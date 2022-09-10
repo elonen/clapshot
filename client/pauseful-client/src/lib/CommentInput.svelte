@@ -16,7 +16,7 @@
 </script>
 
 
-<div class="flex justify-left block rounded-lg shadow-lg shadow-lg bg-gray-800 text-left my-4 p-4 w-full" >
+<div class="flex justify-left block rounded-lg shadow-lg shadow-lg bg-gray-800 text-left p-4 w-full" >
     <img src="https://mdbootstrap.com/img/new/avatars/2.jpg" class="rounded-full p-2 w-12 h-12" alt="" loading="lazy" />
 
     <span bind:this={input_element} class="flex-1 p-2 bg-gray-700 rounded-lg" contenteditable on:focus="{hidePlaceholder}" id="custom_textinput">

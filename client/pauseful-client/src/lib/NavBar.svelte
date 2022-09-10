@@ -11,7 +11,7 @@
   <div class="flex items-center md:order-2">
       <button type="button" class="flex mr-3 text-sm bg-gray-800 rounded-full md:mr-0 focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600" id="user-menu-button" aria-expanded="false" data-dropdown-toggle="user-dropdown" data-dropdown-placement="bottom">
         <span class="sr-only">Open user menu</span>
-        <img src="https://mdbootstrap.com/img/new/avatars/2.jpg" class="rounded-full p-2 w-16 h-16" alt="" loading="lazy" />
+        <img src="https://mdbootstrap.com/img/new/avatars/2.jpg" class="rounded-full p-2 w-12 h-12" alt="" loading="lazy" />
       </button>
       <!-- Dropdown menu -->
       <div class="hidden z-50 my-4 text-base list-none bg-white rounded divide-y divide-gray-100 shadow dark:bg-gray-700 dark:divide-gray-600" id="user-dropdown" style="position: absolute; inset: 0px auto auto 0px; margin: 0px; transform: translate(0px, 10px);" data-popper-reference-hidden="" data-popper-escaped="" data-popper-placement="bottom">
