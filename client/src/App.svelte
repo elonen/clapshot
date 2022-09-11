@@ -15,8 +15,6 @@
 		{ id: crypto.randomUUID(), comment: "Huono. Tehkää parempi.", username: "Aulis Apulainen", avatar_url: "https://mdbootstrap.com/img/new/avatars/1.jpg", indent: 0 },
 ];
 
-  console.log($all_comments);
-
   let video_player: VideoPlayer;
   let comment_container: HTMLDivElement;
   let comment_input: CommentInput;

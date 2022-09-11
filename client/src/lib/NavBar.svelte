@@ -1,14 +1,14 @@
 <script lang="ts">
   import { cur_username, cur_user_pic } from '../stores.js';
-  import logo from '../assets/svelte.svg';
+  import logo from '../assets/clapshot-logo.svg';
 </script>
 
 
 <nav class="bg-white border-gray-200 px-2 sm:px-4 py-2.5 rounded dark:bg-gray-900">
   <div class="container flex flex-wrap justify-between items-center mx-auto">
   <a href="/" class="flex items-center">
-      <img src={logo} class="mr-3 h-6 sm:h-9" alt="Svelte">
-      <span class="self-center text-xl font-semibold whitespace-nowrap dark:text-white">CLAPSHOT</span>
+      <img src={logo} class="mr-3 h-6 sm:h-9 filter brightness-50" alt="Svelte">
+      <span class="self-center text-xl font-semibold whitespace-nowrap dark:text-gray-400">CLAPSHOT</span>
   </a>
   <div class="flex items-center md:order-2">
       <h6 class="mx-4 text-gray-500 font-semibold">{$cur_username}</h6>

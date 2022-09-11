@@ -8,6 +8,7 @@
     let input_text: any;
     let draw_mode = false;
     let timed_comment = true;
+    let cur_color = "red";
 
     export function forceDrawMode(on: boolean) {
         draw_mode = on;
@@ -28,6 +29,7 @@
         sendDrawModeToParent();
     }
     function onColorSelected(c: string) {
+        cur_color = c;
         dispatch('button-clicked', {'action': 'color_select', 'color': c});
     }
     function onUndoRedo(is_undo: boolean) {
@@ -75,14 +77,14 @@
         <button type="button" class="fa fa-redo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 m-2 rounded-lg" title="Redo" on:click={()=>onUndoRedo(false)}/>
 
         {#each ["red", "green", "blue", "cyan", "yellow", "black", "white"] as c}
-            <button type="button" class="border border-gray-500 inline-block w-10 h-10 m-2 rounded-lg" style="background: {c};" on:click="{() => onColorSelected(c)}"/>
+            <button type="button" class="{(cur_color==c) ? 'border-4' : 'border'} border-gray-100 inline-block w-10 h-10 m-2 rounded-full" style="background: {c};" on:click="{() => onColorSelected(c)}"/>
         {/each}
     </div>
 {/if}
 
 <style>
     button {
-        transition: 0.2s ease-in-out;
+        transition: 0.1s ease-in-out;
     }
     button:disabled {
         opacity: 0.5;

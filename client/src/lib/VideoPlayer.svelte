@@ -4,8 +4,6 @@
   import {Notifications, acts} from '@tadashi/svelte-notification'
  
   import { create as sdb_create } from "simple-drawing-board";
-  import { onMount } from 'svelte';
-
 
   export let src: any;
 
@@ -149,7 +147,12 @@
   }
 
 
-
+  // Audio control
+  let audio_volume = 50;
+	$:{
+    if (video_elem)
+      video_elem.volume = audio_volume/100; // Immediately changes video element volume
+	}
 
   // These are called from PARENT component on user interaction
   export function onToggleDraw(mode_on: boolean) {
@@ -216,14 +219,28 @@
 
 		<div class="flex p-1">
 			
-      <input class="text-lg mx-4 flex-0 bg-transparent hover:bg-gray-700 w-32 font-mono" value="{format(time)}" on:change={onTimeCodeEdited}/>
-
-			<span class="flex-1 text-center space-x-3 text-xl">
-          <button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
-          <button class="fa-solid {paused ? 'fa-play' : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
-          <button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
+      <!-- Timecode -->
+      <input class="flex-0 text-lg mx-4 bg-transparent hover:bg-gray-700 w-32 font-mono" value="{format(time)}" on:change={onTimeCodeEdited}/>
+ 
+      <!-- Audio volume -->
+      <span class="flex-0 text-center">
+        <button
+          class="fa {audio_volume>0 ? 'fa-volume-high' : 'fa-volume-mute'} mx-2"
+          on:click="{() => audio_volume = audio_volume>0 ? 0 : 50}"
+          />
+          <input class="mx-2" id="vol-control" type="range" min="0" max="100" step="1" bind:value={audio_volume}/>
       </span>
-			<span class="text-lg mx-4  flex-0">{format(duration)}</span>
+
+      <!-- Play/Pause -->
+			<span class="flex-1 text-left ml-16 space-x-3 text-xl">
+        <button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
+        <button class="fa-solid {paused ? 'fa-play' : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
+        <button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
+      </span>
+
+
+      <!-- Video duration -->
+			<span class="flex-0 text-lg mx-4">{format(duration)}</span>
 		</div>
 	</div>
 
