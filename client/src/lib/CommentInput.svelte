@@ -53,12 +53,12 @@
 
     <button type="button"
         title="Comment is time specific?"
-        class="fa fa-stopwatch w-12 h-12 text-[1.75em] {timed_comment ? 'text-blue-400' : 'text-gray-500'}"
+        class="fas fa-stopwatch w-12 h-12 text-[1.75em] {timed_comment ? 'text-blue-400' : 'text-gray-500'}"
         on:click="{ () => timed_comment = !timed_comment }" />
 
     <button type="button"
         on:click={onClickDraw}
-        class="{draw_mode ? 'border-2' : ''} fa fa-pencil inline-block h-12 px-6 py-2.5 ml-2 bg-cyan-700 text-white rounded-lg shadow-md hover:bg-cyan-500 hover:shadow-lg focus:bg-cyan-700 focus:shadow-lg focus:outline-none focus:ring-0 active:shadow-lg transition duration-150 ease-in-out"
+        class="{draw_mode ? 'border-2' : ''} fas fa-pencil inline-block h-12 px-6 py-2.5 ml-2 bg-cyan-700 text-white rounded-lg shadow-md hover:bg-cyan-500 hover:shadow-lg focus:bg-cyan-700 focus:shadow-lg focus:outline-none focus:ring-0 active:shadow-lg transition duration-150 ease-in-out"
         title="Draw on video">
     </button>
 
@@ -73,8 +73,8 @@
 <!-- Color selector -->
 {#if draw_mode}
     <div class="bg-gray-900 rounded-lg flex place-content-end" transition:slide>
-        <button type="button" class="fa fa-undo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 m-2 rounded-lg" title="Undo" on:click={()=>onUndoRedo(true)}/>
-        <button type="button" class="fa fa-redo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 m-2 rounded-lg" title="Redo" on:click={()=>onUndoRedo(false)}/>
+        <button type="button" class="fas fa-undo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 m-2 rounded-lg" title="Undo" on:click={()=>onUndoRedo(true)}/>
+        <button type="button" class="fas fa-redo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 m-2 rounded-lg" title="Redo" on:click={()=>onUndoRedo(false)}/>
 
         {#each ["red", "green", "blue", "cyan", "yellow", "black", "white"] as c}
             <button type="button" class="{(cur_color==c) ? 'border-4' : 'border'} border-gray-100 inline-block w-10 h-10 m-2 rounded-full" style="background: {c};" on:click="{() => onColorSelected(c)}"/>
@@ -83,6 +83,8 @@
 {/if}
 
 <style>
+    @import '@fortawesome/fontawesome-free/css/all.min.css';
+
     button {
         transition: 0.1s ease-in-out;
     }

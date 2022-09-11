@@ -8,12 +8,16 @@
   import example_video from './assets/big_buck_bunny_720p_5mb.mp4';
 
 
-  $all_comments = [
-		{ id: crypto.randomUUID(), comment: "Huono. Tehkää parempi.", username: "Aulis Apulainen", avatar_url: "https://mdbootstrap.com/img/new/avatars/1.jpg", indent: 0 },
-		{ id: crypto.randomUUID(), comment: "Huono. Tehkää parempi.", username: "Aulis Apulainen", avatar_url: "https://mdbootstrap.com/img/new/avatars/1.jpg", indent: 1 },
-		{ id: crypto.randomUUID(), comment: "Huono. Tehkää parempi.", username: "Aulis Apulainen", avatar_url: "https://mdbootstrap.com/img/new/avatars/1.jpg", indent: 2 },
-		{ id: crypto.randomUUID(), comment: "Huono. Tehkää parempi.", username: "Aulis Apulainen", avatar_url: "https://mdbootstrap.com/img/new/avatars/1.jpg", indent: 0 },
-];
+  $all_comments = []
+  for (let i=0; i<5; i++)
+  {
+    $all_comments.push({
+      id: crypto.randomUUID(),
+      comment: "Huono video! Tehkää parempi.",
+      username: "Aulis Apulainen",
+      avatar_url: "https://mdbootstrap.com/img/new/avatars/1.jpg",
+      indent: i%2 });
+  }
 
   let video_player: VideoPlayer;
   let comment_container: HTMLDivElement;

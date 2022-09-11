@@ -2,8 +2,7 @@
 
   import {VideoFrame, FrameRates} from './VideoFrame.js';
   import {Notifications, acts} from '@tadashi/svelte-notification'
- 
-  import { create as sdb_create } from "simple-drawing-board";
+  import {create as sdb_create} from "simple-drawing-board";
 
   export let src: any;
 
@@ -223,16 +222,16 @@
       <input class="flex-0 text-lg mx-4 bg-transparent hover:bg-gray-700 w-32 font-mono" value="{format(time)}" on:change={onTimeCodeEdited}/>
  
       <!-- Audio volume -->
-      <span class="flex-0 text-center">
+      <span class="flex-0 text-center whitespace-nowrap">
         <button
-          class="fa {audio_volume>0 ? 'fa-volume-high' : 'fa-volume-mute'} mx-2"
+          class="fas {audio_volume>0 ? 'fa-volume-high' : 'fa-volume-mute'} mx-2"
           on:click="{() => audio_volume = audio_volume>0 ? 0 : 50}"
           />
           <input class="mx-2" id="vol-control" type="range" min="0" max="100" step="1" bind:value={audio_volume}/>
       </span>
 
       <!-- Play/Pause -->
-			<span class="flex-1 text-left ml-16 space-x-3 text-xl">
+			<span class="flex-1 text-left ml-16 space-x-3 text-xl whitespace-nowrap">
         <button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
         <button class="fa-solid {paused ? 'fa-play' : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
         <button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
@@ -240,7 +239,7 @@
 
 
       <!-- Video duration -->
-			<span class="flex-0 text-lg mx-4">{format(duration)}</span>
+			<span class="flex-0 text-lg mx-4 ml-8">{format(duration)}</span>
 		</div>
 	</div>
 
@@ -252,8 +251,8 @@
 <svelte:window on:keydown={onWindowKeyPress} />
 
 <style>
-  @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css');
-
+  @import '@fortawesome/fontawesome-free/css/all.min.css';
+  
   button:disabled {
     opacity: 0.3;
   }
