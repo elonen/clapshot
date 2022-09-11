@@ -8,7 +8,7 @@
   <div class="container flex flex-wrap justify-between items-center mx-auto">
   <a href="/" class="flex items-center">
       <img src={logo} class="mr-3 h-6 sm:h-9" alt="Svelte">
-      <span class="self-center text-xl font-semibold whitespace-nowrap dark:text-white">PAUSEFUL video review</span>
+      <span class="self-center text-xl font-semibold whitespace-nowrap dark:text-white">CLAPSHOT</span>
   </a>
   <div class="flex items-center md:order-2">
       <h6 class="mx-4 text-gray-500 font-semibold">{$cur_username}</h6>

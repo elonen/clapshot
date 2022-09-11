@@ -56,7 +56,7 @@
 
     <button type="button"
         on:click={onClickDraw}
-        class="{draw_mode ? 'border-2' : ''} fa fa-pencil inline-block h-12 px-6 py-2.5 ml-2 bg-green-700 text-white rounded-lg shadow-md hover:bg-green-500 hover:shadow-lg focus:bg-green-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-green-800 active:shadow-lg transition duration-150 ease-in-out"
+        class="{draw_mode ? 'border-2' : ''} fa fa-pencil inline-block h-12 px-6 py-2.5 ml-2 bg-cyan-700 text-white rounded-lg shadow-md hover:bg-cyan-500 hover:shadow-lg focus:bg-cyan-700 focus:shadow-lg focus:outline-none focus:ring-0 active:shadow-lg transition duration-150 ease-in-out"
         title="Draw on video">
     </button>
 
