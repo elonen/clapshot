@@ -1,36 +1,93 @@
 <script lang="ts">
-    let input_element: HTMLElement;
-    const placeholder_txt: string = "Add a comment...";
+    import { createEventDispatcher } from 'svelte';
+    import { fade, blur, fly, slide, scale } from "svelte/transition";
+    import { cur_user_pic } from '../stores.js';
 
-    let count: number = 0;
-    function onClickSend() {
-        input_element.textContent = placeholder_txt;
-        count += 1;
+    const dispatch = createEventDispatcher();
+
+    let input_text: any;
+    let draw_mode = false;
+    let timed_comment = true;
+
+    export function forceDrawMode(on: boolean) {
+        draw_mode = on;
     }
 
-    function hidePlaceholder() {
-        if (input_element.textContent.includes(placeholder_txt)) {
-            input_element.textContent = "";
+    function sendDrawModeToParent() {
+        dispatch('button-clicked', {'action': 'draw', 'is_draw_mode': draw_mode});
+    }
+
+    function onClickSend() {
+        dispatch('button-clicked', {'action': 'send', 'comment_text': input_text, 'is_timed': timed_comment});
+        input_text = "";
+        draw_mode = false;
+        sendDrawModeToParent();
+    }
+    function onClickDraw() {
+        draw_mode = !draw_mode;
+        sendDrawModeToParent();
+    }
+    function onColorSelected(c: string) {
+        dispatch('button-clicked', {'action': 'color_select', 'color': c});
+    }
+    function onUndoRedo(is_undo: boolean) {
+        if (is_undo) {
+            dispatch('button-clicked', {'action': 'undo'});
+        } else {
+            dispatch('button-clicked', {'action': 'redo'});
         }
     }
+
 </script>
 
 
-<div class="flex justify-left block rounded-lg shadow-lg shadow-lg bg-gray-800 text-left p-4 w-full" >
-    <img src="https://mdbootstrap.com/img/new/avatars/2.jpg" class="rounded-full p-2 w-12 h-12" alt="" loading="lazy" />
+<form on:submit|preventDefault={onClickSend} class="flex justify-left block rounded-lg shadow-lg shadow-lg bg-gray-800 text-left p-4 w-full" >
 
-    <span bind:this={input_element} class="flex-1 p-2 bg-gray-700 rounded-lg" contenteditable on:focus="{hidePlaceholder}" id="custom_textinput">
-        <span class="text-gray-500">{placeholder_txt} ({count} clicks)...</span>
-    </span>
+    <img src={$cur_user_pic} class="rounded-full p-2 w-12 h-12" alt="" loading="lazy" />
+
+    <input 
+        bind:value={input_text} 
+        class="flex-1 p-2 bg-gray-700 rounded-lg" placeholder="Add a comment..." />
 
     <button type="button"
-        on:click={onClickSend}
-        class="inline-block h-12 px-6 py-2.5 ml-2 bg-blue-700 text-white rounded-lg shadow-md hover:bg-blue-700 hover:shadow-lg focus:bg-blue-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-800 active:shadow-lg transition duration-150 ease-in-out">
+        title="Comment is time specific?"
+        class="fa fa-stopwatch w-12 h-12 text-[1.75em] {timed_comment ? 'text-blue-400' : 'text-gray-500'}"
+        on:click="{ () => timed_comment = !timed_comment }" />
+
+    <button type="button"
+        on:click={onClickDraw}
+        class="{draw_mode ? 'border-2' : ''} fa fa-pencil inline-block h-12 px-6 py-2.5 ml-2 bg-green-700 text-white rounded-lg shadow-md hover:bg-green-500 hover:shadow-lg focus:bg-green-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-green-800 active:shadow-lg transition duration-150 ease-in-out"
+        title="Draw on video">
+    </button>
+
+    <button type="submit"
+        disabled={!input_text}
+        class="inline-block h-12 px-6 py-2.5 ml-2 bg-blue-700 text-white rounded-lg shadow-md hover:bg-blue-500 hover:shadow-lg focus:bg-blue-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-800 active:shadow-lg transition duration-150 ease-in-out">
         Send
     </button>
-</div>
+
+</form>
+
+<!-- Color selector -->
+{#if draw_mode}
+    <div class="bg-gray-900 rounded-lg flex place-content-end" transition:slide>
+        <button type="button" class="fa fa-undo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 m-2 rounded-lg" title="Undo" on:click={()=>onUndoRedo(true)}/>
+        <button type="button" class="fa fa-redo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 m-2 rounded-lg" title="Redo" on:click={()=>onUndoRedo(false)}/>
+
+        {#each ["red", "green", "blue", "cyan", "yellow", "black", "white"] as c}
+            <button type="button" class="border border-gray-500 inline-block w-10 h-10 m-2 rounded-lg" style="background: {c};" on:click="{() => onColorSelected(c)}"/>
+        {/each}
+    </div>
+{/if}
 
 <style>
+    button {
+        transition: 0.2s ease-in-out;
+    }
+    button:disabled {
+        opacity: 0.5;
+        background-color: gray;
+    }
 </style>
-    
+
     

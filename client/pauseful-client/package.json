@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^1.0.2",
+    "@tadashi/svelte-notification": "^1.1.0",
     "@tsconfig/svelte": "^3.0.0",
     "autoprefixer": "^10.4.8",
     "postcss": "^8.4.16",
@@ -21,6 +22,6 @@
     "tslib": "^2.4.0",
     "typescript": "^4.6.4",
     "vite": "^3.1.0",
-    "@tadashi/svelte-notification": "^1.1.0"
+    "simple-drawing-board": "^3.1.2"
   }
 }
