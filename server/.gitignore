@@ -1,0 +1,14 @@
+test_data
+
+.DS_Store
+__pycache__
+output
+venv
+_venv
+.venv
+.idea/*
+*.pkl
+*.built
+build/*
+*~
+~$*
