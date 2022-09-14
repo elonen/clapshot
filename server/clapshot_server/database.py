@@ -21,15 +21,17 @@ class Video(Base):
 
     added_by_userid = Column(sql.String, index=True)    # unique user id
     added_by_username = Column(sql.String)  # human readable username
-    added_time = Column(sql.DateTime, server_default=sql.func.now())
+    added_time = Column(sql.DateTime, server_default=sql.func.now(), nullable=False)
 
+    recompression_done = Column(sql.DateTime, nullable=True, default=None)
     orig_filename = Column(sql.String)
 
     total_frames = Column(sql.Integer)
     duration = Column(sql.Float)
-    avg_fps = Column(sql.String) # decimal number in seconds
+    fps = Column(sql.String) # decimal number in seconds
 
-    raw_metadata = Column(sql.String)
+    raw_metadata_video = Column(sql.String)
+    raw_metadata_all = Column(sql.String)
 
     comments = relationship("Comment", cascade="all, delete-orphan")
     
@@ -42,8 +44,9 @@ class Video(Base):
             "orig_filename": self.orig_filename,
             "total_frames": self.total_frames,
             "duration": self.duration,
-            "avg_fps": self.avg_fps,
-            "raw_metadata": self.raw_metadata
+            "fps": self.fps,
+            "raw_metadata_vide": self.raw_metadata_video,
+            "raw_metadata_all": self.raw_metadata_all
         }
 
     def __repr__(self):

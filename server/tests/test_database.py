@@ -15,14 +15,13 @@ Database tests.
 """
 
 random.seed()
-TEST_DBFILE = f'{common.DATA_DIR}/test.db'
 import logging
 logging.basicConfig(level=logging.INFO)
 
 
 # Simple test database test against
 @pytest.fixture
-async def example_db():
+async def example_db(tmp_path_factory):
     """
     <Video(id=1 video_hash=HASH0 orig_filename=test0.mp4 added_by_userid=user.num1 ...)>
     <Video(id=2 video_hash=HASH1 orig_filename=test1.mp4 added_by_userid=user.num2 ...)>
@@ -37,8 +36,11 @@ async def example_db():
     <Comment(id='6' video=HASH0 parent=1 user_id='user.num2' comment='Comment 5' has-drawing=True ...)>
     <Comment(id='7' video=HASH0 parent=1 user_id='user.num1' comment='Comment 6' has-drawing=True ...)>
     """
-    Path(TEST_DBFILE).unlink(missing_ok=True)
-    async with DB.Database(Path(TEST_DBFILE), logging.getLogger()) as db:
+    dst_dir = tmp_path_factory.mktemp("clapshot_database_test")
+    db_file = Path(dst_dir / "test.sqlite")
+
+    Path(db_file).unlink(missing_ok=True)
+    async with DB.Database(Path(db_file), logging.getLogger()) as db:
 
         async def mkvid(i):
             v = DB.Video(
@@ -48,8 +50,9 @@ async def example_db():
                 orig_filename=f"test{i}.mp4",
                 total_frames=i*1000,
                 duration=i*100,
-                avg_fps=i*i,
-                raw_metadata="{video:" + str(i) + "}")
+                fps=i*i,
+                raw_metadata_video="{video:" + str(i) + "}",
+                raw_metadata_all="{all: {video:" + str(i) + "}}")
             v.id = await db.add_video(v)
             return v
 
@@ -69,10 +72,11 @@ async def example_db():
         comments = [await mkcom(i, videos[i%3].video_hash) for i in range(5)]
         comments.extend([await mkcom(i, comments[0].video_hash, parent_id=comments[0].id) for i in range(5,5+2)])
 
-        yield (db, videos, comments)
-
-    print("Database closed")
-    Path(TEST_DBFILE).unlink(missing_ok=True) # Cleanup
+        try:
+            yield (db, videos, comments)
+        finally:
+            Path(db_file).unlink(missing_ok=True)
+            print("Database closed & removed")
 
 
 @pytest.mark.timeout(5)

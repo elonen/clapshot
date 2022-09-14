@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+
+from decimal import Decimal
+from fractions import Fraction
+import hashlib
+import multiprocessing as mp
+import logging
+import os
+from pathlib import Path
+import queue
+import shutil
+import threading
+from typing import Any, Callable, DefaultDict, Optional
+import ffmpeg
+import json
+import asyncio
+
+from . import database as DB
+
+TARGET_VIDEO_MAX_BITRATE = 2.5*(10**6)
+TARGET_AUDIO_BITRATE = 128*(10**3)
+TARGET_VIDEO_MAX_W = '1920'
+
+logging.basicConfig(level=logging.DEBUG)
+
+
+# Used for returning multiprocessing results in a queue
+class ProcessingResult:
+    def __init__(self, orig_filename: str, file_owner_id: str, success: bool, msg: str = None, video_hash: str = None):
+        self.orig_filename = orig_filename
+        self.video_hash = video_hash
+        self.file_owner_id = file_owner_id
+        self.success = success
+        self.msg = msg
+    
+    def __repr__(self) -> str:
+        return f"ProcessingResult(orig_filename={self.orig_filename}, video_hash={self.video_hash}, file_owner_id={self.file_owner_id}, success={self.success}, msg={self.msg})"
+
+class VideoProcessor:
+    def __init__(self, db_file: Path, logger: logging.Logger = None) -> None:
+        self.logger = logger or logging.getLogger("clapshot.videoproc")
+        self.db_file = db_file
+
+
+    def convert_video(self, src: Path, dst: Path, logger: logging.Logger, orig_bit_rate: int, orig_codec: str) \
+        -> Optional[tuple[Path, Path]]:
+        """
+        Convert & scale down video to with ffmpeg-python, if necessary.
+
+        Args:
+            src: Path to the source video file
+            dst: Path to the destination video file
+            logger: logger to use
+            orig_bit_rate: original video bit rate (for skipping conversion if not necessary)
+            orig_codec: original video codec (for skipping conversion if not necessary)
+
+        Returns:
+            tuple(stdout_log: Path, stderr_log: Path) -- logs from FFmpeg, or None if no conversion was necessary
+
+        Raises:
+            Exception: if the conversion fails (also writes ffmpeg output to a log)
+        """
+
+        logger.info(f"Converting '{src}' to '{dst}'...")
+        assert src.exists()
+
+        fn_stdout = dst.parent / 'encoder.stdout'
+        fn_stderr = dst.parent / 'encoder.stderr'
+
+        newbitrate = max(int(orig_bit_rate/2), min(int(orig_bit_rate), TARGET_VIDEO_MAX_BITRATE))
+        if newbitrate >= orig_bit_rate and orig_codec.lower() in ('h264', 'hevc', 'h265') and src.name.lower().endswith('mp4'):
+            logger.info(f"Keeping original video codec '{orig_codec}'/MP4 because new bitrate is lower than original. Copying instead of transcoding.")
+            shutil.copy(src, dst)
+            logger.info(f"Video copied ok'")
+        else:
+            try:
+                out, err = ffmpeg \
+                    .input(filename=src.absolute()) \
+                    .output(filename=dst.absolute(), 
+                        vcodec='libx264', preset='faster', 
+                        vf=f'scale={TARGET_VIDEO_MAX_W}:-8',
+                        map=0,          # copy all streams
+                        acodec='aac',
+                        ac=2,           # stereo
+                        strict='experimental',
+                        **{'b:v': newbitrate, 'b:a': TARGET_AUDIO_BITRATE}) \
+                    .global_args('-nostdin', '-hide_banner', '-nostats') \
+                    .overwrite_output()  \
+                    .run(capture_stdout=True, capture_stderr=True)
+
+                fn_stdout.write_bytes(out or b'')
+                fn_stderr.write_bytes(err or b'')
+                logger.info(f"Conversion done")
+                
+                return fn_stdout, fn_stderr
+
+            except ffmpeg.Error as e:
+                fn_stdout.write_bytes(bytes(e.stdout))
+                fn_stderr.write_bytes(bytes(e.stderr))
+                msg = f"Error converting video '{src}' to '{dst}'. See '{fn_stderr}' and '{fn_stdout}' for details."
+                logger.error(msg)
+                raise Exception(msg)
+        return None
+
+
+    def read_video_metadata(self,
+        src: Path,
+        video_hash: str,
+        logger: logging.Logger,
+        fmt_result: Callable[[str, bool], ProcessingResult],
+        test_mock: dict = {}) \
+            -> tuple[Optional[ProcessingResult], str, int]:
+        """
+        Read video metadata with ffmpeg-python and write it to the database.
+
+        Args:
+            src: Path to the source video file
+            video_hash: hash (unique id) of the video file
+            logger: logger to use
+            fmt_result: function to post a ProcessingResult, if error occurs
+            test_mock: mock values for testing
+        
+        Returns:
+            tuple(result: ProcessingResult, orig_codec: str, orig_bitrate: int) -- result is None if no error occurred
+        """
+
+        try:
+            metadata = ffmpeg.probe(src.absolute())
+        except ffmpeg.Error as e:
+            return fmt_result(f"FFMPEG error reading video metadata for '{src}': {e}", False), 'None', 0
+
+        # (TESTING: delete video streams if requested by pytest)
+        if test_mock.get('no_video_stream'):
+            metadata['streams'] = [s for s in metadata['streams'] if s['codec_type'] != 'video']
+
+        # Get video stream metadata
+        video_stream = next((stream for stream in metadata['streams'] if stream['codec_type'] == 'video'), None)
+        if not video_stream:
+            return fmt_result("No video stream found in the file. Giving up.", False), 'None', 0
+
+        total_frames = int(video_stream['nb_frames'])
+        duration = Decimal(video_stream['duration'])
+        codec = video_stream['codec_name']
+        fps =  Fraction(video_stream.get('avg_frame_rate')) if not ('no_fps' in test_mock) else None
+        bit_rate = int(video_stream.get('bit_rate') or '0')
+        if not fps:
+            fps = Fraction(total_frames) / Fraction(duration)
+
+        try:
+            async def add_video_to_db():
+                async with DB.Database(Path(self.db_file), logger) as db:
+                    await db.add_video(DB.Video(
+                        video_hash=video_hash,
+                        added_by_userid=src.owner(),
+                        added_by_username=src.owner(),       # TODO: get username from user id (wrap LDAP in some kind of abstraction)
+                        orig_filename=src.name,
+                        total_frames=total_frames,
+                        duration=duration,
+                        fps=str(fps.numerator / Decimal(fps.denominator)),
+                        raw_metadata_video=json.dumps(video_stream),
+                        raw_metadata_all=json.dumps(metadata)
+                    ))
+            asyncio.run(add_video_to_db())
+        except Exception as e:
+            return fmt_result(f"Error inserting video info into DB: {e}", False), codec, bit_rate
+
+        return None, codec, bit_rate
+
+
+    def process_file(self, src: Path, dst_dir: Path) -> ProcessingResult:
+        """
+        Process a video file: recompress and get metadata.            
+        Args:
+            src: Path to the source video file
+            dst_dir: Path to the destination directory
+
+        Returns:
+            ProcessingResult
+        """
+        logger = logging.getLogger(f"clapshot.videoproc.worker_pid{os.getpid()}")
+        try:
+            # Name the file with a hash of the first 128k of file contents + the original filename
+            file_hash = hashlib.md5(str(src).encode('utf-8'))
+            with open(src, 'rb') as f:
+                file_hash.update(f.read(128*1024))
+            new_dir = dst_dir / file_hash.hexdigest()
+
+            # Helper for returning results through multiporcessing queue
+            def fmt_result(msg: str, success: bool) -> ProcessingResult:
+                if success:
+                    logger.info(f"Succesfully processed '{src}' -> '{new_dir}'")
+                else:
+                    logger.error(f"Error processing '{src}' -> '{new_dir}': {msg}")
+                return ProcessingResult(
+                    orig_filename=src.name,
+                    file_owner_id=src.owner(),
+                    success=success,
+                    video_hash=new_dir.name,
+                    msg=msg)
+
+            # Move video to video dir
+            dir_for_orig = new_dir / "orig"
+            assert not (dir_for_orig / src.name).exists(), f"File '{src}' already exists in '{dir_for_orig}'. Aborting."
+            
+            logger.info(f"Moving '{src}' to '{dir_for_orig}/'...")
+            new_dir.mkdir(parents=False, exist_ok=True)
+            dir_for_orig.mkdir(parents=False, exist_ok=True)
+            shutil.move(src, dir_for_orig)
+            src = dir_for_orig / src.name       # update src to point to the new location
+            assert src.exists(), f"Failed to move '{src}'?? Aborting."
+
+            opt_res, orig_codec, orig_bitrate = self.read_video_metadata(src, new_dir.name, logger, fmt_result)
+            if opt_res:
+                assert not opt_res.success, "read_video_metadata should not return success"
+                return opt_res
+            
+            # Convert video to mp4 with ffmpeg
+            mp4_file = new_dir / "video.mp4"
+            self.convert_video(src, mp4_file, logger, orig_bitrate, orig_codec)
+
+            return fmt_result("Video processing complete", True)
+
+        except Exception as e:
+            logger.error(f"General error processing video '{str(src)}' to : {e}")
+            return ProcessingResult(
+                orig_filename=src.name,
+                file_owner_id=src.owner(),
+                success=False,
+                msg=f"Generic video processing error: {e}")
+
+
+    def monitor_incoming_folder_loop(self, incoming_dir: Path, dst_dir: Path, interrupt_flag: threading.Event, results: queue.Queue, poll_interval: int) -> None:
+        """
+        Monitor the incoming folder for new files and process them.
+        This is a blocking function that runs in a separate thread.
+        It spawns a new process for each file it finds as soon as it determines that the file is not being written to anymore.
+
+        Args:
+            incoming_dir:    Incoming videos directory
+            dst_dir:         Where to store the processed videos
+            interrupt_flag:  Event to signal process should be interrupted
+            results:         Queue to post ProcessingResults to
+            poll_interval:   How often to check for new files (in seconds)        
+        """
+        logger = logging.getLogger(f"clapshot.videoproc.incoming_monitor")
+
+        incoming = Path(incoming_dir)
+        logger.info(f"Starting incoming folder ({incoming}) monitor")
+
+        last_tested_size = DefaultDict(int)  # type: DefaultDict[Path, int]
+
+        with mp.Pool() as pool:
+            while not interrupt_flag.is_set():
+                logger.debug("Checking for new files...")
+                process_now = []
+
+                # Check for new files in the incoming folder
+                for fn in incoming.iterdir():
+                    # Check if file is still being written to
+                    cur_size = fn.stat().st_size
+                    if cur_size == last_tested_size[fn]:
+                        logger.info(f"File '{fn}' not growing any more. Processing it...")
+                        process_now.append(fn)
+                    else:
+                        logger.info(f"File '{fn}' size changed since last poll. Skipping it for now...")
+                        last_tested_size[fn] = cur_size
+
+                # Process new files in parallel and wait for them to finish
+                # (otherwise we might process the same file twice)
+                if process_now:
+                    for r in pool.starmap(self.process_file, [(f, dst_dir) for f in process_now]):
+                        results.put(r)
+
+                interrupt_flag.wait(timeout=poll_interval)
+
+        logger.info("Video processor stopped")
