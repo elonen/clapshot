@@ -84,7 +84,7 @@
         </div>
       </div>
     </div>
-    <div class="flex-none basis-128 bg-gray-900 py-2 px-2 space-y-2 ml-2 h-screen overflow-y-scroll" bind:this={comment_container}>
+    <div class="flex-none basis-128 bg-gray-900 w-80 py-2 px-2 space-y-2 ml-2 h-screen overflow-y-scroll" bind:this={comment_container}>
 
       {#each $all_comments as item}
         <CommentCard {...item} on:display-comment={onDisplayComment}/>

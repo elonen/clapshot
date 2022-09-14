@@ -1,7 +1,7 @@
 <script lang="ts">
     import { createEventDispatcher } from 'svelte';
     import { fade, blur, fly, slide, scale } from "svelte/transition";
-    import { cur_user_pic } from '../stores.js';
+    import { video_is_ready, cur_user_pic } from '../stores.js';
 
     const dispatch = createEventDispatcher();
 
@@ -51,16 +51,18 @@
         bind:value={input_text} 
         class="flex-1 p-2 bg-gray-700 rounded-lg" placeholder="Add a comment..." />
 
-    <button type="button"
-        title="Comment is time specific?"
-        class="fas fa-stopwatch w-12 h-12 text-[1.75em] {timed_comment ? 'text-blue-400' : 'text-gray-500'}"
-        on:click="{ () => timed_comment = !timed_comment }" />
+    {#if $video_is_ready}
+        <button type="button"
+            title="Comment is time specific?"
+            class="fas fa-stopwatch w-12 h-12 text-[1.75em] {timed_comment ? 'text-blue-400' : 'text-gray-500'}"
+            on:click="{ () => timed_comment = !timed_comment }" />
 
-    <button type="button"
-        on:click={onClickDraw}
-        class="{draw_mode ? 'border-2' : ''} fas fa-pencil inline-block h-12 px-6 py-2.5 ml-2 bg-cyan-700 text-white rounded-lg shadow-md hover:bg-cyan-500 hover:shadow-lg focus:bg-cyan-700 focus:shadow-lg focus:outline-none focus:ring-0 active:shadow-lg transition duration-150 ease-in-out"
-        title="Draw on video">
-    </button>
+        <button type="button"
+            on:click={onClickDraw}
+            class="{draw_mode ? 'border-2' : ''} fas fa-pen-fancy inline-block h-12 px-6 py-2.5 ml-2 bg-cyan-700 text-white rounded-lg shadow-md hover:bg-cyan-500 hover:shadow-lg focus:bg-cyan-700 focus:shadow-lg focus:outline-none focus:ring-0 active:shadow-lg transition duration-150 ease-in-out"
+            title="Draw on video">
+        </button>
+    {/if}
 
     <button type="submit"
         disabled={!input_text}

@@ -11,7 +11,7 @@
   export let avatar_url: string = "";
   export let indent: number = 0;
   export let timecode: string = "";
-  export let drawing_data: string = null;
+  export let drawing_data: string = "";
 
   let show_actions: boolean = false;
  
@@ -84,9 +84,9 @@ function onReplySubmit() {
 
   {#if show_actions}
   <div class="p-2 flex place-content-end" transition:slide="{{ duration: 200 }}">
-    <button class="border rounded-lg px-1 text-gray-200 text-base ml-2 text-sm border-green-300 text-green-300"  on:click={() => show_reply=true}>Reply</button>
-    <button class="opacity-25  border rounded-lg px-1 text-gray-200 text-base ml-2 text-sm border-orange-300 text-orange-300">Edit</button>
-    <button class="border rounded-lg px-1 text-gray-200 text-base ml-2 text-sm border-red-300 text-red-300" on:click={deleteComment}>Del</button>
+    <button class="border rounded-lg px-1 placeholder: ml-2 text-sm border-green-300 text-green-300"  on:click={() => show_reply=true}>Reply</button>
+    <button class="opacity-25  border rounded-lg px-1 ml-2 text-sm border-orange-300 text-orange-300">Edit</button>
+    <button class="border rounded-lg px-1 ml-2 text-sm border-red-300 text-red-300" on:click={deleteComment}>Del</button>
   </div>
   {/if}
 
