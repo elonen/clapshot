@@ -194,7 +194,7 @@ def test_process_video_ok(temp_dir):
     for (src, dst_dir, src_garbage, vp) in temp_dir:
         res = vp.process_file(src, dst_dir)
         assert res.success
-        assert res.orig_filename == src.name
+        assert res.orig_file.name == src.name
         assert res.video_hash is not None
         assert res.file_owner_id is not None
         assert res.msg is not None
@@ -210,11 +210,12 @@ def test_process_video_ok(temp_dir):
 def test_process_video_corrupted(temp_dir):
     """
     Test that a corrupted video gives a controlled error.
-    """
+    """    
     for (src, dst_dir, src_garbage, vp) in temp_dir:
         res = vp.process_file(src_garbage, dst_dir)
+        print("RES OF test_process_video_corrupted", res)
         assert not res.success
-        assert res.orig_filename == src_garbage.name
+        assert res.orig_file.name == src_garbage.name
         assert res.msg is not None
         
         vid = _get_video_from_db(res.video_hash, vp.db_file)
@@ -240,9 +241,12 @@ def test_monitor_dir(temp_dir):
     for (src, dst_dir, src_garbage, vp) in temp_dir:
         incoming_dir = dst_dir / "incoming"
         incoming_dir.mkdir()
-        
-        dst_dir = dst_dir / "videos"
-        dst_dir.mkdir()
+
+        rejected_dir = dst_dir / "rejected"
+        rejected_dir.mkdir()
+
+        videos_dir = dst_dir / "videos"
+        videos_dir.mkdir()
         
         def now():
             return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
@@ -253,7 +257,7 @@ def test_monitor_dir(temp_dir):
         print(f"Starting monitor at {now()}...")
         p = threading.Thread(
             target=VideoProcessor.monitor_incoming_folder_loop,
-            args=(vp, incoming_dir, dst_dir, interrupt_flag, result_queue, 0.1))
+            args=(vp, incoming_dir, videos_dir, rejected_dir, interrupt_flag, result_queue, 0.1, {"test_skip_list": True}))
         p.start()
         time.sleep(1)
         
@@ -268,11 +272,15 @@ def test_monitor_dir(temp_dir):
         p.join()
 
         # Check that both ok and corrupted files were processed
+        assert not result_queue.empty()
         res_ok = result_queue.get_nowait()
         res_fail = result_queue.get_nowait()
         assert result_queue.empty()
+
         if res_fail.success:
             res_ok, res_fail = res_fail, res_ok
+        print(f"res_ok = {res_ok}")
+        print(f"res_fail = {res_fail}")
 
         assert res_ok.success
         assert res_ok.msg is not None
@@ -285,11 +293,133 @@ def test_monitor_dir(temp_dir):
         assert vid.added_by_userid == res_ok.file_owner_id
         assert src.name in res_ok.__repr__()
 
-        assert (dst_dir / res_ok.video_hash / "video.mp4").exists()
-        assert (dst_dir / res_ok.video_hash / "orig" / src.name).exists()
+        assert (videos_dir / res_ok.video_hash / "video.mp4").exists()
+        assert (videos_dir / res_ok.video_hash / "orig" / src.name).exists()
 
         assert not res_fail.success
         assert res_fail.msg is not None
-        assert res_fail.orig_filename == src_garbage.name
+        assert res_fail.orig_file.name == src_garbage.name
         assert res_fail.file_owner_id is not None
         assert src_garbage.name in res_fail.__repr__()
+        assert not (videos_dir / res_fail.video_hash / "orig" / src_garbage.name).exists(), "Cleanup failed - original file was not deleted"
+        assert not (videos_dir  / res_fail.video_hash / "video.mp4").exists()
+        assert (rejected_dir / res_fail.video_hash / src_garbage.name).exists(), "Cleanup failed. Corrupted file should have been moved to rejected folder"
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(15)
+def test_monitor_dir_bad_reject_dir(temp_dir):
+    """
+    Test incomig video monitoring.
+    """
+    # vp.monitor_incoming_folder_loop(self, incoming_dir: Path, dst_dir: Path, interrupt_flag: mp.Event):
+    for (src, dst_dir, src_garbage, vp) in temp_dir:
+        incoming_dir = dst_dir / "incoming"
+        incoming_dir.mkdir()
+        rejected_dir = "/dev/null"
+        videos_dir = dst_dir / "videos"
+        videos_dir.mkdir()
+        
+        interrupt_flag = threading.Event()
+        result_queue = queue.SimpleQueue()
+        p = threading.Thread(
+            target=VideoProcessor.monitor_incoming_folder_loop,
+            args=(vp, incoming_dir, videos_dir, rejected_dir, interrupt_flag, result_queue, 0.1))
+        p.start()
+        time.sleep(1)        
+        shutil.copy(src_garbage, incoming_dir / src_garbage.name)
+        time.sleep(1)
+        
+        interrupt_flag.set()
+        p.join()
+
+        # Expect only one result        
+        assert not result_queue.empty()
+        res_fail = result_queue.get_nowait()
+        assert result_queue.empty()
+
+        # Must not be added to DB
+        assert res_fail.video_hash
+        vid = _get_video_from_db(res_fail.video_hash, vp.db_file)
+        assert not vid
+
+        assert not res_fail.success
+        assert res_fail.orig_file.name == src_garbage.name
+        in_orig = videos_dir / res_fail.video_hash / "orig" / src_garbage.name
+        assert in_orig.exists(), "Original should've not been removed if rejected folder is not writable"
+        assert in_orig.stat().st_size == src_garbage.stat().st_size
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(15)
+def test_monitor_dir_bad_video_dir(temp_dir):
+    """
+    Test incomig video monitoring.
+    """
+    # vp.monitor_incoming_folder_loop(self, incoming_dir: Path, dst_dir: Path, interrupt_flag: mp.Event):
+    for (src, dst_dir, src_garbage, vp) in temp_dir:
+        incoming_dir = dst_dir / "incoming"
+        incoming_dir.mkdir()
+        rejected_dir = dst_dir / "rejected"
+        rejected_dir.mkdir()
+        videos_dir = Path("/dev/null")
+        
+        interrupt_flag = threading.Event()
+        result_queue = queue.SimpleQueue()
+        p = threading.Thread(
+            target=VideoProcessor.monitor_incoming_folder_loop,
+            args=(vp, incoming_dir, videos_dir, rejected_dir, interrupt_flag, result_queue, 0.1))
+        p.start()
+        time.sleep(1)        
+        shutil.copy(src_garbage, incoming_dir / src_garbage.name)
+        time.sleep(1)
+        
+        interrupt_flag.set()
+        p.join()
+
+        # Expect only one result        
+        assert not result_queue.empty()
+        res_fail = result_queue.get_nowait()
+        assert result_queue.empty()
+
+        assert not res_fail.video_hash, "Video should not have been probed if it couldn't be moved to videos folder"
+        assert not res_fail.success
+        assert res_fail.orig_file.name == src_garbage.name
+        assert src_garbage.exists(), "Original should not have been removed if neither video folder nor rejected folder war not writable"
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(15)
+def test_monitor_dir_bad_video_and_reject_dir(temp_dir):
+    """
+    Test incomig video monitoring.
+    """
+    # vp.monitor_incoming_folder_loop(self, incoming_dir: Path, dst_dir: Path, interrupt_flag: mp.Event):
+    for (src, dst_dir, src_garbage, vp) in temp_dir:
+        incoming_dir = dst_dir / "incoming"
+        incoming_dir.mkdir()
+        rejected_dir = Path("/dev/null")
+        videos_dir = Path("/dev/null")
+        
+        interrupt_flag = threading.Event()
+        result_queue = queue.SimpleQueue()
+        p = threading.Thread(
+            target=VideoProcessor.monitor_incoming_folder_loop,
+            args=(vp, incoming_dir, videos_dir, rejected_dir, interrupt_flag, result_queue, 0.1))
+        p.start()
+        time.sleep(1)        
+        shutil.copy(src_garbage, incoming_dir / src_garbage.name)
+        time.sleep(1)
+        
+        interrupt_flag.set()
+        p.join()
+
+        # Expect only one result        
+        assert not result_queue.empty()
+        res_fail = result_queue.get_nowait()
+        assert result_queue.empty()
+
+        assert not res_fail.video_hash, "Video should not have been probed if it couldn't be moved to videos folder"
+        assert not res_fail.success
+        assert res_fail.orig_file.name == src_garbage.name
+        assert src_garbage.exists(), "Original should not have been removed if neither video folder nor rejected folder war not writable"

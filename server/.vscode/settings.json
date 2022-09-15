@@ -8,7 +8,6 @@
         "-v",
         "--cov=clapshot_server/",
         "--cov-report=xml",
-        "--pdb",
         "tests/"
     ]
 }

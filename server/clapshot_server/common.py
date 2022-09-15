@@ -26,5 +26,6 @@ comment_table_sql = """
 
 DATA_DIR = "test_data"
 INCOMING_DIR = f"{DATA_DIR}/incoming"
+REJECTED_DIR = f"{DATA_DIR}/rejected"
 VIDEOS_DIR = f"{DATA_DIR}/videos"
 DB_FILE = f"{DATA_DIR}/clapshot.db"
