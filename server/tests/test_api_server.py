@@ -13,7 +13,7 @@ import pytest, random
 from pathlib import Path
 
 from clapshot_server import database as DB
-from clapshot_server.api_server import SOCKET_IO_PATH, run_server as run_api_server
+from clapshot_server.api_server import CustomUserMessage, SOCKET_IO_PATH, run_server as run_api_server
 from .test_database import example_db
 
 import socketio
@@ -28,17 +28,20 @@ logging.basicConfig(level=logging.INFO)
 @pytest.fixture
 async def api_server_and_db(example_db, request):
     async for (db, vid, com) in example_db:
-        try:
+        try:            
             # ----------------------------------------
             # Server
             # ----------------------------------------
+            push_msg_queue = asyncio.Queue()
+
             port = random.randint(10000, 20000)
             server_task = asyncio.create_task(
                 run_api_server(
                     db=db,
                     logger=logging.getLogger("clapshot.db"),
                     url_base='http://localhost/',
-                    port=port))
+                    port=port,
+                    push_messages=push_msg_queue))
 
             server_task.add_done_callback(lambda t: print("Server task done:", t))
             await asyncio.sleep(0.1)
@@ -80,14 +83,33 @@ async def api_server_and_db(example_db, request):
                 comments: list[DB.Comment]
                 port: int
                 break_db: Callable
+                pushq: push_msg_queue
 
-            yield TestData(send=send, get=get_msg, recvq=recvq, db=db, videos=vid, comments=com, port=port, break_db=break_db)
+            yield TestData(send=send, get=get_msg, recvq=recvq, db=db, videos=vid, comments=com, port=port, break_db=break_db, pushq=push_msg_queue)
             
         finally:
             server_task.cancel()
             with suppress(asyncio.CancelledError):
                 await server_task
 
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_api_push_msq(api_server_and_db):
+    async for td in api_server_and_db:
+
+        # Send a message
+        td.pushq.put_nowait(CustomUserMessage(user_id="user.num1", event_name="test_push_msg", fields={"param1": "test_param"}))
+        await asyncio.sleep(0.1)
+        event, data = await td.get()
+        assert event == "test_push_msg"
+        assert data["param1"] == "test_param"
+
+        # Send to another user
+        td.pushq.put_nowait(CustomUserMessage(user_id="user.num2", event_name="not_delivered", fields={}))
+        await asyncio.sleep(0.1)
+        with pytest.raises(asyncio.TimeoutError):
+            await td.get()
 
 
 @pytest.mark.timeout(5)

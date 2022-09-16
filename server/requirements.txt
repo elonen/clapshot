@@ -15,3 +15,6 @@ slack-sdk==3.18.3
 python-socketio
 aiohttp
 mypy==0.971
+
+docopt==0.6.2
+

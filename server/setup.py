@@ -19,7 +19,7 @@ setup(
 
     entry_points={
         'console_scripts': [
-            'clapshot-server = clapshot.main:main'
+            'clapshot-server = clapshot_server.main:main'
         ],
     },
     data_files=[],

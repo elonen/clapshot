@@ -1,18 +1,25 @@
 import asyncio
 from contextlib import suppress
+from dataclasses import dataclass
 import logging
-from typing import Any, Optional
+from typing import Any, DefaultDict, Optional
 from aiohttp import web
 from pathlib import Path
 import socketio
 
 from .database import Database, Video, Comment
 
-logging.basicConfig(level=logging.DEBUG)
-
 sio = socketio.AsyncServer(async_mode='aiohttp')
-
 SOCKET_IO_PATH = '/api/socket.io'
+
+@dataclass
+class CustomUserMessage:
+    """
+    Custom message to be sent to the client.
+    """
+    user_id: str 
+    fields: dict[str, Any]
+    event_name: str = 'info'
 
 
 class ClapshotApiServer:
@@ -43,8 +50,6 @@ class ClapshotApiServer:
             except Exception as e:
                 self.logger.exception(f"Exception in list_my_videos for sid '{sid}':: {e}")
                 await sio.emit('error', {'msg': f"Failed to list videos for you:: {e}"}, room=sid)
-
-
 
 
         @sio.event
@@ -161,17 +166,6 @@ class ClapshotApiServer:
 
         @sio.event
         async def connect(sid, environ):
-            
-
-
-            # TEMP, TODO: remove this
-            if False:
-                for k,v in environ.items():
-                    if k != 'wsgi.input':
-                        print(f"[environ]:: {k} = {v}")
-
-
-
             # Trust headers from web server / reverse proxy on user auth
             user_id, username = self.user_from_headers(environ)
             
@@ -194,6 +188,12 @@ class ClapshotApiServer:
 
         self.app.router.add_static('/api/static', Path(__file__).parent.absolute()/'static')
         self.app.router.add_get('/api', index)
+
+
+    async def push_message(self, msg: CustomUserMessage):
+        assert msg.user_id
+        if msg.user_id in self.userid_to_sid:
+            await sio.emit(msg.event_name, msg.fields, room=self.userid_to_sid[msg.user_id])
 
 
     def dict_for_video(self, v: Video) -> dict:
@@ -227,10 +227,13 @@ class ClapshotApiServer:
 
 
 async def run_server(
-    db: Database,
-    logger: logging.Logger,
-    url_base: str,
-    port: int) -> None:
+        db: Database,
+        logger: logging.Logger,
+        url_base: str,
+        push_messages: asyncio.Queue,
+        host='localhost',
+        port: int=8086
+    ) -> None:
     """
     Run HTTP / Socket.IO API server forever (until this asyncio task is cancelled)
 
@@ -245,19 +248,11 @@ async def run_server(
         runner = web.AppRunner(server.app)
         await runner.setup()
         # bind to localhost only, no matter what url_base is (for security, use reverse proxy to expose)
-        site = web.TCPSite(runner, 'localhost', server.port)
+        site = web.TCPSite(runner, host, server.port)
+        logger.info(f"Starting API server. Bound to {host}:{server.port} -- Base URL: {url_base}")
         await site.start()
-        await asyncio.Event().wait()  # wait forever
 
-
-"""
-if __name__ == '__main__':
-    asyncio.run(run_server(
-        db=Database(
-            Path('test_data/clapshot.db'),
-            logging.getLogger("clapshot.db")),
-        url_base='http://localhost/',
-        port=8086,
-        logger=logging.getLogger("clapshot.api"))
-    )
-"""
+        while True:
+            # Wait for messages from other parts of the app
+            msg = await push_messages.get()
+            await server.push_message(msg)

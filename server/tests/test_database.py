@@ -5,9 +5,6 @@ cleanup_on_sigterm()
 from contextlib import suppress
 import pytest, random
 from pathlib import Path
-import asyncio
-
-from clapshot_server import common
 from clapshot_server import database as DB
 
 """

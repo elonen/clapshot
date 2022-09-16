@@ -21,8 +21,6 @@ TARGET_VIDEO_MAX_BITRATE = 2.5*(10**6)
 TARGET_AUDIO_BITRATE = 128*(10**3)
 TARGET_VIDEO_MAX_W = '1920'
 
-logging.basicConfig(level=logging.DEBUG)
-
 
 # Used for returning multiprocessing results in a queue
 class ProcessingResult:
@@ -38,7 +36,7 @@ class ProcessingResult:
 
 class VideoProcessor:
     def __init__(self, db_file: Path, logger: logging.Logger = None) -> None:
-        self.logger = logger or logging.getLogger("clapshot.videoproc")
+        self.logger = logger or logging.getLogger("vp")
         self.db_file = db_file
 
 
@@ -71,9 +69,10 @@ class VideoProcessor:
         if newbitrate >= orig_bit_rate and orig_codec.lower() in ('h264', 'hevc', 'h265') and src.name.lower().endswith('mp4'):
             logger.info(f"Keeping original video codec '{orig_codec}'/MP4 because new bitrate is lower than original. Copying instead of transcoding.")
             shutil.copy(src, dst)
-            logger.info(f"Video copied ok'")
+            logger.debug(f"Video copied ok'")
         else:
             try:
+                logger.info(f"Transcoding video '{src}' with new bitrate {newbitrate} as '{dst}'...")
                 out, err = ffmpeg \
                     .input(filename=src.absolute()) \
                     .output(filename=dst.absolute(), 
@@ -90,7 +89,7 @@ class VideoProcessor:
 
                 fn_stdout.write_bytes(out or b'')
                 fn_stderr.write_bytes(err or b'')
-                logger.info(f"Conversion done")
+                logger.debug(f"Conversion done")
                 
                 return fn_stdout, fn_stderr
 
@@ -125,11 +124,12 @@ class VideoProcessor:
         """
 
         try:
+            logger.debug(f"FFMPEG probing metadata for '{src}'...")
             metadata = ffmpeg.probe(src.absolute())
         except ffmpeg.Error as e:
             return fmt_result(f"FFMPEG error reading video metadata for '{src}': {e}", False), 'None', 0
 
-        # (TESTING: delete video streams if requested by pytest)
+        # (For pytest: delete video streams if requested by pytest)
         if test_mock.get('no_video_stream'):
             metadata['streams'] = [s for s in metadata['streams'] if s['codec_type'] != 'video']
 
@@ -146,9 +146,14 @@ class VideoProcessor:
         if not fps:
             fps = Fraction(total_frames) / Fraction(duration)
 
+        logger.debug(f"Video '{src}' probed. Metadata: codec='{codec}', fps='{fps}', bit_rate='{bit_rate}', total_frames='{total_frames}', duration='{duration}'")
+
         try:
+            logger.debug(f"Writing metadata to database...")
             async def add_video_to_db():
+                logger.debug(f"Opening DB '{self.db_file}'...")
                 async with DB.Database(Path(self.db_file), logger) as db:
+                    logger.debug(f"db.add_video ...")
                     await db.add_video(DB.Video(
                         video_hash=video_hash,
                         added_by_userid=src.owner(),
@@ -161,6 +166,7 @@ class VideoProcessor:
                         raw_metadata_all=json.dumps(metadata)
                     ))
             asyncio.run(add_video_to_db())
+            logger.debug(f"Metadata wrote")
         except Exception as e:
             return fmt_result(f"Error inserting video info into DB: {e}", False), codec, bit_rate
 
@@ -177,14 +183,19 @@ class VideoProcessor:
         Returns:
             ProcessingResult
         """
-        logger = logging.getLogger(f"clapshot.videoproc.worker_pid{os.getpid()}")
+        logger = logging.getLogger(f"vp.wrk_{os.getpid()}")
         try:
             # Name the file with a hash of the first 128k of file contents + the original filename
-            file_hash = hashlib.md5(str(src).encode('utf-8'))
-            with open(src, 'rb') as f:
-                file_hash.update(f.read(128*1024))
-            assert len(file_hash.hexdigest()) >= 8
-            new_dir = dst_dir / file_hash.hexdigest()[:8]
+            def calc_video_hash(fn: Path) -> str:
+                file_hash = hashlib.md5(str(fn).encode('utf-8'))
+                with open(fn, 'rb') as f:
+                    file_hash.update(f.read(128*1024))
+                hash = file_hash.hexdigest()
+                assert len(hash) >= 8
+                return hash[:8]
+
+            new_dir = dst_dir / calc_video_hash(src)
+            logger.debug(f"Video_hash for '{src}' = '{new_dir.name}. New dir: '{new_dir}'")
 
             # Helper for returning results through multiporcessing queue
             def fmt_result(msg: str, success: bool) -> ProcessingResult:
@@ -200,12 +211,15 @@ class VideoProcessor:
                     msg=msg)
 
             # Move video to video dir
+            logger.debug(f"Creating dir '{new_dir}'...")
+            new_dir.mkdir(parents=False, exist_ok=True)
+
             dir_for_orig = new_dir / "orig"
             assert not (dir_for_orig / src.name).exists(), f"File '{src}' already exists in '{dir_for_orig}'. Aborting."
-            
-            logger.info(f"Moving '{src}' to '{dir_for_orig}/'...")
-            new_dir.mkdir(parents=False, exist_ok=True)
-            dir_for_orig.mkdir(parents=False, exist_ok=True)
+            logger.debug(f"Creating dir '{dir_for_orig}'...")
+            dir_for_orig.mkdir(parents=False)
+
+            logger.debug(f"Moving '{src}' to '{dir_for_orig}'...")
             shutil.move(src, dir_for_orig)
             assert (dir_for_orig / src.name).exists(), f"Failed to move '{src}' to {dir_for_orig}. Aborting."
             src = dir_for_orig / src.name       # update src to point to the new location
@@ -221,6 +235,8 @@ class VideoProcessor:
 
             return fmt_result("Video processing complete", True)
 
+        except KeyboardInterrupt:
+            logger.warning(f"SIGINT while processing '{src}'")
         except Exception as e:
             logger.error(f"Generic video processing error '{str(src)}' to : {e}")
             return ProcessingResult(
@@ -272,7 +288,7 @@ class VideoProcessor:
         rejected_dir: Path,
         interrupt_flag: threading.Event,
         results: queue.Queue,
-        poll_interval: int,
+        poll_interval: float,
         test_mock: dict = {}) -> None:
         """
         Monitor the incoming folder for new files and process them.
@@ -287,10 +303,10 @@ class VideoProcessor:
             results:         Queue to post ProcessingResults to
             poll_interval:   How often to check for new files (in seconds)        
         """
-        logger = logging.getLogger(f"clapshot.videoproc.incoming_monitor")
+        logger = logging.getLogger(f"vp.incoming")
 
         incoming = Path(incoming_dir)
-        logger.info(f"Starting incoming folder ({incoming}) monitor")
+        logger.info(f"Starting incoming folder monitor in '{incoming}'...")
 
         last_tested_size: DefaultDict[Path, int] = DefaultDict(int) # For detecting files that are still being written to
         skip_list: set[Path] = set()    # For skipping files that failed to process before (and could not be moved to rejected)
@@ -298,42 +314,45 @@ class VideoProcessor:
         if test_mock.get("test_skip_list"):
             skip_list.add(Path("non-existent-file"))
 
-        with mp.Pool() as pool:
-            while not interrupt_flag.is_set():
-                logger.debug("Checking for new files...")
-                process_now = []
+        try:
+            with mp.Pool() as pool:
+                while not interrupt_flag.is_set():
+                    logger.debug("Checking for new files...")
+                    process_now = []
 
-                # Clean up skip_list (remove files that no longer exist)
-                skip_list = set(filter(lambda x: x.exists(), skip_list))
+                    # Clean up skip_list (remove files that no longer exist)
+                    skip_list = set(filter(lambda x: x.exists(), skip_list))
 
-                # Check for new files in the incoming folder
-                for fn in incoming.iterdir():
-                    if fn.is_file() and fn not in skip_list:
-                        # Check if file is still being written to
-                        cur_size = fn.stat().st_size
-                        if cur_size == last_tested_size[fn]:
-                            logger.info(f"File '{fn}' not growing any more. Processing it...")
-                            process_now.append(fn)
-                        else:
-                            logger.info(f"File '{fn}' size changed since last poll. Skipping it for now...")
-                            last_tested_size[fn] = cur_size
+                    # Check for new files in the incoming folder
+                    for fn in incoming.iterdir():
+                        if fn.is_file() and fn not in skip_list:
+                            # Check if file is still being written to
+                            cur_size = fn.stat().st_size
+                            if cur_size == last_tested_size[fn]:
+                                logger.info(f"File '{fn}' not growing any more. Processing it...")
+                                process_now.append(fn)
+                            else:
+                                logger.info(f"File '{fn}' size changed since last poll. Skipping it for now...")
+                                last_tested_size[fn] = cur_size
 
-                # Process new files in parallel and wait for them to finish
-                # (otherwise we might process the same file twice)
-                if process_now:
-                    for r in pool.starmap(self.process_file, [(src, dst_dir) for src in process_now]):
-                        if not r.success:
-                            logger.error(f"Failed to process '{r.orig_file}': {r.msg}. Cleaning up...")
-                            try:
-                                self.cleanup_and_move_to_rejected(r.orig_file, r.video_hash, dst_dir, rejected_dir)
-                            except Exception as e:
-                                logger.error(f"Failed to cleanup after processing '{r.orig_file}':: {e}")
-                                r.msg = f"{r.msg}. ALSO, failed to cleanup: {e}"
-                            if r.orig_file.exists():
-                                logger.error(f"File '{r.orig_file}' still exists after cleanup. Adding to skip_list, so we don't reprocess it.")
-                                skip_list.add(r.orig_file)
-                        results.put(r)
+                    # Process new files in parallel and wait for them to finish
+                    # (otherwise we might process the same file twice)
+                    if process_now:                    
+                        for r in pool.starmap(self.process_file, [(src, dst_dir) for src in process_now]):
+                            if not r.success:
+                                logger.error(f"Failed to process '{r.orig_file}': {r.msg}. Cleaning up...")
+                                try:
+                                    self.cleanup_and_move_to_rejected(r.orig_file, r.video_hash, dst_dir, rejected_dir)
+                                except Exception as e:
+                                    logger.error(f"Failed to cleanup after processing '{r.orig_file}':: {e}")
+                                    r.msg = f"{r.msg}. ALSO, failed to cleanup: {e}"
+                                if r.orig_file.exists():
+                                    logger.error(f"File '{r.orig_file}' still exists after cleanup. Adding to skip_list, so we don't reprocess it.")
+                                    skip_list.add(r.orig_file)
+                            results.put(r)
 
-                interrupt_flag.wait(timeout=poll_interval)
+                    interrupt_flag.wait(timeout=poll_interval)
+        except KeyboardInterrupt:
+            logger.info("SIGINT.")
 
         logger.info("Video processor stopped")
