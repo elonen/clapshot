@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime
 from fractions import Fraction
 import json
+import multiprocessing
 import queue
 import shutil
 import time
@@ -109,6 +110,10 @@ def test_conversion_error(temp_dir):
             vp.convert_video(src_garbage, dst_file, logger, 123456, 'h264')
         assert (dst_dir / "encoder.stderr").stat().st_size > 0, "stderr file is empty"
 
+        # Same with error queue
+        q = multiprocessing.Queue()
+        vp.convert_video(src_garbage, dst_file, logger, 123, 'h264', error_q=q)
+        assert q.get() is not None
 
 
 def _get_video_from_db(video_hash: str, db_file: Path):
@@ -233,7 +238,7 @@ def test_process_dev_null_failure(temp_dir):
 
 @pytest.mark.slow
 @pytest.mark.timeout(15)
-def test_monitor_dir(temp_dir):
+def test_monitor_dir_ok(temp_dir):
     """
     Test incomig video monitoring.
     """

@@ -394,7 +394,7 @@ async def test_api_anonymous_user(api_server_and_db):
 @pytest.mark.asyncio
 async def test_api_logout(api_server_and_db):
     async for td in api_server_and_db:
-        await td.send('logout', {'a': 'b'})
+        await td.send('logout', None)
         await asyncio.sleep(0.1)
         with pytest.raises(asyncio.exceptions.TimeoutError) as e_info:
             await td.get()

@@ -161,7 +161,7 @@ class ClapshotApiServer:
                 await sio.emit('error', {'msg': f"Failed to delete comment:: {e}"}, room=sid)
 
         @sio.event
-        async def logout(sid, msg):
+        async def logout(sid):
             await sio.disconnect(sid)
 
         @sio.event

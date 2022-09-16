@@ -1,4 +1,4 @@
-.coverage
+.coverage*
 coverage.xml
 .DS_Store
 __pycache__

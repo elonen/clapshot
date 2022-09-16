@@ -3,7 +3,6 @@
 from decimal import Decimal
 from fractions import Fraction
 import hashlib
-import multiprocessing as mp
 import logging
 import os
 from pathlib import Path
@@ -14,12 +13,18 @@ from typing import Any, Callable, DefaultDict, Optional
 import ffmpeg
 import json
 import asyncio
+import concurrent
+import multiprocessing
 
 from . import database as DB
 
 TARGET_VIDEO_MAX_BITRATE = 2.5*(10**6)
 TARGET_AUDIO_BITRATE = 128*(10**3)
 TARGET_VIDEO_MAX_W = '1920'
+
+# Bug(?) workaround. Otherwise p.exitcode=1 always when multiprocessing is spawned in a thread. See:
+# https://stackoverflow.com/questions/67273533/processes-in-python-3-9-exiting-with-code-1-when-its-created-inside-a-threadpoo
+multiprocessing.set_start_method('forkserver', force=True)
 
 
 # Used for returning multiprocessing results in a queue
@@ -40,7 +45,7 @@ class VideoProcessor:
         self.db_file = db_file
 
 
-    def convert_video(self, src: Path, dst: Path, logger: logging.Logger, orig_bit_rate: int, orig_codec: str) \
+    def convert_video(self, src: Path, dst: Path, logger: logging.Logger, orig_bit_rate: int, orig_codec: str, error_q: Optional[multiprocessing.Queue] = None) \
         -> Optional[tuple[Path, Path]]:
         """
         Convert & scale down video to with ffmpeg-python, if necessary.
@@ -59,46 +64,54 @@ class VideoProcessor:
             Exception: if the conversion fails (also writes ffmpeg output to a log)
         """
 
-        logger.info(f"Converting '{src}' to '{dst}'...")
-        assert src.exists()
+        try:
+            logger.info(f"Converting '{src}' to '{dst}'...")
+            assert src.exists()
 
-        fn_stdout = dst.parent / 'encoder.stdout'
-        fn_stderr = dst.parent / 'encoder.stderr'
+            fn_stdout = dst.parent / 'encoder.stdout'
+            fn_stderr = dst.parent / 'encoder.stderr'
 
-        newbitrate = max(int(orig_bit_rate/2), min(int(orig_bit_rate), TARGET_VIDEO_MAX_BITRATE))
-        if newbitrate >= orig_bit_rate and orig_codec.lower() in ('h264', 'hevc', 'h265') and src.name.lower().endswith('mp4'):
-            logger.info(f"Keeping original video codec '{orig_codec}'/MP4 because new bitrate is lower than original. Copying instead of transcoding.")
-            shutil.copy(src, dst)
-            logger.debug(f"Video copied ok'")
-        else:
-            try:
-                logger.info(f"Transcoding video '{src}' with new bitrate {newbitrate} as '{dst}'...")
-                out, err = ffmpeg \
-                    .input(filename=src.absolute()) \
-                    .output(filename=dst.absolute(), 
-                        vcodec='libx264', preset='faster', 
-                        vf=f'scale={TARGET_VIDEO_MAX_W}:-8',
-                        map=0,          # copy all streams
-                        acodec='aac',
-                        ac=2,           # stereo
-                        strict='experimental',
-                        **{'b:v': newbitrate, 'b:a': TARGET_AUDIO_BITRATE}) \
-                    .global_args('-nostdin', '-hide_banner', '-nostats') \
-                    .overwrite_output()  \
-                    .run(capture_stdout=True, capture_stderr=True)
+            newbitrate = max(int(orig_bit_rate/2), min(int(orig_bit_rate), TARGET_VIDEO_MAX_BITRATE))
+            if newbitrate >= orig_bit_rate and orig_codec.lower() in ('h264', 'hevc', 'h265') and src.name.lower().endswith('mp4'):
+                logger.info(f"Keeping original video codec '{orig_codec}'/MP4 because new bitrate is lower than original. Copying instead of transcoding.")
+                shutil.copy(src, dst)
+                logger.debug(f"Video copied ok'")
+            else:
+                try:
+                    logger.info(f"Transcoding video '{src}' with new bitrate {newbitrate} as '{dst}'...")
+                    out, err = ffmpeg \
+                        .input(filename=src.absolute()) \
+                        .output(filename=dst.absolute(), 
+                            vcodec='libx264', preset='faster', 
+                            vf=f'scale={TARGET_VIDEO_MAX_W}:-8',
+                            map=0,          # copy all streams
+                            acodec='aac',
+                            ac=2,           # stereo
+                            strict='experimental',
+                            **{'b:v': newbitrate, 'b:a': TARGET_AUDIO_BITRATE}) \
+                        .global_args('-nostdin', '-hide_banner', '-nostats') \
+                        .overwrite_output()  \
+                        .run(capture_stdout=True, capture_stderr=True)
 
-                fn_stdout.write_bytes(out or b'')
-                fn_stderr.write_bytes(err or b'')
-                logger.debug(f"Conversion done")
-                
-                return fn_stdout, fn_stderr
+                    fn_stdout.write_bytes(out or b'')
+                    fn_stderr.write_bytes(err or b'')
+                    logger.debug(f"Conversion done")
+                    
+                    return fn_stdout, fn_stderr
 
-            except ffmpeg.Error as e:
-                fn_stdout.write_bytes(bytes(e.stdout))
-                fn_stderr.write_bytes(bytes(e.stderr))
-                msg = f"Error converting video '{src}' to '{dst}'. See '{fn_stderr}' and '{fn_stdout}' for details."
-                logger.error(msg)
-                raise Exception(msg)
+                except ffmpeg.Error as e:
+                    fn_stdout.write_bytes(bytes(e.stdout))
+                    fn_stderr.write_bytes(bytes(e.stderr))
+                    msg = f"FFMPEG error converting video '{src}' to '{dst}'. See '{fn_stderr}' and '{fn_stdout}' for details."
+                    logger.error(msg)
+                    raise Exception(msg)
+
+        except Exception as e:
+            if error_q:
+                error_q.put_nowait(e)
+            else:
+                raise e
+
         return None
 
 
@@ -215,7 +228,7 @@ class VideoProcessor:
             new_dir.mkdir(parents=False, exist_ok=True)
 
             dir_for_orig = new_dir / "orig"
-            assert not (dir_for_orig / src.name).exists(), f"File '{src}' already exists in '{dir_for_orig}'. Aborting."
+            assert not (dir_for_orig / src.name).exists(), f"File '{src.name}' already exists in '{dir_for_orig}'. Aborting."
             logger.debug(f"Creating dir '{dir_for_orig}'...")
             dir_for_orig.mkdir(parents=False)
 
@@ -231,12 +244,19 @@ class VideoProcessor:
             
             # Convert video to mp4 with ffmpeg
             mp4_file = new_dir / "video.mp4"
-            self.convert_video(src, mp4_file, logger, orig_bitrate, orig_codec)
+            
+            errq = multiprocessing.Queue()  # type: multiprocessing.Queue[Exception]
+            p = multiprocessing.Process(target=self.convert_video, args=(src, mp4_file, logger, orig_bitrate, orig_codec, errq))
+            p.start()
+            p.join()
+            if not errq.empty():
+                e = errq.get()
+                return fmt_result(f"FFMPEG error converting video:: {e}", False)
+            elif p.exitcode != 0:
+                return fmt_result(f"FFMPEG subprocess exitcode={p.exitcode}. Got no exception.", False)
 
             return fmt_result("Video processing complete", True)
 
-        except KeyboardInterrupt:
-            logger.warning(f"SIGINT while processing '{src}'")
         except Exception as e:
             logger.error(f"Generic video processing error '{str(src)}' to : {e}")
             return ProcessingResult(
@@ -314,45 +334,42 @@ class VideoProcessor:
         if test_mock.get("test_skip_list"):
             skip_list.add(Path("non-existent-file"))
 
-        try:
-            with mp.Pool() as pool:
-                while not interrupt_flag.is_set():
-                    logger.debug("Checking for new files...")
-                    process_now = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            while not interrupt_flag.is_set():
+                logger.debug("Checking for new files...")
+                process_now = []
 
-                    # Clean up skip_list (remove files that no longer exist)
-                    skip_list = set(filter(lambda x: x.exists(), skip_list))
+                # Clean up skip_list (remove files that no longer exist)
+                skip_list = set(filter(lambda x: x.exists(), skip_list))
 
-                    # Check for new files in the incoming folder
-                    for fn in incoming.iterdir():
-                        if fn.is_file() and fn not in skip_list:
-                            # Check if file is still being written to
-                            cur_size = fn.stat().st_size
-                            if cur_size == last_tested_size[fn]:
-                                logger.info(f"File '{fn}' not growing any more. Processing it...")
-                                process_now.append(fn)
-                            else:
-                                logger.info(f"File '{fn}' size changed since last poll. Skipping it for now...")
-                                last_tested_size[fn] = cur_size
+                # Check for new files in the incoming folder
+                for fn in incoming.iterdir():
+                    if fn.is_file() and fn not in skip_list:
+                        # Check if file is still being written to
+                        cur_size = fn.stat().st_size
+                        if cur_size == last_tested_size[fn]:
+                            logger.info(f"File '{fn}' not growing any more. Processing it...")
+                            process_now.append(fn)
+                        else:
+                            logger.info(f"File '{fn}' size changed since last poll. Skipping it for now...")
+                            last_tested_size[fn] = cur_size
 
-                    # Process new files in parallel and wait for them to finish
-                    # (otherwise we might process the same file twice)
-                    if process_now:                    
-                        for r in pool.starmap(self.process_file, [(src, dst_dir) for src in process_now]):
-                            if not r.success:
-                                logger.error(f"Failed to process '{r.orig_file}': {r.msg}. Cleaning up...")
-                                try:
-                                    self.cleanup_and_move_to_rejected(r.orig_file, r.video_hash, dst_dir, rejected_dir)
-                                except Exception as e:
-                                    logger.error(f"Failed to cleanup after processing '{r.orig_file}':: {e}")
-                                    r.msg = f"{r.msg}. ALSO, failed to cleanup: {e}"
-                                if r.orig_file.exists():
-                                    logger.error(f"File '{r.orig_file}' still exists after cleanup. Adding to skip_list, so we don't reprocess it.")
-                                    skip_list.add(r.orig_file)
-                            results.put(r)
+                # Process new files in parallel and wait for them to finish
+                # (otherwise we might process the same file twice)
+                if process_now:
+                    for r in executor.map(lambda x: self.process_file(x, dst_dir), process_now):
+                        if not r.success:
+                            logger.error(f"Failed to process '{r.orig_file}': {r.msg}. Cleaning up...")
+                            try:
+                                self.cleanup_and_move_to_rejected(r.orig_file, r.video_hash, dst_dir, rejected_dir)
+                            except Exception as e:
+                                logger.error(f"Failed to cleanup after processing '{r.orig_file}':: {e}")
+                                r.msg = f"{r.msg}. ALSO, failed to cleanup: {e}"
+                            if r.orig_file.exists():
+                                logger.error(f"File '{r.orig_file}' still exists after cleanup. Adding to skip_list, so we don't reprocess it.")
+                                skip_list.add(r.orig_file)
+                        results.put(r)
 
-                    interrupt_flag.wait(timeout=poll_interval)
-        except KeyboardInterrupt:
-            logger.info("SIGINT.")
+                interrupt_flag.wait(timeout=poll_interval)
 
         logger.info("Video processor stopped")
