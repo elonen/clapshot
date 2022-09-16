@@ -326,7 +326,7 @@ def test_monitor_dir_bad_reject_dir(temp_dir):
             target=VideoProcessor.monitor_incoming_folder_loop,
             args=(vp, incoming_dir, videos_dir, rejected_dir, interrupt_flag, result_queue, 0.1))
         p.start()
-        time.sleep(1)        
+        time.sleep(1)
         shutil.copy(src_garbage, incoming_dir / src_garbage.name)
         time.sleep(1)
         

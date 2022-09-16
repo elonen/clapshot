@@ -35,17 +35,17 @@ class Video(Base):
 
     comments = relationship("Comment", cascade="all, delete-orphan")
     
-    def as_dict(self):
+    def to_dict(self):
         return {
             "video_hash": self.video_hash,
             "added_by_userid": self.added_by_userid,
             "added_by_username": self.added_by_username,
-            "added_time": self.added_time,
+            "added_time": self.added_time.isoformat(),
             "orig_filename": self.orig_filename,
             "total_frames": self.total_frames,
             "duration": self.duration,
             "fps": self.fps,
-            "raw_metadata_vide": self.raw_metadata_video,
+            "raw_metadata_video": self.raw_metadata_video,
             "raw_metadata_all": self.raw_metadata_all
         }
 
@@ -58,23 +58,23 @@ class Comment(Base):
     __mapper_args__ = {"eager_defaults": True}
 
     id = Column(sql.Integer, primary_key=True)  # required by SQLAlchemy
-    video_hash = Column(sql.Integer, sql.ForeignKey('video.video_hash'), default=None)
+    video_hash = Column(sql.Integer, sql.ForeignKey('video.video_hash'), nullable=False)
 
     parent_id = Column(sql.Integer, sql.ForeignKey('comment.id'), default=None, index=True)
-    created = Column(sql.DateTime, nullable=False, server_default=sql.func.now())
+    created = Column(sql.DateTime, server_default=sql.func.now(), nullable=False)
     edited = Column(sql.DateTime, default=None)  # set if comment has been edited since creation
     user_id = Column(sql.String, default="anonymous")    # unique user id
     username = Column(sql.String, default="Anonymous")   # human readable username
     comment = Column(sql.String, default="")
     drawing = Column(sql.String, default=None)  # image data URI
 
-    def as_dict(self):
+    def to_dict(self):
         return {
             "id": self.id,
             "video_hash": self.video_hash,
             "parent_id": self.parent_id,
-            "created": self.created,
-            "edited": self.edited,
+            "created": self.created.isoformat(),
+            "edited": self.edited.isoformat() if self.edited else None,
             "user_id": self.user_id,
             "username": self.username,
             "comment": self.comment,
@@ -119,7 +119,7 @@ class Database:
             res = await session.execute(select(Video).filter_by(video_hash=video_hash))
             return res.scalars().first()
 
-    async def del_video(self, video_hash: str):
+    async def del_video_and_comments(self, video_hash: str):
         async with self.async_session() as session:
             await session.execute(sql.delete(Video).filter_by(video_hash=video_hash))
             await session.execute(sql.delete(Comment).filter_by(video_hash=video_hash))
@@ -148,13 +148,12 @@ class Database:
             res = (await session.execute(select(Comment).filter_by(video_hash=video_hash))).scalars().all()
             return res
     
-    async def del_comment(self, comment_id: int):
+    async def del_comment(self, comment_id: int) -> None:
         async with self.async_session() as session:
             await session.execute(sql.delete(Comment).filter_by(id=comment_id))
             await session.commit()
 
-    async def edit_comment(self, comment_id: int, new_comment: str):
+    async def edit_comment(self, comment_id: int, new_comment: str) -> None:
         async with self.async_session() as session:
             await session.execute(sql.update(Comment).filter_by(id=comment_id).values(comment=new_comment))
             await session.commit()
-

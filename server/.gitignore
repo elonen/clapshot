@@ -12,3 +12,4 @@ _venv
 build/*
 *~
 ~$*
+*.egg-info

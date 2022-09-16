@@ -126,7 +126,7 @@ async def test_comment_edit(example_db):
 @pytest.mark.asyncio
 async def test_video_delete(example_db):
     async for (db, vid, com) in example_db:
-        await db.del_video(vid[1].video_hash)
+        await db.del_video_and_comments(vid[1].video_hash)
         for v in vid:
             if v.video_hash == vid[1].video_hash:
                 assert (await db.get_video(v.video_hash)) is None, "Video should be deleted"
@@ -161,8 +161,8 @@ async def test_repr(example_db):
         for v in vid:        
             assert v.video_hash in repr(v)
             assert v.orig_filename in repr(v)    
-            assert v.video_hash == v.as_dict()['video_hash']
+            assert v.video_hash == v.to_dict()['video_hash']
         for c in com:
             assert c.video_hash in repr(c)
             assert c.comment in repr(c)
-            assert c.username == c.as_dict()['username']
+            assert c.username == c.to_dict()['username']
