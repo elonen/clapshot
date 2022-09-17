@@ -1,7 +1,11 @@
 <script lang="ts">
+    import { createPopup } from '@picmo/popup-picker';
+    import { darkTheme, NativeRenderer } from 'picmo';
+    import { TwemojiRenderer  } from '@picmo/renderer-twemoji';
+    
     import { createEventDispatcher } from 'svelte';
     import { fade, blur, fly, slide, scale } from "svelte/transition";
-    import { video_is_ready, cur_user_pic } from '../stores.js';
+    import { video_is_ready, cur_user_pic, cur_username } from '../stores.js';
 
     const dispatch = createEventDispatcher();
 
@@ -11,13 +15,13 @@
     let cur_color = "red";
 
     export function forceDrawMode(on: boolean) {
+        console.log("Forcing draw mode: " + on);
         draw_mode = on;
     }
 
     function sendDrawModeToParent() {
         dispatch('button-clicked', {'action': 'draw', 'is_draw_mode': draw_mode});
     }
-
     function onClickSend() {
         dispatch('button-clicked', {'action': 'send', 'comment_text': input_text, 'is_timed': timed_comment});
         input_text = "";
@@ -40,22 +44,52 @@
         }
     }
 
+  // Picmo emoji picker
+  let emoji_picker: any = null;
+  function onEmojiPicker(e) 
+  {
+    if (!emoji_picker) {
+            emoji_picker = createPopup({
+                theme: darkTheme,
+                renderer: new TwemojiRenderer()}, {
+            referenceElement: e.target,
+            triggerElement: e.target,
+            position: 'right-end'        
+        });
+        emoji_picker.addEventListener('emoji:select', (selection) => {
+            input_text = (input_text ? input_text : '') + selection.emoji;
+        });
+    }
+    emoji_picker.toggle();
+}
+
 </script>
 
 
-<form on:submit|preventDefault={onClickSend} class="flex justify-left block rounded-lg shadow-lg shadow-lg bg-gray-800 text-left p-4 w-full" >
+<div id="pickerContainer"></div>
 
-    <img src={$cur_user_pic} class="rounded-full p-2 w-12 h-12" alt="" loading="lazy" />
+<form on:submit|preventDefault={onClickSend} class="flex justify-left block rounded-lg shadow-lg shadow-lg bg-gray-800 text-left p-4 w-full" >
 
     <input 
         bind:value={input_text} 
-        class="flex-1 p-2 bg-gray-700 rounded-lg" placeholder="Add a comment..." />
+        class="flex-1 p-2 bg-gray-700 rounded-lg" placeholder="Add a comment{timed_comment ? ' - at current time' :''}..." />
+
+    <button type="button"
+        class="far fa-smile text-gray-400 hover:text-yellow-500 w-12 h-12 text-[1.75em]"
+        on:click={onEmojiPicker} />
 
     {#if $video_is_ready}
         <button type="button"
             title="Comment is time specific?"
-            class="fas fa-stopwatch w-12 h-12 text-[1.75em] {timed_comment ? 'text-blue-400' : 'text-gray-500'}"
-            on:click="{ () => timed_comment = !timed_comment }" />
+            class="{timed_comment ? 'text-amber-600' : 'text-gray-500'}"
+            on:click="{ () => timed_comment = !timed_comment }">
+            <span class="fa-stack">
+                <i class="fa-solid fa-stopwatch fa-stack-2x"></i>
+                {#if !timed_comment}
+                    <i class="fa-solid fa-x fa-stack-2x text-red-800"></i>
+                {/if}                
+            </span>
+        </button>
 
         <button type="button"
             on:click={onClickDraw}

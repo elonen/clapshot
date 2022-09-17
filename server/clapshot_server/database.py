@@ -16,7 +16,7 @@ class Video(Base):
     __tablename__ = 'video'
     __mapper_args__ = {"eager_defaults": True}
 
-    id = sql.Column(sql.Integer, primary_key=True)  # required by SQLAlchemy
+    id = sql.Column(sql.Integer, primary_key=True, autoincrement=True)  # required by SQLAlchemy
     video_hash = Column(sql.String, index=True, unique=True)
 
     added_by_userid = Column(sql.String, index=True)    # unique user id
@@ -56,8 +56,9 @@ class Video(Base):
 class Comment(Base):
     __tablename__ = 'comment'
     __mapper_args__ = {"eager_defaults": True}
+    __table_args__ = {'sqlite_autoincrement': True} # required to avoid ID reuse
 
-    id = Column(sql.Integer, primary_key=True)  # required by SQLAlchemy
+    id = Column(sql.Integer, primary_key=True, autoincrement=True)
     video_hash = Column(sql.Integer, sql.ForeignKey('video.video_hash'), nullable=False)
 
     parent_id = Column(sql.Integer, sql.ForeignKey('comment.id'), default=None, index=True)
@@ -66,23 +67,25 @@ class Comment(Base):
     user_id = Column(sql.String, default="anonymous")    # unique user id
     username = Column(sql.String, default="Anonymous")   # human readable username
     comment = Column(sql.String, default="")
-    drawing = Column(sql.String, default=None)  # image data URI
+    timecode = Column(sql.String, default=None, nullable=True)
+    drawing = Column(sql.String, default=None, nullable=True)  # image data URI
 
     def to_dict(self):
         return {
-            "id": self.id,
+            "comment_id": self.id,
             "video_hash": self.video_hash,
-            "parent_id": self.parent_id,
+            "parent_id": self.parent_id if self.parent_id else '',
             "created": self.created.isoformat(),
             "edited": self.edited.isoformat() if self.edited else None,
             "user_id": self.user_id,
             "username": self.username,
             "comment": self.comment,
+            "timecode": self.timecode or '',
             "drawing": self.drawing
         }
 
     def __repr__(self):
-       return f"<Comment(id='{self.id}' video={self.video_hash} parent={self.parent_id} user_id='{self.user_id}' comment='{self.comment}' has-drawing={not(not self.drawing)} ...)>"
+       return f"<Comment({self.id} video={self.video_hash} parent={self.parent_id or '-'} user_id='{self.user_id}' comment='{self.comment}' drawing={not(not self.drawing)} ...)>"
 
 
 
@@ -155,5 +158,5 @@ class Database:
 
     async def edit_comment(self, comment_id: int, new_comment: str) -> None:
         async with self.async_session() as session:
-            await session.execute(sql.update(Comment).filter_by(id=comment_id).values(comment=new_comment))
+            await session.execute(sql.update(Comment).filter_by(id=comment_id).values(comment=new_comment, edited=sql.func.now()))
             await session.commit()

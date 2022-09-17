@@ -3,9 +3,9 @@
   import {VideoFrame, FrameRates} from './VideoFrame.js';
   import {Notifications, acts} from '@tadashi/svelte-notification'
   import {create as sdb_create} from "simple-drawing-board";
-  import { onMount } from 'svelte';
+  import {onMount} from 'svelte';
   
-  import {video_is_ready} from '../stores.js';
+  import {video_is_ready, video_fps} from '../stores.js';
 
   export let src: any;
 
@@ -44,6 +44,28 @@
       this.try_create_all();
       return this._canvas;
     }
+    
+    isEmpty(): bool 
+    {
+      if (!this._board || !this._canvas) return true;
+      const blankCanvas = document.createElement('canvas');
+      blankCanvas.width = this._canvas.width;
+      blankCanvas.height = this._canvas.height;
+      return this._canvas.toDataURL() === blankCanvas.toDataURL()
+    }
+
+    getDataUrl(): string
+    {
+      if (this.isEmpty())
+        return "";
+      let comb_canvas = document.createElement('canvas');
+      comb_canvas.width  = video_elem.videoWidth;
+      comb_canvas.height = video_elem.videoHeight;
+      var ctx = comb_canvas.getContext('2d');
+      ctx.drawImage(video_elem, 0, 0);
+      ctx.drawImage(this._canvas, 0, 0);
+      return comb_canvas.toDataURL("image/webp", 0.8);
+    }
 
     try_create_all() : void
     {
@@ -55,14 +77,14 @@
 
         vframe_calc = new VideoFrame({
           video: video_elem,
-          frameRate: FrameRates.film, /// TODO: THIS NEEDS TO BE READ FROM SERVER - no way to get this from the video element
+          frameRate: $video_fps,
           callback: function(response) { console.log(response); } });
 
         // Create the drawing board
         this._canvas = document.createElement('canvas');
         this._canvas.width = video_elem.videoWidth;
         this._canvas.height = video_elem.videoHeight;
-        this._canvas.style.cssText = 'border: 6px solid red; cursor:crosshair; opacity: 0.66; position: absolute; top: 0; left: 0; z-index: 1000; width: 100%; height: 100%;';
+        this._canvas.style.cssText = 'border: 6px solid red; cursor:crosshair; opacity: 1.0; position: absolute; top: 0; left: 0; z-index: 1000; width: 100%; height: 100%;';
         video_canvas_container.appendChild(this._canvas);
 
         this._board = sdb_create(this._canvas);
@@ -216,7 +238,7 @@
   }
 
   export function getDrawing() {
-    return !!draw.board ? draw.board.toDataURL() : '';
+    return draw.getDataUrl();
   }
 
   export async function setDrawing(drawing: string) {
@@ -239,7 +261,10 @@
   <div bind:this={video_canvas_container} class="block relative">
     <video
       src="{src}"
+      crossOrigin="anonymous"
       preload="auto"
+      width="1920" height="1080"
+      style="opacity: {$video_is_ready ? 1.0 : 0}; transition: 1.0s;"
       bind:this={video_elem}
       on:loadedmetadata={draw.try_create_all}
       on:click={togglePlay}
@@ -284,9 +309,6 @@
 			<span class="flex-0 text-lg mx-4 ml-8">{format(duration)}</span>
 		</div>
 	</div>
-
-  <Notifications />
-
   
 </div>
 

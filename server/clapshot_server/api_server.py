@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import suppress
 from dataclasses import dataclass
+from decimal import Decimal
 import logging
 from typing import Any, DefaultDict, Optional
 from aiohttp import web
@@ -9,8 +10,15 @@ import socketio
 
 from .database import Database, Video, Comment
 
-sio = socketio.AsyncServer(async_mode='aiohttp')
+sio = socketio.AsyncServer(async_mode='aiohttp', cors_allowed_origins='*')
 SOCKET_IO_PATH = '/api/socket.io'
+
+@web.middleware
+async def cors_middleware(request, handler):
+    response = await handler(request)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
 
 @dataclass
 class CustomUserMessage:
@@ -21,16 +29,21 @@ class CustomUserMessage:
     fields: dict[str, Any]
     event_name: str = 'info'
 
-
 class ClapshotApiServer:
 
-    def __init__(self, db: Database, url_base: str, port: int, logger: logging.Logger):
+    def __init__(
+            self, db: Database, 
+            url_base: str,
+            port: int,
+            logger: logging.Logger,
+            serve_dirs: dict[str, Path]):
         self.db = db
         self.url_base = url_base
         self.port = port
         self.logger = logger
+        self.serve_dirs = serve_dirs
 
-        self.app = web.Application()
+        self.app = web.Application(middlewares=[cors_middleware])
         sio.attach(self.app, socketio_path=SOCKET_IO_PATH)
 
         self.userid_to_sid: dict[str, str] = {}
@@ -48,8 +61,8 @@ class ClapshotApiServer:
                     'videos': [self.dict_for_video(v) for v in videos] 
                     }, room=sid)
             except Exception as e:
-                self.logger.exception(f"Exception in list_my_videos for sid '{sid}':: {e}")
-                await sio.emit('error', {'msg': f"Failed to list videos for you:: {e}"}, room=sid)
+                self.logger.exception(f"Exception in list_my_videos for sid '{sid}': {e}")
+                await sio.emit('oops', {'msg': f"Failed to list videos for you: {e}"}, room=sid)
 
 
         @sio.event
@@ -57,16 +70,21 @@ class ClapshotApiServer:
             try:
                 user_id, username = await self.get_user(sid)
                 video_hash = msg['video_hash']
-                self.logger.info(f"lookup_video: user_id='{user_id}' username='{username}' video_hash='{video_hash}'")                
+                self.logger.info(f"open_video: user_id='{user_id}' username='{username}' video_hash='{video_hash}'")
+
                 v = await self.db.get_video(video_hash)
                 if v is None:
-                    await sio.emit('error', {'msg': f"No such '{video_hash}'"}, room=sid)
+                    await sio.emit('oops', {'msg': f"No such video '{video_hash}'"}, room=sid)
                 else:
                     sio.enter_room(sid, video_hash)
-                    await sio.emit('open_video', self.dict_for_video(v), room=sid)
+                    fields = self.dict_for_video(v)
+                    await sio.emit('open_video', fields, room=sid)
+                    for c in await self.db.get_video_comments(video_hash):
+                        self.logger.debug(f"Sending to sid='{sid}' comment {c}")
+                        await sio.emit('new_comment', c.to_dict(), room=sid)
             except Exception as e:
-                self.logger.exception(f"Exception in lookup_video for sid '{sid}':: {e}")
-                await sio.emit('error', {'msg': f"Failed to lookup video:: {e}"}, room=sid)
+                self.logger.exception(f"Exception in lookup_video for sid '{sid}': {e}")
+                await sio.emit('oops', {'msg': f"Failed to lookup video: {e}"}, room=sid)
 
         @sio.event
         async def del_video(sid, msg):
@@ -76,15 +94,15 @@ class ClapshotApiServer:
                 self.logger.info(f"del_video: user_id='{user_id}' video_hash='{video_hash}'")
                 v = await self.db.get_video(video_hash)
                 if v is None:
-                    await sio.emit('error', {'msg': f"No such video '{video_hash}'. Cannot delete."}, room=sid)
+                    await sio.emit('oops', {'msg': f"No such video '{video_hash}'. Cannot delete."}, room=sid)
                 else:
                     assert user_id in (v.added_by_userid, 'admin'), f"Video '{video_hash}' not owned by you. Cannot delete."
                     await self.db.del_video_and_comments(video_hash)
                     await sio.emit('info', {'msg': f"Deleted video '{video_hash}' / '{v.orig_filename}'"}, room=sid)
 
             except Exception as e:
-                self.logger.exception(f"Exception in del_video for sid '{sid}':: {e}")
-                await sio.emit('error', {'msg': f"Failed to delete video:: {e}"}, room=sid)
+                self.logger.exception(f"Exception in del_video for sid '{sid}': {e}")
+                await sio.emit('oops', {'msg': f"Failed to delete video: {e}"}, room=sid)
 
 
 
@@ -94,26 +112,28 @@ class ClapshotApiServer:
                 user_id, username = await self.get_user(sid)
                 assert user_id and username
                 video_hash = msg['video_hash']
+                self.logger.info(f"add_comment: user_id='{user_id}' video_hash='{video_hash}', msg='{msg.get('comment')}'")
 
                 vid = await self.db.get_video(video_hash)
                 if vid is None:
-                    await sio.emit('error', {'msg': f"No such video '{video_hash}'. Cannot comment."}, room=sid)
+                    await sio.emit('oops', {'msg': f"No such video '{video_hash}'. Cannot comment."}, room=sid)
                     return
 
                 comment = Comment(
                     video_hash = video_hash,
-                    parent_id = msg.get('parent_id'),
+                    parent_id = msg.get('parent_id') or None,
                     user_id = user_id,
                     username = username,
-                    comment = str(msg.get('comment')) or '',
-                    drawing = str(msg.get('drawing')) or None)
+                    comment = msg.get('comment') or '',
+                    timecode = msg.get('timecode') or '',
+                    drawing = msg.get('drawing') or None)
 
                 await self.db.add_comment(comment)
                 await sio.emit('new_comment', comment.to_dict(), room=video_hash)
 
             except Exception as e:
-                self.logger.exception(f"Exception in add_comment for sid '{sid}':: {e}")
-                await sio.emit('error', {'msg': f"Failed to add comment:: {e}"}, room=sid)
+                self.logger.exception(f"Exception in add_comment for sid '{sid}': {e}")
+                await sio.emit('oops', {'msg': f"Failed to add comment: {e}"}, room=sid)
 
 
         @sio.event
@@ -123,6 +143,7 @@ class ClapshotApiServer:
                 assert user_id and username
                 comment_id = msg['comment_id']
                 comment = str(msg['comment'])
+                self.logger.info(f"edit_comment: user_id='{user_id}' comment_id='{comment_id}', comment='{comment}'")
                 
                 old = await db.get_comment(comment_id)
                 video_hash = old.video_hash
@@ -130,11 +151,12 @@ class ClapshotApiServer:
 
                 await self.db.edit_comment(comment_id, comment)
                 await sio.emit('del_comment', {'comment_id': comment_id}, room=video_hash)
-                await sio.emit('new_comment', {'comment_id': comment_id, 'comment': comment}, room=video_hash)
+                c = await self.db.get_comment(comment_id)
+                await sio.emit('new_comment', c.to_dict(), room=video_hash)
 
             except Exception as e:
-                self.logger.exception(f"Exception in edit_comment for sid '{sid}':: {e}")
-                await sio.emit('error', {'msg': f"Failed to edit comment:: {e}"}, room=sid)
+                self.logger.exception(f"Exception in edit_comment for sid '{sid}': {e}")
+                await sio.emit('oops', {'msg': f"Failed to edit comment: {e}"}, room=sid)
 
 
         @sio.event
@@ -143,6 +165,7 @@ class ClapshotApiServer:
                 user_id, username = await self.get_user(sid)
                 assert user_id and username
                 comment_id = msg['comment_id']
+                self.logger.info(f"del_comment: user_id='{user_id}' comment_id='{comment_id}'")
 
                 old = await self.db.get_comment(comment_id)
                 video_hash = old.video_hash
@@ -157,21 +180,27 @@ class ClapshotApiServer:
                 await sio.emit('del_comment', {'comment_id': comment_id}, room=video_hash)
 
             except Exception as e:
-                self.logger.exception(f"Exception in del_comment for sid '{sid}':: {e}")
-                await sio.emit('error', {'msg': f"Failed to delete comment:: {e}"}, room=sid)
+                self.logger.exception(f"Exception in del_comment for sid '{sid}': {e}")
+                await sio.emit('oops', {'msg': f"Failed to delete comment: {e}"}, room=sid)
 
         @sio.event
         async def logout(sid):
+            self.logger.info(f"logout: sid='{sid}'")
             await sio.disconnect(sid)
 
         @sio.event
         async def connect(sid, environ):
             # Trust headers from web server / reverse proxy on user auth
             user_id, username = self.user_from_headers(environ)
+            self.logger.info(f"connect: sid='{sid}' user_id='{user_id}' username='{username}'")
             
+            #for k,v in environ.items():
+            #    if k != 'wsgi.input':
+            #        print(f"HDR: {k}={v}")
+
             await sio.save_session(sid, {'user_id': user_id, 'username': username})
-            self.userid_to_sid[user_id] = sid            
-            await sio.emit('my_response', {'data': 'Connected', 'count': 0, 'user_id': user_id})
+            self.userid_to_sid[user_id] = sid
+            await sio.emit('welcome', {'username': username, 'user_id': user_id}, room=sid)
             sio.enter_room(sid, 'huoneusto')
 
         @sio.event
@@ -181,14 +210,9 @@ class ClapshotApiServer:
             self.userid_to_sid.pop(user_id, None)
 
         # HTTP routes
-        async def index(request: web.Request):
-            module_dir = Path(__file__).parent.absolute()
-            with open(module_dir/'static/index.html') as f:
-                return web.Response(text=f.read(), content_type='text/html')
 
-        self.app.router.add_static('/api/static', Path(__file__).parent.absolute()/'static')
-        self.app.router.add_get('/api', index)
-
+        for route, path in self.serve_dirs.items():
+            self.app.router.add_static(route, path)
 
     async def push_message(self, msg: CustomUserMessage):
         assert msg.user_id
@@ -200,7 +224,8 @@ class ClapshotApiServer:
         return {
                 'orig_filename': v.orig_filename,
                 'video_hash': v.video_hash,
-                'video_url': self.url_base.rstrip('/') + ('' if self.port in (80, 443) else f':{self.port}') + f'/video/{v.video_hash}/video.mp4',
+                'video_url': self.url_base.rstrip('/') + f'/video/{v.video_hash}/video.mp4',
+                'fps': str(round(Decimal(v.fps), 3)),  # eg. 23.976
                 'added_time': str(v.added_time.isoformat()),
                 'duration': v.duration,
                 'username': v.added_by_username,
@@ -232,7 +257,8 @@ async def run_server(
         url_base: str,
         push_messages: asyncio.Queue,
         host='localhost',
-        port: int=8086
+        port: int=8086,
+        serve_dirs: dict[str, Path] = {}
     ) -> None:
     """
     Run HTTP / Socket.IO API server forever (until this asyncio task is cancelled)
@@ -244,7 +270,7 @@ async def run_server(
         port:         Port to listen on
     """
     async with db:
-        server = ClapshotApiServer(db=db, url_base=url_base, port=port, logger=logger)
+        server = ClapshotApiServer(db=db, url_base=url_base, port=port, logger=logger, serve_dirs=serve_dirs)
         runner = web.AppRunner(server.app)
         await runner.setup()
         # bind to localhost only, no matter what url_base is (for security, use reverse proxy to expose)

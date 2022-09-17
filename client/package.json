@@ -10,19 +10,26 @@
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
   "devDependencies": {
+    "@fortawesome/fontawesome-free": "^6.2.0",
     "@sveltejs/vite-plugin-svelte": "^1.0.2",
     "@tadashi/svelte-notification": "^1.1.0",
     "@tsconfig/svelte": "^3.0.0",
     "autoprefixer": "^10.4.8",
+    "@picmo/popup-picker": "^5.7.0",
+    "@picmo/renderer-twemoji": "^5.7.0",
+    "picmo": "^5.7.0",
     "postcss": "^8.4.16",
     "simple-drawing-board": "^3.1.2",
+    "socket.io": "^4.5.2",
+    "socket.io-client": "^4.5.2",
     "svelte": "^3.49.0",
     "svelte-check": "^2.8.1",
     "svelte-preprocess": "^4.10.7",
     "tailwindcss": "^3.1.8",
     "tslib": "^2.4.0",
     "typescript": "^4.6.4",
-    "vite": "^3.1.0",
-    "@fortawesome/fontawesome-free": "^6.2.0"
+    "vite": "^3.1.0"
+  },
+  "dependencies": {
   }
 }

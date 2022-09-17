@@ -93,6 +93,21 @@ async def api_server_and_db(example_db, request):
                 await server_task
 
 
+async def _open_video(td, video_hash):
+    """
+    Helper function to open a video (which also joins user into video's socketio "room"),
+    and to consume all the new_message events that server sends when opening a video.
+    """
+    await td.send('open_video', {'video_hash': video_hash})
+    event, data = await td.get()
+    assert event == 'open_video'
+    with pytest.raises(asyncio.exceptions.TimeoutError):
+        while m := await td.get():
+            assert m[0] == 'new_comment'
+            assert m[1]['video_hash'] == video_hash
+
+
+
 @pytest.mark.timeout(5)
 @pytest.mark.asyncio
 async def test_api_push_msq(api_server_and_db):
@@ -129,7 +144,7 @@ async def test_api_list_user_videos(api_server_and_db):
         await td.break_db()
         await td.send('list_my_videos', {})
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
 
 
 @pytest.mark.timeout(5)
@@ -142,21 +157,21 @@ async def test_api_del_video(api_server_and_db):
         await td.send('del_video', {'video_hash': td.videos[0].video_hash})
         await asyncio.sleep(0.1)
         event, data = await td.get()
-        assert event != 'error'        
+        assert event != 'oops'        
         assert not await td.db.get_video(td.videos[0].video_hash)
 
         # Fail to delete a non-existent video
         await td.send('del_video', {'video_hash': 'non-existent'})
         await asyncio.sleep(0.1)
         event, data = await td.get()
-        assert event == 'error'        
+        assert event == 'oops'        
 
         # Fail to delete someones else's video
         assert await td.db.get_video(td.videos[1].video_hash)
         await td.send('del_video', {'video_hash': td.videos[1].video_hash})
         await asyncio.sleep(0.1)
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
         assert await td.db.get_video(td.videos[1].video_hash)
         
         # Break the database
@@ -164,7 +179,7 @@ async def test_api_del_video(api_server_and_db):
         await td.send('del_video', {'video_hash': td.videos[2].video_hash})
         event, data = await td.get()
         print(data)
-        assert event == 'error'
+        assert event == 'oops'
 
 
 @pytest.mark.timeout(5)
@@ -178,7 +193,7 @@ async def test_api_del_video_as_admin(api_server_and_db):
                     await td.send('del_video', {'video_hash': td.videos[vi].video_hash})
                     await asyncio.sleep(0.1)
                     event, data = await td.get()
-                    assert event != 'error'        
+                    assert event != 'oops'        
                     assert not await td.db.get_video(td.videos[vi].video_hash)
 
 
@@ -189,9 +204,15 @@ async def test_api_open_videos(api_server_and_db):
         for vid in td.videos:
             await td.send('open_video', {'video_hash': vid.video_hash})
             await asyncio.sleep(0.1)
+            
             event, data = await td.get()
             assert event == 'open_video'
             assert data['video_hash'] == vid.video_hash
+            while not td.recvq.empty():
+                assert (await td.get())[0] == 'new_comment'
+
+            while not td.recvq.empty():
+                assert (await td.get())[0] == 'new_comment'
             assert vid.video_hash in data['video_url'] 
             assert data['user_id'] == vid.added_by_userid
             assert data['username'] == vid.added_by_username
@@ -202,7 +223,7 @@ async def test_api_open_videos(api_server_and_db):
         await td.break_db()
         await td.send('open_video', {'video_hash': td.videos[0].video_hash})
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
 
 
 @pytest.mark.timeout(8)
@@ -212,7 +233,7 @@ async def test_api_open_bad_video(api_server_and_db):
         await td.send('open_video', {'video_hash': 'bad_hash'})
         await asyncio.sleep(0.1)
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
 
 
 @pytest.mark.timeout(8)
@@ -228,10 +249,7 @@ async def test_api_add_plain_comment(api_server_and_db):
         with pytest.raises(asyncio.exceptions.TimeoutError) as e_info:
             await td.get()
 
-        # Join room
-        await td.send('open_video', {'video_hash': vid.video_hash})
-        event, data = await td.get()
-        assert event == 'open_video'
+        await _open_video(td, vid.video_hash) # Join room
         
         # Add another comment
         await td.send('add_comment', {'video_hash': vid.video_hash, 'comment': 'Test comment 2'})
@@ -244,13 +262,14 @@ async def test_api_add_plain_comment(api_server_and_db):
         await td.send('add_comment', {'video_hash': 'bad_hash', 'comment': 'Test comment 3'})
         await asyncio.sleep(0.1)
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
 
         # Break the database
         await td.break_db()
         await td.send('add_comment', {'video_hash': vid.video_hash, 'comment': 'Test comment 4'})
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
+
 
 
 @pytest.mark.timeout(8)
@@ -260,11 +279,8 @@ async def test_api_edit_comment(api_server_and_db):
         vid = td.videos[0]
         com = td.comments[0]
         
-        # Join room
-        await td.send('open_video', {'video_hash': vid.video_hash})
-        event, data = await td.get()
-        assert event == 'open_video'
-        
+        await _open_video(td, vid.video_hash) # Join room
+
         # Edit comment
         await td.send('edit_comment', {'comment_id': com.id, 'comment': 'Edited comment'})
         await asyncio.sleep(0.1)
@@ -275,24 +291,25 @@ async def test_api_edit_comment(api_server_and_db):
         assert event == 'new_comment'
         assert data['comment_id'] == com.id
         assert data['comment'] == 'Edited comment'
+        assert data['video_hash'] == vid.video_hash
 
         # Edit nonexisting comment
         await td.send('edit_comment', {'comment_id': '1234566999', 'comment': 'Edited comment 2'})
         await asyncio.sleep(0.1)
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
 
         # Try to edit someone else's comment
         await td.send('edit_comment', {'comment_id': td.comments[1].id, 'comment': 'Edited comment 3'})
         await asyncio.sleep(0.1)
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
 
         # Break the database
         await td.break_db()
         await td.send('edit_comment', {'comment_id': com.id, 'comment': 'Edited comment 4'})
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
 
 
 
@@ -308,11 +325,8 @@ async def test_api_del_comment(api_server_and_db):
         #       comment[5] (user 2)
         #       comment[6] (user 1)
         #     comment[3] (user 2)
-        
-        # Join room for video HASH0
-        await td.send('open_video', {'video_hash': td.videos[0].video_hash})
-        event, data = await td.get()
-        assert event == 'open_video'
+
+        await _open_video(td, td.videos[0].video_hash) # Join room
         
         # Delete comment[6] (user 1)
         await td.send('del_comment', {'comment_id': td.comments[6].id})
@@ -325,20 +339,20 @@ async def test_api_del_comment(api_server_and_db):
         await td.send('del_comment', {'comment_id': '1234566999'})
         await asyncio.sleep(0.1)
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
 
         # Fail to delete user2's comment[3] (user 2)
         await td.send('del_comment', {'comment_id': td.comments[3].id})
         await asyncio.sleep(0.1)
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
         assert 'your' in data['msg']
 
         # Fail to delete comment[0] that has replies
         await td.send('del_comment', {'comment_id': td.comments[0].id})
         await asyncio.sleep(0.1)
         event, data = await td.get()
-        assert event == 'error'
+        assert event == 'oops'
         assert "repl" in data['msg']
 
         # Delete the last remaining reply comment[5]
@@ -356,11 +370,7 @@ async def test_api_del_comment(api_server_and_db):
 @pytest.mark.parametrize("api_server_and_db", [{'user_id': 'admin', 'username': 'Admin'}], indirect=True)
 async def test_api_del_comment_as_admin(api_server_and_db):
         async for td in api_server_and_db:
-
-            # Join room for video HASH0
-            await td.send('open_video', {'video_hash': td.videos[0].video_hash})
-            event, data = await td.get()
-            assert event == 'open_video'
+            await _open_video(td, td.videos[0].video_hash) # Join room HASH0
 
             # Delete comments by different users
             for i in (5,6):
@@ -377,11 +387,7 @@ async def test_api_del_comment_as_admin(api_server_and_db):
 @pytest.mark.parametrize("api_server_and_db", [{'user_id': '', 'username': ''}], indirect=True)
 async def test_api_anonymous_user(api_server_and_db):
     async for td in api_server_and_db:
-
-        # Join room for video HASH0
-        await td.send('open_video', {'video_hash': td.videos[0].video_hash})
-        event, data = await td.get()
-        assert event == 'open_video'
+        await _open_video(td, td.videos[0].video_hash) # Join room HASH0
 
         # crete comment
         await td.send('add_comment', {'video_hash': td.videos[0].video_hash, 'comment': 'Test comment'})

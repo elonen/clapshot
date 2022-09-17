@@ -151,6 +151,13 @@ async def test_comment_delete(example_db):
         # Check that video still has 1 comment
         assert len(await db.get_video_comments(com[1].video_hash)) == 1, "Video should have 1 comment left"
 
+        # Delete last, add a new one and check for ID reuse
+        await db.del_comment(com[6].id)
+        c = DB.Comment(video_hash=com[1].video_hash, user_id=com[1].user_id, username=f"name", comment=f"re-add")
+        new_id = await db.add_comment(c)
+        assert new_id != com[6].id, "Comment ID was re-used after deletion. This would mix up comment threads in the UI."
+
+
 @pytest.mark.timeout(5)
 @pytest.mark.asyncio
 async def test_repr(example_db):

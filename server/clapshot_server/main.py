@@ -56,6 +56,7 @@ def main():
 
     Usage:
       clapshot-server [options] (--url-base=URL) (--data-dir=PATH)
+      clapshot-server [options] [--mute TOPIC]... (--url-base=URL) (--data-dir=PATH)
       clapshot-server (-h | --help)
 
     Required:
@@ -64,11 +65,16 @@ def main():
      --data-dir=PATH      Directory for database, /incoming, /videos and /rejected
 
     Options:
-     -p PORT --port=PORT  Port to listen on [default: 8086]
-     -H HOST --host=HOST  Host to listen on [default: localhost]
-     -P SEC --poll=SEC    Polling interval for incoming folder [default: 3.0]
-     -d --debug           Enable debug logging
-     -h --help            Show this screen
+     -p PORT --port=PORT    Port to listen on [default: 8086]
+     -H HOST --host=HOST    Host to listen on [default: localhost]
+     --host-videos          Host the /videos directory [default: False]
+                            (For debugging. Use Nginx or Apache with auth in production.)
+     -P SEC --poll SEC      Polling interval for incoming folder [default: 3.0]
+     -m TOPIC --mute TOPIC    Mute logging for a topic (can be repeated). Sets level to WARNING.
+                            See logs logs for available topics.
+     -l FILE --log FILE     Log to file instead of stdout
+     -d --debug             Enable debug logging
+     -h --help              Show this screen
     """
     args = docopt.docopt(main.__doc__)
 
@@ -76,10 +82,14 @@ def main():
         level = (logging.DEBUG if args["--debug"] else logging.INFO),
         format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
         datefmt='%m-%d %H:%M:%S',
-        # filename='/tmp/myapp.log',
-        # filemode='w'
+        filename=args["--log"] or None,
+        filemode='w' if args["--log"] else None
     )
-    logger = logging.getLogger("clapshot")    
+    logger = logging.getLogger("clapshot")
+
+    # Mute logging for some topics
+    for topic in args["--mute"] or []:
+        logging.getLogger(topic).setLevel(logging.WARNING)
 
     # Make sure data dir exists
     data_dir = Path(args["--data-dir"])
@@ -119,7 +129,8 @@ def main():
                 logger=logging.getLogger("api"),
                 url_base=url_base,
                 port=int(args["--port"]),
-                push_messages=push_message_queue)
+                push_messages=push_message_queue,
+                serve_dirs={'/video': videos_dir} if args["--host-videos"] else {})
 
         async def vp_result_deliverer():
             while not vp_interrupt_flag.is_set() and vp_thread.is_alive():
@@ -132,7 +143,8 @@ def main():
                         fields = {
                             'msg': vp_res.msg,
                             'orig_file': vp_res.orig_file.name,
-                            'viode_hash': vp_res.video_hash,
+                            'video_hash': vp_res.video_hash,
+                            'severity': 'success' if vp_res.success else 'error'
                             }))
                     # TODO: Slack, too
 
