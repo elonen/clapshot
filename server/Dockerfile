@@ -6,7 +6,7 @@ RUN apt-get -y update
 RUN apt-get -y install make
 RUN apt-get -y install ffmpeg
 
-# Create regular user and switch to it
+# Create regular user
 
 ARG USER=docker
 ARG UID=1000

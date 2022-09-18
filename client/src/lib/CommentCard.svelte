@@ -67,11 +67,11 @@ function onEditFieldKeyUp(e) {
   on:mouseleave="{() => show_actions=false}"
   on:click = "{() => {if (timecode) onTimecodeClick(timecode);}}">
 
-  <!-- <span class="font-mono">{id}@{parent_id}</span> -->
 
   <div class="flex mx-2 pt-3">
     <Avatar userFullName="{username}" src="{avatar_url}" width="32"  />
     <h5 class="ml-3 flex-1 text-gray-500 self-end">{username}</h5>
+    <span class="invisible text-xs font-mono">[{id}@{parent_id}]</span>
     <span
       on:click="{() => { onTimecodeClick(timecode) }}"
       class="pl-2 flex-0 text-xs italic text-yellow-700 hover:text-yellow-500 hover:underline cursor-pointer self-end">
@@ -110,7 +110,7 @@ function onEditFieldKeyUp(e) {
       <input 
         class="w-full border p-1 rounded bg-gray-900"
         type="text" placeholder="Your reply..."
-        autofocus
+        use:callFocus
         bind:this={reply_input}
         on:blur="{()=>show_reply=false}" />
     </form>
