@@ -19,12 +19,24 @@
   -webkit-text-size-adjust: 100%;
 }
 
-
-.svelte-emoji-picker {
-  position: absolute;
-  top: 0;
-  left: 0;
+/* Customize emoji picker (fix z-index and colors) */
+.my-picmo-popup {
+  --background-color: red;
+  --text-color: red;
+  border: 2px solid #131d2b;
+  border-radius: 8px;
+  z-index: 1000;
 }
+.my-picmo-popup .dark {
+  --background-color: #1f2937;
+  --category-name-background-color: #1f2937;
+  --secondary-background-color: #161f2b;
+  filter: drop-shadow(8px 8px 10px black);
+}
+ .popupContainer button.closeButton {
+  z-index: 1010;
+}
+
 
 #app {
 }

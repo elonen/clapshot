@@ -285,8 +285,17 @@
 
 		<div class="flex p-1">
 			
-      <!-- Timecode -->
-      <input class="flex-0 text-lg mx-4 bg-transparent hover:bg-gray-700 w-32 font-mono" value="{format(time)}" on:change={(e) => seekToTimecode(e.target.value)}/>
+      <!-- Play/Pause -->
+			<span class="flex-1 text-left ml-8 space-x-3 text-xl whitespace-nowrap">
+        <button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
+        <button class="fa-solid {paused ? 'fa-play' : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
+        <button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
+
+        <!-- Timecode -->
+        <input class="flex-0 text-lg mx-4 bg-transparent hover:bg-gray-700 w-32 font-mono" value="{format(time)}" on:change={(e) => seekToTimecode(e.target.value)}/>
+
+      </span>
+
  
       <!-- Audio volume -->
       <span class="flex-0 text-center whitespace-nowrap">
@@ -297,16 +306,8 @@
           <input class="mx-2" id="vol-control" type="range" min="0" max="100" step="1" bind:value={audio_volume}/>
       </span>
 
-      <!-- Play/Pause -->
-			<span class="flex-1 text-left ml-16 space-x-3 text-xl whitespace-nowrap">
-        <button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
-        <button class="fa-solid {paused ? 'fa-play' : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
-        <button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
-      </span>
-
-
       <!-- Video duration -->
-			<span class="flex-0 text-lg mx-4 ml-8">{format(duration)}</span>
+			<span class="flex-0 text-lg mx-4 mx-8">{format(duration)}</span>
 		</div>
 	</div>
   

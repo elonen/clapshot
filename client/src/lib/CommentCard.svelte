@@ -61,7 +61,7 @@ function onEditFieldKeyUp(e) {
 </script>
 
 <div transition:scale
-  class="block rounded-lg shadow-lg bg-gray-800 {!!timecode ? 'hover:bg-gray-700' : ''}"
+  class="block rounded-lg bg-gray-800 {!!timecode ? 'hover:bg-gray-700' : ''} shadow-lg shadow-black"
   style="margin-left: {indent*1.5}em"
   on:mouseenter="{() => show_actions=true}"
   on:mouseleave="{() => show_actions=false}"
@@ -69,22 +69,22 @@ function onEditFieldKeyUp(e) {
 
   <!-- <span class="font-mono">{id}@{parent_id}</span> -->
 
-  <div class="flex mx-2 pt-2">    
-    <Avatar userFullName="{username}" src="{avatar_url}" />
-    <h5 class="px-2 flex-1 text-gray-500 self-end">{username}</h5>
-    <span 
+  <div class="flex mx-2 pt-3">
+    <Avatar userFullName="{username}" src="{avatar_url}" width="32"  />
+    <h5 class="ml-3 flex-1 text-gray-500 self-end">{username}</h5>
+    <span
       on:click="{() => { onTimecodeClick(timecode) }}"
       class="pl-2 flex-0 text-xs italic text-yellow-700 hover:text-yellow-500 hover:underline cursor-pointer self-end">
-      {#if drawing_data && drawing_data != ""}
-        <i class="fas fa-pen"></i>
-      {/if}
-      {timecode}
+        {#if drawing_data && drawing_data != ""}
+          <i class="fas fa-pen"></i>
+        {/if}
+        {timecode}
     </span>
   </div>
 
   <div class="p-2">
     {#if editing}
-      <input type="text" use:callFocus bind:value="{comment}" on:keyup={onEditFieldKeyUp} on:blur="{(e)=>{editing=false;}}" />
+      <input class="w-full outline-dashed bg-slate-500" type="text" use:callFocus bind:value="{comment}" on:keyup={onEditFieldKeyUp} on:blur="{(e)=>{editing=false;}}" />
     {:else}
       <p class="text-gray-300 text-base">
         {comment}

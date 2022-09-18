@@ -132,7 +132,7 @@
   
   // Connect to server
   console.log("...CONNECTING to API....")
-  const socket = io("//:8086", {
+  const socket = io("//:8095", {
     path: '/api/socket.io',
     extraHeaders: {x_remote_user_id: "jarno", x_remote_user_name: "Jarno Elonen"},
     transports: ["polling", "websocket"], // do HTTP first to get support extraHeaders
@@ -267,10 +267,10 @@
 
 <svelte:window on:popstate={popHistoryState}/>
 <main>
+  <div class="w-full mb-4"><NavBar on:clear-all={onClearAll} /></div>
   <div class="flex">
     <div class="flex-1 bg-black">
-      <div class="grid justify-items-center" style="width: 100%;">
-        <div class="w-full mb-4"><NavBar on:clear-all={onClearAll} /></div>
+      <div class="grid" style="width: 100%;">
         <Notifications />
 
         {#if !socket.connected }
@@ -285,17 +285,34 @@
             </div>            
 
           </div>
+
         {:else if $video_hash}
 
           <!-- ========== video review widgets ============= -->
-          <div transition:slide class="w-full h-full">
-            <div class="block bg-cyan-900 ">
-              <VideoPlayer bind:this={video_player} src={$video_url} />
+          <div transition:slide class="flex w-full">
+
+            <div class="flex-0 transition:slide">
+              <div class="block bg-cyan-900 ">
+                <VideoPlayer bind:this={video_player} src={$video_url} />
+              </div>
+              <div class="block w-full p-4">
+                <CommentInput bind:this={comment_input} on:button-clicked={onCommentInputButton} />
+              </div>      
             </div>
-            <div class="block w-full p-4">
-              <CommentInput bind:this={comment_input} on:button-clicked={onCommentInputButton} />
+
+            {#if $all_comments.length > 0}
+            <!-- ========== comment sidepanel ============= -->
+            <div class="flex-1">
+              <div class="flex-none basis-128 bg-gray-900 w-80 py-2 px-2 space-y-2 ml-2 h-screen overflow-y-scroll" transition:slide>
+                {#each $all_comments as item}
+                  <CommentCard {...item} on:display-comment={onDisplayComment} on:delete-comment={onDeleteComment} on:reply-to-comment={onReplyComment} on:edit-comment={onEditComment}/>
+                {/each}
+              </div>
             </div>
+            {/if}
           </div>
+
+
         {:else}
 
           <!-- ========== video listing ============= -->        
@@ -315,21 +332,13 @@
                 <a href="/?vid={item.video_hash}" class="text-xs overflow-clip whitespace-nowrap">{item.orig_filename}</a>
               </div>          
               {/each} 
-
             </div> 
           </div>
+
         {/if}
       </div>
     </div>
     
-    {#if $all_comments.length > 0}
-      <!-- ========== comment sidepanel ============= -->
-      <div class="flex-none basis-128 bg-gray-900 w-80 py-2 px-2 space-y-2 ml-2 h-screen overflow-y-scroll" transition:slide>
-        {#each $all_comments as item}
-          <CommentCard {...item} on:display-comment={onDisplayComment} on:delete-comment={onDeleteComment} on:reply-to-comment={onReplyComment} on:edit-comment={onEditComment}/>
-        {/each}
-      </div>
-    {/if}
   </div>
 </main>
 

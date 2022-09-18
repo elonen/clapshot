@@ -9,39 +9,43 @@ import logo from "../assets/clapshot-logo.svg";
     dispatch("clear-all", {});
   }
 
-  let url = document.URL;
-
 </script>
 
-<nav class="bg-white border-gray-200 px-2 sm:px-4 py-2.5 rounded dark:bg-gray-900">
+<nav class="px-2 sm:px-4 py-2.5 rounded dark:bg-gray-900">
   
-  <div class="container flex flex-wrap justify-between items-center mx-auto">
+  <div class="flex">
 
-    <a href="/" class="flex items-center cursor-pointer" on:click|preventDefault="{onClickBanner}">
-      <img src={logo} class="mr-3 h-6 sm:h-9 filter brightness-75" alt="Clapshot" />
-      <span class="self-center text-4xl whitespace-nowrap text-gray-300 align-text-bottom" style="font-family: 'Yanone Kaffeesatz', sans-serif;">CLAPSHOT</span>
-    </a>
-    
-    <div class="flex items-center md:order-2" style="visibility: {$cur_username ? 'visible': 'hidden'}">
-      <h6 class="mx-4 text-gray-500 font-semibold">{$cur_username}</h6>
-      <button class="flex mr-3 text-sm bg-gray-800 rounded-full md:mr-0 focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600" on:click|preventDefault={onClickBanner}>
-            {#if $cur_user_pic || $cur_username}
-              <Avatar userFullName={$cur_username} src={$cur_user_pic} />
-            {/if}
-      </button>
+    <!-- logo with "home" link -->
+    <span class="flex-0">
+      <a href="/" class="flex items-baseline cursor-pointer" on:click|preventDefault="{onClickBanner}">
+        <img src={logo} class="mr-3 h-6 sm:h-9 filter brightness-75" alt="Clapshot" />
+        <span class="self-center mt-1 text-4xl whitespace-nowrap text-gray-400" style="font-family: 'Yanone Kaffeesatz', sans-serif;">CLAPSHOT</span>
+      </a>
+    </span>
 
-    </div>
-
-    <div class="justify-between items-center w-full md:flex md:w-auto md:order-1">
+    <!-- video info -->
+    <div class="flex-1 justify-between">
       {#if $video_hash}
-      <span class="grid grid-flow-row auto-rows-max font-mono text-gray-600 mx-4">
+      <span class="grid grid-flow-row auto-rows-max items-center font-mono text-gray-600 mx-4">
           <h2 class=" text-lg text-center">
             {$video_hash}
-            <a href="?vid={$video_hash}" class="fas fa-share-square text-sm text-gray-700 hover:text-gray-500" />
+            <a href="?vid={$video_hash}" class="text-gray-700 hover:text-gray-500"><i class="fas fa-share-square text-sm"></i></a>
           </h2>
         <span class="mx-4 text-sm text-center">{$video_orig_filename}</span>  
       </span>
       {/if}      
+    </div>
+
+    <!-- Username & avatar-->
+    <div class="flex-0" style="visibility: {$cur_username ? 'visible': 'hidden'}">
+      <span class="flex w-auto items-center">
+        <h6 class="flex-1 mx-4 text-gray-500 font-semibold">{$cur_username}</h6>
+        <button class="flex-0 mr-3 text-sm bg-gray-800 rounded-full md:mr-0 focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600" on:click|preventDefault={onClickBanner}>
+          {#if $cur_user_pic || $cur_username}
+            <Avatar userFullName={$cur_username} src={$cur_user_pic} />
+          {/if}
+        </button>
+      </span>
     </div>
 
   </div>

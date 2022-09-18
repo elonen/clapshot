@@ -50,11 +50,12 @@
   {
     if (!emoji_picker) {
             emoji_picker = createPopup({
-                theme: darkTheme,
+                theme: darkTheme,                
                 renderer: new TwemojiRenderer()}, {
             referenceElement: e.target,
-            triggerElement: e.target,
-            position: 'right-end'        
+            triggerElement: e.target,            
+            position: 'right-end',
+            className: 'my-picmo-popup',
         });
         emoji_picker.addEventListener('emoji:select', (selection) => {
             input_text = (input_text ? input_text : '') + selection.emoji;

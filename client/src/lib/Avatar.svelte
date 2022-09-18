@@ -49,11 +49,9 @@ https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
         var colours = avatarColors,
             nameSplit = String(name).toUpperCase().split(" "),
             initials,
-            charIndex,
             colourIndex,
             canvas,
-            context,
-            dataURI;
+            context;
 
         if (nameSplit.length == 1) {
             initials = nameSplit[0] ? nameSplit[0].charAt(0) : "?";
@@ -61,12 +59,14 @@ https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
             initials = nameSplit[0].charAt(0) + nameSplit[1].charAt(0);
         }
 
-        if (window.devicePixelRatio) {
-            size = size * window.devicePixelRatio;
-        }
+        if (window.devicePixelRatio)
+            size = size * window.devicePixelRatio;  // In case display zoomed or retina display
 
-        charIndex = (initials == "?" ? 72 : initials.charCodeAt(0)) - 64;
-        colourIndex = charIndex % 20;
+        let checksum = 0;
+        for (let i=0; i<name.length; i++)
+            checksum += name.charCodeAt(i)*i;
+
+        colourIndex = checksum % 20;
         canvas = document.createElement("canvas");
         canvas.width = size;
         canvas.height = size;
@@ -74,13 +74,13 @@ https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
 
         context.fillStyle = colours[colourIndex - 1];
         context.fillRect(0, 0, canvas.width, canvas.height);
-        context.font = Math.round(canvas.width / 2.2) + "px Arial";
+        context.font = "bold " + Math.round(canvas.width / 2.2) + "px Arial";
         context.font
         context.textAlign = "center";
-        context.fillStyle = "#FFF";
+        context.fillStyle = "#222";
         context.fillText(initials, size / 2, size / 1.5);
 
-        dataURI = canvas.toDataURL();
+        let dataURI = canvas.toDataURL();
         canvas = null;
 
         return dataURI;
@@ -94,6 +94,7 @@ https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
 <style>
     .round {
         border-radius: 50%;
+        filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.3));
     }
 </style>
 
