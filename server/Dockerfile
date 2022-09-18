@@ -1,25 +1,44 @@
-# For more information, please refer to https://aka.ms/vscode-docker-python
-FROM python:3.8-slim
+FROM python:3.9-slim
 
-EXPOSE 5002
+
+# Install system packages
+RUN apt-get -y update
+RUN apt-get -y install make
+RUN apt-get -y install ffmpeg
+
+# Create regular user and switch to it
+
+ARG USER=docker
+ARG UID=1000
+ARG GID=1000
+RUN echo "#### USER=${USER}, UID=${UID}, GID=${GID}"
+RUN test -n "${USER}" && test -n "${UID}" && test -n "${GID}"
+
+RUN groupadd -f ${USER} --gid=${GID}
+RUN useradd -m ${USER} --uid=${UID} --gid=${GID} || true
+RUN mkdir -p /app
+RUN chown ${UID}:${GID} /app
+
 
 # Keeps Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1
-
-# Turns off buffering for easier container logging
+# Turn off buffering for easier container logging
 ENV PYTHONUNBUFFERED=1
 
-# Install pip requirements
-COPY requirements.txt .
-RUN python -m pip install -r requirements.txt
 
 WORKDIR /app
-COPY . /app
+COPY requirements.txt /app/
+USER ${UID}:${GID}
+RUN python3.9 -m venv _venv
+RUN _venv/bin/pip install --upgrade pip
+RUN _venv/bin/pip install wheel
+RUN _venv/bin/pip install -r requirements.txt
 
-# Creates a non-root user with an explicit UID and adds permission to access the /app folder
-# For more info, please refer to https://aka.ms/vscode-docker-python-configure-containers
-RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
-USER appuser
 
-# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-CMD ["gunicorn", "--bind", "0.0.0.0:5002", "app.py:app"]
+COPY --chown=${UID}:${GID} . /app
+RUN make install
+RUN ls -l /
+RUN ls -l /app
+
+EXPOSE 8095
+CMD ["make", "run-local"]

@@ -256,7 +256,7 @@ async def run_server(
         logger: logging.Logger,
         url_base: str,
         push_messages: asyncio.Queue,
-        host='localhost',
+        host='127.0.0.1',
         port: int=8086,
         serve_dirs: dict[str, Path] = {}
     ) -> None:
@@ -274,8 +274,8 @@ async def run_server(
         runner = web.AppRunner(server.app)
         await runner.setup()
         # bind to localhost only, no matter what url_base is (for security, use reverse proxy to expose)
+        logger.info(f"Starting API server. Binding to {host}:{server.port} -- Base URL: {url_base}")
         site = web.TCPSite(runner, host, server.port)
-        logger.info(f"Starting API server. Bound to {host}:{server.port} -- Base URL: {url_base}")
         await site.start()
 
         while True:

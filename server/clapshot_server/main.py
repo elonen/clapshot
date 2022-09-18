@@ -66,7 +66,7 @@ def main():
 
     Options:
      -p PORT --port=PORT    Port to listen on [default: 8086]
-     -H HOST --host=HOST    Host to listen on [default: localhost]
+     -H HOST --host=HOST    Host to listen on [default: 0.0.0.0]
      --host-videos          Host the /videos directory [default: False]
                             (For debugging. Use Nginx or Apache with auth in production.)
      -P SEC --poll SEC      Polling interval for incoming folder [default: 3.0]
@@ -128,6 +128,7 @@ def main():
                     logging.getLogger("db")),
                 logger=logging.getLogger("api"),
                 url_base=url_base,
+                host=args["--host"],
                 port=int(args["--port"]),
                 push_messages=push_message_queue,
                 serve_dirs={'/video': videos_dir} if args["--host-videos"] else {})

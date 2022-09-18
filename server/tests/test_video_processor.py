@@ -50,7 +50,7 @@ def temp_dir(tmp_path_factory):
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_convert_hbr(temp_dir):
     """
     Test converting a hight bitrate video to a smaller one.
@@ -65,7 +65,7 @@ def test_convert_hbr(temp_dir):
         assert f_stderr.exists()
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_no_conv_smaller_mp4(temp_dir):
     """
     Test that a smaller h264 MP¤ file is not converted, only copied.
@@ -85,7 +85,7 @@ def test_no_conv_smaller_mp4(temp_dir):
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_conv_smaller_mov(temp_dir):
     """
     Test that a smaller MOV file is converted to MP4, even if it's (supposedly) h264 and low bitrate.
@@ -97,7 +97,7 @@ def test_conv_smaller_mov(temp_dir):
         assert dst_file.exists()
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_conversion_error(temp_dir):
     """
     Test that a conversion error is handled correctly.
@@ -124,7 +124,7 @@ def _get_video_from_db(video_hash: str, db_file: Path):
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_read_metadata_ok(temp_dir):
     """
     Test that metadata is read correctly.
@@ -153,13 +153,13 @@ def test_read_metadata_ok(temp_dir):
         assert float(Fraction(meta_video['avg_frame_rate'])) == pytest.approx(float(vid.fps), 0.1)
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_fail_read_metadata_no_video_stream(temp_dir):
     for (src, dst_dir, src_garbage, vp) in temp_dir:
         res, codec, bitrate = vp.read_video_metadata(src, "testhash", logger, lambda e,s: (e, s), test_mock={'no_video_stream': True})
         assert res is not None and res[1] is False
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_metadata_no_explicit_fps(temp_dir):
     for (src, dst_dir, src_garbage, vp) in temp_dir:
         res, codec, bitrate = vp.read_video_metadata(src, "testhash", logger, lambda e,s: (e, s), test_mock={'no_fps': True})
@@ -169,7 +169,7 @@ def test_metadata_no_explicit_fps(temp_dir):
         assert float(Fraction(meta_video['avg_frame_rate'])) == pytest.approx(float(vid.fps), 0.1)
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_fail_read_metadata(temp_dir):
     for (src, dst_dir, src_garbage, vp) in temp_dir:
         vid = _get_video_from_db("testhash1", vp.db_file)
@@ -179,7 +179,7 @@ def test_fail_read_metadata(temp_dir):
         assert _get_video_from_db("testhash", vp.db_file) is None
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_fail_read_metadata_bad_db(temp_dir):
     for (src, dst_dir, src_garbage, vp) in temp_dir:
         vp.db_file = Path("/dev/null")
@@ -191,7 +191,7 @@ def test_fail_read_metadata_bad_db(temp_dir):
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_process_video_ok(temp_dir):
     """
     Test that a video is processed (both probed and compressed) completely.
@@ -211,7 +211,7 @@ def test_process_video_ok(temp_dir):
         assert vid.added_by_userid == res.file_owner_id
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_process_video_corrupted(temp_dir):
     """
     Test that a corrupted video gives a controlled error.
@@ -226,7 +226,7 @@ def test_process_video_corrupted(temp_dir):
         vid = _get_video_from_db(res.video_hash, vp.db_file)
         assert not vid
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_process_dev_null_failure(temp_dir):
     """
     Test that a complete broken input gives a controlled error.
@@ -237,7 +237,7 @@ def test_process_dev_null_failure(temp_dir):
         assert res.msg is not None
 
 @pytest.mark.slow
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(120)
 def test_monitor_dir_ok(temp_dir):
     """
     Test incomig video monitoring.
@@ -312,7 +312,7 @@ def test_monitor_dir_ok(temp_dir):
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_monitor_dir_bad_reject_dir(temp_dir):
     """
     Test incomig video monitoring.
@@ -356,7 +356,7 @@ def test_monitor_dir_bad_reject_dir(temp_dir):
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_monitor_dir_bad_video_dir(temp_dir):
     """
     Test incomig video monitoring.
@@ -394,7 +394,7 @@ def test_monitor_dir_bad_video_dir(temp_dir):
 
 
 @pytest.mark.slow
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(60)
 def test_monitor_dir_bad_video_and_reject_dir(temp_dir):
     """
     Test incomig video monitoring.

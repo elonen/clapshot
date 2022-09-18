@@ -3,6 +3,7 @@
 **/.classpath
 **/.dockerignore
 **/.env
+**/_venv
 **/.git
 **/.gitignore
 **/.project
@@ -23,4 +24,5 @@
 **/obj
 **/secrets.dev.yaml
 **/values.dev.yaml
-README.md
+**/DEV_DATADIR
+

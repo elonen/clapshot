@@ -39,7 +39,7 @@ async def api_server_and_db(example_db, request):
                 run_api_server(
                     db=db,
                     logger=logging.getLogger("clapshot.db"),
-                    url_base='http://localhost/',
+                    url_base='http://127.0.0.1/',
                     port=port,
                     push_messages=push_msg_queue))
 
@@ -57,7 +57,7 @@ async def api_server_and_db(example_db, request):
                 username = request.param["username"]
 
             await sio.connect(
-                url = f'http://localhost:{port}', 
+                url = f'http://127.0.0.1:{port}', 
                 socketio_path = SOCKET_IO_PATH,
                 headers={'X-REMOTE-USER-ID': user_id, 'X-REMOTE-USER-NAME': username})
 
@@ -108,7 +108,7 @@ async def _open_video(td, video_hash):
 
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_api_push_msq(api_server_and_db):
     async for td in api_server_and_db:
@@ -127,7 +127,7 @@ async def test_api_push_msq(api_server_and_db):
             await td.get()
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_api_list_user_videos(api_server_and_db):
     async for td in api_server_and_db:
@@ -147,7 +147,7 @@ async def test_api_list_user_videos(api_server_and_db):
         assert event == 'oops'
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_api_del_video(api_server_and_db):
     async for td in api_server_and_db:
@@ -182,7 +182,7 @@ async def test_api_del_video(api_server_and_db):
         assert event == 'oops'
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("api_server_and_db", [{'user_id': 'admin', 'username': 'Admin'}], indirect=True)
 async def test_api_del_video_as_admin(api_server_and_db):
@@ -197,7 +197,7 @@ async def test_api_del_video_as_admin(api_server_and_db):
                     assert not await td.db.get_video(td.videos[vi].video_hash)
 
 
-@pytest.mark.timeout(8)
+@pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_api_open_videos(api_server_and_db):
     async for td in api_server_and_db:
@@ -226,7 +226,7 @@ async def test_api_open_videos(api_server_and_db):
         assert event == 'oops'
 
 
-@pytest.mark.timeout(8)
+@pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_api_open_bad_video(api_server_and_db):
     async for td in api_server_and_db:
@@ -236,7 +236,7 @@ async def test_api_open_bad_video(api_server_and_db):
         assert event == 'oops'
 
 
-@pytest.mark.timeout(8)
+@pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_api_add_plain_comment(api_server_and_db):
     async for td in api_server_and_db:
@@ -272,7 +272,7 @@ async def test_api_add_plain_comment(api_server_and_db):
 
 
 
-@pytest.mark.timeout(8)
+@pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_api_edit_comment(api_server_and_db):
     async for td in api_server_and_db:
@@ -313,7 +313,7 @@ async def test_api_edit_comment(api_server_and_db):
 
 
 
-@pytest.mark.timeout(8)
+@pytest.mark.timeout(20)
 @pytest.mark.asyncio
 async def test_api_del_comment(api_server_and_db):
     async for td in api_server_and_db:
@@ -365,7 +365,7 @@ async def test_api_del_comment(api_server_and_db):
         assert event == 'del_comment'
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("api_server_and_db", [{'user_id': 'admin', 'username': 'Admin'}], indirect=True)
 async def test_api_del_comment_as_admin(api_server_and_db):
@@ -382,7 +382,7 @@ async def test_api_del_comment_as_admin(api_server_and_db):
                 assert data['comment_id'] == td.comments[i].id
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("api_server_and_db", [{'user_id': '', 'username': ''}], indirect=True)
 async def test_api_anonymous_user(api_server_and_db):
@@ -396,7 +396,7 @@ async def test_api_anonymous_user(api_server_and_db):
         assert data['user_id'] == 'anonymous'
 
 
-@pytest.mark.timeout(8)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_api_logout(api_server_and_db):
     async for td in api_server_and_db:

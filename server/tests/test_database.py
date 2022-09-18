@@ -76,7 +76,7 @@ async def example_db(tmp_path_factory):
             print("Database closed & removed")
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_fixture_state(example_db):
     async for (db, vid, com) in example_db:
@@ -105,7 +105,7 @@ async def test_fixture_state(example_db):
         assert len(await db.get_all_user_videos('user.num2')) == 2
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_comment_edit(example_db):
     async for (db, vid, com) in example_db:
@@ -119,7 +119,7 @@ async def test_comment_edit(example_db):
                 assert (await db.get_comment(c.id)).comment != new_comment
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_video_delete(example_db):
     async for (db, vid, com) in example_db:
@@ -134,7 +134,7 @@ async def test_video_delete(example_db):
         assert len(await db.get_video_comments(vid[1].video_hash)) == 0, "Comments were not deleted when video was deleted"
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_comment_delete(example_db):
     async for (db, vid, com) in example_db:
@@ -158,7 +158,7 @@ async def test_comment_delete(example_db):
         assert new_id != com[6].id, "Comment ID was re-used after deletion. This would mix up comment threads in the UI."
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(15)
 @pytest.mark.asyncio
 async def test_repr(example_db):
     async for (db, vid, com) in example_db:
