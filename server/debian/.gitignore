@@ -1,0 +1,6 @@
+clapshot-server.*.debhelper
+clapshot-server.substvars
+clapshot-server/
+clapshot-server-*/
+files
+debhelper-build-stamp

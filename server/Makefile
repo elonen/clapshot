@@ -1,4 +1,4 @@
-.PHONY: deps install clean build_clean dist_clean tests dist docker
+.PHONY: deps install clean wheel test docker
 
 ENV=_venv
 PYTHON=python3.9
@@ -6,6 +6,9 @@ SITE_PACKAGES=${ENV}/lib/${PYTHON}/site-packages
 IN_ENV=. ${ENV}/bin/activate;
 PYTHON_ENV=${ENV}/bin/${PYTHON}
 PACKAGE_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
+
+UID=$(shell id -u)
+GID=$(shell id -g)
 
 PACKAGE=clapshot_server
 SERVER_CMD=${ENV}/bin/clapshot-server
@@ -33,15 +36,7 @@ wheel: ${ENV}
 	${PYTHON_ENV} -m pip install -U wheel
 	${PYTHON_ENV} setup.py bdist_wheel
 
-dist: wheel
-
-dist_clean:
-	rm -rf dist
-
-build_clean:
-	rm -rf build
-
-clean: build_clean dist_clean
+clean:
 	rm -rf "${ENV}" dist build __pycache__ *.egg-info
 
 
@@ -54,14 +49,28 @@ install_dev: ${ENV}
 	${PYTHON_ENV} -m pip install --editable .
 
 
-docker: build_clean dist_clean ${DEV_DATADIR}
+docker: clean ${DEV_DATADIR}
 	@echo "-------------------------------------------------------------------------------------------------------------------"
 	@echo "NOTE! Creating your current username and UID/GID insode Docker so bind mounted ${DEV_DATADIR} is owned by you."
 	@echo "Otherwise you wouldn't be able to access it without root privileges."
 	@echo "-------------------------------------------------------------------------------------------------------------------"
 
-	docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg USER=${USER} --build-arg UID=$$(id -u) --build-arg GID=$$(id -g) .
+	docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID} .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
+
+debian-local: clean wheel
+	apt-get -y install build-essential debhelper devscripts equivs
+	apt-get -y install python3-venv python3-dev python-dev dh-virtualenv python3-setuptools libffi-dev
+	dpkg-buildpackage -us -uc -b
+
+debian-docker: docker ${ENV}
+	rm -rf dist_deb
+	mkdir -p dist_deb
+	$(eval PVER="$(shell ${PYTHON_ENV} setup.py --version)")
+	test -n ${PVER}
+	$(eval PKGDIR=${PACKAGE}-${PVER})
+	$(eval CMD="mkdir -p /deb/ && cp -a /app /deb/${PKGDIR} && cd /deb/${PKGDIR} && make debian-local && rm -rf /deb/${PKGDIR} && chown -R ${UID}:${GID} /deb")
+	docker run -it --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:latest  bash -c ${CMD}
 
 
 test-local: install_dev

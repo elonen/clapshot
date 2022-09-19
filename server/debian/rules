@@ -1,0 +1,53 @@
+#!/usr/bin/make -f
+#
+# Build Debian package using https://github.com/spotify/dh-virtualenv
+#
+# The below targets create a clean copy of the workdir via
+# using "sdist", else "pip" goes haywire when installing from
+# sourcedir ".", because that includes the debian build stage,
+# and a recursive explosion ensues when symlinks are followed.
+#
+# It also ensures your MANIFEST is complete and at least covers
+# all files needed for a release build.
+
+# Increase trace logging, see debhelper(7) (uncomment to enable)
+#DH_VERBOSE=1
+
+export DH_VIRTUALENV_INSTALL_ROOT=/opt/venvs
+SNAKE=/usr/bin/python3
+EXTRA_REQUIREMENTS=--upgrade-pip --preinstall "setuptools" --preinstall "wheel"
+DH_VENV_ARGS=--builtin-venv --python=$(SNAKE) $(EXTRA_REQUIREMENTS) \
+            # --extra-pip-arg "--no-binary=psycopg2" \
+            # -v
+PACKAGE="${shell dh_listpackages}"
+VERSION=$(shell python3 setup.py --version)
+SDIST_DIR=debian/$(PACKAGE)-$(VERSION)
+
+
+.PHONY: clean build-arch override_dh_virtualenv override_dh_strip
+	# override_dh_shlibdeps
+
+clean:
+	test ! -d dist || rm -rf dist
+	test ! -d $(SDIST_DIR) || rm -rf $(SDIST_DIR)
+	dh $@ $(DH_VENV_ARGS)
+
+build-arch:
+	$(SNAKE) setup.py sdist --formats tar
+	mkdir -p $(SDIST_DIR)
+	cp requirements.txt $(SDIST_DIR)  # No idea why this doesn't get copied automatically
+	tar -x -C $(SDIST_DIR) --strip-components=1 --exclude '*.egg-info' -f dist/*.tar
+	dh $@ $(DH_VENV_ARGS) --sourcedir $(SDIST_DIR)
+
+%:
+	mkdir -p $(SDIST_DIR)
+	dh $@ --with python-virtualenv --sourcedir $(SDIST_DIR)
+
+override_dh_virtualenv:
+	dh_virtualenv $(DH_VENV_ARGS)
+
+override_dh_strip:
+	dh_strip --exclude=cffi --exclude=_imaging
+
+#override_dh_shlibdeps:
+#	dh_shlibdeps -X/x86/ -X/Cython/ -X/PIL/ -X/psycopg2/ -X/_yaml

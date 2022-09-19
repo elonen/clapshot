@@ -1,10 +1,5 @@
 import setuptools
-
-try:
-    from pyinstaller_setuptools import setup
-except ImportError:
-    print("WARNING: pyinstaller_setuptools not installed. You won't be able to `./setup.py pyinstaller`")
-    from setuptools import setup
+from setuptools import setup
 
 
 with open("README.md", "r") as f:

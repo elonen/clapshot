@@ -6,6 +6,11 @@ RUN apt-get -y update
 RUN apt-get -y install make
 RUN apt-get -y install ffmpeg
 
+# ...for build deb
+RUN apt-get -y install build-essential debhelper devscripts equivs
+RUN apt-get -y install python3-venv python3-dev python-dev dh-virtualenv python3-setuptools libffi-dev
+
+
 # Create regular user
 
 ARG USER=docker
@@ -18,7 +23,6 @@ RUN groupadd -f ${USER} --gid=${GID}
 RUN useradd -m ${USER} --uid=${UID} --gid=${GID} || true
 RUN mkdir -p /app
 RUN chown ${UID}:${GID} /app
-
 
 # Keeps Python from generating .pyc files in the container
 ENV PYTHONDONTWRITEBYTECODE=1

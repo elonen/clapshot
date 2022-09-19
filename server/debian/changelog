@@ -1,0 +1,7 @@
+clapshot-server (0.1.0+nmu1) UNRELEASED; urgency=low
+
+  [ Jarno Elonen ]
+  * clapshot-server: Initial debian packaging
+
+ -- Jarno Elonen <elonen@iki.fi>  Mon, 19 Sep 2022 07:09:12 +0000
+

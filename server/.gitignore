@@ -1,6 +1,8 @@
 .coverage*
 coverage.xml
 .DS_Store
+DEV_DATADIR
+dist_deb
 __pycache__
 output
 venv
