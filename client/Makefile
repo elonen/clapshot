@@ -30,6 +30,7 @@ build-local: npm-deps
 
 build-docker: docker-for-deb
 	mkdir -p dist
+	chmod a+rwx dist
 	docker run --rm --mount type=bind,source="$$(pwd)"/dist,target=/build/dist  ${PACKAGE}:deb  make build-local
 	@echo "==== Build in Docker done. Results are in ./dist/ ===="
 

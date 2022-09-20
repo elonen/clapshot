@@ -1,7 +1,6 @@
-arch: arm64
+arch: amd64
 os: linux
-dist: focal
-virt: lxd
+dist: jammy
 language: minimal
 services: docker
 install: make docker
