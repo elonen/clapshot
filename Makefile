@@ -17,3 +17,11 @@ clean:
 	rm -rf dist_deb
 	(cd client; make clean)
 	(cd server; make clean)
+
+docker:
+	(cd client; make docker)
+	(cd server; make docker)
+
+test:
+	(cd server; make test-docker)
+	(cd client; make test-docker)

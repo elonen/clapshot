@@ -1,0 +1,11 @@
+arch: arm64
+os: linux
+dist: focal
+virt: lxd
+language: minimal
+services: docker
+install: make docker
+script: make test
+branches:
+  only:
+    - master

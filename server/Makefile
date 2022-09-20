@@ -70,14 +70,14 @@ debian-docker: docker ${ENV}
 	test -n ${PVER}
 	$(eval PKGDIR=${PACKAGE}-${PVER})
 	$(eval CMD="mkdir -p /deb/ && cp -a /app /deb/${PKGDIR} && cd /deb/${PKGDIR} && make debian-local && rm -rf /deb/${PKGDIR} && chown -R ${UID}:${GID} /deb")
-	docker run -it --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:latest  bash -c ${CMD}
+	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:latest  bash -c ${CMD}
 
 
 test-local: install_dev
 	${IN_ENV} pytest
 
 test-docker: docker
-	docker run --rm -it ${PACKAGE}:latest make test-local
+	docker run --rm ${PACKAGE}:latest make test-local
 
 test:
 	@echo "Please run either 'test-docker' or 'test-local'"
