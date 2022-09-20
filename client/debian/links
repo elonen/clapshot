@@ -1,0 +1,2 @@
+/usr/share/clapshot-client/www		/var/www/clapshot-client
+/etc/clapshot_client.conf    /usr/share/clapshot-client/www/clapshot_client.conf.json

@@ -1,0 +1,18 @@
+Source: clapshot-client
+Section: unknown
+Priority: optional
+Maintainer: Jarno Elonen <elonen@iki.fi>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.5.1
+Homepage: https://github.com/elonen/clapshot
+Rules-Requires-Root: no
+
+Package: clapshot-client
+Architecture: all
+Depends: ${misc:Depends}
+Description: Clapshot video review tool (frontend)
+    .
+    Frontend components for Clapshot. This is simply a
+    static javascript app, served by a HTTP server.
+    Configuration file is also served over HTTP, and
+    read by the app when it starts.

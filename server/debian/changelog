@@ -1,4 +1,4 @@
-clapshot-server (0.1.0+nmu1) UNRELEASED; urgency=low
+clapshot-server (0.1.0) UNRELEASED; urgency=low
 
   [ Jarno Elonen ]
   * clapshot-server: Initial debian packaging

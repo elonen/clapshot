@@ -4,6 +4,9 @@ FROM node:18.9.0-slim
 RUN apt-get -y update
 RUN apt-get -y install make
 
+ARG TARGET=dev
+RUN if [ "$TARGET" = "deb" ]; then apt-get -y install make debhelper devscripts; fi
+
 # Create regular user
 
 ARG USER=docker

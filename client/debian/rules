@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+PACKAGE=${shell dh_listpackages}
+WWW_DIR=usr/share/clapshot-client/www
+export DH_VERBOSE = 1
+
+build-indep:
+	make build-local
+
+execute_after_dh_install:
+	install -d debian/${PACKAGE}/etc
+	mv debian/${PACKAGE}/${WWW_DIR}/clapshot_client.conf.json  debian/${PACKAGE}/etc/clapshot_client.conf
+	chown www-data:www-data -R debian/${PACKAGE}/${WWW_DIR}
+
+%:
+	dh $@
