@@ -3,10 +3,7 @@
 PACKAGE_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
 PACKAGE=clapshot_client
 
-default:
-	@echo "No make default. Maybe try 'dev-docker' or 'build-docker'?"
-
-
+default: build-docker
 
 clean:
 	rm -rf node_modules dist
@@ -23,7 +20,6 @@ docker: clean
 
 build-local: npm-deps
 	npm run build
-	ls	
 
 build-docker: docker
 	mkdir -p dist

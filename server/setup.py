@@ -19,7 +19,7 @@ setup(
     },
     data_files=[],
 
-    version="0.1",
+    version="0.1.0",
     author="Jarno Elonen",
     author_email="elonen@iki.fi",
     description="Backend server for Clapshot",

@@ -1,2 +1,2 @@
-debian/additional_files/clapshot-server.conf	/etc
-debian/additional_files/run-with-conf.sh	/usr/share/clapshot-server
+../additional_files/clapshot-server.conf	/etc
+../additional_files/run-with-conf.sh	/usr/share/clapshot-server
