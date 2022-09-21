@@ -39,7 +39,7 @@ build:
 
 
 debian-local:
-	apt-get -y install make debhelper devscripts
+	apt-get -qy install make debhelper devscripts
 	dpkg-buildpackage -us -uc -b
 
 debian-docker: docker-for-deb

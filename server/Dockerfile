@@ -2,13 +2,13 @@ FROM python:3.9-slim
 
 
 # Install system packages
-RUN apt-get -y update
-RUN apt-get -y install make
-RUN apt-get -y install ffmpeg
+RUN apt-get -qy update
+RUN apt-get -qy install make
+RUN apt-get -qy install ffmpeg
 
 # ...for build deb
-RUN apt-get -y install build-essential debhelper devscripts equivs
-RUN apt-get -y install python3-venv python3-dev python-dev dh-virtualenv python3-setuptools libffi-dev
+RUN apt-get -qy install build-essential debhelper devscripts equivs
+RUN apt-get -qy install python3-venv python3-dev python-dev dh-virtualenv python3-setuptools libffi-dev
 
 
 # Create regular user

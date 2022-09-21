@@ -59,8 +59,8 @@ docker: clean ${DEV_DATADIR}
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
 
 debian-local: clean wheel
-	apt-get -y install build-essential debhelper devscripts equivs
-	apt-get -y install python3-venv python3-dev python-dev dh-virtualenv python3-setuptools libffi-dev
+	apt-get -qy install build-essential debhelper devscripts equivs
+	apt-get -qy install python3-venv python3-dev python-dev dh-virtualenv python3-setuptools libffi-dev
 	dpkg-buildpackage -us -uc -b
 
 debian-docker: docker ${ENV}
