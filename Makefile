@@ -23,5 +23,5 @@ docker:
 	(cd server; make docker)
 
 test:
-	(cd server; make test-docker)
 	(cd client; make test-docker)
+	(cd server; make test-docker)

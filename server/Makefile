@@ -45,7 +45,7 @@ venv: ${ENV}
 
 install: ${SERVER_CMD}
 
-install_dev: ${ENV}
+dev: ${ENV}
 	${PYTHON_ENV} -m pip install --editable .
 
 
@@ -73,8 +73,8 @@ debian-docker: docker ${ENV}
 	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:latest  bash -c ${CMD}
 
 
-test-local: install_dev
-	${IN_ENV} pytest
+test-local: dev
+	${IN_ENV} pytest --test-alembic
 
 test-docker: docker
 	docker run --rm ${PACKAGE}:latest make test-local

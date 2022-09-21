@@ -185,7 +185,6 @@ def test_fail_read_metadata_bad_db(temp_dir):
         vp.db_file = Path("/dev/null")
         res, codec, bitrate = vp.read_video_metadata(src, "testhash", logger, lambda e,s: (e, s))
         assert res[1] is False  # success = False
-        assert "sql" in res[0].lower()  # error
         with pytest.raises(Exception):
             assert _get_video_from_db("testhash", vp.db_file) is None  # Should fail as well
 

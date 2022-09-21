@@ -10,6 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.future import select
 
+from alembic.config import Config as AlembicCfg
+from alembic import command as alembic_cmd
+from alembic import script as alembic_script
+from alembic.runtime import migration
+
 Base = declarative_base() # type: sql.ext.declarative.api.DeclarativeMeta
 
 class Video(Base):
@@ -97,10 +102,30 @@ class Database:
         self.db_file = db_file
 
     async def __aenter__(self):
+        db_existed = self.db_file.exists()
         self.engine = create_async_engine(f"sqlite+aiosqlite:///{self.db_file}", echo=False)
 
-        async with self.engine.begin() as c:
-            await c.run_sync(Base.metadata.create_all, checkfirst=True)
+        alb_cfg = AlembicCfg(Path(__file__).parent / 'alembic.ini')
+        alb_cfg.set_main_option("script_location", "clapshot_server:sqlite-migrations")
+        alb_dir = alembic_script.ScriptDirectory.from_config(alb_cfg)
+
+        if not db_existed:
+            # Create database
+            async with self.engine.begin() as c:
+                self.logger.info("Creating tables for " + str(self.db_file))
+                def doit(sync_c):
+                    Base.metadata.create_all(sync_c)
+                    # Stamp the newly created database with latest migration
+                    migration.MigrationContext.configure(sync_c).stamp(alb_dir, "head")
+                await c.run_sync(doit)
+        else:
+            # Make sure database is at latest migration
+            async with self.engine.begin() as c:
+                def is_latest_migration(sync_c):
+                    ctx = migration.MigrationContext.configure(sync_c)
+                    return set(ctx.get_current_heads()) == set(alb_dir.get_heads())
+                if not await c.run_sync(is_latest_migration):
+                    raise Exception(f"Database ({self.db_file}) is out date. Apply migrations before starting server.")
 
         self.async_session = sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
         return self

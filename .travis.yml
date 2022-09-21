@@ -3,7 +3,6 @@ os: linux
 dist: jammy
 language: minimal
 services: docker
-install: make docker
 script: make test
 branches:
   only:
