@@ -6,46 +6,6 @@ import threading
 import docopt
 from clapshot_server import database, api_server, video_processor
 
-# TODO:
-"""
-# Support Ctrl+C
-def signal_handler(signal, frame):
-    global interrupt_flag
-    if not interrupt_flag.is_set():
-        logger.info("SIGINT received, exiting...")
-        interrupt_flag.set()
-signal.signal(signal.SIGINT, signal_handler)
-
-
-...
-
-
-        interrupt_flag = threading.Event()
-        result_queue = queue.SimpleQueue()
-
-        print(f"Starting monitor at {now()}...")
-        p = threading.Thread(
-            target=VideoProcessor.monitor_incoming_folder_loop,
-            args=(vp, incoming_dir, dst_dir, interrupt_flag, result_queue, 0.1))
-        p.start()
-        time.sleep(1)
-        
-        print(f"Copying '{src}' to '{incoming_dir}' at {now()}...")
-        shutil.copy(src, incoming_dir / src.name)
-        shutil.copy(src_garbage, incoming_dir / src_garbage.name)
-        time.sleep(1)
-        
-        print(f"Stopping monitor at {now()}...")
-        interrupt_flag.set()
-        print(f"Waiting for monitor & children to stop at {now()}...")
-        p.join()
-
-        # Check that both ok and corrupted files were processed
-        res_ok = result_queue.get_nowait()
-"""
-
-
-
 def main():
     """
     Clapshot server -- backend of a video annotation tool.
@@ -65,7 +25,7 @@ def main():
      --data-dir=PATH      Directory for database, /incoming, /videos and /rejected
 
     Options:
-     -p PORT --port=PORT    Port to listen on [default: 8086]
+     -p PORT --port=PORT    Port to listen on [default: 8095]
      -H HOST --host=HOST    Host to listen on [default: 0.0.0.0]
      --host-videos          Host the /videos directory [default: False]
                             (For debugging. Use Nginx or Apache with auth in production.)
@@ -121,8 +81,8 @@ def main():
         vp_thread.start()
 
         # Run API server with asyncio forever
-        async def run_api_server():
-            await api_server.run_server(
+        async def run_api_server() -> bool:
+            return await api_server.run_server(
                 db=database.Database(
                     db_file,
                     logging.getLogger("db")),
@@ -138,17 +98,17 @@ def main():
                 await asyncio.sleep(0.5)
                 if not vp_result_queue.empty():
                     vp_res = vp_result_queue.get()  # type: video_processor.VideoProcessorResult
-                    await push_message_queue.put(api_server.CustomUserMessage(
-                        event_name = 'info',
+                    if len(vp_res.msg) < 64:
+                        msg, details = vp_res.msg, ''
+                    else:
+                        msg = 'Video processed ok.' if vp_res.success else 'Failed to process video.'
+                        details = ''
+                    await push_message_queue.put(database.Message(
+                        event_name = ('ok' if vp_res.success else 'error'),
                         user_id = vp_res.file_owner_id,
-                        fields = {
-                            'msg': vp_res.msg,
-                            'orig_file': vp_res.orig_file.name,
-                            'video_hash': vp_res.video_hash,
-                            'severity': 'success' if vp_res.success else 'error'
-                            }))
-                    # TODO: Slack, too
-
+                        ref_video = vp_res.video_hash,
+                        message = msg,
+                        details = details))
         
         try:
             task_api = asyncio.create_task(run_api_server())
@@ -158,7 +118,6 @@ def main():
                   not task_api.done() and \
                   not task_msg.done():
                 await asyncio.sleep(0.2)
-
         except KeyboardInterrupt:
             pass
         finally:
@@ -167,7 +126,10 @@ def main():
 
         logger.info("API server stopped")
 
-    asyncio.run(go())
+    try:
+        asyncio.run(go())
+    except KeyboardInterrupt:
+        pass
 
 if __name__ == '__main__':
     main()

@@ -1,3 +1,4 @@
+from email.policy import default
 import logging
 from pathlib import Path
 
@@ -45,7 +46,7 @@ class Video(Base):
             "video_hash": self.video_hash,
             "added_by_userid": self.added_by_userid,
             "added_by_username": self.added_by_username,
-            "added_time": self.added_time.isoformat(),
+            "added_time": self.added_time.isoformat() if self.added_time else None,
             "orig_filename": self.orig_filename,
             "total_frames": self.total_frames,
             "duration": self.duration,
@@ -80,7 +81,7 @@ class Comment(Base):
             "comment_id": self.id,
             "video_hash": self.video_hash,
             "parent_id": self.parent_id if self.parent_id else '',
-            "created": self.created.isoformat(),
+            "created": self.created.isoformat() if self.created else None,
             "edited": self.edited.isoformat() if self.edited else None,
             "user_id": self.user_id,
             "username": self.username,
@@ -93,6 +94,39 @@ class Comment(Base):
        return f"<Comment({self.id} video={self.video_hash} parent={self.parent_id or '-'} user_id='{self.user_id}' comment='{self.comment}' drawing={not(not self.drawing)} ...)>"
 
 
+class Message(Base):
+    __tablename__ = 'message'
+    __mapper_args__ = {"eager_defaults": True}
+    __table_args__ = {'sqlite_autoincrement': True} # required to avoid ID reuse
+
+    id = Column(sql.Integer, primary_key=True, autoincrement=True)
+    user_id = Column(sql.String, default="anonymous")
+    created = Column(sql.DateTime, server_default=sql.func.now(), nullable=False)
+    seen = Column(sql.Boolean, default=False)
+
+    ref_video_hash = Column(sql.Integer, sql.ForeignKey('video.video_hash'), nullable=True, default=None)
+    ref_comment_id = Column(sql.Integer, sql.ForeignKey('comment.id'), nullable=True, default=None)
+
+    event_name = Column(sql.String, default="info")  # info, warning, error
+    message = Column(sql.String, default="")
+    details = Column(sql.String, default="")
+
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "created": self.created.isoformat() if self.created else None,
+            "seen": self.seen,
+            "ref_video_hash": self.ref_video_hash,
+            "ref_comment_id": self.ref_comment_id,
+            "event_name": self.event_name,
+            "message": self.message,
+            "details": self.details
+        }
+
+    def __repr__(self):
+         return f"<Message({self.id} user_id='{self.user_id}' video={self.ref_video_hash} comment={self.ref_comment_id} seen={self.seen} event_name='{self.event_name}' message='{self.message}' ...)>"
 
 
 
@@ -100,6 +134,7 @@ class Database:
     def __init__(self, db_file: Path, logger: logging.Logger):
         self.logger = logger
         self.db_file = db_file
+        self.error_state = "db not started (__aenter__ not called)"
 
     async def __aenter__(self):
         db_existed = self.db_file.exists()
@@ -117,6 +152,7 @@ class Database:
                     Base.metadata.create_all(sync_c)
                     # Stamp the newly created database with latest migration
                     migration.MigrationContext.configure(sync_c).stamp(alb_dir, "head")
+                    self.error_state = None
                 await c.run_sync(doit)
         else:
             # Make sure database is at latest migration
@@ -124,10 +160,13 @@ class Database:
                 def is_latest_migration(sync_c):
                     ctx = migration.MigrationContext.configure(sync_c)
                     return set(ctx.get_current_heads()) == set(alb_dir.get_heads())
-                if not await c.run_sync(is_latest_migration):
-                    raise Exception(f"Database ({self.db_file}) is out date. Apply migrations before starting server.")
 
-        self.async_session = sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
+                self.error_state = None if await c.run_sync(is_latest_migration) else \
+                    "Database schema is out of sync with app. Use 'clapshot-alembic' to upgrade it."
+
+        if not self.error_state:
+            self.async_session = sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
+        
         return self
 
     async def __aexit__(self, exc_t, exc_v, exc_tb):
@@ -184,4 +223,31 @@ class Database:
     async def edit_comment(self, comment_id: int, new_comment: str) -> None:
         async with self.async_session() as session:
             await session.execute(sql.update(Comment).filter_by(id=comment_id).values(comment=new_comment, edited=sql.func.now()))
+            await session.commit()
+
+    # Message
+    # -------
+    async def add_message(self, msg: Message) -> sql.Integer:
+        async with self.async_session() as session:
+            session.add(msg)
+            await session.commit()
+            return msg.id
+    
+    async def get_message(self, msg_id: int) -> Message:
+        async with self.async_session() as session:
+            return (await session.execute(select(Message).filter_by(id=msg_id))).scalars().first()
+    
+    async def get_user_messages(self, user_id: str) -> list[Message]:
+        async with self.async_session() as session:
+            res = (await session.execute(select(Message).filter_by(user_id=user_id))).scalars().all()
+            return res
+
+    async def set_message_seen(self, msg_id: int, new_status: bool) -> None:
+        async with self.async_session() as session:
+            await session.execute(sql.update(Message).filter_by(id=msg_id).values(seen=new_status))
+            await session.commit()
+    
+    async def del_message(self, msg_id: int) -> None:
+        async with self.async_session() as session:
+            await session.execute(sql.delete(Message).filter_by(id=msg_id))
             await session.commit()

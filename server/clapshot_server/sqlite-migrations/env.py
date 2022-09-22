@@ -1,9 +1,10 @@
 #from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import create_engine
+import sys
 
 from alembic import context
+from alembic.runtime import migration
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -29,8 +30,12 @@ target_metadata = Base.metadata
 
 
 def _omit_sqlite_sequence(object, name, type_, reflected, compare_to):
-    if name == "sqlite_sequence":
-        return False
+    return name not in ["sqlite_sequence"]
+
+def _get_db_url():
+    url = context.get_x_argument(as_dictionary=True).get('db_url')
+    assert url, "URL not set in Alembic args. (e.g. -x db_url=sqlite:///path/to/db.sqlite)"
+    return url
 
 
 def run_migrations_offline() -> None:
@@ -45,9 +50,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=_get_db_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -69,11 +73,7 @@ def run_migrations_online() -> None:
     connectable = context.config.attributes.get("connection", None)
 
     if connectable is None:
-        connectable = engine_from_config(
-            config.get_section(config.config_ini_section),
-            prefix="sqlalchemy.",
-            poolclass=pool.NullPool,
-        )
+        connectable = create_engine(_get_db_url())
 
     with connectable.connect() as connection:
         context.configure(
@@ -81,8 +81,14 @@ def run_migrations_online() -> None:
             include_object=_omit_sqlite_sequence
         )
 
+        mc = migration.MigrationContext.configure(connection)
+        print("Head(s) before: " + ' '.join(mc.get_current_heads()))
+        print("Running online migrations...")
+
         with context.begin_transaction():
             context.run_migrations()
+        
+        print("Head(s) now: " + ' '.join(mc.get_current_heads()))
 
 
 if context.is_offline_mode():

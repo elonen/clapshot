@@ -38,7 +38,7 @@ async def example_db(tmp_path_factory):
 
     Path(db_file).unlink(missing_ok=True)
     async with DB.Database(Path(db_file), logging.getLogger()) as db:
-
+        assert not db.error_state, f"DB error state {db.error_state}"
         async def mkvid(i):
             v = DB.Video(
                 video_hash=f"HASH{i}",
@@ -73,7 +73,6 @@ async def example_db(tmp_path_factory):
             yield (db, videos, comments)
         finally:
             Path(db_file).unlink(missing_ok=True)
-            print("Database closed & removed")
 
 
 @pytest.mark.timeout(15)
@@ -170,3 +169,35 @@ async def test_repr(example_db):
             assert c.video_hash in repr(c)
             assert c.comment in repr(c)
             assert c.username == c.to_dict()['username']
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.asyncio
+async def test_user_messages(example_db):
+    async for (db, vid, com) in example_db:
+        # Add a message to user #1
+        msgs = [
+            DB.Message(user_id='user.num1', message='message1', event_name="info", ref_video_hash="HASH0"),
+            DB.Message(user_id='user.num1', message='message2', event_name="oops", ref_video_hash="HASH0", details="STACKTRACE"),
+            DB.Message(user_id='user.num2', message='message3', event_name="info")
+        ]
+
+        for i,m in enumerate(msgs):
+            msgs[i].id = await db.add_message(m)
+            got = await db.get_message(msgs[i].id)
+            assert got.to_dict() == msgs[i].to_dict()
+            assert not got.seen
+
+        # Correctly count messages
+        assert len(await db.get_user_messages('user.num1')) == 2
+        assert len(await db.get_user_messages('user.num2')) == 1
+
+        # Mark message #2 as seen
+        await db.set_message_seen(msgs[1].id, True)
+        assert (await db.get_message(msgs[1].id)).seen
+
+        # Delete & recount
+        await db.del_message(msgs[2].id)
+        await db.del_message(msgs[0].id)
+        assert len(await db.get_user_messages('user.num1')) == 1
+        assert len(await db.get_user_messages('user.num2')) == 0

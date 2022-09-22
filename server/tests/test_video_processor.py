@@ -33,6 +33,7 @@ def temp_dir(tmp_path_factory):
     # Example video
     assert Path(SRC_VIDEO).exists(), f"Test video '{src.absolute}' does not exist"
     dst_dir = tmp_path_factory.mktemp("clapshot_videoproc_test")
+    
     shutil.copy2(SRC_VIDEO, dst_dir)
 
     # Invalid video file
@@ -119,6 +120,7 @@ def test_conversion_error(temp_dir):
 def _get_video_from_db(video_hash: str, db_file: Path):
     async def _do_get():
         async with Database(Path(db_file), logger) as db:
+            assert not db.error_state, f"DB error state {db.error_state}"
             return await db.get_video(video_hash)
     return asyncio.run(_do_get())
 
@@ -267,8 +269,9 @@ def test_monitor_dir_ok(temp_dir):
         
         print(f"Copying '{src}' to '{incoming_dir}' at {now()}...")
         shutil.copy(src, incoming_dir / src.name)
+        print(f"Copying '{src_garbage}' to '{incoming_dir}' at {now()}...")
         shutil.copy(src_garbage, incoming_dir / src_garbage.name)
-        time.sleep(1)
+        time.sleep(2)
         
         print(f"Stopping monitor at {now()}...")
         interrupt_flag.set()

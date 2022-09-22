@@ -166,6 +166,7 @@ class VideoProcessor:
             async def add_video_to_db():
                 logger.debug(f"Opening DB '{self.db_file}'...")
                 async with DB.Database(Path(self.db_file), logger) as db:
+                    assert not db.error_state, f"DB error state {db.error_state}"
                     logger.debug(f"db.add_video ...")
                     await db.add_video(DB.Video(
                         video_hash=video_hash,
@@ -181,7 +182,7 @@ class VideoProcessor:
             asyncio.run(add_video_to_db())
             logger.debug(f"Metadata wrote")
         except Exception as e:
-            return fmt_result(f"Error inserting video info into DB: {e}", False), codec, bit_rate
+            return fmt_result(f"Error inserting video info into DB: '{e}'", False), codec, bit_rate
 
         return None, codec, bit_rate
 
