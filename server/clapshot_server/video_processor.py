@@ -208,8 +208,9 @@ class VideoProcessor:
                 assert len(hash) >= 8
                 return hash[:8]
 
-            new_dir = dst_dir / calc_video_hash(src)
-            logger.debug(f"Video_hash for '{src}' = '{new_dir.name}. New dir: '{new_dir}'")
+            video_hash = calc_video_hash(src)
+            new_dir = dst_dir / video_hash
+            logger.debug(f"Video_hash for '{src}' = '{video_hash}. New dir: '{new_dir}'")
 
             # Helper for returning results through multiporcessing queue
             def fmt_result(msg: str, success: bool) -> ProcessingResult:
@@ -221,7 +222,7 @@ class VideoProcessor:
                     orig_file=src,
                     file_owner_id=src.owner(),
                     success=success,
-                    video_hash=new_dir.name,
+                    video_hash=video_hash,
                     msg=msg)
 
             # Move video to video dir
@@ -238,7 +239,7 @@ class VideoProcessor:
             assert (dir_for_orig / src.name).exists(), f"Failed to move '{src}' to {dir_for_orig}. Aborting."
             src = dir_for_orig / src.name       # update src to point to the new location
 
-            opt_res, orig_codec, orig_bitrate = self.read_video_metadata(src, new_dir.name, logger, fmt_result)
+            opt_res, orig_codec, orig_bitrate = self.read_video_metadata(src, video_hash, logger, fmt_result)
             if opt_res:
                 assert not opt_res.success, "read_video_metadata should not return success"
                 return opt_res
@@ -255,6 +256,13 @@ class VideoProcessor:
                 return fmt_result(f"FFMPEG error converting video:: {e}", False)
             elif p.exitcode != 0:
                 return fmt_result(f"FFMPEG subprocess exitcode={p.exitcode}. Got no exception.", False)
+            else:
+                logger.debug(f"FFMPEG subprocess finished successfully")
+                async def mark_recompressed():
+                    async with DB.Database(Path(self.db_file), logger) as db:
+                        assert not db.error_state, f"DB error state {db.error_state}"
+                        await db.set_video_recompressed(video_hash)
+                asyncio.run(mark_recompressed())
 
             return fmt_result("Video processing complete", True)
 

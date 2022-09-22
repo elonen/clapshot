@@ -69,7 +69,7 @@ def test_convert_hbr(temp_dir):
 @pytest.mark.timeout(120)
 def test_no_conv_smaller_mp4(temp_dir):
     """
-    Test that a smaller h264 MP¤ file is not converted, only copied.
+    Test that a smaller h264 MP4 file is not converted, only copied.
     """
     for (src, dst_dir, src_garbage, vp) in temp_dir:
         dst_file = dst_dir / "test.mp4"
@@ -210,6 +210,7 @@ def test_process_video_ok(temp_dir):
         vid = _get_video_from_db(res.video_hash, vp.db_file)
         assert vid.orig_filename == src.name
         assert vid.added_by_userid == res.file_owner_id
+        assert vid.recompression_done
 
 
 @pytest.mark.timeout(120)

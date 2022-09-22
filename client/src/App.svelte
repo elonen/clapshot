@@ -7,9 +7,10 @@
   import NavBar from './lib/NavBar.svelte'
   import VideoPlayer from './lib/VideoPlayer.svelte';
   import CommentInput from './lib/CommentInput.svelte';
+  import UserMessage from './lib/UserMessage.svelte';
   import {Notifications, acts} from '@tadashi/svelte-notification'
   
-  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_orig_filename, all_my_videos} from './stores.js';
+  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_orig_filename, all_my_videos, user_messages} from './stores.js';
     
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
@@ -90,6 +91,7 @@
     $all_comments = [];
     $video_is_ready = false;
     socket.emit('list_my_videos', {});
+    socket.emit('list_my_messages', {});
   }
 
   function onClearAll(e) {
@@ -171,6 +173,7 @@
         socket.emit('open_video', {video_hash: $video_hash});
       } else {
         socket.emit('list_my_videos', {});
+        socket.emit('list_my_messages', {});
       }
     });
 
@@ -201,15 +204,16 @@
       $cur_user_id = data.user_id
     }));
 
-    socket.on('info', (data) => handle_with_errors(() => {
-      console.log("[SERVER] info: " + JSON.stringify(data));
-      let severity = (data.severity == 'error') ? 'danger' : data.severity;
-      acts.add({mode: severity, message: data.msg, lifetime: 5});
-    }));
+    socket.on('message', (data) => handle_with_errors(() => {
+      console.log("[SERVER] message: " + JSON.stringify(data));
+      $user_messages = $user_messages.filter((m) => m.id != data.id);
+      $user_messages.push(data);
+      $user_messages = $user_messages.sort((a, b) => a.id > b.id ? -1 : a.id < b.id ? 1 : 0)
 
-    socket.on('oops', (data) => handle_with_errors(() => {  // 'error' is reserved by Socket.io for internal user
-      console.log("[SERVER] oops: " + JSON.stringify(data));
-      acts.add({mode: 'danger', message: data.msg, lifetime: 5});
+      if (!data.seen) {
+        const severity = (data.event_name == 'error') ? 'danger' : 'info';
+        acts.add({mode: severity, message: data.message, lifetime: 5});
+      }
     }));
 
     socket.on('error', (data) => handle_with_errors(() => {
@@ -358,6 +362,19 @@
               </div>          
               {/each} 
             </div> 
+
+            {#if $user_messages.length>0}
+              <h1 class="text-2xl m-6 mt-12 text-slate-500">
+                  Latest messages
+              </h1>
+              <div class="gap-4">
+                {#each $user_messages as msg}
+                  <UserMessage {msg} />
+                {/each} 
+              </div> 
+            {/if}
+
+
           </div>
 
         {/if}

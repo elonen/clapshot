@@ -183,7 +183,9 @@ async def test_user_messages(example_db):
         ]
 
         for i,m in enumerate(msgs):
-            msgs[i].id = await db.add_message(m)
+            new_msg = await db.add_message(m)
+            msgs[i].id = new_msg.id
+            assert new_msg.created
             got = await db.get_message(msgs[i].id)
             assert got.to_dict() == msgs[i].to_dict()
             assert not got.seen

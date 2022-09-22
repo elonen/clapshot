@@ -7,6 +7,7 @@ from typing import Any, DefaultDict, Optional
 from aiohttp import web
 from pathlib import Path
 import socketio
+import urllib.parse
 
 from .database import Database, Video, Comment, Message
 
@@ -100,14 +101,14 @@ class ClapshotApiServer:
                 else:
                     assert user_id in (v.added_by_userid, 'admin'), f"Video '{video_hash}' not owned by you. Cannot delete."
                     await self.db.del_video_and_comments(video_hash)
-                    await self.push_message(Message(
+                    await self.push_message(persist=True, msg=Message(
                         event_name='ok', user_id=user_id,
                         ref_video_hash=video_hash,
                         message=f"Video deleted.",
                         details=f"Added by {v.added_by_username} ({v.added_by_userid}) on {v.added_time}. Filename was '{v.orig_filename}'"))
             except Exception as e:
                 self.logger.exception(f"Exception in del_video for sid '{sid}': {e}")
-                await self.push_message(dont_throw=True, msg=Message(
+                await self.push_message(dont_throw=True, persist=True, msg=Message(
                     event_name='error', user_id=user_id,
                     ref_video_hash=msg.get('video_hash'),
                     message= f"Failed to delete video.", details=str(e)))
@@ -128,7 +129,6 @@ class ClapshotApiServer:
                         event_name='error', user_id=user_id,
                         ref_video_hash=video_hash,
                         message=  f"No such video. Cannot comment."))
-
                     return
 
                 comment = Comment(
@@ -207,16 +207,18 @@ class ClapshotApiServer:
 
 
         @sio.event
-        async def get_messages(sid, msg):
+        async def list_my_messages(sid, msg):
             try:
                 user_id, username = await self.get_user(sid)
                 assert user_id
-                self.logger.info(f"get_messages: user_id='{user_id}'")
+                self.logger.info(f"list_my_messages: user_id='{user_id}'")
                 msgs = await self.db.get_user_messages(user_id)
                 for m in msgs:
-                    await sio.emit('message', m.to_dict(), room=sid)
+                    await sio.emit('message', m.to_dict(), room=sid)                
+                    if not m.seen:
+                        await self.db.set_message_seen(m.id, True)
             except Exception as e:
-                self.logger.exception(f"Exception in get_messages for sid '{sid}': {e}")
+                self.logger.exception(f"Exception in list_my_messages for sid '{sid}': {e}")
                 # Don't push new error messages to db, as listing them failed.
                 await sio.emit("message", Message(
                         event_name='error', user_id=user_id,
@@ -255,27 +257,35 @@ class ClapshotApiServer:
         for route, path in self.serve_dirs.items():
             self.app.router.add_static(route, path)
 
-    async def push_message(self, msg: Message, dont_throw=False):
+    async def push_message(self, msg: Message, dont_throw=False, persist=False):
         """
         Push a message to the database and emit it to all clients.
         Set dont_throw if this is called from an exception handler.
         """
+        if persist:
+            try:
+                msg = await self.db.add_message(msg) # Also sets id and timestamp
+            except Exception as e:
+                self.logger.error(f"Exception in push_message while persisting: {e}")
+                if not dont_throw:
+                    raise
         try:
-            assert msg.user_id
             if msg.user_id in self.userid_to_sid:
                 await sio.emit("message", msg.to_dict(), room=self.userid_to_sid[msg.user_id])
-            await self.db.add_message(msg)
         except Exception as e:
-            if dont_throw:
-                self.logger.error(f"Exception in push_message: {e}")
-            else:
+            self.logger.error(f"Exception in push_message while emitting: {e}")
+            if not dont_throw:
                 raise
 
     def dict_for_video(self, v: Video) -> dict:
+        video_url = self.url_base.rstrip('/') + f'/video/{v.video_hash}/' + (
+            'video.mp4' if v.recompression_done else
+            ('orig/'+urllib.parse.quote(v.orig_filename, safe='')))
+
         return {
                 'orig_filename': v.orig_filename,
                 'video_hash': v.video_hash,
-                'video_url': self.url_base.rstrip('/') + f'/video/{v.video_hash}/video.mp4',
+                'video_url': video_url,
                 'fps': str(round(Decimal(v.fps), 3)),  # eg. 23.976
                 'added_time': str(v.added_time.isoformat()),
                 'duration': v.duration,
@@ -342,7 +352,7 @@ async def run_server(
             # Wait for messages from other parts of the app,
             # and push them to clients.
             while msg := await push_messages.get():                
-                await server.push_message(msg)
+                await server.push_message(msg, persist=True, dont_throw=True)
 
     except Exception as e:
         logger.error(f"Exception in API server: {e}")

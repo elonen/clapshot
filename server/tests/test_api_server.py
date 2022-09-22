@@ -389,6 +389,39 @@ async def test_api_anonymous_user(api_server_and_db):
 
 @pytest.mark.timeout(15)
 @pytest.mark.asyncio
+async def test_list_my_messages(api_server_and_db):
+    async for td in api_server_and_db:
+
+        await td.send('list_my_messages', {})
+        assert not await td.get()
+
+        msgs = [
+            DB.Message(user_id='user.num1', message='message1', event_name="info", ref_video_hash="HASH0"),
+            DB.Message(user_id='user.num1', message='message2', event_name="oops", ref_video_hash="HASH0", details="STACKTRACE"),
+            DB.Message(user_id='user.num2', message='message3', event_name="info")
+        ]
+        for i,m in enumerate(msgs):
+            msgs[i].id = await td.db.add_message(m)
+
+        await td.send('list_my_messages', {})
+        for m in [m for m in msgs if m.user_id == 'user.num1']:
+            event, data = await td.get()
+            assert data['event_name'] == m.event_name
+            assert not data['seen']
+        assert not await td.get()   # No more messages
+
+        # List again, this time messages should be marked "seen"
+        await td.send('list_my_messages', {})
+        for m in [m for m in msgs if m.user_id == 'user.num1']:
+            event, data = await td.get()
+            assert data['event_name'] == m.event_name
+            assert data['seen']
+
+
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.asyncio
 async def test_api_logout(api_server_and_db):
     async for td in api_server_and_db:
         await td.send('logout', None)

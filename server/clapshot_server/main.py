@@ -102,11 +102,11 @@ def main():
                         msg, details = vp_res.msg, ''
                     else:
                         msg = 'Video processed ok.' if vp_res.success else 'Failed to process video.'
-                        details = ''
+                        details = vp_res.msg
                     await push_message_queue.put(database.Message(
                         event_name = ('ok' if vp_res.success else 'error'),
                         user_id = vp_res.file_owner_id,
-                        ref_video = vp_res.video_hash,
+                        ref_video_hash = vp_res.video_hash,
                         message = msg,
                         details = details))
         

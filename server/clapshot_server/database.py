@@ -181,6 +181,11 @@ class Database:
             await session.commit()
             return video.id
 
+    async def set_video_recompressed(self, video_hash: str):
+        async with self.async_session() as session:
+            await session.execute(sql.update(Video).filter_by(video_hash=video_hash).values(recompression_done=sql.func.now()))
+            await session.commit()
+
     async def get_video(self, video_hash: str) -> Video:
         async with self.async_session() as session:
             res = await session.execute(select(Video).filter_by(video_hash=video_hash))
@@ -227,11 +232,11 @@ class Database:
 
     # Message
     # -------
-    async def add_message(self, msg: Message) -> sql.Integer:
+    async def add_message(self, msg: Message) -> Message:
         async with self.async_session() as session:
             session.add(msg)
             await session.commit()
-            return msg.id
+            return msg   # Contains new id and timestamp
     
     async def get_message(self, msg_id: int) -> Message:
         async with self.async_session() as session:

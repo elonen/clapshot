@@ -14,3 +14,4 @@ export let cur_user_pic = writable(null);
 export let video_is_ready = writable(false);
 
 export let all_comments = writable([]);
+export let user_messages = writable([]);
