@@ -128,11 +128,11 @@ class VideoProcessor:
         Read video metadata with ffmpeg-python and write it to the database.
 
         Args:
-            src: Path to the source video file
-            video_hash: hash (unique id) of the video file
-            logger: logger to use
-            fmt_result: function to post a ProcessingResult, if error occurs
-            test_mock: mock values for testing
+            src:        Path to the source video file
+            video_hash: Hash (unique id) of the video file
+            logger:     Logger to use
+            fmt_result: Function to post a ProcessingResult, if error occurs
+            test_mock:  Overrides for testing
         
         Returns:
             tuple(result: ProcessingResult, orig_codec: str, orig_bitrate: int) -- result is None if no error occurred
@@ -146,7 +146,7 @@ class VideoProcessor:
             for track in mediainfo.tracks:
                 if track.track_type == "Video" and not test_mock.get('no_video_stream'):
                     for x in ('frame_count', 'frame_rate', 'height', 'width', 'duration', 'format'):
-                        if x not in track.to_data():
+                        if x not in track.to_data() or test_mock.get('missing_mediainfo_fields'):
                             raise ValueError(f"No field '{x}' in video track")                    
                     video = track
                     break
@@ -190,23 +190,30 @@ class VideoProcessor:
         return None, video.format, int(bit_rate)
 
 
-    def process_file(self, src: Path, dst_dir: Path) -> ProcessingResult:
+    def process_file(self,
+        src: Path,
+        dst_dir: Path,
+        user_id=None,
+        test_mock: dict = {}) -> ProcessingResult:
         """
         Process a video file: recompress and get metadata.            
         Args:
-            src: Path to the source video file
-            dst_dir: Path to the destination directory
-
+            src:         Path to the source video file
+            dst_dir:     Path to the destination directory
+            user_id:     User id of the submitter. Defaults to file owner.
+            test_mock:   Overrides for testing
         Returns:
             ProcessingResult
         """
         logger = logging.getLogger(f"vp.wrk_{os.getpid()}")
         try:
-            # Name the file with a hash of the first 128k of file contents + the original filename
+            user_id = user_id or src.owner()
+
+            # Hash = Filename + user_id + size + first 32k of contents
             def calc_video_hash(fn: Path) -> str:
-                file_hash = hashlib.md5(str(fn).encode('utf-8'))
+                file_hash = hashlib.sha256((str(fn) + str(user_id) + str(fn.stat().st_size)).encode('utf-8'))
                 with open(fn, 'rb') as f:
-                    file_hash.update(f.read(128*1024))
+                    file_hash.update(f.read(32*1024))
                 hash = file_hash.hexdigest()
                 assert len(hash) >= 8
                 return hash[:8]
@@ -223,10 +230,30 @@ class VideoProcessor:
                     logger.error(f"Error processing '{src}' -> '{new_dir}': {msg}")
                 return ProcessingResult(
                     orig_file=src,
-                    file_owner_id=src.owner(),
+                    file_owner_id=user_id,
                     success=success,
                     video_hash=video_hash,
                     msg=msg)
+
+            if test_mock.get('preexisting_dir'):
+                new_dir.mkdir(parents=True, exist_ok=True)
+
+            # Check if video is already processed
+            if new_dir.exists():
+                async def lookup_existing():
+                    async with DB.Database(Path(self.db_file), logger) as db:
+                        return await db.get_video(video_hash)
+                old_vid = asyncio.run(lookup_existing())
+                
+                if old_vid:
+                    assert old_vid.added_by_userid == user_id, \
+                        f"Hash collision?!? Video '{video_hash}' already owned by '{old_vid.added_by_userid}'."
+                    res = fmt_result(f"You already have this video.", True)
+                    src.unlink() # Just delete the original. It's already in /videos anyway.
+                    return res
+                else:
+                    logger.warning(f"Dir for '{video_hash}' exists, but not in DB. Deleting old and reprocessing.")
+                    shutil.rmtree(new_dir)
 
             # Move video to video dir
             logger.debug(f"Creating dir '{new_dir}'...")
@@ -270,10 +297,10 @@ class VideoProcessor:
             return fmt_result("Video processing complete", True)
 
         except Exception as e:
-            logger.error(f"Generic video processing error '{str(src)}' to : {e}")
+            logger.error(f"General processing error '{str(src)}' to : {e}")
             return ProcessingResult(
                 orig_file=src,
-                file_owner_id=src.owner(),
+                file_owner_id=user_id,
                 success=False,
                 msg=f"Generic video processing error: {e}")
 

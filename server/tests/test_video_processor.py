@@ -25,27 +25,32 @@ random.seed()
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-SRC_VIDEO="tests/assets/NASA_Red_Lettuce_excerpt.mov"
+SRC_VIDEO_HBR="tests/assets/NASA_Red_Lettuce_excerpt.mov"
+SRC_VIDEO_LBR="tests/assets/60fps-example.mp4"
 
 
 @pytest.fixture()
 def temp_dir(tmp_path_factory):
     # Example video
-    assert Path(SRC_VIDEO).exists(), f"Test video '{src.absolute}' does not exist"
+    assert Path(SRC_VIDEO_HBR).exists(), f"Test video '{src.absolute}' does not exist"
     dst_dir = tmp_path_factory.mktemp("clapshot_videoproc_test")
     
-    shutil.copy2(SRC_VIDEO, dst_dir)
+    shutil.copy2(SRC_VIDEO_HBR, dst_dir)
+    shutil.copy2(SRC_VIDEO_LBR, dst_dir)
 
     # Invalid video file
     src_garbage = dst_dir / "garbage.mov"
     with open(src_garbage, 'wb') as f:
         f.write(b'das ist kein video')
 
-    src = Path(dst_dir / Path(SRC_VIDEO).name)
+    src = Path(dst_dir / Path(SRC_VIDEO_HBR).name)
     assert src.exists(), f"Test video '{src.absolute}' does not exist"
+    src_lbr = Path(dst_dir / Path(SRC_VIDEO_LBR).name)
+    assert src_lbr.exists(), f"Test video '{src_lbr.absolute}' does not exist"
+
     vp = VideoProcessor(dst_dir/"test.sqlite", logger)
     try:
-        yield [(src, dst_dir, src_garbage, vp)]
+        yield [(src, dst_dir, src_garbage, vp, src_lbr)]
     finally:        
         shutil.rmtree(dst_dir, ignore_errors=True)
 
@@ -56,7 +61,7 @@ def test_convert_hbr(temp_dir):
     """
     Test converting a hight bitrate video to a smaller one.
     """
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         dst_file = dst_dir / "test.mp4"
         assert not dst_file.exists()
         f_stdout, f_stderr = vp.convert_video(src, dst_file, logger, 15*10**6, 'fake-codec')
@@ -71,7 +76,7 @@ def test_no_conv_smaller_mp4(temp_dir):
     """
     Test that a smaller h264 MP4 file is not converted, only copied.
     """
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         dst_file = dst_dir / "test.mp4"
         assert not dst_file.exists()
         src_mp4 = dst_dir / "src.mp4"
@@ -91,7 +96,7 @@ def test_conv_smaller_mov(temp_dir):
     """
     Test that a smaller MOV file is converted to MP4, even if it's (supposedly) h264 and low bitrate.
     """
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         dst_file = dst_dir / "test.mp4"
         assert not dst_file.exists()
         vp.convert_video(Path(src), dst_file, logger, 1*10**6, 'h264')
@@ -103,7 +108,7 @@ def test_conversion_error(temp_dir):
     """
     Test that a conversion error is handled correctly.
     """
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         dst_file = dst_dir / "test.mp4"
 
         # Exception should be raised and error log written
@@ -131,7 +136,7 @@ def test_read_metadata_ok(temp_dir):
     """
     Test that metadata is read correctly.
     """
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         vid = _get_video_from_db("testhash1", vp.db_file)
         assert vid is None
 
@@ -156,13 +161,19 @@ def test_read_metadata_ok(temp_dir):
 
 @pytest.mark.timeout(120)
 def test_fail_read_metadata_no_video_stream(temp_dir):
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         res, codec, bitrate = vp.read_video_metadata(src, "testhash", logger, lambda e,s: (e, s), test_mock={'no_video_stream': True})
         assert res is not None and res[1] is False
 
 @pytest.mark.timeout(120)
-def test_read_metadata_approximate_video_bitrate(temp_dir):
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+def test_fail_read_metadata_missing_fields(temp_dir):
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
+        res, codec, bitrate = vp.read_video_metadata(src, "testhash", logger, lambda e,s: (e, s), test_mock={'missing_mediainfo_fields': True})
+        assert res is not None and res[1] is False
+
+@pytest.mark.timeout(120)
+def test_read_metadata_approximate_bitrate(temp_dir):
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         res, codec, bitrate = vp.read_video_metadata(src, "testhash", logger, lambda e,s: (e, s), test_mock={'no_bit_rate': True})
         assert res is None
         # Calculated bitrate from file size is not quite accurate
@@ -171,7 +182,7 @@ def test_read_metadata_approximate_video_bitrate(temp_dir):
 
 @pytest.mark.timeout(120)
 def test_fail_read_metadata(temp_dir):
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         vid = _get_video_from_db("testhash1", vp.db_file)
         assert vid is None
         res, codec, bitrate = vp.read_video_metadata(src_garbage, "testhash", logger, lambda e,s: (e, s))
@@ -181,12 +192,13 @@ def test_fail_read_metadata(temp_dir):
 
 @pytest.mark.timeout(120)
 def test_fail_read_metadata_bad_db(temp_dir):
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         vp.db_file = Path("/dev/null")
         res, codec, bitrate = vp.read_video_metadata(src, "testhash", logger, lambda e,s: (e, s))
-        assert res[1] is False  # success = False
+        assert res[1] is False  # success == False
         with pytest.raises(Exception):
             assert _get_video_from_db("testhash", vp.db_file) is None  # Should fail as well
+
 
 
 @pytest.mark.slow
@@ -195,7 +207,7 @@ def test_process_video_ok(temp_dir):
     """
     Test that a video is processed (both probed and compressed) completely.
     """
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         res = vp.process_file(src, dst_dir)
         assert res.success
         assert res.orig_file.name == src.name
@@ -216,7 +228,7 @@ def test_process_video_corrupted(temp_dir):
     """
     Test that a corrupted video gives a controlled error.
     """    
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         res = vp.process_file(src_garbage, dst_dir)
         print("RES OF test_process_video_corrupted", res)
         assert not res.success
@@ -231,10 +243,56 @@ def test_process_dev_null_failure(temp_dir):
     """
     Test that a complete broken input gives a controlled error.
     """
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         res = vp.process_file(Path("/dev/null"), dst_dir)
         assert not res.success
         assert res.msg is not None
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(120)
+def test_process_reupload(temp_dir):
+    """
+    Process same video multiple ties.
+    """
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
+
+        res1 = vp.process_file(src_lbr, dst_dir)
+        assert res1.success
+        assert res1.video_hash is not None
+        orig = dst_dir / res1.video_hash / "orig" / res1.orig_file.name
+        assert orig.exists()
+        vid = _get_video_from_db(res1.video_hash, vp.db_file)
+        assert vid.added_by_userid == res1.file_owner_id
+
+        # Reupload as same user
+        shutil.copy(orig, src_lbr.absolute())  # Copy original file to new location to reprocess
+        res2 = vp.process_file(src_lbr, dst_dir)
+        assert res2.success
+        assert res2.video_hash == res1.video_hash
+        assert "lready" in res2.msg
+
+        # Reupload as another user. Expect new hash.
+        shutil.copy(orig, src_lbr.absolute())
+        res3 = vp.process_file(src_lbr, dst_dir, user_id='another.user')
+        assert res3.success
+        assert res3.video_hash != res1.video_hash
+        assert (dst_dir / res3.video_hash / "orig" / orig.name).exists()
+        assert _get_video_from_db(res3.video_hash, vp.db_file)
+
+
+@pytest.mark.slow
+@pytest.mark.timeout(120)
+def test_process_reupload_but_missing_from_db(temp_dir):
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
+        res = vp.process_file(src_lbr, dst_dir, test_mock={'preexisting_dir': True})
+        assert res.success
+        assert res.video_hash is not None
+        orig = dst_dir / res.video_hash / "orig" / res.orig_file.name
+        assert orig.exists()
+        assert _get_video_from_db(res.video_hash, vp.db_file)
+
+
 
 @pytest.mark.slow
 @pytest.mark.timeout(240)
@@ -243,7 +301,7 @@ def test_monitor_dir_ok(temp_dir):
     Test incomig video monitoring.
     """
     # vp.monitor_incoming_folder_loop(self, incoming_dir: Path, dst_dir: Path, interrupt_flag: mp.Event):
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         incoming_dir = dst_dir / "incoming"
         incoming_dir.mkdir()
 
@@ -319,7 +377,7 @@ def test_monitor_dir_bad_reject_dir(temp_dir):
     Test incomig video monitoring.
     """
     # vp.monitor_incoming_folder_loop(self, incoming_dir: Path, dst_dir: Path, interrupt_flag: mp.Event):
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         incoming_dir = dst_dir / "incoming"
         incoming_dir.mkdir()
         rejected_dir = "/dev/null"
@@ -363,7 +421,7 @@ def test_monitor_dir_bad_video_dir(temp_dir):
     Test incomig video monitoring.
     """
     # vp.monitor_incoming_folder_loop(self, incoming_dir: Path, dst_dir: Path, interrupt_flag: mp.Event):
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         incoming_dir = dst_dir / "incoming"
         incoming_dir.mkdir()
         rejected_dir = dst_dir / "rejected"
@@ -401,7 +459,7 @@ def test_monitor_dir_bad_video_and_reject_dir(temp_dir):
     Test incomig video monitoring.
     """
     # vp.monitor_incoming_folder_loop(self, incoming_dir: Path, dst_dir: Path, interrupt_flag: mp.Event):
-    for (src, dst_dir, src_garbage, vp) in temp_dir:
+    for (src, dst_dir, src_garbage, vp, src_lbr) in temp_dir:
         incoming_dir = dst_dir / "incoming"
         incoming_dir.mkdir()
         rejected_dir = Path("/dev/null")
