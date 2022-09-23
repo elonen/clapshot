@@ -20,14 +20,19 @@ setup(
     },
     data_files=[],
 
-    version="0.1.1",
+    version="0.2.1",
     author="Jarno Elonen",
     author_email="elonen@iki.fi",
     description="Backend server for Clapshot",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/elonen/clapshot",
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages() + [
+        'clapshot_server',
+        'clapshot_server.sqlite-migrations',
+        'clapshot_server.sqlite-migrations.versions'],
+    package_data={'clapshot_server': ['*.ini']},
+    include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

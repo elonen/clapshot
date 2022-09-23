@@ -1,5 +1,11 @@
-clapshot-client (0.1.0) unstable; urgency=medium
+clapshot-client (0.2.1-1) bullseye; urgency=low
 
-  * Initial Release.
+  * New (prerelease) upstream version
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 23 Sep 2022 07:29:23 +0000
+
+clapshot-client (0.1.0) bullseye; urgency=low
+
+  * Initial debian packaging
 
  -- Jarno Elonen <elonen@iki.fi>  Tue, 20 Sep 2022 16:46:46 +0300

@@ -37,7 +37,8 @@ wheel: ${ENV}
 	${PYTHON_ENV} setup.py bdist_wheel
 
 clean:
-	rm -rf "${ENV}" dist build __pycache__ *.egg-info dist_deb
+	rm -rf "${ENV}" dist build *.egg-info dist_deb
+	find . -name __pycache__ -type d -exec rm -r {} ';'
 
 
 

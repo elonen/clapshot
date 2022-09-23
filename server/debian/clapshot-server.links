@@ -1,2 +1,2 @@
-opt/venvs/clapshot-server/bin/clapshot-server usr/bin/clapshot-server
-opt/venvs/clapshot-server/bin/alembic         usr/bin/clapshot-alembic
+opt/venvs/clapshot-server/bin/clapshot-server   usr/bin/clapshot-server
+opt/venvs/clapshot-server/bin/clapshot-alembic  usr/bin/clapshot-alembic

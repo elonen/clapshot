@@ -1,7 +1,12 @@
-clapshot-server (0.1.0) UNRELEASED; urgency=low
+clapshot-server (0.2.1-1) bullseye; urgency=low
 
-  [ Jarno Elonen ]
-  * clapshot-server: Initial debian packaging
+  * New (prerelease) upstream version
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 23 Sep 2022 07:29:23 +0000
+
+clapshot-server (0.1.0) bullseye; urgency=low
+
+  * Initial debian packaging
 
  -- Jarno Elonen <elonen@iki.fi>  Mon, 19 Sep 2022 07:09:12 +0000
 
