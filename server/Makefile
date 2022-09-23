@@ -85,7 +85,7 @@ test:
 
 
 
-run-local: ${SERVER_CMD} ${DEV_DATADIR}
+run-local: dev ${DEV_DATADIR}
 	${SERVER_CMD} --url-base http://127.0.0.1:8095/ --port 8095 --data-dir ${DEV_DATADIR} --host-videos --debug -m aiosqlite
 
 run-docker: docker

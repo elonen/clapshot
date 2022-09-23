@@ -143,16 +143,15 @@ def test_read_metadata_ok(temp_dir):
 
         res, new_codec, new_bitrate = vp.read_video_metadata(dst_file, "testhash2", logger, lambda e,s: (e, s))
         assert res is None, "Got error message"
-        assert orig_codec == 'hevc'
-        assert new_codec == 'h264'
+        assert orig_codec.lower() == 'hevc'
+        assert new_codec.lower() in ('h264', 'avc')
         assert orig_bitrate >= new_bitrate
 
         vid = _get_video_from_db("testhash1", vp.db_file)
         assert vid.orig_filename == src.name
         meta_video = json.loads(vid.raw_metadata_video)
-        assert meta_video['codec_name'] == orig_codec
         assert int(meta_video['bit_rate']) == orig_bitrate
-        assert float(Fraction(meta_video['avg_frame_rate'])) == pytest.approx(float(vid.fps), 0.1)
+        assert float(Fraction(meta_video['frame_rate'])) == pytest.approx(float(vid.fps), 0.1)
 
 
 @pytest.mark.timeout(120)
@@ -162,13 +161,12 @@ def test_fail_read_metadata_no_video_stream(temp_dir):
         assert res is not None and res[1] is False
 
 @pytest.mark.timeout(120)
-def test_metadata_no_explicit_fps(temp_dir):
+def test_read_metadata_approximate_video_bitrate(temp_dir):
     for (src, dst_dir, src_garbage, vp) in temp_dir:
-        res, codec, bitrate = vp.read_video_metadata(src, "testhash", logger, lambda e,s: (e, s), test_mock={'no_fps': True})
+        res, codec, bitrate = vp.read_video_metadata(src, "testhash", logger, lambda e,s: (e, s), test_mock={'no_bit_rate': True})
         assert res is None
-        vid = _get_video_from_db("testhash", vp.db_file)
-        meta_video = json.loads(vid.raw_metadata_video)
-        assert float(Fraction(meta_video['avg_frame_rate'])) == pytest.approx(float(vid.fps), 0.1)
+        # Calculated bitrate from file size is not quite accurate
+        assert 8000000 < bitrate < 9000000
 
 
 @pytest.mark.timeout(120)

@@ -15,6 +15,8 @@ import json
 import asyncio
 import concurrent
 import multiprocessing
+from pymediainfo import MediaInfo
+
 
 from . import database as DB
 
@@ -137,29 +139,30 @@ class VideoProcessor:
         """
 
         try:
-            logger.debug(f"FFMPEG probing metadata for '{src}'...")
-            metadata = ffmpeg.probe(src.absolute())
-        except ffmpeg.Error as e:
-            return fmt_result(f"FFMPEG error reading video metadata for '{src}': {e}", False), 'None', 0
+            logger.debug(f"Reading metadata for '{src}'...")
 
-        # (For pytest: delete video streams if requested by pytest)
-        if test_mock.get('no_video_stream'):
-            metadata['streams'] = [s for s in metadata['streams'] if s['codec_type'] != 'video']
+            video = None
+            mediainfo = MediaInfo.parse(src.absolute())
+            for track in mediainfo.tracks:
+                if track.track_type == "Video" and not test_mock.get('no_video_stream'):
+                    for x in ('frame_count', 'frame_rate', 'height', 'width', 'duration', 'format'):
+                        if x not in track.to_data():
+                            raise ValueError(f"No field '{x}' in video track")                    
+                    video = track
+                    break
+            if not video:
+                return fmt_result("No video stream found in '{src}'. Giving up.", False), 'None', 0
+        except Exception as e:
+            return fmt_result(f"Error reading mediainfo for '{src}': {e}", False), 'None', 0
 
-        # Get video stream metadata
-        video_stream = next((stream for stream in metadata['streams'] if stream['codec_type'] == 'video'), None)
-        if not video_stream:
-            return fmt_result("No video stream found in the file. Giving up.", False), 'None', 0
+        # Calc duration and bitrate (if not found in mediainfo)
+        duration_sec = Decimal(video.duration) / Decimal(1000)
+        bit_rate = video.to_data().get('bit_rate') or video.to_data().get('nominal_bit_rate')
+        if not bit_rate or test_mock.get('no_bit_rate'):
+            logger.warning(f"No bit rate found for '{src}'. Calculating it from file size.")
+            bit_rate = int(src.stat().st_size * 8 / duration_sec)
 
-        total_frames = int(video_stream['nb_frames'])
-        duration = Decimal(video_stream['duration'])
-        codec = video_stream['codec_name']
-        fps =  Fraction(video_stream.get('avg_frame_rate')) if not ('no_fps' in test_mock) else None
-        bit_rate = int(video_stream.get('bit_rate') or '0')
-        if not fps:
-            fps = Fraction(total_frames) / Fraction(duration)
-
-        logger.debug(f"Video '{src}' probed. Metadata: codec='{codec}', fps='{fps}', bit_rate='{bit_rate}', total_frames='{total_frames}', duration='{duration}'")
+        logger.debug(f"Metadata for '{src}': codec='{video.format}', fps='{video.frame_rate}', bit_rate='{int(bit_rate)}', frame_count='{video.frame_count}', duration='{duration_sec}'")
 
         try:
             logger.debug(f"Writing metadata to database...")
@@ -173,18 +176,18 @@ class VideoProcessor:
                         added_by_userid=src.owner(),
                         added_by_username=src.owner(),       # TODO: get username from user id (wrap LDAP in some kind of abstraction)
                         orig_filename=src.name,
-                        total_frames=total_frames,
-                        duration=duration,
-                        fps=str(fps.numerator / Decimal(fps.denominator)),
-                        raw_metadata_video=json.dumps(video_stream),
-                        raw_metadata_all=json.dumps(metadata)
+                        total_frames=video.frame_count,
+                        duration=Decimal(duration_sec),
+                        fps=str(video.frame_rate),
+                        raw_metadata_video=json.dumps(video.to_data()),
+                        raw_metadata_all=mediainfo.to_json(),
                     ))
             asyncio.run(add_video_to_db())
             logger.debug(f"Metadata wrote")
         except Exception as e:
-            return fmt_result(f"Error inserting video info into DB: '{e}'", False), codec, bit_rate
+            return fmt_result(f"Error inserting video info into DB: '{e}'", False), video.format, int(bit_rate)
 
-        return None, codec, bit_rate
+        return None, video.format, int(bit_rate)
 
 
     def process_file(self, src: Path, dst_dir: Path) -> ProcessingResult:

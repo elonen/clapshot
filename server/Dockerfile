@@ -5,6 +5,7 @@ FROM python:3.9-slim
 RUN apt-get -qy update
 RUN apt-get -qy install make
 RUN apt-get -qy install ffmpeg
+RUN apt-get -qy install python3-pymediainfo
 
 # ...for build deb
 RUN apt-get -qy install build-essential debhelper devscripts equivs

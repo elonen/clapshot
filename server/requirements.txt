@@ -1,4 +1,6 @@
 ffmpeg-python==0.2.0
+pymediainfo==5.1.0
+
 SQLAlchemy==1.4.41
 aiosqlite==0.17.0
 alembic==1.8.1
