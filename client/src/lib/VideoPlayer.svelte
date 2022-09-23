@@ -118,10 +118,12 @@
     draw.board?.clear();
 	}
 
-	function format(seconds: number) : string {
+	function format_tc(seconds: number) : string {
 		if (isNaN(seconds)) return '...';
-    if (vframe_calc)
-      return `${vframe_calc.toSMPTE(seconds * vframe_calc.fps)}`;
+    if (vframe_calc) {
+      const fr = Math.floor(seconds * vframe_calc.frameRate);
+      return `${vframe_calc.toSMPTE(fr)}`;
+    }
     else if(seconds==0)
       return '--:--:--:--';
     else {
@@ -132,9 +134,25 @@
     }
 	}
 
+	function format_frames(seconds: number) : string {
+		if (isNaN(seconds)) return '';
+    if (vframe_calc) {
+      const fr = Math.floor(seconds * vframe_calc.frameRate);
+      return `${fr}`;
+    }
+    else
+      return '----';
+	}
+
+
   export function getCurTimecode() {
-    return format(time);
+    return format_tc(time);
   }
+
+  export function getCurFrame() {
+    return Math.floor(time * vframe_calc.fps);
+  }
+
 
   function step_video(frames: number) {
     if (vframe_calc) {
@@ -172,11 +190,11 @@
       step_video(1);
         break;
       case 38: // up
-        video_elem.currentTime += 1;
+        time += 1;
         step_video(0);
         break;
       case 40: // down
-        video_elem.currentTime -= 1;
+        time -= 1;
         step_video(0);
         break;
       case 90: // z
@@ -193,15 +211,17 @@
     e.preventDefault();
   }
 
-  export function seekToTimecode(timecode: string) {
+  export function seekTo(value: string, fmt: string) {
+    // fmt should be either "SMPTE" or "frame"
     try {
-      vframe_calc.seekTo({ SMPTE: timecode });
+      let ops = new Object();
+      ops[fmt] = value;
+      vframe_calc.seekTo(ops);
       draw.board?.clear();
     } catch(err) {
-      acts.add({mode: 'warning', message: `Seek failed to: ${timecode}`, lifetime: 3});
+      acts.add({mode: 'warning', message: `Seek failed to: ${fmt} ${value}`, lifetime: 3});
     }
   }
-
 
   // Audio control
   let audio_volume = 50;
@@ -292,7 +312,10 @@
         <button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
 
         <!-- Timecode -->
-        <input class="flex-0 text-lg mx-4 bg-transparent hover:bg-gray-700 w-32 font-mono" value="{format(time)}" on:change={(e) => seekToTimecode(e.target.value)}/>
+        <span class="flex-0 mx-4 text-sm font-mono">
+          <input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => seekTo(e.target.value, 'SMPTE')}/>
+          FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => seekTo(e.target.value, 'frame')}/>
+        </span>
 
       </span>
 
@@ -307,7 +330,7 @@
       </span>
 
       <!-- Video duration -->
-			<span class="flex-0 text-lg mx-4 mx-8">{format(duration)}</span>
+			<span class="flex-0 text-lg mx-4 mx-8">{format_tc(duration)}</span>
 		</div>
 	</div>
   

@@ -47,7 +47,7 @@
 
 
   function onDisplayComment(e) {
-    video_player.seekToTimecode(e.detail.timecode);
+    video_player.seekTo(e.detail.timecode, 'SMPTE');
     // Close draw mode while showing (drawing from a saved) comment
     video_player.onToggleDraw(false);
     comment_input.forceDrawMode(false);
@@ -76,7 +76,7 @@
 
   function onSeekToTimecode(e) {
     console.log("Seek to timecode: " + e.detail.timecode);
-    video_player.seekToTimecode(e.detail.timecode);
+    video_player.seekTo(e.detail.timecode, 'SMPTE');
   }
 
 

@@ -86,7 +86,7 @@ function onEditFieldKeyUp(e) {
     {#if editing}
       <input class="w-full outline-dashed bg-slate-500" type="text" use:callFocus bind:value="{comment}" on:keyup={onEditFieldKeyUp} on:blur="{(e)=>{editing=false;}}" />
     {:else}
-      <p class="text-gray-300 text-base">
+      <p class="text-gray-300 text-base break-all">
         {comment}
         {#if edited}
           <span class="text-xs italic text-gray-500"> (edited)</span>
