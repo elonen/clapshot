@@ -74,10 +74,11 @@ class VideoProcessor:
             fn_stderr = dst.parent / 'encoder.stderr'
 
             newbitrate = max(int(orig_bit_rate/2), min(int(orig_bit_rate), TARGET_VIDEO_MAX_BITRATE))
-            if newbitrate >= orig_bit_rate and orig_codec.lower() in ('h264', 'hevc', 'h265') and src.name.lower().endswith('mp4'):
-                logger.info(f"Keeping original video codec '{orig_codec}'/MP4 because new bitrate is lower than original. Copying instead of transcoding.")
-                shutil.copy(src, dst)
-                logger.debug(f"Video copied ok'")
+            if (newbitrate >= orig_bit_rate or orig_bit_rate <= 1.2*TARGET_VIDEO_MAX_BITRATE) and \
+                orig_codec.lower() in ('h264', 'hevc', 'h265', 'avc') and src.suffix.lower() in ('.mp4', '.mkv'):
+                    logger.info(f"Keeping original video codec '{orig_codec}' because new bitrate is lower than target. Copying instead of transcoding.")
+                    shutil.copy(src, dst)
+                    logger.debug(f"Video copied ok'")
             else:
                 try:
                     logger.info(f"Transcoding video '{src}' with new bitrate {newbitrate} as '{dst}'...")
