@@ -1,4 +1,4 @@
-.PHONY: deps install clean wheel test docker
+.PHONY: deps install clean wheel test docker dev test run
 
 ENV=_venv
 PYTHON=python3.9
@@ -56,7 +56,7 @@ docker: clean ${DEV_DATADIR}
 	@echo "Otherwise you wouldn't be able to access it without root privileges."
 	@echo "-------------------------------------------------------------------------------------------------------------------"
 
-	docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID} .
+	DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID} .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
 
 debian-local: clean wheel

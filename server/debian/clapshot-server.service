@@ -8,7 +8,7 @@ Type=simple
 Restart=always
 RestartSec=2
 User=www-data
-ExecStart=bash /usr/share/clapshot-server/run-with-conf.sh /etc/clapshot-server.conf
+ExecStart=/bin/bash /usr/share/clapshot-server/run-with-conf.sh /etc/clapshot-server.conf
 
 [Install]
 WantedBy=multi-user.target

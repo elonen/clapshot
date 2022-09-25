@@ -2,7 +2,7 @@
 
 PACKAGE=${shell dh_listpackages}
 WWW_DIR=usr/share/clapshot-client/www
-export DH_VERBOSE = 1
+#export DH_VERBOSE = 1
 
 build-indep:
 	make build-local

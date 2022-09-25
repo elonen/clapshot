@@ -1,4 +1,4 @@
-.PHONY: deps install clean build_clean dist_clean tests dist docker
+.PHONY: dev docker build clean dist docker npm-deps
 
 PACKAGE_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
 PACKAGE=clapshot_client
@@ -17,11 +17,11 @@ npm-deps:
 	npm install
 
 docker: clean 
-	docker build -t ${PACKAGE}:${PACKAGE_VERSION} .
+	DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
 
 docker-for-deb: clean 
-	docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg TARGET=deb  .
+	DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg TARGET=deb  .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:deb
 
 
