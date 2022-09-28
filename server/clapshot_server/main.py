@@ -1,10 +1,10 @@
 import asyncio
 import logging
+import multiprocessing
 from pathlib import Path
-import queue
-import threading
 import docopt
-from clapshot_server import database, api_server, video_processor
+from clapshot_server import database, api_server, video_processing_pipeline, video_ingesting, multi_processor
+
 
 def main():
     """
@@ -33,6 +33,8 @@ def main():
      -m TOPIC --mute TOPIC    Mute logging for a topic (can be repeated). Sets level to WARNING.
                             See logs logs for available topics.
      -l FILE --log FILE     Log to file instead of stdout
+     -w N --workers N       Max number of workers for video processing [default: 0]
+                            (0 = number of CPU cores)
      -d --debug             Enable debug logging
      -h --help              Show this screen
     """
@@ -45,7 +47,8 @@ def main():
         filename=args["--log"] or None,
         filemode='w' if args["--log"] else None
     )
-    logger = logging.getLogger("clapshot")
+    logger = logging.getLogger("main")
+
 
     # Mute logging for some topics
     for topic in args["--mute"] or []:
@@ -67,18 +70,21 @@ def main():
     assert url_base
 
     db_file = data_dir / "clapshot.sqlite"
-    vp_interrupt_flag = threading.Event()
 
-    async def go():
-        vp_result_queue = queue.SimpleQueue()
+    async def go(mpm):
+
         push_message_queue = asyncio.Queue()
 
-        # Run file monitor in a thread
-        vp = video_processor.VideoProcessor(db_file, logger)
-        vp_thread = threading.Thread(
-            target=video_processor.VideoProcessor.monitor_incoming_folder_loop,
-            args=(vp, incoming_dir, videos_dir, rejected_dir, vp_interrupt_flag, vp_result_queue, float(args["--poll"])))
-        vp_thread.start()
+        vip = video_processing_pipeline.VideoProcessingPipeline(
+            db_file = db_file,
+            data_dir = data_dir,
+            mpm = mpm,
+            max_workers = int(args["--workers"]))
+
+        vip_proc = multiprocessing.Process(
+            target=vip.run_forever,
+            args=[float(args["--poll"])])
+        vip_proc.start()
 
         # Run API server with asyncio forever
         async def run_api_server() -> bool:
@@ -94,42 +100,39 @@ def main():
                 serve_dirs={'/video': videos_dir} if args["--host-videos"] else {})
 
         async def vp_result_deliverer():
-            while not vp_interrupt_flag.is_set() and vp_thread.is_alive():
+            while vip_proc.is_alive():
                 await asyncio.sleep(0.5)
-                if not vp_result_queue.empty():
-                    vp_res = vp_result_queue.get()  # type: video_processor.VideoProcessorResult
-                    if len(vp_res.msg) < 64:
-                        msg, details = vp_res.msg, ''
-                    else:
-                        msg = 'Video processed ok.' if vp_res.success else 'Failed to process video.'
-                        details = vp_res.msg
+                if not vip.res_to_user.empty():
+                    vp_res = vip.res_to_user.get()  # type: video_ingesting.UserResults
                     await push_message_queue.put(database.Message(
                         event_name = ('ok' if vp_res.success else 'error'),
                         user_id = vp_res.file_owner_id,
                         ref_video_hash = vp_res.video_hash,
-                        message = msg,
-                        details = details))
+                        message = vp_res.msg or '',
+                        details = vp_res.details or ''))
         
         try:
             task_api = asyncio.create_task(run_api_server())
             task_msg = asyncio.create_task(vp_result_deliverer())
-            while vp_thread.is_alive() and \
-                  not vp_interrupt_flag.is_set() and \
+            while vip_proc.is_alive() and \
                   not task_api.done() and \
                   not task_msg.done():
                 await asyncio.sleep(0.2)
         except KeyboardInterrupt:
             pass
         finally:
-            vp_interrupt_flag.set()
-            vp_thread.join()
+            vip_proc.terminate()
 
         logger.info("API server stopped")
 
     try:
-        asyncio.run(go())
+        multi_processor.install_sigterm_handlers()
+        with multiprocessing.Manager() as mpm:
+            asyncio.run(go(mpm))
     except KeyboardInterrupt:
         pass
+    finally:
+        logger.info("Bye")
 
 if __name__ == '__main__':
     main()

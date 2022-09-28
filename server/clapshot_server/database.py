@@ -36,7 +36,6 @@ class Video(Base):
     duration = Column(sql.Float)
     fps = Column(sql.String) # decimal number in seconds
 
-    raw_metadata_video = Column(sql.String)
     raw_metadata_all = Column(sql.String)
 
     comments = relationship("Comment", cascade="all, delete-orphan")
@@ -51,7 +50,6 @@ class Video(Base):
             "total_frames": self.total_frames,
             "duration": self.duration,
             "fps": self.fps,
-            "raw_metadata_video": self.raw_metadata_video,
             "raw_metadata_all": self.raw_metadata_all
         }
 

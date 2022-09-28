@@ -1,8 +1,6 @@
-from types import SimpleNamespace
 from pytest_cov.embed import cleanup_on_sigterm
 cleanup_on_sigterm()
 
-from contextlib import suppress
 import pytest, random
 from pathlib import Path
 from clapshot_server import database as DB
@@ -48,7 +46,6 @@ async def example_db(tmp_path_factory):
                 total_frames=i*1000,
                 duration=i*100,
                 fps=i*i,
-                raw_metadata_video="{video:" + str(i) + "}",
                 raw_metadata_all="{all: {video:" + str(i) + "}}")
             v.id = await db.add_video(v)
             return v
@@ -84,6 +81,11 @@ async def test_fixture_state(example_db):
             assert com[i].parent_id is None
         for i in range(5,5+2):
             assert com[i].parent_id == com[0].id
+
+        # to_dict() and repr should work
+        for x in (vid + com):
+            assert x.to_dict()
+            assert str(x)
 
         # Video #0 has 3 comments, video #1 has 2, video #2 has 1
         assert com[0].video_hash == com[3].video_hash == com[5].video_hash == com[6].video_hash == (vid[0].video_hash)
@@ -184,6 +186,8 @@ async def test_user_messages(example_db):
 
         for i,m in enumerate(msgs):
             new_msg = await db.add_message(m)
+            assert new_msg.to_dict()
+            assert str(new_msg)
             msgs[i].id = new_msg.id
             assert new_msg.created
             got = await db.get_message(msgs[i].id)

@@ -249,13 +249,26 @@ class ClapshotApiServer:
         @sio.event
         async def disconnect(sid):
             user_id = (await sio.get_session(sid)).get('user_id')
-            print(f'Client disconnected, sid={sid}, user_id={user_id}')
+            self.logger.info(f'Client disconnected, sid={sid}, user_id={user_id}')
             self.userid_to_sid.pop(user_id, None)
 
-        # HTTP routes
+        # Handle file upload callback from Nginx
+        async def uploaded(request: web.Request) -> web.Response:
+            user_id, username = self.user_from_headers(request.headers)
+            self.logger.info("Upload-notify", request.headers, user_id, username)
+            xfile = request.headers.get('X_FILE')
+            # 'X-FILE': '/home/jarno/clapshot/server/DEV_DATADIR/upload/0000000003'
+            
+            # TODO: actually do something here
 
+            return web.Response(text="OK")
+
+
+        # Register HTTP routes
+        self.app.add_routes([web.post('/api/uploaded', uploaded)])
         for route, path in self.serve_dirs.items():
             self.app.router.add_static(route, path)
+
 
     async def push_message(self, msg: Message, dont_throw=False, persist=False):
         """

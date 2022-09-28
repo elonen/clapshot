@@ -130,6 +130,7 @@
 
 
   let socket: Socket;
+  let upload_url: string = "";
 
 
   // -------------------------------------------------------------
@@ -146,7 +147,7 @@
   fetch(conf_file)
       .then(handleErrors)
       .then(response => response.json())
-      .then(json => connect_socket_io(json.api_url))
+      .then(json => { upload_url = json.upload_url; connect_socket_io(json.api_url); })
       .catch(error => {
           console.log("Failed to read config. " + error)
           acts.add({mode: 'danger', message: "Failed to read config. " + error, lifetime: 50});
@@ -372,6 +373,16 @@
                   <UserMessage {msg} />
                 {/each} 
               </div> 
+            {/if}
+
+            {#if upload_url }
+              <h1 class="text-2xl m-6 mt-12 text-slate-500">
+                  Upload a new video
+              </h1>
+              <form action="{upload_url}" method="post" enctype="multipart/form-data">
+                <input type="file" name="filename">
+                <input type="submit" name="submit" value="Upload">
+              </form>
             {/if}
 
 
