@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>clapshot_server.database &mdash; Clapshot server HEAD documentation</title>
+  <title>clapshot_server.database &mdash; Clapshot server  documentation</title>
       <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="../../_static/readthedocs-custom.css" type="text/css" />
@@ -28,6 +28,7 @@
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
             <a href="../../index.html" class="icon icon-home"> Clapshot server
+            <img src="../../_static/clapshot-logo.svg" class="logo" alt="Logo"/>
           </a>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
@@ -43,6 +44,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../introduction.html#technology-overview">Technology overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../cli-commands.html">Command line interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../architecture.html">Architecture</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../../_autosummary/clapshot_server.html">clapshot_server</a></li>
@@ -245,7 +247,7 @@
                     <span class="k">return</span> <span class="nb">set</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">get_current_heads</span><span class="p">())</span> <span class="o">==</span> <span class="nb">set</span><span class="p">(</span><span class="n">alb_dir</span><span class="o">.</span><span class="n">get_heads</span><span class="p">())</span>
 
                 <span class="bp">self</span><span class="o">.</span><span class="n">error_state</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="k">await</span> <span class="n">c</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">is_latest_migration</span><span class="p">)</span> <span class="k">else</span> \
-                    <span class="s2">&quot;Database schema is out of sync with app. Use &#39;clapshot-alembic&#39; to upgrade it.&quot;</span>
+                    <span class="sa">f</span><span class="s2">&quot;Database &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">db_file</span><span class="si">}</span><span class="s2">&#39; schema is out of sync with app version. Use &#39;clapshot-alembic&#39; to upgrade it.&quot;</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">error_state</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span> <span class="o">=</span> <span class="n">sessionmaker</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="p">,</span> <span class="n">expire_on_commit</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">class_</span><span class="o">=</span><span class="n">AsyncSession</span><span class="p">)</span>

@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Python Module Index &mdash; Clapshot server  documentation</title>
+  <title>Architecture &mdash; Clapshot server  documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
       <link rel="stylesheet" href="_static/readthedocs-custom.css" type="text/css" />
@@ -20,9 +21,8 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
- 
-
-
+    <link rel="next" title="clapshot_server" href="_autosummary/clapshot_server.html" />
+    <link rel="prev" title="Command line interface" href="cli-commands.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -42,12 +42,12 @@
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="introduction.html">Introduction</a></li>
 <li class="toctree-l1"><a class="reference internal" href="introduction.html#technology-overview">Technology overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cli-commands.html">Command line interface</a></li>
-<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Architecture</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="_autosummary/clapshot_server.html">clapshot_server</a></li>
@@ -67,7 +67,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>Python Module Index</li>
+      <li>Architecture</li>
       <li class="wy-breadcrumbs-aside">
       </li>
   </ul>
@@ -76,79 +76,60 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
+  <section id="architecture">
+<h1>Architecture<a class="headerlink" href="#architecture" title="Permalink to this heading">¶</a></h1>
+<p>The server comprises of a number of separate processes that pass messages to each other through
+multiprocessing safe queues.</p>
+<p>Here’s an overview on what happens when a client copies a new video file to the “incoming” directory:</p>
+<p class="mscgen">
+<img src="_images/mscgen-a39b1d1a3d8cded5f3d50e292f3407a79c136641.png" alt="msc {
+   width = &quot;1024&quot;;
 
-   <h1>Python Module Index</h1>
+   Client, API [label=&quot;API server&quot;], Mon [label=&quot;Incoming monitor&quot;], Pipeline [label=&quot;Processing pipeline&quot;], Meta [label=&quot;Metadata reader(xN)&quot;], Ing [label=&quot;Video ingesting(xN)&quot;], Comp [label=&quot;Video compressor(xN)&quot;];
 
-   <div class="modindex-jumpbox">
-   <a href="#cap-c"><strong>c</strong></a>
-   </div>
+   Client note Client [label=&quot;Copy video to 'incoming/' folder&quot;];
 
-   <table class="indextable modindextable">
-     <tr class="pcap"><td></td><td>&#160;</td><td></td></tr>
-     <tr class="cap" id="cap-c"><td></td><td>
-       <strong>c</strong></td><td></td></tr>
-     <tr>
-       <td><img src="_static/minus.png" class="toggler"
-              id="toggle-1" style="display: none" alt="-" /></td>
-       <td>
-       <a href="_autosummary/clapshot_server.html#module-clapshot_server"><code class="xref">clapshot_server</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="cg-1">
-       <td></td>
-       <td>&#160;&#160;&#160;
-       <a href="_autosummary/clapshot_server.alembic.html#module-clapshot_server.alembic"><code class="xref">clapshot_server.alembic</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="cg-1">
-       <td></td>
-       <td>&#160;&#160;&#160;
-       <a href="_autosummary/clapshot_server.api_server.html#module-clapshot_server.api_server"><code class="xref">clapshot_server.api_server</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="cg-1">
-       <td></td>
-       <td>&#160;&#160;&#160;
-       <a href="_autosummary/clapshot_server.database.html#module-clapshot_server.database"><code class="xref">clapshot_server.database</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="cg-1">
-       <td></td>
-       <td>&#160;&#160;&#160;
-       <a href="_autosummary/clapshot_server.incoming_monitor.html#module-clapshot_server.incoming_monitor"><code class="xref">clapshot_server.incoming_monitor</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="cg-1">
-       <td></td>
-       <td>&#160;&#160;&#160;
-       <a href="_autosummary/clapshot_server.main.html#module-clapshot_server.main"><code class="xref">clapshot_server.main</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="cg-1">
-       <td></td>
-       <td>&#160;&#160;&#160;
-       <a href="_autosummary/clapshot_server.multi_processor.html#module-clapshot_server.multi_processor"><code class="xref">clapshot_server.multi_processor</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="cg-1">
-       <td></td>
-       <td>&#160;&#160;&#160;
-       <a href="_autosummary/clapshot_server.video_compressor.html#module-clapshot_server.video_compressor"><code class="xref">clapshot_server.video_compressor</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="cg-1">
-       <td></td>
-       <td>&#160;&#160;&#160;
-       <a href="_autosummary/clapshot_server.video_ingesting.html#module-clapshot_server.video_ingesting"><code class="xref">clapshot_server.video_ingesting</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="cg-1">
-       <td></td>
-       <td>&#160;&#160;&#160;
-       <a href="_autosummary/clapshot_server.video_metadata_reader.html#module-clapshot_server.video_metadata_reader"><code class="xref">clapshot_server.video_metadata_reader</code></a></td><td>
-       <em></em></td></tr>
-     <tr class="cg-1">
-       <td></td>
-       <td>&#160;&#160;&#160;
-       <a href="_autosummary/clapshot_server.video_processing_pipeline.html#module-clapshot_server.video_processing_pipeline"><code class="xref">clapshot_server.video_processing_pipeline</code></a></td><td>
-       <em></em></td></tr>
-   </table>
+   Mon note Mon [label=&quot;Finds new file&quot;];
+
+   Mon =&gt; Pipeline [label=&quot;file added&quot;];
+   Pipeline =&gt; Meta [label=&quot;MD read request&quot;];
+   Meta =&gt; Pipeline [label=&quot;Video metadata&quot;];
+   Pipeline =&gt; Ing [label=&quot;Path and metadata&quot;];
+
+   Ing note Ing [label=&quot;Move file to 'videos/[HASH]/'&quot;];
+   Ing note Ing [label=&quot;Add to DB&quot;];
+
+   Ing =&gt; Comp [label=&quot;src filename&quot;];
+   Ing =&gt; Pipeline [label=&quot;MSG: 'Video added'&quot;];
+
+   API &lt;&lt; Pipeline [label=&quot;(poll user messages)&quot;];
+   API =&gt; Client [label=&quot;MSG: 'Video added'&quot;];
+   ...;
+   Comp =&gt; Pipeline [label=&quot;transcoding results&quot;];
+   Pipeline =&gt; Ing [label=&quot;transcoding results&quot;];
+
+   Ing note Ing [label=&quot;Symlink transcoded file&quot;];
+   Ing note Ing [label=&quot;Mark recompressed in DB&quot;];
+   Ing =&gt; Pipeline [label=&quot;MSG: 'Video transcoded'&quot;];
+
+   API &lt;&lt; Pipeline [label=&quot;(poll user messages)&quot;];
+   API =&gt; Client [label=&quot;MSG: 'Video transcoded'&quot;];
+}" usemap="#a39b1d1a3d8cded5f3d50e292f3407a79c136641" />
+<map id="a39b1d1a3d8cded5f3d50e292f3407a79c136641" name="a39b1d1a3d8cded5f3d50e292f3407a79c136641"></map></p>
+<p>Components marked with “(xN)” are a pool several workers, that all listen to the same task queue.</p>
+<p><cite>Processing pipeline</cite> is mostly just a “paper pusher” that owns all the queues and reduces
+codependecies between the other components.</p>
+<p>If errors occur during the processing, the messages contain “success = False”,
+along with an error message, and possible details.</p>
+</section>
 
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="cli-commands.html" class="btn btn-neutral float-left" title="Command line interface" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="_autosummary/clapshot_server.html" class="btn btn-neutral float-right" title="clapshot_server" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 

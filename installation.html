@@ -48,11 +48,12 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#trying-it-out">Trying it out</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#deployment-in-production">Deployment in production</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#building-it">Building it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#building">Building</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#running-tests">Running tests</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="cli-commands.html">Command line interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="_autosummary/clapshot_server.html">clapshot_server</a></li>
@@ -86,9 +87,10 @@
 <section id="trying-it-out">
 <h2>Trying it out<a class="headerlink" href="#trying-it-out" title="Permalink to this heading">¶</a></h2>
 <p>To try out Clapshot for the first time, do <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">run-docker</span></code>.
-This will start a Docker container with the server running and an
-Nginx proxy in front of it. It will show you the URL to visit in
-your browser (Chrome or Firefox recommended).</p>
+This builds everything in a Docker container, installs them in
+a production-like environment, starts the server and an Nginx
+proxy in front of it. Watch the console output for a URL to
+open in a browser.</p>
 </section>
 <section id="deployment-in-production">
 <h2>Deployment in production<a class="headerlink" href="#deployment-in-production" title="Permalink to this heading">¶</a></h2>
@@ -103,9 +105,9 @@ on startup.</p>
 can be developed and tested without one. Debian package has an example
 nginx config file in <code class="docutils literal notranslate"><span class="pre">/usr/share/doc/clapshot-server/examples/</span></code>.</p>
 </section>
-<section id="building-it">
-<h2>Building it<a class="headerlink" href="#building-it" title="Permalink to this heading">¶</a></h2>
-<p>The recommended way to build it is to use Docker and the provided Makefile:</p>
+<section id="building">
+<h2>Building<a class="headerlink" href="#building" title="Permalink to this heading">¶</a></h2>
+<p>The recommended way to build Clapshot is to use Docker and the provided Makefile:</p>
 <blockquote>
 <div><ol class="arabic simple">
 <li><p>Install and start Docker</p></li>
@@ -113,15 +115,16 @@ nginx config file in <code class="docutils literal notranslate"><span class="pre
 </ol>
 </div></blockquote>
 <p>This will build Debian packages and put them in the <code class="docutils literal notranslate"><span class="pre">dist_deb/</span></code> directory.</p>
-<p>You can also build the Debian packages directly on your system, but not recommended, as
-it will leave behind a lot of build dependencies. See Makefiles and Dockerfiles for details.</p>
+<p>You can also build the Python / Debian packages directly on your system, but Docker
+is a lot cleaner. See Makefiles and Dockerfiles for details on explicit
+building.</p>
 </section>
 <section id="running-tests">
 <h2>Running tests<a class="headerlink" href="#running-tests" title="Permalink to this heading">¶</a></h2>
-<p>Run <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">test</span></code> to run the tests in a Docker container.</p>
-<p>During development running unit tests on clapshot-server can be more
-convenient to do locally (inside a Python _venv).</p>
-<p>Install a _venv (<code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">server</span> <span class="pre">&amp;&amp;</span> <span class="pre">make</span> <span class="pre">dev</span></code>) and run <code class="docutils literal notranslate"><span class="pre">pytest</span></code>.</p>
+<p>Use <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">test</span></code> to run all tests in a Docker container.</p>
+<p>During development, running unit tests locally for clapshot-server can be more
+convenient.</p>
+<p>Install a <code class="docutils literal notranslate"><span class="pre">_venv</span></code> by running <code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">server;</span> <span class="pre">make</span> <span class="pre">dev</span></code>. Then run <code class="docutils literal notranslate"><span class="pre">pytest</span></code>.</p>
 </section>
 </section>
 

@@ -46,6 +46,7 @@
 <li class="toctree-l1"><a class="reference internal" href="introduction.html#technology-overview">Technology overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="cli-commands.html">Command line interface</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 </ul>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="_autosummary/clapshot_server.html">clapshot_server</a></li>
@@ -76,8 +77,10 @@
              
   <section id="clapshot-server-documentation">
 <h1>Clapshot server documentation<a class="headerlink" href="#clapshot-server-documentation" title="Permalink to this heading">¶</a></h1>
-<p>This is documentation for backend server of the Clapshot video review tool.
-The server is written in Python 3.9 and runs as a daemon on a Linux (preferrably Debian) server.</p>
+<p>Clapshot server is backend part of the Clapshot video review web app,
+that runs as a daemon on a Linux server (preferably Debian/Ubuntu).</p>
+<p>You can easily try it out in Docker before installing. See <cite>Installation</cite>.</p>
+<p>It requires Python 3.9+, SQLite libs 3.35+, FFMPEG and Nginx for hosting in production.</p>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
 <ul>
@@ -86,7 +89,7 @@ The server is written in Python 3.9 and runs as a daemon on a Linux (preferrably
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="installation.html#trying-it-out">Trying it out</a></li>
 <li class="toctree-l2"><a class="reference internal" href="installation.html#deployment-in-production">Deployment in production</a></li>
-<li class="toctree-l2"><a class="reference internal" href="installation.html#building-it">Building it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#building">Building</a></li>
 <li class="toctree-l2"><a class="reference internal" href="installation.html#running-tests">Running tests</a></li>
 </ul>
 </li>
@@ -94,6 +97,7 @@ The server is written in Python 3.9 and runs as a daemon on a Linux (preferrably
 <li class="toctree-l2"><a class="reference internal" href="cli-commands.html#upgrading-database">Upgrading database</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 </ul>
 </div>
 <p class="rubric">Modules</p>
@@ -114,7 +118,6 @@ The server is written in Python 3.9 and runs as a daemon on a Linux (preferrably
 <ul class="simple">
 <li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
 <li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
-<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
 </ul>
 </section>
 
