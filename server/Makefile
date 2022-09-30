@@ -1,7 +1,7 @@
-.PHONY: deps install clean wheel test docker dev test run
+.PHONY: deps install clean wheel test docker dev test run docs
 
 ENV=_venv
-PYTHON=python3.9
+PYTHON=python3
 SITE_PACKAGES=${ENV}/lib/${PYTHON}/site-packages
 IN_ENV=. ${ENV}/bin/activate;
 PYTHON_ENV=${ENV}/bin/${PYTHON}
@@ -37,8 +37,10 @@ wheel: ${ENV}
 	${PYTHON_ENV} setup.py bdist_wheel
 
 clean:
-	rm -rf "${ENV}" dist build *.egg-info dist_deb
-	find . -name __pycache__ -type d -exec rm -r {} ';'
+	rm -rf "${ENV}" dist build *.egg-info
+	rm -rf dist_deb || sudo rm -rf dist_deb
+	cd docs; make proper
+	# find . -name __pycache__ -type d -exec rm -r {} ';'
 
 
 
@@ -84,6 +86,11 @@ test:
 	@echo "Please run either 'test-docker' or 'test-local'"
 
 
+docs:
+	cd docs; make clean html
+	cd docs; make man
+	@echo "------------"
+	@echo "Documentation generated. See docs/_build/"
 
 run-local: dev ${DEV_DATADIR}
 	${SERVER_CMD} --url-base http://127.0.0.1:8095/ --port 8095 --data-dir ${DEV_DATADIR} --host-videos --debug -m aiosqlite

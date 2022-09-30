@@ -1,3 +1,20 @@
+"""
+Websocket (Socket.IO) based API server for Clapshot.
+
+Listens to connections from web UI, runs commands from users,
+communicates with database and video ingestion pipeline.
+Pushes video processing results to clients.
+
+**Relies on reverse proxy for authentication**! Specifically,
+it belives anything that it gets from the
+``HTTP_X_REMOTE_USER_ID`` and ``HTTP_X_REMOTE_USER_NAME``
+headers. Proxy is expected to authenticate users in some
+manner (e.g. Kerberos agains AD) and set these headers.
+
+If specified, also serves video files, but this is mainly for testing.
+Nginx or Apache should be used in production for that.
+"""
+
 import asyncio
 from contextlib import suppress
 from dataclasses import dataclass
@@ -15,13 +32,16 @@ sio = socketio.AsyncServer(async_mode='aiohttp', cors_allowed_origins='*')
 SOCKET_IO_PATH = '/api/socket.io'
 
 @web.middleware
-async def cors_middleware(request, handler):
+async def _cors_middleware(request, handler):
     response = await handler(request)
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response
 
 
 class ClapshotApiServer:
+    """
+    Socket.io server to communicate with web client
+    """
 
     def __init__(
             self, db: Database, 
@@ -35,7 +55,7 @@ class ClapshotApiServer:
         self.logger = logger
         self.serve_dirs = serve_dirs
 
-        self.app = web.Application(middlewares=[cors_middleware])
+        self.app = web.Application(middlewares=[_cors_middleware])
         sio.attach(self.app, socketio_path=SOCKET_IO_PATH)
 
         self.userid_to_sid: dict[str, str] = {}

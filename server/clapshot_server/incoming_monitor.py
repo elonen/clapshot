@@ -1,3 +1,5 @@
+"""Incoming folder monitor."""
+
 import logging
 from multiprocessing import Queue
 from pathlib import Path
@@ -12,6 +14,17 @@ def monitor_incoming_folder_loop(
     files_to_process: Queue,
     poll_interval: float,
     resubmit_delay: float) -> None:
+    """
+    Monitor a folder and put new files to processing queue.
+    Waits for a file to be fully written (not growing) before putting it to the queue.
+
+    Args:
+        incoming_dir:       Path to the incoming/ folder
+        files_to_process:   Queue to put new files to
+        poll_interval:      How often to check for new files (in seconds)
+        resubmit_delay:     How long to wait before resubmitting a file if it was already submitted.
+                            This basically specifies how long processing of a file should take at maximum.
+    """
 
     install_sigterm_handlers()
 
@@ -38,7 +51,7 @@ def monitor_incoming_folder_loop(
                     # Check if file is still being written to
                     cur_size = fn.stat().st_size
                     if cur_size == last_tested_size[fn]:
-                        logger.info(f"File '{fn}' not growing any more. Submitting for processing...")
+                        logger.info(f"Submitting '{fn}' for processing. ")
                         files_to_process.put(str(fn.absolute()))
                         submission_time[fn] = time.time()
                         del last_tested_size[fn]

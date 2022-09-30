@@ -1,5 +1,6 @@
-#!/usr/bin/env python3
-
+"""
+Message queue manager that passes messages between API, metadata reader, ingestion and transcoding.
+"""
 import logging
 from pathlib import Path
 import multiprocessing
@@ -14,8 +15,20 @@ from .video_ingesting import VideoIngestingPool, IngestingArgs, UserResults
 
 
 class VideoProcessingPipeline():
-
+    """
+    Message queue manager.
+    """
     def __init__(self, db_file: str, data_dir: Path, mpm: multiprocessing.Manager, max_workers: int = 0):
+        """
+        Create a dispatcher that manages the message queues between the various worker pools.
+
+        Args:
+            db_file:      Path to the SQLite database file
+            data_dir:     Path to the data directory (incoming, videos, reject)
+            mpm:          Python multiprocessing manager
+            max_workers:  Max number of workers to use per component. 0 = use all available CPUs.
+                          The manager itself is single-threaded, this is only for subservient worker pools.
+        """
         self.mpm = mpm
         self.max_workers = max_workers
 
@@ -34,8 +47,17 @@ class VideoProcessingPipeline():
 
 
     def run_forever(self, poll_interval: float = 5.0, resubmit_delay: float = 15.0) -> None:
+        """
+        Run the message queue manager forever.
+
+        Args:
+            poll_interval:   How often to poll the message queues for new messages
+            resubmit_delay:  How long to wait before resubmitting a file to the ingestion pool
+                             if it's still in the incoming folder.
+        """
+
         install_sigterm_handlers()
-        logger = logging.getLogger("dispatch")
+        logger = logging.getLogger("pipeline")
 
         try:
             # Start monitoring incoming/

@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+"""
+This module contains most of the logic on what happens
+when a new video is submitted to the server. It moves
+around files, stores stuff to DB, schedules transcoding etc.
+"""
 
 from dataclasses import dataclass
 from decimal import Decimal
@@ -24,6 +28,7 @@ TARGET_VIDEO_MAX_BITRATE = 2.5*(10**6)
 
 @dataclass
 class UserResults:
+    """Result message ready to be shown to users."""
     success: bool
     orig_file: str
     video_hash: str = ""
@@ -34,12 +39,22 @@ class UserResults:
 
 @dataclass
 class IngestingArgs:
+    """Wrapper for incoming metadata or compression results."""
     md: video_metadata_reader.Results = None
     cmpr: video_compressor.Results = None
     test_mock: dict = None
 
 
 class VideoIngestingPool(MultiProcessor):
+    """
+    Orchestrates video ingestion process.
+
+    Receives video metadata and compression results,
+    and figures out what do with them.
+
+    Stores DB entries, moves files, determines if videos need to be recompressed,
+    and cleans up after errors
+    """
 
     def __init__(self,
             inq: Queue,

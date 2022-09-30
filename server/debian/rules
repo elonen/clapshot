@@ -34,6 +34,7 @@ clean:
 
 build-arch:
 	$(SNAKE) setup.py sdist --formats tar
+	make docs
 	mkdir -p $(SDIST_DIR)
 	cp requirements.txt $(SDIST_DIR)  # No idea why this doesn't get copied automatically
 	tar -x -C $(SDIST_DIR) --strip-components=1 --exclude '*.egg-info' -f dist/*.tar

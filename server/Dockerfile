@@ -11,6 +11,12 @@ RUN apt-get -qy install python3-pymediainfo
 RUN apt-get -qy install build-essential debhelper devscripts equivs
 RUN apt-get -qy install python3-venv python3-dev python-dev dh-virtualenv python3-setuptools libffi-dev
 
+# Version of sqlite3 that support ALTER TABLE DROP column
+RUN echo 'deb http://ftp.debian.org/debian bookworm main' >> /etc/apt/sources.list.d/bookworm.list
+RUN apt-get -qy update
+RUN apt-get -qy install -t bookworm sqlite3
+RUN rm /etc/apt/sources.list.d/bookworm.list
+RUN apt-get -qy update
 
 # Create regular user
 

@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+"""
+Transcoder for making submitted videos smaller and more compatible with browsers.
+This runs a pool of separate processes and invokes FFMPEG to do the work.
+"""
 
 from dataclasses import dataclass
 import logging
@@ -14,6 +17,7 @@ TARGET_VIDEO_MAX_W = '1920'
 
 @dataclass
 class Args:
+    """Arguments for the video compressor."""
     src: Path
     dst: Path
     video_bitrate: int
@@ -23,6 +27,7 @@ class Args:
 
 @dataclass
 class Results:
+    """Results from the video compressor."""
     src_file: str
     dst_file: str
     video_hash: str
@@ -35,8 +40,19 @@ class Results:
 
 
 class CompressorPool(MultiProcessor):
+    """
+    A pool of workers that transcode videos with FFMPEG.
+    """
 
     def __init__(self, inq: multiprocessing.Queue, outq: multiprocessing.Queue, max_workers: int = 0):
+        """
+        Create a new pool of video compressor workers.
+
+        Args:
+            inq (Queue[Args]):         Queue of Args objects to process.
+            outq (Queue[Results]):     Queue of Results objects to return.
+            max_workers (int):         Maximum number of workers to spawn. If 0, use the number of CPUs.
+        """
         super().__init__(inq, "compr", max_workers)
         self.outq = outq
 

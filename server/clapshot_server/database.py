@@ -1,24 +1,28 @@
-from email.policy import default
+"""
+Database models (table definitions) and functions to access them
+"""
 import logging
 from pathlib import Path
 
 import sqlalchemy as sql
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column
-from sqlalchemy.orm import relationship, backref, sessionmaker, joinedload
+from sqlalchemy.orm import relationship, sessionmaker
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.future import select
 
 from alembic.config import Config as AlembicCfg
-from alembic import command as alembic_cmd
 from alembic import script as alembic_script
 from alembic.runtime import migration
 
 Base = declarative_base() # type: sql.ext.declarative.api.DeclarativeMeta
 
 class Video(Base):
+    """
+    Video file (DB table)
+    """
     __tablename__ = 'video'
     __mapper_args__ = {"eager_defaults": True}
 
@@ -58,6 +62,7 @@ class Video(Base):
 
 
 class Comment(Base):
+    """User comment on a video (DB table)"""
     __tablename__ = 'comment'
     __mapper_args__ = {"eager_defaults": True}
     __table_args__ = {'sqlite_autoincrement': True} # required to avoid ID reuse
@@ -93,6 +98,7 @@ class Comment(Base):
 
 
 class Message(Base):
+    """Notification sent to a user (DB table)"""
     __tablename__ = 'message'
     __mapper_args__ = {"eager_defaults": True}
     __table_args__ = {'sqlite_autoincrement': True} # required to avoid ID reuse
@@ -129,6 +135,10 @@ class Message(Base):
 
 
 class Database:
+    """
+    Wrapper for DB connection and queries.
+    Abstracts away the SQLAlchemy ORM from the rest of the code.
+    """
     def __init__(self, db_file: Path, logger: logging.Logger):
         self.logger = logger
         self.db_file = db_file
@@ -160,7 +170,7 @@ class Database:
                     return set(ctx.get_current_heads()) == set(alb_dir.get_heads())
 
                 self.error_state = None if await c.run_sync(is_latest_migration) else \
-                    "Database schema is out of sync with app. Use 'clapshot-alembic' to upgrade it."
+                    f"Database '{self.db_file}' schema is out of sync with app version. Use 'clapshot-alembic' to upgrade it."
 
         if not self.error_state:
             self.async_session = sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
@@ -174,28 +184,67 @@ class Database:
     # Video
     # -----
     async def add_video(self, video: Video) -> sql.Integer:
+        """
+        Add a new video to the database.
+
+        Args:
+            video: Video object
+        Returns:
+            sql.Integer: ID of the new video
+        """
         async with self.async_session() as session:
             session.add(video)
             await session.commit()
             return video.id
 
     async def set_video_recompressed(self, video_hash: str):
+        """
+        Set the recompressed flag for a video.
+
+        Args:
+            video_hash: Hash (unique identifier) of the video
+        """
         async with self.async_session() as session:
             await session.execute(sql.update(Video).filter_by(video_hash=video_hash).values(recompression_done=sql.func.now()))
             await session.commit()
 
     async def get_video(self, video_hash: str) -> Video:
+        """
+        Get a video from the database.
+
+        Args:
+            video_hash: Hash (unique identifier) of the video
+        Returns:
+            Video: Video object
+        """
         async with self.async_session() as session:
             res = await session.execute(select(Video).filter_by(video_hash=video_hash))
             return res.scalars().first()
 
     async def del_video_and_comments(self, video_hash: str):
+        """
+        Delete a video and all its comments from the database.
+
+        Args:
+            video_hash: Hash (unique identifier) of the video
+        Returns:
+            Video: Video object
+        """
         async with self.async_session() as session:
             await session.execute(sql.delete(Video).filter_by(video_hash=video_hash))
             await session.execute(sql.delete(Comment).filter_by(video_hash=video_hash))
             await session.commit()
 
     async def get_all_user_videos(self, user_id: str) -> list[Video]:
+        """
+        Get all videos for a user.
+        **Note**: Return value cannot be an iterator because DB queries are short-lived.
+
+        Args:
+            user_id: User ID
+        Returns:
+            list[Video]: List of Video objects
+        """
         async with self.async_session() as session:
             res = await session.execute(select(Video).filter_by(added_by_userid=user_id))
             return res.scalars().all()
@@ -203,6 +252,14 @@ class Database:
     # Comment
     # -------
     async def add_comment(self, comment: Comment) -> sql.Integer:
+        """
+        Add a new comment on a video.
+
+        Args:
+            comment: Comment object
+        Returns:
+            sql.Integer: ID of the new comment
+        """
         async with self.async_session() as session:
             session.add(comment)
             await session.commit()
@@ -210,20 +267,50 @@ class Database:
             return comment.id
 
     async def get_comment(self, comment_id: int) -> Comment:
+        """
+        Get a comment from the database.
+
+        Args:
+            comment_id: ID of the comment
+        Returns:
+            Comment: Comment object
+        """
         async with self.async_session() as session:
             return (await session.execute(select(Comment).filter_by(id=comment_id))).scalars().first()
 
     async def get_video_comments(self, video_hash: str) -> list[Comment]:
+        """
+        Get all comments for a video.
+        **Note**: Return value cannot be an iterator because DB queries are short-lived.
+
+        Args:
+            video_hash: Hash (unique identifier) of the video
+        Returns:
+            list[Comment]: List of Comment objects
+        """
         async with self.async_session() as session:
             res = (await session.execute(select(Comment).filter_by(video_hash=video_hash))).scalars().all()
             return res
     
     async def del_comment(self, comment_id: int) -> None:
+        """
+        Delete a comment from the database.
+
+        Args:
+            comment_id: ID of the comment        
+        """
         async with self.async_session() as session:
             await session.execute(sql.delete(Comment).filter_by(id=comment_id))
             await session.commit()
 
     async def edit_comment(self, comment_id: int, new_comment: str) -> None:
+        """
+        Edit a comment (change text).
+
+        Args:
+            comment_id: ID of the comment
+            new_comment: New text of the comment
+        """
         async with self.async_session() as session:
             await session.execute(sql.update(Comment).filter_by(id=comment_id).values(comment=new_comment, edited=sql.func.now()))
             await session.commit()
@@ -231,26 +318,65 @@ class Database:
     # Message
     # -------
     async def add_message(self, msg: Message) -> Message:
+        """
+        Add a new message to the database.
+
+        Args:
+            msg: Message object
+        Returns:
+            Message: Message object, with ID and timestamp set
+        """
         async with self.async_session() as session:
             session.add(msg)
             await session.commit()
             return msg   # Contains new id and timestamp
     
     async def get_message(self, msg_id: int) -> Message:
+        """
+        Get a message from the database.
+
+        Args:
+            msg_id: ID of the message
+        Returns:
+            Message: Message object
+        """
         async with self.async_session() as session:
             return (await session.execute(select(Message).filter_by(id=msg_id))).scalars().first()
     
     async def get_user_messages(self, user_id: str) -> list[Message]:
+        """
+        Get all messages for a user.
+        **Note**: Return value cannot be an iterator because DB queries are short-lived.
+
+        Args:
+            user_id: User ID
+        Returns:
+            list[Message]: List of Message objects
+        """
         async with self.async_session() as session:
             res = (await session.execute(select(Message).filter_by(user_id=user_id))).scalars().all()
             return res
 
     async def set_message_seen(self, msg_id: int, new_status: bool) -> None:
+        """
+        Set the seen status of a message.
+
+        Args:
+            msg_id: ID of the message
+            new_status: New status
+        """
         async with self.async_session() as session:
             await session.execute(sql.update(Message).filter_by(id=msg_id).values(seen=new_status))
             await session.commit()
     
     async def del_message(self, msg_id: int) -> None:
+        """
+        Delete a message from the database.
+        **Note**: This does not check for, nor cascade to, possible replies to the message.
+
+        Args:
+            msg_id: ID of the message
+        """
         async with self.async_session() as session:
             await session.execute(sql.delete(Message).filter_by(id=msg_id))
             await session.commit()

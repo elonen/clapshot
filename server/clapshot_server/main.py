@@ -1,3 +1,10 @@
+'''
+Entry point for the Clapshot server.
+
+This is a command line program that stays in the foreground,
+so background it with process control tools like systemd or supervisord.
+'''
+
 import asyncio
 import logging
 import multiprocessing
@@ -8,7 +15,7 @@ from clapshot_server import database, api_server, video_processing_pipeline, vid
 
 def main():
     """
-    Clapshot server -- backend of a video annotation tool.
+    Clapshot server - backend of a video annotation tool
 
     Monitors <path>/incoming for new videos, processes them, and stores them in <path>/videos.
     Then serves the annotations and comments via an asyncronous HTTP + Socket.IO API.

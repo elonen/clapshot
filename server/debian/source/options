@@ -4,6 +4,5 @@ tar-ignore = .tox
 tar-ignore = .venv
 tar-ignore = _venv
 tar-ignore = bin
-tar-ignore = docs/_build
 tar-ignore = *.log
 tar-ignore = *.egg-info

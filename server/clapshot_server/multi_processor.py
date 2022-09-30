@@ -1,5 +1,7 @@
-#!/usr/bin/env python3
-
+"""
+Boilderplate code to run functions in a pool of separate processes.
+Used for metadata extraction, file ingestion, video compression.
+"""
 from abc import abstractmethod, ABC
 import logging
 import multiprocessing
@@ -9,21 +11,22 @@ import sys
 from typing import Any
 
 exiting = False
-def term_handler(signal_received, frame):
+def _term_handler(signal_received, frame):
     global exiting
     if not exiting:
         exiting = True
         raise KeyboardInterrupt()
 
 def install_sigterm_handlers():
-    signal.signal(signal.SIGTERM, term_handler)
-    signal.signal(signal.SIGINT, term_handler)
-    signal.signal(signal.SIG_IGN, term_handler)
+    """Facilitate shutdown by CTR-C and SIGTERM"""
+    signal.signal(signal.SIGTERM, _term_handler)
+    signal.signal(signal.SIGINT, _term_handler)
+    signal.signal(signal.SIG_IGN, _term_handler)
 
 
 class MultiProcessor(ABC):
     """
-    Base class for multiprocessing videos with in/out queues.
+    Base class for multiprocessing videos with queues.
     """
 
     def __init__(self, 
@@ -37,11 +40,18 @@ class MultiProcessor(ABC):
 
 
     @abstractmethod
-    def do_task(self, args: Any, logging_name: str):
-        pass # pragma: no cover
+    def do_task(self, args: Any, logging_name: str):   # pragma: no cover
+        """
+        Abstract method to be implemented by subclasses.
+
+        Args:
+            args: Arguments to be passed to the task. (Type depends on the subclass.)
+            logging_name: Name of the logger to be used by the task.
+        """
+        pass
 
 
-    def worker(self, p: int):
+    def _worker(self, p: int):
         worker_name = f"{self.logging_name}.{p+1}"
         logging.getLogger(worker_name).debug(f"Worker {p+1} started, pid {os.getpid()}")
         try:
@@ -54,11 +64,12 @@ class MultiProcessor(ABC):
         finally:
             logging.getLogger(worker_name).debug(f"Worker {p+1} stopped.")
             sys.exit(0)
+            
 
     def run_forever(self):
         """
-        Infinitely running main function for video compression.
-        Starts a thread pool and waits for video compressions tasks to be added to the queue.
+        Infinitely running loop for multiprocessing.
+        Starts a process pool and waits for tasks to be added to the queue.
         """
         n_procs = min(self.max_workers, max(2, int(os.cpu_count()/2)))
         self.logger.info(f"Starting {n_procs} workers...")
@@ -66,7 +77,7 @@ class MultiProcessor(ABC):
         try:
             install_sigterm_handlers()
             procs = [multiprocessing.Process(
-                        target=self.worker,
+                        target=self._worker,
                         name=f'{self.logging_name}_{i}',
                         args=[i])
                     for i in range(n_procs)]

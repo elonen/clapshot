@@ -9,6 +9,14 @@ RUN apt-get -qy install python3-pymediainfo
 RUN apt-get -qy install nginx
 RUN apt-get -qy install acl sudo
 
+# Version of sqlite3 that support ALTER TABLE DROP column
+RUN echo 'deb http://ftp.debian.org/debian bookworm main' >> /etc/apt/sources.list.d/bookworm.list
+RUN apt-get -qy update
+RUN apt-get -qy install -t bookworm sqlite3
+RUN rm /etc/apt/sources.list.d/bookworm.list
+RUN apt-get -qy update
+
+
 # Add regular user (to match local user ID)
 ARG UID=1000
 ARG GID=1000

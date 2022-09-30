@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
+'''
+Clapshot server specific wrapper for Alembic database migration tool.
+This frees the user from manually specifying path to database, migration scripts, etc.
+'''
+
 import re
 import sys
 from pathlib import Path
-from alembic.config import main as al_main, Config
+from alembic.config import main as al_main
 import clapshot_server
 import docopt
 
-#from alembic.config import Config as AlembicCfg
-#from alembic import command as alembic_cmd
-#from alembic import script as alembic_script
-#from alembic.runtime import migration
-
 def main():
     """
-    Database migration tool (Alembic wrapper) for Clapshot server.
+    Database migration tool (Alembic wrapper) for Clapshot server
 
     Passes all arguments to Alembic, but first configures Alembic to
     use the database in PATH.
@@ -23,11 +23,11 @@ def main():
       clapshot-alembic (-h | --help)
 
     Required:
-     --data-dir=PATH      Directory for database, /incoming, /videos and /rejected
+      --data-dir=PATH      Directory for database, /incoming, /videos and /rejected
 
     Options:
-     -h --help              Show this screen
-     --showcmd              Print Alembic command, don't run it
+      -h --help              Show this screen
+      --showcmd              Print Alembic command, don't run it
 
     Examples:
 

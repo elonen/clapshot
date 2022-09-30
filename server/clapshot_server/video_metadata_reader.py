@@ -1,26 +1,27 @@
-#!/usr/bin/env python3
+"""
+Pool of processes that read metadata from video files.
+"""
 
 from dataclasses import dataclass
 from decimal import Decimal
 import logging
-from multiprocessing.dummy import Manager
 from pathlib import Path
 import multiprocessing
-
-from .multi_processor import MultiProcessor
-
 from pymediainfo import MediaInfo
-
+from .multi_processor import MultiProcessor
 
 
 @dataclass
 class Args:
+    """Arguments for the video metadata reader."""
     src: Path
     user_id: str = None
     test_mock: dict = None
 
+
 @dataclass
 class Results:
+    """Resulting metadata or error messages."""
     success: bool
     msg: str = ""
     details: str = ""
@@ -35,8 +36,19 @@ class Results:
 
 
 class ReaderPool(MultiProcessor):
+    """
+    Metadata reader pool.
+    """
 
     def __init__(self, inq: multiprocessing.Queue, outq: multiprocessing.Queue, max_workers: int = 0):
+        """
+        Create a new pool of video metadata readers.
+
+        Args:
+            inq (Queue[Args]):         Queue of Args objects to process.
+            outq (Queue[Results]):     Queue of Results objects to return.
+            max_workers (int):         Maximum number of workers to spawn. If 0, use the number of CPUs.
+        """
         super().__init__(inq, "metad", max_workers)
         self.outq = outq
 
@@ -45,6 +57,17 @@ class ReaderPool(MultiProcessor):
 
 
     def read_metadata(self, args: Args, logging_name: str) -> Results:
+        """
+        Read metadata from a given video file.
+
+        Args:
+            args (Args):        Arguments object to process.
+            logging_name (str): Name of the logger to use.
+        
+        Returns:
+            Results:            Results object with the results of the operation.
+                                Contains read metadata or error details if the operation failed.
+        """
         src = args.src
         test_mock = args.test_mock or {}        
         user_id = args.user_id or (src.owner() if src.exists() else '')
@@ -68,7 +91,6 @@ class ReaderPool(MultiProcessor):
                     success=False, src_file=src, user_id=user_id,
                     msg="Metadata error.",
                     details=f"No video stream found in '{src}'.")
-                return
 
         except Exception as e:
                 return Results(

@@ -3,18 +3,20 @@ Section: contrib/python
 Priority: extra
 Maintainer: Jarno Elonen <elonen@iki.fi>
 Build-Depends: debhelper (>= 9), python3 (>= 3.9), python3-venv (>= 3.9), python3-dev, dh-virtualenv (>= 1.1), python3-setuptools, python3-pip, libffi-dev, tar
+X-Python3-Version: >= 3.9
 Standards-Version: 3.9.5
 Homepage: https://github.com/elonen/clapshot
 
 Package: clapshot-server
 Architecture: any
 Pre-Depends: dpkg (>= 1.16.1), python3 (>= 3.9), python3-venv, ${misc:Pre-Depends}
-Depends: ${python:Depends}, ${misc:Depends} ffmpeg
+Depends: ${python:Depends}, ${misc:Depends} ffmpeg, sqlite3 (>= 3.35)
 Description: Clapshot video review tool (backend)
     .
-    This is a distribution of "clapshot-server" as a self-contained
-    Python virtualenv wrapped into a Debian package ("omnibus" package,
-    all passengers on board). The packaged virtualenv is kept in sync with
-    the host's interpreter automatically.
+    Clapshot is a multiuser web app for reviewing and commenting video files.
+    This package provides the backend server that communicates with clients
+    over websocket, processes video files and maintains a databases of them.
     .
-    See https://github.com/spotify/dh-virtualenv for more details.
+    Clapshot server is written in Python 3.9, and this is a self-contained
+    "omnibus"-style package that provides all its dependencies in a
+    virtualenv directory, instead of relying on Debian packages for each library.
