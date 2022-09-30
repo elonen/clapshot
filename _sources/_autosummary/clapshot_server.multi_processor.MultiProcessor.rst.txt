@@ -1,0 +1,26 @@
+clapshot\_server.multi\_processor.MultiProcessor
+================================================
+
+.. currentmodule:: clapshot_server.multi_processor
+
+.. autoclass:: MultiProcessor
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+      ~MultiProcessor.do_task
+      ~MultiProcessor.run_forever
+   
+   
+
+   
+   
+   

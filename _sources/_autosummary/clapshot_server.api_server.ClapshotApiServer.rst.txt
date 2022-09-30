@@ -1,0 +1,28 @@
+clapshot\_server.api\_server.ClapshotApiServer
+==============================================
+
+.. currentmodule:: clapshot_server.api_server
+
+.. autoclass:: ClapshotApiServer
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+      ~ClapshotApiServer.dict_for_video
+      ~ClapshotApiServer.get_user
+      ~ClapshotApiServer.push_message
+      ~ClapshotApiServer.user_from_headers
+   
+   
+
+   
+   
+   

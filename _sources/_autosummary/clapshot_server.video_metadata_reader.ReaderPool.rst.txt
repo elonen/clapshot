@@ -1,0 +1,27 @@
+clapshot\_server.video\_metadata\_reader.ReaderPool
+===================================================
+
+.. currentmodule:: clapshot_server.video_metadata_reader
+
+.. autoclass:: ReaderPool
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+      ~ReaderPool.do_task
+      ~ReaderPool.read_metadata
+      ~ReaderPool.run_forever
+   
+   
+
+   
+   
+   

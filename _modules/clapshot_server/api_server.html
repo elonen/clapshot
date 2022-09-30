@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>clapshot_server.api_server &mdash; Clapshot server HEAD documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/readthedocs-custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/sphinx_highlight.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> Clapshot server
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../introduction.html#technology-overview">Technology overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli-commands.html">Command line interface</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../_autosummary/clapshot_server.html">clapshot_server</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Clapshot server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>clapshot_server.api_server</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for clapshot_server.api_server</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Websocket (Socket.IO) based API server for Clapshot.</span>
+
+<span class="sd">Listens to connections from web UI, runs commands from users,</span>
+<span class="sd">communicates with database and video ingestion pipeline.</span>
+<span class="sd">Pushes video processing results to clients.</span>
+
+<span class="sd">**Relies on reverse proxy for authentication**! Specifically,</span>
+<span class="sd">it belives anything that it gets from the</span>
+<span class="sd">``HTTP_X_REMOTE_USER_ID`` and ``HTTP_X_REMOTE_USER_NAME``</span>
+<span class="sd">headers. Proxy is expected to authenticate users in some</span>
+<span class="sd">manner (e.g. Kerberos agains AD) and set these headers.</span>
+
+<span class="sd">If specified, also serves video files, but this is mainly for testing.</span>
+<span class="sd">Nginx or Apache should be used in production for that.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">contextlib</span> <span class="kn">import</span> <span class="n">suppress</span>
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span> <span class="nn">decimal</span> <span class="kn">import</span> <span class="n">Decimal</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">DefaultDict</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">aiohttp</span> <span class="kn">import</span> <span class="n">web</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span> <span class="nn">socketio</span>
+<span class="kn">import</span> <span class="nn">urllib.parse</span>
+
+<span class="kn">from</span> <span class="nn">.database</span> <span class="kn">import</span> <span class="n">Database</span><span class="p">,</span> <span class="n">Video</span><span class="p">,</span> <span class="n">Comment</span><span class="p">,</span> <span class="n">Message</span>
+
+<span class="n">sio</span> <span class="o">=</span> <span class="n">socketio</span><span class="o">.</span><span class="n">AsyncServer</span><span class="p">(</span><span class="n">async_mode</span><span class="o">=</span><span class="s1">&#39;aiohttp&#39;</span><span class="p">,</span> <span class="n">cors_allowed_origins</span><span class="o">=</span><span class="s1">&#39;*&#39;</span><span class="p">)</span>
+<span class="n">SOCKET_IO_PATH</span> <span class="o">=</span> <span class="s1">&#39;/api/socket.io&#39;</span>
+
+<span class="nd">@web</span><span class="o">.</span><span class="n">middleware</span>
+<span class="k">async</span> <span class="k">def</span> <span class="nf">_cors_middleware</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="n">handler</span><span class="p">):</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="n">handler</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+    <span class="n">response</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s1">&#39;Access-Control-Allow-Origin&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;*&#39;</span>
+    <span class="k">return</span> <span class="n">response</span>
+
+
+<div class="viewcode-block" id="ClapshotApiServer"><a class="viewcode-back" href="../../_autosummary/clapshot_server.api_server.ClapshotApiServer.html#clapshot_server.api_server.ClapshotApiServer">[docs]</a><span class="k">class</span> <span class="nc">ClapshotApiServer</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Socket.io server to communicate with web client</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span> <span class="n">db</span><span class="p">:</span> <span class="n">Database</span><span class="p">,</span> 
+            <span class="n">url_base</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+            <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">,</span>
+            <span class="n">serve_dirs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">db</span> <span class="o">=</span> <span class="n">db</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">url_base</span> <span class="o">=</span> <span class="n">url_base</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">port</span> <span class="o">=</span> <span class="n">port</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">serve_dirs</span> <span class="o">=</span> <span class="n">serve_dirs</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">app</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">Application</span><span class="p">(</span><span class="n">middlewares</span><span class="o">=</span><span class="p">[</span><span class="n">_cors_middleware</span><span class="p">])</span>
+        <span class="n">sio</span><span class="o">.</span><span class="n">attach</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="p">,</span> <span class="n">socketio_path</span><span class="o">=</span><span class="n">SOCKET_IO_PATH</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">userid_to_sid</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+        <span class="nd">@sio</span><span class="o">.</span><span class="n">event</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">list_my_videos</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user</span><span class="p">(</span><span class="n">sid</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;list_my_videos: user_id=&#39;</span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&#39; username=&#39;</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+                <span class="n">videos</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">get_all_user_videos</span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span>
+                <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;user_videos&#39;</span><span class="p">,</span> <span class="p">{</span>
+                    <span class="s1">&#39;username&#39;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span>
+                    <span class="s1">&#39;user_id&#39;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">,</span>
+                    <span class="s1">&#39;videos&#39;</span><span class="p">:</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dict_for_video</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">videos</span><span class="p">]</span> 
+                    <span class="p">},</span> <span class="n">room</span><span class="o">=</span><span class="n">sid</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exception in list_my_videos for sid &#39;</span><span class="si">{</span><span class="n">sid</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">dont_throw</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">Message</span><span class="p">(</span>
+                    <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                    <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Failed to list your videos.&quot;</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)))</span>
+
+
+        <span class="nd">@sio</span><span class="o">.</span><span class="n">event</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">open_video</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user</span><span class="p">(</span><span class="n">sid</span><span class="p">)</span>
+                <span class="n">video_hash</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s1">&#39;video_hash&#39;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;open_video: user_id=&#39;</span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&#39; username=&#39;</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">&#39; video_hash=&#39;</span><span class="si">{</span><span class="n">video_hash</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+
+                <span class="n">v</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">get_video</span><span class="p">(</span><span class="n">video_hash</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">Message</span><span class="p">(</span>
+                        <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                        <span class="n">ref_video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">,</span>
+                        <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;No such video.&quot;</span><span class="p">))</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">sio</span><span class="o">.</span><span class="n">enter_room</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="n">video_hash</span><span class="p">)</span>
+                    <span class="n">fields</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dict_for_video</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+                    <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;open_video&#39;</span><span class="p">,</span> <span class="n">fields</span><span class="p">,</span> <span class="n">room</span><span class="o">=</span><span class="n">sid</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">get_video_comments</span><span class="p">(</span><span class="n">video_hash</span><span class="p">):</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sending to sid=&#39;</span><span class="si">{</span><span class="n">sid</span><span class="si">}</span><span class="s2">&#39; comment </span><span class="si">{</span><span class="n">c</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                        <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;new_comment&#39;</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span> <span class="n">room</span><span class="o">=</span><span class="n">sid</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exception in lookup_video for sid &#39;</span><span class="si">{</span><span class="n">sid</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">dont_throw</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">Message</span><span class="p">(</span>
+                    <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                    <span class="n">ref_video_hash</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;video_hash&#39;</span><span class="p">),</span>
+                    <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Failed to lookup video.&quot;</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)))</span>
+
+        <span class="nd">@sio</span><span class="o">.</span><span class="n">event</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">del_video</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user</span><span class="p">(</span><span class="n">sid</span><span class="p">)</span>
+                <span class="n">video_hash</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s1">&#39;video_hash&#39;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;del_video: user_id=&#39;</span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&#39; video_hash=&#39;</span><span class="si">{</span><span class="n">video_hash</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+                <span class="n">v</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">get_video</span><span class="p">(</span><span class="n">video_hash</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">Message</span><span class="p">(</span>
+                        <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                        <span class="n">ref_video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">,</span>
+                        <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;No such video. Cannot delete.&quot;</span><span class="p">))</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">assert</span> <span class="n">user_id</span> <span class="ow">in</span> <span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">added_by_userid</span><span class="p">,</span> <span class="s1">&#39;admin&#39;</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Video &#39;</span><span class="si">{</span><span class="n">video_hash</span><span class="si">}</span><span class="s2">&#39; not owned by you. Cannot delete.&quot;</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">del_video_and_comments</span><span class="p">(</span><span class="n">video_hash</span><span class="p">)</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">persist</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">Message</span><span class="p">(</span>
+                        <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;ok&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                        <span class="n">ref_video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">,</span>
+                        <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Video deleted.&quot;</span><span class="p">,</span>
+                        <span class="n">details</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Added by </span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">added_by_username</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">added_by_userid</span><span class="si">}</span><span class="s2">) on </span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">added_time</span><span class="si">}</span><span class="s2">. Filename was &#39;</span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">orig_filename</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">))</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exception in del_video for sid &#39;</span><span class="si">{</span><span class="n">sid</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">dont_throw</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">persist</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">Message</span><span class="p">(</span>
+                    <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                    <span class="n">ref_video_hash</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;video_hash&#39;</span><span class="p">),</span>
+                    <span class="n">message</span><span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Failed to delete video.&quot;</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)))</span>
+
+
+
+        <span class="nd">@sio</span><span class="o">.</span><span class="n">event</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">add_comment</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user</span><span class="p">(</span><span class="n">sid</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="n">user_id</span> <span class="ow">and</span> <span class="n">username</span>
+                <span class="n">video_hash</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s1">&#39;video_hash&#39;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;add_comment: user_id=&#39;</span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&#39; video_hash=&#39;</span><span class="si">{</span><span class="n">video_hash</span><span class="si">}</span><span class="s2">&#39;, msg=&#39;</span><span class="si">{</span><span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;comment&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+
+                <span class="n">vid</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">get_video</span><span class="p">(</span><span class="n">video_hash</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">vid</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">Message</span><span class="p">(</span>
+                        <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                        <span class="n">ref_video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">,</span>
+                        <span class="n">message</span><span class="o">=</span>  <span class="sa">f</span><span class="s2">&quot;No such video. Cannot comment.&quot;</span><span class="p">))</span>
+                    <span class="k">return</span>
+
+                <span class="n">comment</span> <span class="o">=</span> <span class="n">Comment</span><span class="p">(</span>
+                    <span class="n">video_hash</span> <span class="o">=</span> <span class="n">video_hash</span><span class="p">,</span>
+                    <span class="n">parent_id</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;parent_id&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="n">user_id</span> <span class="o">=</span> <span class="n">user_id</span><span class="p">,</span>
+                    <span class="n">username</span> <span class="o">=</span> <span class="n">username</span><span class="p">,</span>
+                    <span class="n">comment</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;comment&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="s1">&#39;&#39;</span><span class="p">,</span>
+                    <span class="n">timecode</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;timecode&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="s1">&#39;&#39;</span><span class="p">,</span>
+                    <span class="n">drawing</span> <span class="o">=</span> <span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;drawing&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">)</span>
+
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">add_comment</span><span class="p">(</span><span class="n">comment</span><span class="p">)</span>
+                <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;new_comment&#39;</span><span class="p">,</span> <span class="n">comment</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span> <span class="n">room</span><span class="o">=</span><span class="n">video_hash</span><span class="p">)</span>
+
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exception in add_comment for sid &#39;</span><span class="si">{</span><span class="n">sid</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">dont_throw</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">Message</span><span class="p">(</span>
+                    <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                    <span class="n">ref_video_hash</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;video_hash&#39;</span><span class="p">),</span>
+                    <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Failed to add comment.&quot;</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)))</span>
+
+
+        <span class="nd">@sio</span><span class="o">.</span><span class="n">event</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">edit_comment</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user</span><span class="p">(</span><span class="n">sid</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="n">user_id</span> <span class="ow">and</span> <span class="n">username</span>
+                <span class="n">comment_id</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s1">&#39;comment_id&#39;</span><span class="p">]</span>
+                <span class="n">comment</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">msg</span><span class="p">[</span><span class="s1">&#39;comment&#39;</span><span class="p">])</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;edit_comment: user_id=&#39;</span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&#39; comment_id=&#39;</span><span class="si">{</span><span class="n">comment_id</span><span class="si">}</span><span class="s2">&#39;, comment=&#39;</span><span class="si">{</span><span class="n">comment</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+                
+                <span class="n">old</span> <span class="o">=</span> <span class="k">await</span> <span class="n">db</span><span class="o">.</span><span class="n">get_comment</span><span class="p">(</span><span class="n">comment_id</span><span class="p">)</span>
+                <span class="n">video_hash</span> <span class="o">=</span> <span class="n">old</span><span class="o">.</span><span class="n">video_hash</span>
+                <span class="k">assert</span> <span class="n">user_id</span> <span class="ow">in</span> <span class="p">(</span><span class="n">old</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span> <span class="s1">&#39;admin&#39;</span><span class="p">),</span> <span class="s2">&quot;You can only edit your own comments&quot;</span>
+
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">edit_comment</span><span class="p">(</span><span class="n">comment_id</span><span class="p">,</span> <span class="n">comment</span><span class="p">)</span>
+                <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;del_comment&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;comment_id&#39;</span><span class="p">:</span> <span class="n">comment_id</span><span class="p">},</span> <span class="n">room</span><span class="o">=</span><span class="n">video_hash</span><span class="p">)</span>
+                <span class="n">c</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">get_comment</span><span class="p">(</span><span class="n">comment_id</span><span class="p">)</span>
+                <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;new_comment&#39;</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span> <span class="n">room</span><span class="o">=</span><span class="n">video_hash</span><span class="p">)</span>
+
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exception in edit_comment for sid &#39;</span><span class="si">{</span><span class="n">sid</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">dont_throw</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">Message</span><span class="p">(</span>
+                    <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                    <span class="n">ref_comment_id</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;comment_id&#39;</span><span class="p">),</span>
+                    <span class="n">ref_video_hash</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;video_hash&#39;</span><span class="p">),</span>
+                    <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Failed to edit comment.&quot;</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)))</span>
+
+
+        <span class="nd">@sio</span><span class="o">.</span><span class="n">event</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">del_comment</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user</span><span class="p">(</span><span class="n">sid</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="n">user_id</span> <span class="ow">and</span> <span class="n">username</span>
+                <span class="n">comment_id</span> <span class="o">=</span> <span class="n">msg</span><span class="p">[</span><span class="s1">&#39;comment_id&#39;</span><span class="p">]</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;del_comment: user_id=&#39;</span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&#39; comment_id=&#39;</span><span class="si">{</span><span class="n">comment_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+
+                <span class="n">old</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">get_comment</span><span class="p">(</span><span class="n">comment_id</span><span class="p">)</span>
+                <span class="n">video_hash</span> <span class="o">=</span> <span class="n">old</span><span class="o">.</span><span class="n">video_hash</span>
+                <span class="k">assert</span> <span class="n">user_id</span> <span class="ow">in</span> <span class="p">(</span><span class="n">old</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span> <span class="s1">&#39;admin&#39;</span><span class="p">),</span> <span class="s2">&quot;You can only delete your own comments&quot;</span>
+
+                <span class="n">all_comm</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">get_video_comments</span><span class="p">(</span><span class="n">video_hash</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">all_comm</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">parent_id</span> <span class="o">==</span> <span class="n">comment_id</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Can&#39;t delete a comment that has replies&quot;</span><span class="p">)</span>
+            
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">del_comment</span><span class="p">(</span><span class="n">comment_id</span><span class="p">)</span>
+                <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;del_comment&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;comment_id&#39;</span><span class="p">:</span> <span class="n">comment_id</span><span class="p">},</span> <span class="n">room</span><span class="o">=</span><span class="n">video_hash</span><span class="p">)</span>
+
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="c1"># self.logger.exception(f&quot;Exception in del_comment for sid &#39;{sid}&#39;: {e}&quot;)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">dont_throw</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">Message</span><span class="p">(</span>
+                    <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                    <span class="n">ref_comment_id</span><span class="o">=</span><span class="n">msg</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;comment_id&#39;</span><span class="p">),</span>
+                    <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Failed to delete comment.&quot;</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)))</span>
+
+
+        <span class="nd">@sio</span><span class="o">.</span><span class="n">event</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">list_my_messages</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user</span><span class="p">(</span><span class="n">sid</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="n">user_id</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;list_my_messages: user_id=&#39;</span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+                <span class="n">msgs</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">get_user_messages</span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">msgs</span><span class="p">:</span>
+                    <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;message&#39;</span><span class="p">,</span> <span class="n">m</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span> <span class="n">room</span><span class="o">=</span><span class="n">sid</span><span class="p">)</span>                
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">m</span><span class="o">.</span><span class="n">seen</span><span class="p">:</span>
+                        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">set_message_seen</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exception in list_my_messages for sid &#39;</span><span class="si">{</span><span class="n">sid</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="c1"># Don&#39;t push new error messages to db, as listing them failed.</span>
+                <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;message&quot;</span><span class="p">,</span> <span class="n">Message</span><span class="p">(</span>
+                        <span class="n">event_name</span><span class="o">=</span><span class="s1">&#39;error&#39;</span><span class="p">,</span> <span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">,</span>
+                        <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Failed to get messages.&quot;</span><span class="p">,</span>
+                        <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+                    <span class="p">)</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span> <span class="n">room</span><span class="o">=</span><span class="n">sid</span><span class="p">)</span>
+
+        <span class="nd">@sio</span><span class="o">.</span><span class="n">event</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">logout</span><span class="p">(</span><span class="n">sid</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;logout: sid=&#39;</span><span class="si">{</span><span class="n">sid</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">disconnect</span><span class="p">(</span><span class="n">sid</span><span class="p">)</span>
+
+        <span class="nd">@sio</span><span class="o">.</span><span class="n">event</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">connect</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="n">environ</span><span class="p">):</span>
+            <span class="c1"># Trust headers from web server / reverse proxy on user auth</span>
+            <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">user_from_headers</span><span class="p">(</span><span class="n">environ</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;connect: sid=&#39;</span><span class="si">{</span><span class="n">sid</span><span class="si">}</span><span class="s2">&#39; user_id=&#39;</span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&#39; username=&#39;</span><span class="si">{</span><span class="n">username</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+            
+            <span class="c1">#for k,v in environ.items():</span>
+            <span class="c1">#    if k != &#39;wsgi.input&#39;:</span>
+            <span class="c1">#        print(f&quot;HDR: {k}={v}&quot;)</span>
+
+            <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">save_session</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;user_id&#39;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">,</span> <span class="s1">&#39;username&#39;</span><span class="p">:</span> <span class="n">username</span><span class="p">})</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">userid_to_sid</span><span class="p">[</span><span class="n">user_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">sid</span>
+            <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s1">&#39;welcome&#39;</span><span class="p">,</span> <span class="p">{</span><span class="s1">&#39;username&#39;</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span> <span class="s1">&#39;user_id&#39;</span><span class="p">:</span> <span class="n">user_id</span><span class="p">},</span> <span class="n">room</span><span class="o">=</span><span class="n">sid</span><span class="p">)</span>
+            <span class="n">sio</span><span class="o">.</span><span class="n">enter_room</span><span class="p">(</span><span class="n">sid</span><span class="p">,</span> <span class="s1">&#39;huoneusto&#39;</span><span class="p">)</span>
+
+        <span class="nd">@sio</span><span class="o">.</span><span class="n">event</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">disconnect</span><span class="p">(</span><span class="n">sid</span><span class="p">):</span>
+            <span class="n">user_id</span> <span class="o">=</span> <span class="p">(</span><span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">get_session</span><span class="p">(</span><span class="n">sid</span><span class="p">))</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;user_id&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Client disconnected, sid=</span><span class="si">{</span><span class="n">sid</span><span class="si">}</span><span class="s1">, user_id=</span><span class="si">{</span><span class="n">user_id</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">userid_to_sid</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">user_id</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="c1"># Handle file upload callback from Nginx</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">uploaded</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">web</span><span class="o">.</span><span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">web</span><span class="o">.</span><span class="n">Response</span><span class="p">:</span>
+            <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">user_from_headers</span><span class="p">(</span><span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Upload-notify&quot;</span><span class="p">,</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">user_id</span><span class="p">,</span> <span class="n">username</span><span class="p">)</span>
+            <span class="n">xfile</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;X_FILE&#39;</span><span class="p">)</span>
+            <span class="c1"># &#39;X-FILE&#39;: &#39;/home/jarno/clapshot/server/DEV_DATADIR/upload/0000000003&#39;</span>
+            
+            <span class="c1"># TODO: actually do something here</span>
+
+            <span class="k">return</span> <span class="n">web</span><span class="o">.</span><span class="n">Response</span><span class="p">(</span><span class="n">text</span><span class="o">=</span><span class="s2">&quot;OK&quot;</span><span class="p">)</span>
+
+
+        <span class="c1"># Register HTTP routes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">add_routes</span><span class="p">([</span><span class="n">web</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="s1">&#39;/api/uploaded&#39;</span><span class="p">,</span> <span class="n">uploaded</span><span class="p">)])</span>
+        <span class="k">for</span> <span class="n">route</span><span class="p">,</span> <span class="n">path</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">serve_dirs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">app</span><span class="o">.</span><span class="n">router</span><span class="o">.</span><span class="n">add_static</span><span class="p">(</span><span class="n">route</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="ClapshotApiServer.push_message"><a class="viewcode-back" href="../../_autosummary/clapshot_server.api_server.ClapshotApiServer.html#clapshot_server.api_server.ClapshotApiServer.push_message">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">push_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="n">Message</span><span class="p">,</span> <span class="n">dont_throw</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">persist</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Push a message to the database and emit it to all clients.</span>
+<span class="sd">        Set dont_throw if this is called from an exception handler.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">persist</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">db</span><span class="o">.</span><span class="n">add_message</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span> <span class="c1"># Also sets id and timestamp</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exception in push_message while persisting: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">dont_throw</span><span class="p">:</span>
+                    <span class="k">raise</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">msg</span><span class="o">.</span><span class="n">user_id</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">userid_to_sid</span><span class="p">:</span>
+                <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span><span class="s2">&quot;message&quot;</span><span class="p">,</span> <span class="n">msg</span><span class="o">.</span><span class="n">to_dict</span><span class="p">(),</span> <span class="n">room</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">userid_to_sid</span><span class="p">[</span><span class="n">msg</span><span class="o">.</span><span class="n">user_id</span><span class="p">])</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exception in push_message while emitting: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">dont_throw</span><span class="p">:</span>
+                <span class="k">raise</span></div>
+
+    <span class="k">def</span> <span class="nf">dict_for_video</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="n">Video</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="n">video_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">url_base</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s1">&#39;/&#39;</span><span class="p">)</span> <span class="o">+</span> <span class="sa">f</span><span class="s1">&#39;/video/</span><span class="si">{</span><span class="n">v</span><span class="o">.</span><span class="n">video_hash</span><span class="si">}</span><span class="s1">/&#39;</span> <span class="o">+</span> <span class="p">(</span>
+            <span class="s1">&#39;video.mp4&#39;</span> <span class="k">if</span> <span class="n">v</span><span class="o">.</span><span class="n">recompression_done</span> <span class="k">else</span>
+            <span class="p">(</span><span class="s1">&#39;orig/&#39;</span><span class="o">+</span><span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">quote</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">orig_filename</span><span class="p">,</span> <span class="n">safe</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">)))</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+                <span class="s1">&#39;orig_filename&#39;</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">orig_filename</span><span class="p">,</span>
+                <span class="s1">&#39;video_hash&#39;</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">video_hash</span><span class="p">,</span>
+                <span class="s1">&#39;video_url&#39;</span><span class="p">:</span> <span class="n">video_url</span><span class="p">,</span>
+                <span class="s1">&#39;fps&#39;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">Decimal</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">fps</span><span class="p">),</span> <span class="mi">3</span><span class="p">)),</span>  <span class="c1"># eg. 23.976</span>
+                <span class="s1">&#39;added_time&#39;</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">added_time</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()),</span>
+                <span class="s1">&#39;duration&#39;</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span>
+                <span class="s1">&#39;username&#39;</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">added_by_username</span><span class="p">,</span>
+                <span class="s1">&#39;user_id&#39;</span><span class="p">:</span> <span class="n">v</span><span class="o">.</span><span class="n">added_by_userid</span>
+                <span class="p">}</span>
+
+
+<div class="viewcode-block" id="ClapshotApiServer.user_from_headers"><a class="viewcode-back" href="../../_autosummary/clapshot_server.api_server.ClapshotApiServer.html#clapshot_server.api_server.ClapshotApiServer.user_from_headers">[docs]</a>    <span class="k">def</span> <span class="nf">user_from_headers</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">headers</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get user id and username from (reverse proxy&#39;s) headers.</span>
+
+<span class="sd">        return: (user_id, username)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">user_id</span> <span class="o">=</span> <span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;HTTP_X_REMOTE_USER_ID&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">user_id</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;No user id found in header HTTP_X_REMOTE_USER_ID, using &#39;anonymous&#39;&quot;</span><span class="p">)</span>
+        <span class="n">user_name</span> <span class="o">=</span> <span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;HTTP_X_REMOTE_USER_NAME&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">user_id</span> <span class="ow">or</span> <span class="s1">&#39;anonymous&#39;</span><span class="p">,</span> <span class="n">user_name</span> <span class="ow">or</span> <span class="s1">&#39;Anonymous&#39;</span><span class="p">)</span></div>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_user</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sid</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
+        <span class="n">session</span> <span class="o">=</span> <span class="k">await</span> <span class="n">sio</span><span class="o">.</span><span class="n">get_session</span><span class="p">(</span><span class="n">sid</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;user_id&#39;</span><span class="p">),</span> <span class="n">session</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;username&#39;</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="run_server"><a class="viewcode-back" href="../../_autosummary/clapshot_server.api_server.run_server.html#clapshot_server.api_server.run_server">[docs]</a><span class="k">async</span> <span class="k">def</span> <span class="nf">run_server</span><span class="p">(</span>
+        <span class="n">db</span><span class="p">:</span> <span class="n">Database</span><span class="p">,</span>
+        <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">,</span>
+        <span class="n">url_base</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">push_messages</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Queue</span><span class="p">,</span>
+        <span class="n">host</span><span class="o">=</span><span class="s1">&#39;127.0.0.1&#39;</span><span class="p">,</span>
+        <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="o">=</span><span class="mi">8086</span><span class="p">,</span>
+        <span class="n">serve_dirs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="p">{},</span>
+        <span class="n">has_started</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Event</span><span class="p">(),</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Run HTTP / Socket.IO API server forever (until this asyncio task is cancelled)</span>
+
+<span class="sd">    Params:</span>
+<span class="sd">        db:           Database object</span>
+<span class="sd">        logger:       Logger instance for API server</span>
+<span class="sd">        url_base:     Base URL for the server (e.g. https://example.com). Used e.g. to construct video URLs.</span>
+<span class="sd">        port:         Port to listen on</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        True if server was started successfully, False if not.</span>
+<span class="sd">    &quot;&quot;&quot;</span>    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="n">db</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">db</span><span class="o">.</span><span class="n">error_state</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">fatal</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;DB ERROR: </span><span class="si">{</span><span class="n">db</span><span class="o">.</span><span class="n">error_state</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="kc">False</span>
+
+            <span class="n">server</span> <span class="o">=</span> <span class="n">ClapshotApiServer</span><span class="p">(</span><span class="n">db</span><span class="o">=</span><span class="n">db</span><span class="p">,</span> <span class="n">url_base</span><span class="o">=</span><span class="n">url_base</span><span class="p">,</span> <span class="n">port</span><span class="o">=</span><span class="n">port</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">,</span> <span class="n">serve_dirs</span><span class="o">=</span><span class="n">serve_dirs</span><span class="p">)</span>
+            <span class="n">runner</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">AppRunner</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">app</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">runner</span><span class="o">.</span><span class="n">setup</span><span class="p">()</span>
+            <span class="c1"># bind to localhost only, no matter what url_base is (for security, use reverse proxy to expose)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Starting API server. Binding to </span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">server</span><span class="o">.</span><span class="n">port</span><span class="si">}</span><span class="s2"> -- Base URL: </span><span class="si">{</span><span class="n">url_base</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">site</span> <span class="o">=</span> <span class="n">web</span><span class="o">.</span><span class="n">TCPSite</span><span class="p">(</span><span class="n">runner</span><span class="p">,</span> <span class="n">host</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">port</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">site</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+            <span class="n">has_started</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+            <span class="c1"># Wait for messages from other parts of the app,</span>
+            <span class="c1"># and push them to clients.</span>
+            <span class="k">while</span> <span class="n">msg</span> <span class="o">:=</span> <span class="k">await</span> <span class="n">push_messages</span><span class="o">.</span><span class="n">get</span><span class="p">():</span>                
+                <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">push_message</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">persist</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">dont_throw</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exception in API server: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">return</span> <span class="kc">True</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Jarno Elonen.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

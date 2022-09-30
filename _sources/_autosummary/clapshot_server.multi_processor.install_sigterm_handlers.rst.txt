@@ -1,0 +1,6 @@
+clapshot\_server.multi\_processor.install\_sigterm\_handlers
+============================================================
+
+.. currentmodule:: clapshot_server.multi_processor
+
+.. autofunction:: install_sigterm_handlers

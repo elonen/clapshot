@@ -1,0 +1,6 @@
+clapshot\_server.api\_server.run\_server
+========================================
+
+.. currentmodule:: clapshot_server.api_server
+
+.. autofunction:: run_server

@@ -1,0 +1,40 @@
+clapshot\_server.api\_server
+============================
+
+.. automodule:: clapshot_server.api_server
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+      :nosignatures:
+   
+      run_server
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: custom-class-template.rst
+      :nosignatures:
+   
+      ClapshotApiServer
+   
+   
+
+   
+   
+   
+
+
+

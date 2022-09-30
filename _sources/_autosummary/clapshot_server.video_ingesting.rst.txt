@@ -1,0 +1,34 @@
+clapshot\_server.video\_ingesting
+=================================
+
+.. automodule:: clapshot_server.video_ingesting
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: custom-class-template.rst
+      :nosignatures:
+   
+      IngestingArgs
+      UserResults
+      VideoIngestingPool
+   
+   
+
+   
+   
+   
+
+
+

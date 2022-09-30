@@ -1,0 +1,42 @@
+clapshot\_server.database.Comment
+=================================
+
+.. currentmodule:: clapshot_server.database
+
+.. autoclass:: Comment
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+      ~Comment.to_dict
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~Comment.comment
+      ~Comment.created
+      ~Comment.drawing
+      ~Comment.edited
+      ~Comment.id
+      ~Comment.metadata
+      ~Comment.parent_id
+      ~Comment.registry
+      ~Comment.timecode
+      ~Comment.user_id
+      ~Comment.username
+      ~Comment.video_hash
+   
+   

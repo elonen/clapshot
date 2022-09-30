@@ -1,0 +1,32 @@
+clapshot\_server.video\_processing\_pipeline
+============================================
+
+.. automodule:: clapshot_server.video_processing_pipeline
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: custom-class-template.rst
+      :nosignatures:
+   
+      VideoProcessingPipeline
+   
+   
+
+   
+   
+   
+
+
+

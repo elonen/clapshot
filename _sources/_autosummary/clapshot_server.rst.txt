@@ -1,0 +1,39 @@
+﻿clapshot\_server
+================
+
+.. automodule:: clapshot_server
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+
+.. autosummary::
+   :toctree:
+   :template: custom-module-template.rst
+   :recursive:
+
+   clapshot_server.alembic
+   clapshot_server.api_server
+   clapshot_server.database
+   clapshot_server.incoming_monitor
+   clapshot_server.main
+   clapshot_server.multi_processor
+   clapshot_server.video_compressor
+   clapshot_server.video_ingesting
+   clapshot_server.video_metadata_reader
+   clapshot_server.video_processing_pipeline
+

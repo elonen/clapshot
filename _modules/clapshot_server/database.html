@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>clapshot_server.database &mdash; Clapshot server HEAD documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/readthedocs-custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/sphinx_highlight.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> Clapshot server
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../introduction.html#technology-overview">Technology overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli-commands.html">Command line interface</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../_autosummary/clapshot_server.html">clapshot_server</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Clapshot server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>clapshot_server.database</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for clapshot_server.database</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Database models (table definitions) and functions to access them</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span> <span class="nn">sqlalchemy</span> <span class="k">as</span> <span class="nn">sql</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.ext.declarative</span> <span class="kn">import</span> <span class="n">declarative_base</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="kn">import</span> <span class="n">Column</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.orm</span> <span class="kn">import</span> <span class="n">relationship</span><span class="p">,</span> <span class="n">sessionmaker</span>
+
+<span class="kn">from</span> <span class="nn">sqlalchemy.ext.asyncio</span> <span class="kn">import</span> <span class="n">AsyncSession</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.ext.asyncio</span> <span class="kn">import</span> <span class="n">create_async_engine</span>
+<span class="kn">from</span> <span class="nn">sqlalchemy.future</span> <span class="kn">import</span> <span class="n">select</span>
+
+<span class="kn">from</span> <span class="nn">alembic.config</span> <span class="kn">import</span> <span class="n">Config</span> <span class="k">as</span> <span class="n">AlembicCfg</span>
+<span class="kn">from</span> <span class="nn">alembic</span> <span class="kn">import</span> <span class="n">script</span> <span class="k">as</span> <span class="n">alembic_script</span>
+<span class="kn">from</span> <span class="nn">alembic.runtime</span> <span class="kn">import</span> <span class="n">migration</span>
+
+<span class="n">Base</span> <span class="o">=</span> <span class="n">declarative_base</span><span class="p">()</span> <span class="c1"># type: sql.ext.declarative.api.DeclarativeMeta</span>
+
+<div class="viewcode-block" id="Video"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Video.html#clapshot_server.database.Video">[docs]</a><span class="k">class</span> <span class="nc">Video</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Video file (DB table)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s1">&#39;video&#39;</span>
+    <span class="n">__mapper_args__</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;eager_defaults&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">autoincrement</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># required by SQLAlchemy</span>
+    <span class="n">video_hash</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">unique</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">added_by_userid</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>    <span class="c1"># unique user id</span>
+    <span class="n">added_by_username</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">)</span>  <span class="c1"># human readable username</span>
+    <span class="n">added_time</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">DateTime</span><span class="p">,</span> <span class="n">server_default</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">recompression_done</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">DateTime</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">orig_filename</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">)</span>
+
+    <span class="n">total_frames</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Integer</span><span class="p">)</span>
+    <span class="n">duration</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Float</span><span class="p">)</span>
+    <span class="n">fps</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">)</span> <span class="c1"># decimal number in seconds</span>
+
+    <span class="n">raw_metadata_all</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">)</span>
+
+    <span class="n">comments</span> <span class="o">=</span> <span class="n">relationship</span><span class="p">(</span><span class="s2">&quot;Comment&quot;</span><span class="p">,</span> <span class="n">cascade</span><span class="o">=</span><span class="s2">&quot;all, delete-orphan&quot;</span><span class="p">)</span>
+    
+    <span class="k">def</span> <span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;video_hash&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">video_hash</span><span class="p">,</span>
+            <span class="s2">&quot;added_by_userid&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">added_by_userid</span><span class="p">,</span>
+            <span class="s2">&quot;added_by_username&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">added_by_username</span><span class="p">,</span>
+            <span class="s2">&quot;added_time&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">added_time</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">added_time</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;orig_filename&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">orig_filename</span><span class="p">,</span>
+            <span class="s2">&quot;total_frames&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">total_frames</span><span class="p">,</span>
+            <span class="s2">&quot;duration&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span>
+            <span class="s2">&quot;fps&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">fps</span><span class="p">,</span>
+            <span class="s2">&quot;raw_metadata_all&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">raw_metadata_all</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+       <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&lt;Video(id=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">&#39; video_hash=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">video_hash</span><span class="si">}</span><span class="s2">&#39; orig_filename=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">orig_filename</span><span class="si">}</span><span class="s2">&#39; added_by_userid=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">added_by_userid</span><span class="si">}</span><span class="s2">&#39; ...)&gt;&quot;</span></div>
+
+
+<div class="viewcode-block" id="Comment"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Comment.html#clapshot_server.database.Comment">[docs]</a><span class="k">class</span> <span class="nc">Comment</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;User comment on a video (DB table)&quot;&quot;&quot;</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s1">&#39;comment&#39;</span>
+    <span class="n">__mapper_args__</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;eager_defaults&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+    <span class="n">__table_args__</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;sqlite_autoincrement&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span> <span class="c1"># required to avoid ID reuse</span>
+
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">autoincrement</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">video_hash</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">sql</span><span class="o">.</span><span class="n">ForeignKey</span><span class="p">(</span><span class="s1">&#39;video.video_hash&#39;</span><span class="p">),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">parent_id</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">sql</span><span class="o">.</span><span class="n">ForeignKey</span><span class="p">(</span><span class="s1">&#39;comment.id&#39;</span><span class="p">),</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">created</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">DateTime</span><span class="p">,</span> <span class="n">server_default</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">edited</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">DateTime</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>  <span class="c1"># set if comment has been edited since creation</span>
+    <span class="n">user_id</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;anonymous&quot;</span><span class="p">)</span>    <span class="c1"># unique user id</span>
+    <span class="n">username</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;Anonymous&quot;</span><span class="p">)</span>   <span class="c1"># human readable username</span>
+    <span class="n">comment</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">timecode</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">drawing</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>  <span class="c1"># image data URI</span>
+
+    <span class="k">def</span> <span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;comment_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+            <span class="s2">&quot;video_hash&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">video_hash</span><span class="p">,</span>
+            <span class="s2">&quot;parent_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent_id</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">parent_id</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">,</span>
+            <span class="s2">&quot;created&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">created</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">created</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;edited&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">edited</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">edited</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span>
+            <span class="s2">&quot;username&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">username</span><span class="p">,</span>
+            <span class="s2">&quot;comment&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">comment</span><span class="p">,</span>
+            <span class="s2">&quot;timecode&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">timecode</span> <span class="ow">or</span> <span class="s1">&#39;&#39;</span><span class="p">,</span>
+            <span class="s2">&quot;drawing&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">drawing</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+       <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&lt;Comment(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> video=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">video_hash</span><span class="si">}</span><span class="s2"> parent=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">parent_id</span> <span class="ow">or</span> <span class="s1">&#39;-&#39;</span><span class="si">}</span><span class="s2"> user_id=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&#39; comment=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">comment</span><span class="si">}</span><span class="s2">&#39; drawing=</span><span class="si">{</span><span class="ow">not</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">drawing</span><span class="p">)</span><span class="si">}</span><span class="s2"> ...)&gt;&quot;</span></div>
+
+
+<div class="viewcode-block" id="Message"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Message.html#clapshot_server.database.Message">[docs]</a><span class="k">class</span> <span class="nc">Message</span><span class="p">(</span><span class="n">Base</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Notification sent to a user (DB table)&quot;&quot;&quot;</span>
+    <span class="n">__tablename__</span> <span class="o">=</span> <span class="s1">&#39;message&#39;</span>
+    <span class="n">__mapper_args__</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;eager_defaults&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+    <span class="n">__table_args__</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;sqlite_autoincrement&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span> <span class="c1"># required to avoid ID reuse</span>
+
+    <span class="nb">id</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">primary_key</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">autoincrement</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">user_id</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;anonymous&quot;</span><span class="p">)</span>
+    <span class="n">created</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">DateTime</span><span class="p">,</span> <span class="n">server_default</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">seen</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Boolean</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">ref_video_hash</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">sql</span><span class="o">.</span><span class="n">ForeignKey</span><span class="p">(</span><span class="s1">&#39;video.video_hash&#39;</span><span class="p">),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+    <span class="n">ref_comment_id</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">Integer</span><span class="p">,</span> <span class="n">sql</span><span class="o">.</span><span class="n">ForeignKey</span><span class="p">(</span><span class="s1">&#39;comment.id&#39;</span><span class="p">),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+    <span class="n">event_name</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;info&quot;</span><span class="p">)</span>  <span class="c1"># info, warning, error</span>
+    <span class="n">message</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+    <span class="n">details</span> <span class="o">=</span> <span class="n">Column</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">String</span><span class="p">,</span> <span class="n">default</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+
+
+    <span class="k">def</span> <span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+            <span class="s2">&quot;user_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span>
+            <span class="s2">&quot;created&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">created</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">created</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="s2">&quot;seen&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">seen</span><span class="p">,</span>
+            <span class="s2">&quot;ref_video_hash&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_video_hash</span><span class="p">,</span>
+            <span class="s2">&quot;ref_comment_id&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_comment_id</span><span class="p">,</span>
+            <span class="s2">&quot;event_name&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">event_name</span><span class="p">,</span>
+            <span class="s2">&quot;message&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">message</span><span class="p">,</span>
+            <span class="s2">&quot;details&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">details</span>
+        <span class="p">}</span>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+         <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;&lt;Message(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2"> user_id=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">user_id</span><span class="si">}</span><span class="s2">&#39; video=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_video_hash</span><span class="si">}</span><span class="s2"> comment=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_comment_id</span><span class="si">}</span><span class="s2"> seen=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">seen</span><span class="si">}</span><span class="s2"> event_name=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">event_name</span><span class="si">}</span><span class="s2">&#39; message=&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">message</span><span class="si">}</span><span class="s2">&#39; ...)&gt;&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="Database"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database">[docs]</a><span class="k">class</span> <span class="nc">Database</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Wrapper for DB connection and queries.</span>
+<span class="sd">    Abstracts away the SQLAlchemy ORM from the rest of the code.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db_file</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">db_file</span> <span class="o">=</span> <span class="n">db_file</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">error_state</span> <span class="o">=</span> <span class="s2">&quot;db not started (__aenter__ not called)&quot;</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="fm">__aenter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">db_existed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">db_file</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">engine</span> <span class="o">=</span> <span class="n">create_async_engine</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;sqlite+aiosqlite:///</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">db_file</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">echo</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="n">alb_cfg</span> <span class="o">=</span> <span class="n">AlembicCfg</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s1">&#39;alembic.ini&#39;</span><span class="p">)</span>
+        <span class="n">alb_cfg</span><span class="o">.</span><span class="n">set_main_option</span><span class="p">(</span><span class="s2">&quot;script_location&quot;</span><span class="p">,</span> <span class="s2">&quot;clapshot_server:sqlite-migrations&quot;</span><span class="p">)</span>
+        <span class="n">alb_dir</span> <span class="o">=</span> <span class="n">alembic_script</span><span class="o">.</span><span class="n">ScriptDirectory</span><span class="o">.</span><span class="n">from_config</span><span class="p">(</span><span class="n">alb_cfg</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">db_existed</span><span class="p">:</span>
+            <span class="c1"># Create database</span>
+            <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">begin</span><span class="p">()</span> <span class="k">as</span> <span class="n">c</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Creating tables for &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">db_file</span><span class="p">))</span>
+                <span class="k">def</span> <span class="nf">doit</span><span class="p">(</span><span class="n">sync_c</span><span class="p">):</span>
+                    <span class="n">Base</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">create_all</span><span class="p">(</span><span class="n">sync_c</span><span class="p">)</span>
+                    <span class="c1"># Stamp the newly created database with latest migration</span>
+                    <span class="n">migration</span><span class="o">.</span><span class="n">MigrationContext</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">sync_c</span><span class="p">)</span><span class="o">.</span><span class="n">stamp</span><span class="p">(</span><span class="n">alb_dir</span><span class="p">,</span> <span class="s2">&quot;head&quot;</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">error_state</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">await</span> <span class="n">c</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">doit</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Make sure database is at latest migration</span>
+            <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">begin</span><span class="p">()</span> <span class="k">as</span> <span class="n">c</span><span class="p">:</span>
+                <span class="k">def</span> <span class="nf">is_latest_migration</span><span class="p">(</span><span class="n">sync_c</span><span class="p">):</span>
+                    <span class="n">ctx</span> <span class="o">=</span> <span class="n">migration</span><span class="o">.</span><span class="n">MigrationContext</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">sync_c</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="nb">set</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">get_current_heads</span><span class="p">())</span> <span class="o">==</span> <span class="nb">set</span><span class="p">(</span><span class="n">alb_dir</span><span class="o">.</span><span class="n">get_heads</span><span class="p">())</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">error_state</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="k">await</span> <span class="n">c</span><span class="o">.</span><span class="n">run_sync</span><span class="p">(</span><span class="n">is_latest_migration</span><span class="p">)</span> <span class="k">else</span> \
+                    <span class="s2">&quot;Database schema is out of sync with app. Use &#39;clapshot-alembic&#39; to upgrade it.&quot;</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">error_state</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span> <span class="o">=</span> <span class="n">sessionmaker</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="p">,</span> <span class="n">expire_on_commit</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">class_</span><span class="o">=</span><span class="n">AsyncSession</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">async</span> <span class="k">def</span> <span class="fm">__aexit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exc_t</span><span class="p">,</span> <span class="n">exc_v</span><span class="p">,</span> <span class="n">exc_tb</span><span class="p">):</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">engine</span><span class="o">.</span><span class="n">dispose</span><span class="p">()</span>
+
+
+    <span class="c1"># Video</span>
+    <span class="c1"># -----</span>
+<div class="viewcode-block" id="Database.add_video"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.add_video">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">add_video</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">video</span><span class="p">:</span> <span class="n">Video</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sql</span><span class="o">.</span><span class="n">Integer</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Add a new video to the database.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            video: Video object</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            sql.Integer: ID of the new video</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">video</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">video</span><span class="o">.</span><span class="n">id</span></div>
+
+<div class="viewcode-block" id="Database.set_video_recompressed"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.set_video_recompressed">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">set_video_recompressed</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">video_hash</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Set the recompressed flag for a video.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            video_hash: Hash (unique identifier) of the video</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">Video</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="n">video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">recompression_done</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">()))</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Database.get_video"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.get_video">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_video</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">video_hash</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Video</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get a video from the database.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            video_hash: Hash (unique identifier) of the video</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Video: Video object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">select</span><span class="p">(</span><span class="n">Video</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="n">video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">res</span><span class="o">.</span><span class="n">scalars</span><span class="p">()</span><span class="o">.</span><span class="n">first</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Database.del_video_and_comments"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.del_video_and_comments">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">del_video_and_comments</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">video_hash</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Delete a video and all its comments from the database.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            video_hash: Hash (unique identifier) of the video</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Video: Video object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">Video</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="n">video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">))</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">Comment</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="n">video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">))</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Database.get_all_user_videos"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.get_all_user_videos">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_all_user_videos</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">user_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Video</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get all videos for a user.</span>
+<span class="sd">        **Note**: Return value cannot be an iterator because DB queries are short-lived.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            user_id: User ID</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            list[Video]: List of Video objects</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">select</span><span class="p">(</span><span class="n">Video</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="n">added_by_userid</span><span class="o">=</span><span class="n">user_id</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">res</span><span class="o">.</span><span class="n">scalars</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span></div>
+
+    <span class="c1"># Comment</span>
+    <span class="c1"># -------</span>
+<div class="viewcode-block" id="Database.add_comment"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.add_comment">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">add_comment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">comment</span><span class="p">:</span> <span class="n">Comment</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">sql</span><span class="o">.</span><span class="n">Integer</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Add a new comment on a video.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            comment: Comment object</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            sql.Integer: ID of the new comment</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">comment</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+            <span class="k">assert</span> <span class="n">comment</span><span class="o">.</span><span class="n">parent_id</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">comment</span><span class="o">.</span><span class="n">parent_id</span> <span class="o">!=</span> <span class="n">comment</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="s2">&quot;Comment cannot be its own parent&quot;</span>
+            <span class="k">return</span> <span class="n">comment</span><span class="o">.</span><span class="n">id</span></div>
+
+<div class="viewcode-block" id="Database.get_comment"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.get_comment">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_comment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">comment_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Comment</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get a comment from the database.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            comment_id: ID of the comment</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Comment: Comment object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span><span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">select</span><span class="p">(</span><span class="n">Comment</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">comment_id</span><span class="p">)))</span><span class="o">.</span><span class="n">scalars</span><span class="p">()</span><span class="o">.</span><span class="n">first</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Database.get_video_comments"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.get_video_comments">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_video_comments</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">video_hash</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Comment</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get all comments for a video.</span>
+<span class="sd">        **Note**: Return value cannot be an iterator because DB queries are short-lived.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            video_hash: Hash (unique identifier) of the video</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            list[Comment]: List of Comment objects</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="p">(</span><span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">select</span><span class="p">(</span><span class="n">Comment</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="n">video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">)))</span><span class="o">.</span><span class="n">scalars</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">res</span></div>
+    
+<div class="viewcode-block" id="Database.del_comment"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.del_comment">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">del_comment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">comment_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Delete a comment from the database.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            comment_id: ID of the comment        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">Comment</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">comment_id</span><span class="p">))</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="Database.edit_comment"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.edit_comment">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">edit_comment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">comment_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">new_comment</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Edit a comment (change text).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            comment_id: ID of the comment</span>
+<span class="sd">            new_comment: New text of the comment</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">Comment</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">comment_id</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">comment</span><span class="o">=</span><span class="n">new_comment</span><span class="p">,</span> <span class="n">edited</span><span class="o">=</span><span class="n">sql</span><span class="o">.</span><span class="n">func</span><span class="o">.</span><span class="n">now</span><span class="p">()))</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+
+    <span class="c1"># Message</span>
+    <span class="c1"># -------</span>
+<div class="viewcode-block" id="Database.add_message"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.add_message">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">add_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="n">Message</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Message</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Add a new message to the database.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            msg: Message object</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Message: Message object, with ID and timestamp set</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="n">session</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">msg</span>   <span class="c1"># Contains new id and timestamp</span></div>
+    
+<div class="viewcode-block" id="Database.get_message"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.get_message">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Message</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get a message from the database.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            msg_id: ID of the message</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Message: Message object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span><span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">select</span><span class="p">(</span><span class="n">Message</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">msg_id</span><span class="p">)))</span><span class="o">.</span><span class="n">scalars</span><span class="p">()</span><span class="o">.</span><span class="n">first</span><span class="p">()</span></div>
+    
+<div class="viewcode-block" id="Database.get_user_messages"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.get_user_messages">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">get_user_messages</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">user_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Message</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get all messages for a user.</span>
+<span class="sd">        **Note**: Return value cannot be an iterator because DB queries are short-lived.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            user_id: User ID</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            list[Message]: List of Message objects</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="n">res</span> <span class="o">=</span> <span class="p">(</span><span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">select</span><span class="p">(</span><span class="n">Message</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="n">user_id</span><span class="o">=</span><span class="n">user_id</span><span class="p">)))</span><span class="o">.</span><span class="n">scalars</span><span class="p">()</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">res</span></div>
+
+<div class="viewcode-block" id="Database.set_message_seen"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.set_message_seen">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">set_message_seen</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">new_status</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Set the seen status of a message.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            msg_id: ID of the message</span>
+<span class="sd">            new_status: New status</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">Message</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">msg_id</span><span class="p">)</span><span class="o">.</span><span class="n">values</span><span class="p">(</span><span class="n">seen</span><span class="o">=</span><span class="n">new_status</span><span class="p">))</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div>
+    
+<div class="viewcode-block" id="Database.del_message"><a class="viewcode-back" href="../../_autosummary/clapshot_server.database.Database.html#clapshot_server.database.Database.del_message">[docs]</a>    <span class="k">async</span> <span class="k">def</span> <span class="nf">del_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Delete a message from the database.</span>
+<span class="sd">        **Note**: This does not check for, nor cascade to, possible replies to the message.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            msg_id: ID of the message</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">execute</span><span class="p">(</span><span class="n">sql</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">Message</span><span class="p">)</span><span class="o">.</span><span class="n">filter_by</span><span class="p">(</span><span class="nb">id</span><span class="o">=</span><span class="n">msg_id</span><span class="p">))</span>
+            <span class="k">await</span> <span class="n">session</span><span class="o">.</span><span class="n">commit</span><span class="p">()</span></div></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Jarno Elonen.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

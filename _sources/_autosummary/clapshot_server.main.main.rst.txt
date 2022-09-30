@@ -1,0 +1,6 @@
+clapshot\_server.main.main
+==========================
+
+.. currentmodule:: clapshot_server.main
+
+.. autofunction:: main

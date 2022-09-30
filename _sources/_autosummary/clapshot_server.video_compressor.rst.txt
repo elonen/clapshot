@@ -1,0 +1,34 @@
+clapshot\_server.video\_compressor
+==================================
+
+.. automodule:: clapshot_server.video_compressor
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: custom-class-template.rst
+      :nosignatures:
+   
+      Args
+      CompressorPool
+      Results
+   
+   
+
+   
+   
+   
+
+
+

@@ -1,0 +1,35 @@
+clapshot\_server.video\_ingesting.UserResults
+=============================================
+
+.. currentmodule:: clapshot_server.video_ingesting
+
+.. autoclass:: UserResults
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~UserResults.details
+      ~UserResults.file_owner_id
+      ~UserResults.msg
+      ~UserResults.video_hash
+      ~UserResults.success
+      ~UserResults.orig_file
+   
+   

@@ -1,0 +1,40 @@
+clapshot\_server.multi\_processor
+=================================
+
+.. automodule:: clapshot_server.multi_processor
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+      :nosignatures:
+   
+      install_sigterm_handlers
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: custom-class-template.rst
+      :nosignatures:
+   
+      MultiProcessor
+   
+   
+
+   
+   
+   
+
+
+

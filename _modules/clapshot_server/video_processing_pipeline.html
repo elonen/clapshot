@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>clapshot_server.video_processing_pipeline &mdash; Clapshot server HEAD documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/readthedocs-custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/sphinx_highlight.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> Clapshot server
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../introduction.html#technology-overview">Technology overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli-commands.html">Command line interface</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../_autosummary/clapshot_server.html">clapshot_server</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Clapshot server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>clapshot_server.video_processing_pipeline</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for clapshot_server.video_processing_pipeline</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Message queue manager that passes messages between API, metadata reader, ingestion and transcoding.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span> <span class="nn">multiprocessing</span>
+<span class="kn">from</span> <span class="nn">multiprocessing</span> <span class="kn">import</span> <span class="n">Process</span>
+<span class="kn">import</span> <span class="nn">time</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">video_metadata_reader</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">video_compressor</span>
+<span class="kn">from</span> <span class="nn">.incoming_monitor</span> <span class="kn">import</span> <span class="n">monitor_incoming_folder_loop</span>
+<span class="kn">from</span> <span class="nn">.multi_processor</span> <span class="kn">import</span> <span class="n">install_sigterm_handlers</span>
+<span class="kn">from</span> <span class="nn">.video_ingesting</span> <span class="kn">import</span> <span class="n">VideoIngestingPool</span><span class="p">,</span> <span class="n">IngestingArgs</span><span class="p">,</span> <span class="n">UserResults</span>
+
+
+<div class="viewcode-block" id="VideoProcessingPipeline"><a class="viewcode-back" href="../../_autosummary/clapshot_server.video_processing_pipeline.VideoProcessingPipeline.html#clapshot_server.video_processing_pipeline.VideoProcessingPipeline">[docs]</a><span class="k">class</span> <span class="nc">VideoProcessingPipeline</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Message queue manager.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">db_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">data_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">mpm</span><span class="p">:</span> <span class="n">multiprocessing</span><span class="o">.</span><span class="n">Manager</span><span class="p">,</span> <span class="n">max_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a dispatcher that manages the message queues between the various worker pools.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            db_file:      Path to the SQLite database file</span>
+<span class="sd">            data_dir:     Path to the data directory (incoming, videos, reject)</span>
+<span class="sd">            mpm:          Python multiprocessing manager</span>
+<span class="sd">            max_workers:  Max number of workers to use per component. 0 = use all available CPUs.</span>
+<span class="sd">                          The manager itself is single-threaded, this is only for subservient worker pools.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mpm</span> <span class="o">=</span> <span class="n">mpm</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_workers</span> <span class="o">=</span> <span class="n">max_workers</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">files_from_incoming</span> <span class="o">=</span> <span class="n">mpm</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">files_to_process</span> <span class="o">=</span> <span class="n">mpm</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">res_to_user</span> <span class="o">=</span> <span class="n">mpm</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">to_compress</span> <span class="o">=</span> <span class="n">mpm</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compress_results</span> <span class="o">=</span> <span class="n">mpm</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">to_metadata_reader</span> <span class="o">=</span> <span class="n">mpm</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metadata_results</span> <span class="o">=</span> <span class="n">mpm</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">db_file</span> <span class="o">=</span> <span class="n">db_file</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">videos_dir</span> <span class="o">=</span> <span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;videos&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">incoming_dir</span> <span class="o">=</span> <span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;incoming&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reject_dir</span> <span class="o">=</span> <span class="n">data_dir</span> <span class="o">/</span> <span class="s2">&quot;rejected&quot;</span>
+
+
+<div class="viewcode-block" id="VideoProcessingPipeline.run_forever"><a class="viewcode-back" href="../../_autosummary/clapshot_server.video_processing_pipeline.VideoProcessingPipeline.html#clapshot_server.video_processing_pipeline.VideoProcessingPipeline.run_forever">[docs]</a>    <span class="k">def</span> <span class="nf">run_forever</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">poll_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span> <span class="n">resubmit_delay</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">15.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Run the message queue manager forever.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            poll_interval:   How often to poll the message queues for new messages</span>
+<span class="sd">            resubmit_delay:  How long to wait before resubmitting a file to the ingestion pool</span>
+<span class="sd">                             if it&#39;s still in the incoming folder.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">install_sigterm_handlers</span><span class="p">()</span>
+        <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;pipeline&quot;</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Start monitoring incoming/</span>
+            <span class="n">Process</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">monitor_incoming_folder_loop</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="p">[],</span> <span class="n">kwargs</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;incoming_dir&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">incoming_dir</span><span class="p">,</span>
+                <span class="s2">&quot;files_to_process&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">files_from_incoming</span><span class="p">,</span>
+                <span class="s2">&quot;poll_interval&quot;</span><span class="p">:</span> <span class="n">poll_interval</span><span class="p">,</span>
+                <span class="s2">&quot;resubmit_delay&quot;</span><span class="p">:</span> <span class="n">resubmit_delay</span><span class="p">},</span> <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+            <span class="c1"># Start metadata readers</span>
+            <span class="n">Process</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">video_metadata_reader</span><span class="o">.</span><span class="n">ReaderPool</span><span class="p">(</span>
+                <span class="n">inq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_metadata_reader</span><span class="p">,</span>
+                <span class="n">outq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">metadata_results</span><span class="p">,</span>
+                <span class="n">max_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_workers</span><span class="p">)</span><span class="o">.</span><span class="n">run_forever</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+            <span class="c1"># Start video compressors</span>
+            <span class="n">Process</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">video_compressor</span><span class="o">.</span><span class="n">CompressorPool</span><span class="p">(</span>
+                <span class="n">inq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_compress</span><span class="p">,</span>
+                <span class="n">outq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compress_results</span><span class="p">,</span>
+                <span class="n">max_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_workers</span><span class="p">)</span><span class="o">.</span><span class="n">run_forever</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+
+            <span class="c1"># Start video ingestion</span>
+            <span class="n">Process</span><span class="p">(</span><span class="n">target</span><span class="o">=</span><span class="n">VideoIngestingPool</span><span class="p">(</span>
+                <span class="n">inq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">files_to_process</span><span class="p">,</span>
+                <span class="n">outq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">res_to_user</span><span class="p">,</span>
+                <span class="n">compress_q</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_compress</span><span class="p">,</span>
+                <span class="n">db_file</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">db_file</span><span class="p">,</span>
+                <span class="n">videos_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">videos_dir</span><span class="p">,</span>
+                <span class="n">reject_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reject_dir</span><span class="p">,</span>
+                <span class="n">max_workers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_workers</span><span class="p">)</span><span class="o">.</span><span class="n">run_forever</span><span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+ 
+            <span class="c1"># Helper: Log results and send to user</span>
+            <span class="k">def</span> <span class="nf">send_to_user</span><span class="p">(</span><span class="n">res</span><span class="p">:</span> <span class="n">UserResults</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">res</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processed #</span><span class="si">{</span><span class="n">res</span><span class="o">.</span><span class="n">video_hash</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">res</span><span class="o">.</span><span class="n">orig_file</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">) ok. &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">msg</span><span class="p">))</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Failed to proc #</span><span class="si">{</span><span class="n">res</span><span class="o">.</span><span class="n">video_hash</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">res</span><span class="o">.</span><span class="n">orig_file</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">): &quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">msg</span><span class="p">))</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">res_to_user</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+
+            <span class="c1"># Listen to queues</span>
+            <span class="k">def</span> <span class="nf">_select</span><span class="p">():</span>
+                <span class="n">res</span> <span class="o">=</span> <span class="p">(</span><span class="n">q</span> <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="p">[</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">files_from_incoming</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">metadata_results</span><span class="p">,</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">compress_results</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">q</span><span class="o">.</span><span class="n">empty</span><span class="p">())</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">res</span><span class="p">:</span>
+                    <span class="c1"># Currently there&#39;s no proper select() for mp.queues, so</span>
+                    <span class="c1"># emulate with sleep()ing busyloop</span>
+                    <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.01</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">res</span>
+
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">_select</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">o</span> <span class="o">:=</span> <span class="n">q</span><span class="o">.</span><span class="n">get</span><span class="p">()):</span>
+                        <span class="k">continue</span>
+
+                    <span class="c1"># Incoming file -&gt; Read metadata</span>
+                    <span class="k">if</span> <span class="n">q</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">files_from_incoming</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">to_metadata_reader</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">video_metadata_reader</span><span class="o">.</span><span class="n">Args</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">o</span><span class="p">)))</span>
+
+                    <span class="c1"># Metadata received -&gt; Process and store</span>
+                    <span class="k">elif</span> <span class="n">q</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">metadata_results</span><span class="p">:</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">files_to_process</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">IngestingArgs</span><span class="p">(</span><span class="n">md</span><span class="o">=</span><span class="n">o</span><span class="p">))</span>
+
+                    <span class="c1"># Compression results -&gt; pass back to ingestion</span>
+                    <span class="k">elif</span> <span class="n">q</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">compress_results</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="ow">not</span> <span class="n">o</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+                            <span class="n">send_to_user</span><span class="p">(</span><span class="n">UserResults</span><span class="p">(</span>
+                                <span class="n">success</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">orig_file</span> <span class="o">=</span> <span class="n">o</span><span class="o">.</span><span class="n">orig_file</span><span class="p">,</span>
+                                <span class="n">msg</span> <span class="o">=</span> <span class="n">o</span><span class="o">.</span><span class="n">msg</span><span class="p">,</span> <span class="n">details</span> <span class="o">=</span> <span class="n">o</span><span class="o">.</span><span class="n">details</span><span class="p">,</span>
+                                <span class="n">file_owner_id</span> <span class="o">=</span> <span class="n">o</span><span class="o">.</span><span class="n">user_id</span><span class="p">))</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">files_to_process</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">IngestingArgs</span><span class="p">(</span><span class="n">cmpr</span><span class="o">=</span><span class="n">o</span><span class="p">))</span>
+
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Unknown queue in select()&quot;</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">KeyboardInterrupt</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Video processing pipeline (dispatcher) stopped.&quot;</span><span class="p">)</span></div></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Jarno Elonen.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

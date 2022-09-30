@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>clapshot_server.video_ingesting &mdash; Clapshot server HEAD documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/readthedocs-custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/sphinx_highlight.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> Clapshot server
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../introduction.html#technology-overview">Technology overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../cli-commands.html">Command line interface</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../_autosummary/clapshot_server.html">clapshot_server</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">Clapshot server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="../index.html">Module code</a> &raquo;</li>
+      <li>clapshot_server.video_ingesting</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for clapshot_server.video_ingesting</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">This module contains most of the logic on what happens</span>
+<span class="sd">when a new video is submitted to the server. It moves</span>
+<span class="sd">around files, stores stuff to DB, schedules transcoding etc.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span> <span class="nn">dataclasses</span> <span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span> <span class="nn">decimal</span> <span class="kn">import</span> <span class="n">Decimal</span>
+<span class="kn">import</span> <span class="nn">hashlib</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">pathlib</span> <span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+<span class="kn">import</span> <span class="nn">traceback</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Optional</span>
+<span class="kn">from</span> <span class="nn">uuid</span> <span class="kn">import</span> <span class="n">uuid4</span>
+<span class="kn">import</span> <span class="nn">json</span>
+<span class="kn">import</span> <span class="nn">asyncio</span>
+<span class="kn">from</span> <span class="nn">multiprocessing</span> <span class="kn">import</span> <span class="n">Queue</span>
+
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">video_metadata_reader</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">video_compressor</span>
+<span class="kn">from</span> <span class="nn">.</span> <span class="kn">import</span> <span class="n">database</span> <span class="k">as</span> <span class="n">DB</span>
+<span class="kn">from</span> <span class="nn">.multi_processor</span> <span class="kn">import</span> <span class="n">MultiProcessor</span>
+
+
+<span class="n">TARGET_VIDEO_MAX_BITRATE</span> <span class="o">=</span> <span class="mf">2.5</span><span class="o">*</span><span class="p">(</span><span class="mi">10</span><span class="o">**</span><span class="mi">6</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="UserResults"><a class="viewcode-back" href="../../_autosummary/clapshot_server.video_ingesting.UserResults.html#clapshot_server.video_ingesting.UserResults">[docs]</a><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">UserResults</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Result message ready to be shown to users.&quot;&quot;&quot;</span>
+    <span class="n">success</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">orig_file</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">video_hash</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">msg</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">details</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">file_owner_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span></div>
+
+
+<div class="viewcode-block" id="IngestingArgs"><a class="viewcode-back" href="../../_autosummary/clapshot_server.video_ingesting.IngestingArgs.html#clapshot_server.video_ingesting.IngestingArgs">[docs]</a><span class="nd">@dataclass</span>
+<span class="k">class</span> <span class="nc">IngestingArgs</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Wrapper for incoming metadata or compression results.&quot;&quot;&quot;</span>
+    <span class="n">md</span><span class="p">:</span> <span class="n">video_metadata_reader</span><span class="o">.</span><span class="n">Results</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">cmpr</span><span class="p">:</span> <span class="n">video_compressor</span><span class="o">.</span><span class="n">Results</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">test_mock</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="VideoIngestingPool"><a class="viewcode-back" href="../../_autosummary/clapshot_server.video_ingesting.VideoIngestingPool.html#clapshot_server.video_ingesting.VideoIngestingPool">[docs]</a><span class="k">class</span> <span class="nc">VideoIngestingPool</span><span class="p">(</span><span class="n">MultiProcessor</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Orchestrates video ingestion process.</span>
+
+<span class="sd">    Receives video metadata and compression results,</span>
+<span class="sd">    and figures out what do with them.</span>
+
+<span class="sd">    Stores DB entries, moves files, determines if videos need to be recompressed,</span>
+<span class="sd">    and cleans up after errors</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+            <span class="n">inq</span><span class="p">:</span> <span class="n">Queue</span><span class="p">,</span>
+            <span class="n">outq</span><span class="p">:</span> <span class="n">Queue</span><span class="p">,</span>
+            <span class="n">compress_q</span><span class="p">:</span> <span class="n">Queue</span><span class="p">,</span>
+            <span class="n">db_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">videos_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">reject_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+            <span class="n">max_workers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">):</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">inq</span><span class="p">,</span> <span class="s2">&quot;ingest&quot;</span><span class="p">,</span> <span class="n">max_workers</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">outq</span> <span class="o">=</span> <span class="n">outq</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">compress_q</span> <span class="o">=</span> <span class="n">compress_q</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">db_file</span> <span class="o">=</span> <span class="n">db_file</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">videos_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">videos_dir</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">reject_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">reject_dir</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="VideoIngestingPool.do_task"><a class="viewcode-back" href="../../_autosummary/clapshot_server.video_ingesting.VideoIngestingPool.html#clapshot_server.video_ingesting.VideoIngestingPool.do_task">[docs]</a>    <span class="k">def</span> <span class="nf">do_task</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="p">:</span> <span class="n">IngestingArgs</span><span class="p">,</span> <span class="n">logging_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="n">args</span><span class="o">.</span><span class="n">md</span> <span class="ow">or</span> <span class="n">args</span><span class="o">.</span><span class="n">cmpr</span>
+        <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">md</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">outq</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_recv_metadata</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">md</span><span class="p">,</span> <span class="n">logging_name</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">test_mock</span><span class="p">))</span>
+        <span class="k">elif</span> <span class="n">args</span><span class="o">.</span><span class="n">cmpr</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">on_recv_compressor_results</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">cmpr</span><span class="p">,</span> <span class="n">logging_name</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="VideoIngestingPool.on_recv_metadata"><a class="viewcode-back" href="../../_autosummary/clapshot_server.video_ingesting.VideoIngestingPool.html#clapshot_server.video_ingesting.VideoIngestingPool.on_recv_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">on_recv_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">md</span><span class="p">:</span> <span class="n">video_metadata_reader</span><span class="o">.</span><span class="n">Results</span><span class="p">,</span> <span class="n">logging_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">test_mock</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UserResults</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process a single video:</span>
+<span class="sd">            - Calculate video hash</span>
+<span class="sd">            - Create directory for video</span>
+<span class="sd">            - Move original video into directory</span>
+<span class="sd">            - Write metadata to database</span>
+<span class="sd">            - Schedule recompressing if needed</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">src</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">src_file</span><span class="p">)</span>
+        <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="n">logging_name</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Got metadata for &#39;</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">src</span><span class="p">)</span><span class="si">}</span><span class="s2">&#39;...&quot;</span><span class="p">)</span>
+        <span class="n">video_hash</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+        <span class="n">test_mock</span> <span class="o">=</span> <span class="n">test_mock</span> <span class="ow">or</span> <span class="p">{}</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># If metadata read failed, just clean up and return error</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">md</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">md</span><span class="o">.</span><span class="n">msg</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">md</span><span class="o">.</span><span class="n">details</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="k">assert</span> <span class="n">md</span><span class="o">.</span><span class="n">user_id</span>
+            <span class="k">assert</span> <span class="n">src</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;File &#39;</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">src</span><span class="p">)</span><span class="si">}</span><span class="s2">&#39; does not exist.&quot;</span>
+            
+            <span class="n">video_hash</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calc_video_hash</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">md</span><span class="o">.</span><span class="n">user_id</span><span class="p">)</span>
+            <span class="n">new_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">videos_dir</span> <span class="o">/</span> <span class="n">video_hash</span>
+
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Video_hash for &#39;</span><span class="si">{</span><span class="n">src</span><span class="si">}</span><span class="s2">&#39; = &#39;</span><span class="si">{</span><span class="n">video_hash</span><span class="si">}</span><span class="s2">. New dir: &#39;</span><span class="si">{</span><span class="n">new_dir</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">test_mock</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;preexisting_dir&#39;</span><span class="p">):</span>
+                <span class="n">new_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+            <span class="c1"># Check if video is already processed</span>
+            <span class="k">if</span> <span class="n">new_dir</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="n">prev_owner</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_db_video_owner</span><span class="p">(</span><span class="n">video_hash</span><span class="p">,</span> <span class="n">logger</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">prev_owner</span><span class="p">:</span>
+                    <span class="k">assert</span> <span class="n">prev_owner</span> <span class="o">==</span> <span class="n">md</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span> \
+                        <span class="sa">f</span><span class="s2">&quot;Hash collision?!? Video &#39;</span><span class="si">{</span><span class="n">video_hash</span><span class="si">}</span><span class="s2">&#39; already owned by &#39;</span><span class="si">{</span><span class="n">prev_owner</span><span class="si">}</span><span class="s2">&#39;.&quot;</span>
+
+                    <span class="c1"># User is trying to upload the same video again. This is ok.</span>
+                    <span class="n">src</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
+                    <span class="k">return</span> <span class="n">UserResults</span><span class="p">(</span>
+                        <span class="n">success</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                        <span class="n">msg</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;You already have this video.&quot;</span><span class="p">,</span>
+                        <span class="n">orig_file</span><span class="o">=</span><span class="n">md</span><span class="o">.</span><span class="n">src_file</span><span class="p">,</span>
+                        <span class="n">file_owner_id</span><span class="o">=</span><span class="n">md</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span>
+                        <span class="n">video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dir for &#39;</span><span class="si">{</span><span class="n">video_hash</span><span class="si">}</span><span class="s2">&#39; exists, but not in DB. Deleting old and reprocessing.&quot;</span><span class="p">)</span>
+                    <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">new_dir</span><span class="p">)</span>
+
+            <span class="n">src</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_create_videodir_and_move_orig</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">new_dir</span><span class="p">,</span> <span class="n">logger</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_write_metadata_to_db</span><span class="p">(</span><span class="n">md</span><span class="p">,</span> <span class="n">video_hash</span><span class="p">,</span> <span class="n">logger</span><span class="p">)</span>
+
+
+            <span class="c1"># Schedule recompression if needed</span>
+            <span class="n">new_bitrate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calc_recompression_bitrate</span><span class="p">(</span><span class="n">md</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">new_bitrate</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">compress_q</span><span class="o">.</span><span class="n">put</span><span class="p">(</span> <span class="n">video_compressor</span><span class="o">.</span><span class="n">Args</span><span class="p">(</span>
+                        <span class="n">src</span> <span class="o">=</span> <span class="n">src</span><span class="p">,</span>
+                        <span class="n">dst</span> <span class="o">=</span> <span class="n">new_dir</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;temp_</span><span class="si">{</span><span class="n">uuid4</span><span class="p">()</span><span class="si">}</span><span class="s1">.mp4&#39;</span><span class="p">,</span>
+                        <span class="n">video_bitrate</span> <span class="o">=</span> <span class="n">new_bitrate</span><span class="p">,</span>
+                        <span class="n">video_hash</span> <span class="o">=</span> <span class="n">video_hash</span><span class="p">,</span>
+                        <span class="n">user_id</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">user_id</span>
+                    <span class="p">))</span>
+
+            <span class="k">return</span> <span class="n">UserResults</span><span class="p">(</span>
+                <span class="n">success</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+                <span class="n">orig_file</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">src_file</span><span class="p">,</span>
+                <span class="n">file_owner_id</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span>
+                <span class="n">video_hash</span> <span class="o">=</span> <span class="n">video_hash</span><span class="p">,</span>
+                <span class="n">msg</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Video added. &quot;</span> <span class="o">+</span> <span class="p">(</span>
+                    <span class="s2">&quot;Transcoding it...&quot;</span> <span class="k">if</span> <span class="n">new_bitrate</span> 
+                    <span class="k">else</span> <span class="s2">&quot;Original codec ok.&quot;</span><span class="p">))</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error processing &#39;</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">src</span><span class="p">)</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Try to clean up</span>
+            <span class="n">cleanup_err</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_cleanup_and_move_to_rejected</span><span class="p">(</span>
+                    <span class="n">orig_src</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="n">src</span><span class="p">),</span>
+                    <span class="n">video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">,</span>
+                    <span class="n">videos_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">videos_dir</span><span class="p">),</span>
+                    <span class="n">reject_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">reject_dir</span><span class="p">))</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e2</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Cleanup error for &#39;</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">src</span><span class="p">)</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">e2</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">cleanup_err</span> <span class="o">=</span> <span class="n">e2</span>
+
+            <span class="c1"># tb = traceback.format_exception(type(e), e, e.__traceback__)</span>
+            <span class="n">tb</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+
+            <span class="k">return</span> <span class="n">UserResults</span><span class="p">(</span>
+                <span class="n">orig_file</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">src</span><span class="p">),</span>
+                <span class="n">file_owner_id</span><span class="o">=</span><span class="n">md</span><span class="o">.</span><span class="n">user_id</span> <span class="ow">or</span> <span class="s1">&#39;&#39;</span><span class="p">,</span>
+                <span class="n">video_hash</span><span class="o">=</span><span class="n">video_hash</span><span class="p">,</span>
+                <span class="n">success</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">msg</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Video ingesting failed.&quot;</span> <span class="o">+</span> <span class="p">(</span><span class="s2">&quot; Cleanup failed also.&quot;</span> <span class="k">if</span> <span class="n">cleanup_err</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">),</span>
+                <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">tb</span><span class="p">)</span> <span class="o">+</span> <span class="p">((</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">--- cleanup ---</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">cleanup_err</span><span class="p">))</span> <span class="k">if</span> <span class="n">cleanup_err</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="VideoIngestingPool.on_recv_compressor_results"><a class="viewcode-back" href="../../_autosummary/clapshot_server.video_ingesting.VideoIngestingPool.html#clapshot_server.video_ingesting.VideoIngestingPool.on_recv_compressor_results">[docs]</a>    <span class="k">def</span> <span class="nf">on_recv_compressor_results</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c</span><span class="p">:</span> <span class="n">video_compressor</span><span class="o">.</span><span class="n">Results</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Handle compression results.</span>
+<span class="sd">        Switches the original file with the compressed one, stores logs and updates DB.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">def</span> <span class="nf">_post_results</span><span class="p">(</span><span class="n">success</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">msg</span><span class="p">:</span> <span class="nb">str</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">details</span><span class="p">:</span> <span class="nb">str</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">outq</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">UserResults</span><span class="p">(</span>
+                <span class="n">success</span> <span class="o">=</span> <span class="n">success</span><span class="p">,</span>
+                <span class="n">orig_file</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">src_file</span><span class="p">,</span>
+                <span class="n">video_hash</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">video_hash</span><span class="p">,</span>
+                <span class="n">msg</span> <span class="o">=</span> <span class="n">msg</span><span class="p">,</span>
+                <span class="n">details</span> <span class="o">=</span> <span class="n">details</span><span class="p">,</span>
+                <span class="n">file_owner_id</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">user_id</span><span class="p">))</span>
+        
+        <span class="k">if</span> <span class="n">c</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+            <span class="n">vid_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">videos_dir</span> <span class="o">/</span>  <span class="n">c</span><span class="o">.</span><span class="n">video_hash</span>
+
+            <span class="c1"># Store FFmpeg logs</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">vid_dir</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">vid_dir</span> <span class="o">/</span> <span class="s2">&quot;ffmpeg.stdout.txt&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">stdout</span><span class="p">)</span>
+                    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">vid_dir</span> <span class="o">/</span> <span class="s2">&quot;ffmpeg.stderr.txt&quot;</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">stderr</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">_post_results</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="s2">&quot;Failed to store ffmpeg logs.&quot;</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="c1"># Symlink compressed file</span>
+                <span class="n">dst_file</span> <span class="o">=</span> <span class="n">vid_dir</span> <span class="o">/</span> <span class="s2">&quot;video.mp4&quot;</span>
+                <span class="k">if</span> <span class="n">dst_file</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                    <span class="n">dst_file</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
+                <span class="n">dst_file</span><span class="o">.</span><span class="n">symlink_to</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">dst_file</span><span class="p">)</span>
+
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="c1"># Update DB</span>
+                    <span class="k">async</span> <span class="k">def</span> <span class="nf">mark_recompressed</span><span class="p">():</span>
+                        <span class="k">async</span> <span class="k">with</span> <span class="n">DB</span><span class="o">.</span><span class="n">Database</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">db_file</span><span class="p">),</span> <span class="n">logger</span><span class="p">)</span> <span class="k">as</span> <span class="n">db</span><span class="p">:</span>
+                            <span class="k">assert</span> <span class="ow">not</span> <span class="n">db</span><span class="o">.</span><span class="n">error_state</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;DB error state </span><span class="si">{</span><span class="n">db</span><span class="o">.</span><span class="n">error_state</span><span class="si">}</span><span class="s2">&quot;</span>
+                            <span class="k">await</span> <span class="n">db</span><span class="o">.</span><span class="n">set_video_recompressed</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">video_hash</span><span class="p">)</span>
+                    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">mark_recompressed</span><span class="p">())</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">_post_results</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="s2">&quot;Failed to mark video as recompressed.&quot;</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">_post_results</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="s2">&quot;Symlink to recompressed video failed.&quot;</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">))</span>
+
+        <span class="n">_post_results</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="n">c</span><span class="o">.</span><span class="n">msg</span><span class="p">,</span> <span class="n">details</span><span class="o">=</span><span class="n">c</span><span class="o">.</span><span class="n">details</span><span class="p">)</span></div>
+
+
+    <span class="c1"># -----------------------------</span>
+    <span class="c1"># Helpers</span>
+    <span class="c1"># -----------------------------</span>
+
+    <span class="k">def</span> <span class="nf">_calc_video_hash</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">user_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculate identifier (&quot;video_hash&quot;) for the submitted video,</span>
+<span class="sd">        based on filename, user_id, size and sample of the file contents.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">file_hash</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">((</span><span class="nb">str</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">user_id</span><span class="p">)</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">fn</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span><span class="p">))</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s1">&#39;utf-8&#39;</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="n">fn</span><span class="o">.</span><span class="n">lstat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;File &#39;</span><span class="si">{</span><span class="n">fn</span><span class="si">}</span><span class="s2">&#39; is empty.&quot;</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">file_hash</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="mi">32</span><span class="o">*</span><span class="mi">1024</span><span class="p">))</span>
+        <span class="nb">hash</span> <span class="o">=</span> <span class="n">file_hash</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="nb">hash</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">8</span>
+        <span class="k">return</span> <span class="nb">hash</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span>
+
+
+    <span class="k">def</span> <span class="nf">_create_videodir_and_move_orig</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">src</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">new_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create the new directory for the video, and move the original file into it.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Path to the original video in the new directory</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating dir &#39;</span><span class="si">{</span><span class="n">new_dir</span><span class="si">}</span><span class="s2">&#39;...&quot;</span><span class="p">)</span>
+        <span class="n">new_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">dir_for_orig</span> <span class="o">=</span> <span class="n">new_dir</span> <span class="o">/</span> <span class="s2">&quot;orig&quot;</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="p">(</span><span class="n">dir_for_orig</span> <span class="o">/</span> <span class="n">src</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;File &#39;</span><span class="si">{</span><span class="n">src</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; already exists in &#39;</span><span class="si">{</span><span class="n">dir_for_orig</span><span class="si">}</span><span class="s2">&#39;. Aborting.&quot;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Creating dir &#39;</span><span class="si">{</span><span class="n">dir_for_orig</span><span class="si">}</span><span class="s2">&#39;...&quot;</span><span class="p">)</span>
+        <span class="n">dir_for_orig</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Moving &#39;</span><span class="si">{</span><span class="n">src</span><span class="si">}</span><span class="s2">&#39; to &#39;</span><span class="si">{</span><span class="n">dir_for_orig</span><span class="si">}</span><span class="s2">&#39;...&quot;</span><span class="p">)</span>
+        <span class="n">shutil</span><span class="o">.</span><span class="n">move</span><span class="p">(</span><span class="n">src</span><span class="p">,</span> <span class="n">dir_for_orig</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="p">(</span><span class="n">dir_for_orig</span> <span class="o">/</span> <span class="n">src</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;Failed to move &#39;</span><span class="si">{</span><span class="n">src</span><span class="si">}</span><span class="s2">&#39; to </span><span class="si">{</span><span class="n">dir_for_orig</span><span class="si">}</span><span class="s2">. Aborting.&quot;</span>
+        <span class="k">return</span> <span class="n">dir_for_orig</span> <span class="o">/</span> <span class="n">src</span><span class="o">.</span><span class="n">name</span>
+
+
+    <span class="k">def</span> <span class="nf">_get_db_video_owner</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">video_hash</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get the user_id of the video as recorded in the database.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">async</span> <span class="k">def</span> <span class="nf">lookup_existing</span><span class="p">():</span>
+            <span class="k">async</span> <span class="k">with</span> <span class="n">DB</span><span class="o">.</span><span class="n">Database</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">db_file</span><span class="p">),</span> <span class="n">logger</span><span class="p">)</span> <span class="k">as</span> <span class="n">db</span><span class="p">:</span>
+                <span class="k">return</span> <span class="k">await</span> <span class="n">db</span><span class="o">.</span><span class="n">get_video</span><span class="p">(</span><span class="n">video_hash</span><span class="p">)</span>
+        <span class="n">old_vid</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">lookup_existing</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">old_vid</span><span class="o">.</span><span class="n">added_by_userid</span> <span class="k">if</span> <span class="n">old_vid</span> <span class="k">else</span> <span class="kc">None</span>
+
+
+    <span class="k">def</span> <span class="nf">_write_metadata_to_db</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">md</span><span class="p">:</span> <span class="n">video_metadata_reader</span><span class="o">.</span><span class="n">Results</span><span class="p">,</span> <span class="n">video_hash</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">logger</span><span class="p">:</span> <span class="n">logging</span><span class="o">.</span><span class="n">Logger</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write the video metadata to the database.</span>
+<span class="sd">        Raises:</span>
+<span class="sd">            AssertionError: If the database write fails</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Writing metadata to database...&quot;</span><span class="p">)</span>
+            <span class="k">async</span> <span class="k">def</span> <span class="nf">add_video_to_db</span><span class="p">():</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Opening DB &#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">db_file</span><span class="si">}</span><span class="s2">&#39;...&quot;</span><span class="p">)</span>
+                <span class="k">async</span> <span class="k">with</span> <span class="n">DB</span><span class="o">.</span><span class="n">Database</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">db_file</span><span class="p">),</span> <span class="n">logger</span><span class="p">)</span> <span class="k">as</span> <span class="n">db</span><span class="p">:</span>
+                    <span class="k">assert</span> <span class="ow">not</span> <span class="n">db</span><span class="o">.</span><span class="n">error_state</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;DB error state </span><span class="si">{</span><span class="n">db</span><span class="o">.</span><span class="n">error_state</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;db.add_video ...&quot;</span><span class="p">)</span>
+                    <span class="k">await</span> <span class="n">db</span><span class="o">.</span><span class="n">add_video</span><span class="p">(</span><span class="n">DB</span><span class="o">.</span><span class="n">Video</span><span class="p">(</span>
+                        <span class="n">video_hash</span> <span class="o">=</span> <span class="n">video_hash</span><span class="p">,</span>
+                        <span class="n">added_by_userid</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span>
+                        <span class="n">added_by_username</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">user_id</span><span class="p">,</span>       <span class="c1"># TODO: get username from user id (wrap LDAP in some kind of abstraction)</span>
+                        <span class="n">orig_filename</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">src_file</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+                        <span class="n">total_frames</span> <span class="o">=</span> <span class="n">md</span><span class="o">.</span><span class="n">total_frames</span><span class="p">,</span>
+                        <span class="n">duration</span> <span class="o">=</span> <span class="n">Decimal</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">duration</span><span class="p">),</span>
+                        <span class="n">fps</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">fps</span><span class="p">),</span>
+                        <span class="n">raw_metadata_all</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">metadata_all</span><span class="p">)</span>
+                    <span class="p">))</span>
+            <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">add_video_to_db</span><span class="p">())</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Metadata wrote to DB.&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;DB error writing metadata: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+    <span class="k">def</span> <span class="nf">_calc_recompression_bitrate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">md</span><span class="p">:</span> <span class="n">video_metadata_reader</span><span class="o">.</span><span class="n">Results</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Determine if the video needs to be recompressed.</span>
+<span class="sd">        Bitrate and format are checked.</span>
+<span class="sd">        Return:</span>
+<span class="sd">            The bitrate to use for the recompression, or None if no recompression is needed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">new_bitrate</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">bitrate</span><span class="o">/</span><span class="mi">2</span><span class="p">),</span> <span class="nb">min</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">bitrate</span><span class="p">),</span> <span class="n">TARGET_VIDEO_MAX_BITRATE</span><span class="p">))</span>
+        <span class="n">already_fine</span> <span class="o">=</span> <span class="p">(</span><span class="n">new_bitrate</span> <span class="o">&gt;=</span> <span class="n">md</span><span class="o">.</span><span class="n">bitrate</span> <span class="ow">or</span> <span class="n">md</span><span class="o">.</span><span class="n">bitrate</span> <span class="o">&lt;=</span> <span class="mf">1.2</span><span class="o">*</span><span class="n">TARGET_VIDEO_MAX_BITRATE</span><span class="p">)</span> <span class="ow">and</span> \
+            <span class="n">md</span><span class="o">.</span><span class="n">orig_codec</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;h264&#39;</span><span class="p">,</span> <span class="s1">&#39;hevc&#39;</span><span class="p">,</span> <span class="s1">&#39;h265&#39;</span><span class="p">,</span> <span class="s1">&#39;avc&#39;</span><span class="p">)</span> <span class="ow">and</span> \
+            <span class="n">Path</span><span class="p">(</span><span class="n">md</span><span class="o">.</span><span class="n">src_file</span><span class="p">)</span><span class="o">.</span><span class="n">suffix</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;.mp4&#39;</span><span class="p">,</span> <span class="s1">&#39;.mkv&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">already_fine</span> <span class="k">else</span> <span class="n">new_bitrate</span>
+
+
+    <span class="k">def</span> <span class="nf">_cleanup_and_move_to_rejected</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+        <span class="n">orig_src</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">video_hash</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+        <span class="n">videos_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">reject_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Move the video to the rejected directory, and delete the video hash directory (if it exists).</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            orig_src:       Original source path</span>
+<span class="sd">            video_hash:     ID/hash of the video</span>
+<span class="sd">            videos_dir:     Directory for succesfully processed videos</span>
+<span class="sd">            reject_dir:     Directory for rejected videos</span>
+<span class="sd">        </span>
+<span class="sd">        Raises:</span>
+<span class="sd">            AssertionError: If cleanup fails</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">video_hash</span><span class="p">:</span>
+            <span class="n">hash_dir</span> <span class="o">=</span> <span class="n">videos_dir</span> <span class="o">/</span> <span class="n">video_hash</span>
+            <span class="k">if</span> <span class="n">hash_dir</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="n">file_to_move</span> <span class="o">=</span> <span class="n">hash_dir</span> <span class="o">/</span> <span class="s2">&quot;orig&quot;</span> <span class="o">/</span> <span class="n">orig_src</span><span class="o">.</span><span class="n">name</span>
+                <span class="n">move_to_dir</span> <span class="o">=</span> <span class="n">reject_dir</span> <span class="o">/</span> <span class="n">video_hash</span>
+                <span class="k">if</span> <span class="n">file_to_move</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                    <span class="n">move_to_dir</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="k">assert</span> <span class="ow">not</span> <span class="p">(</span><span class="n">move_to_dir</span> <span class="o">/</span> <span class="n">orig_src</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;File &#39;</span><span class="si">{</span><span class="n">orig_src</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; already exists in &#39;</span><span class="si">{</span><span class="n">move_to_dir</span><span class="si">}</span><span class="s2">&#39;. Aborting cleanup.&quot;</span>
+                    <span class="n">shutil</span><span class="o">.</span><span class="n">move</span><span class="p">(</span><span class="n">file_to_move</span><span class="p">,</span> <span class="n">move_to_dir</span><span class="p">)</span>
+                    <span class="k">assert</span> <span class="ow">not</span> <span class="n">file_to_move</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;Failed to move &#39;</span><span class="si">{</span><span class="n">file_to_move</span><span class="si">}</span><span class="s2">&#39; - still exists. Aborting cleanup.&quot;</span>
+                    <span class="k">assert</span> <span class="p">(</span><span class="n">move_to_dir</span> <span class="o">/</span> <span class="n">orig_src</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;DISASTER! File &#39;</span><span class="si">{</span><span class="n">file_to_move</span><span class="si">}</span><span class="s2">&#39; disappeared after moving it to &#39;</span><span class="si">{</span><span class="n">move_to_dir</span><span class="si">}</span><span class="s2">&#39;! Aborting cleanup.&quot;</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">file_to_move</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                    <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">hash_dir</span><span class="p">)</span>
+                    <span class="k">assert</span> <span class="ow">not</span> <span class="n">hash_dir</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;Failed to delete &#39;</span><span class="si">{</span><span class="n">hash_dir</span><span class="si">}</span><span class="s2">&#39; - still exists. Please delete manually.&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">orig_src</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+                <span class="k">assert</span> <span class="n">reject_dir</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">reject_dir</span><span class="o">.</span><span class="n">is_dir</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;Reject directory &#39;</span><span class="si">{</span><span class="n">reject_dir</span><span class="si">}</span><span class="s2">&#39; does not exist. Aborting cleanup.&quot;</span>
+                <span class="k">assert</span> <span class="ow">not</span> <span class="p">(</span><span class="n">reject_dir</span> <span class="o">/</span> <span class="n">orig_src</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;File &#39;</span><span class="si">{</span><span class="n">orig_src</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">&#39; already exists in &#39;</span><span class="si">{</span><span class="n">reject_dir</span><span class="si">}</span><span class="s2">&#39;. Aborting cleanup.&quot;</span>
+                <span class="n">shutil</span><span class="o">.</span><span class="n">move</span><span class="p">(</span><span class="n">orig_src</span><span class="p">,</span> <span class="n">reject_dir</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="ow">not</span> <span class="n">orig_src</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;Failed to move &#39;</span><span class="si">{</span><span class="n">orig_src</span><span class="si">}</span><span class="s2">&#39; into </span><span class="si">{</span><span class="n">reject_dir</span><span class="si">}</span><span class="s2">. Please move manually.&quot;</span>
+                <span class="k">assert</span> <span class="p">(</span><span class="n">reject_dir</span> <span class="o">/</span> <span class="n">orig_src</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">(),</span> <span class="sa">f</span><span class="s2">&quot;DISASTER! File &#39;</span><span class="si">{</span><span class="n">orig_src</span><span class="si">}</span><span class="s2">&#39; disappeared after moving it to &#39;</span><span class="si">{</span><span class="n">reject_dir</span><span class="si">}</span><span class="s2">&#39;! Please investigate.&quot;</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Jarno Elonen.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

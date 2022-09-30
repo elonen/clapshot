@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Introduction &mdash; Clapshot server  documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="_static/readthedocs-custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Installation" href="installation.html" />
+    <link rel="prev" title="Clapshot server documentation" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html" class="icon icon-home"> Clapshot server
+            <img src="_static/clapshot-logo.svg" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="#technology-overview">Technology overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli-commands.html">Command line interface</a></li>
+</ul>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="_autosummary/clapshot_server.html">clapshot_server</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Clapshot server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Introduction</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="introduction">
+<h1>Introduction<a class="headerlink" href="#introduction" title="Permalink to this heading">¶</a></h1>
+<p>The server has three main functions:</p>
+<blockquote>
+<div><ol class="arabic simple">
+<li><p><strong>API server</strong>, which listens to Socket.IO (websocket or HTTP long polling) connections
+from the web frontend and/or pushes messages when something happens.</p></li>
+<li><p><strong>Video file processing</strong>, which receives files, extracts metadata and transcodes if necessary.</p></li>
+<li><p><strong>Database</strong>, which stores video metadata, user comments etc.</p></li>
+</ol>
+</div></blockquote>
+<p>These are independent components and run in separate OS processes. Video processing forks into several
+subprocessing pools.</p>
+<p>They sub-processes currently communicate through internal multiprocessing queues, but those
+could be quite painlessly be replaced with something else (e.g. ZeroMQ, Redis or RabbitMQ) if
+distribution to multiple machines becomes necessary.</p>
+<p>The database is an SQLite3 file, which is stored in <code class="docutils literal notranslate"><span class="pre">data-dir</span></code> (see CLI arguments).
+Database migrations - when schema changes during version upgrades - can be done with the Alembic
+tool, that is wrapped (for convenience) as a separate command-line tool, <code class="docutils literal notranslate"><span class="pre">clapshot-alembic</span></code>.</p>
+<p>Data directory should be put on a large file system. It contains:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">incoming/</span></code>  - For incoming files (files can submitted by Samba or NFS).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">videos/</span></code>    - Directory where video files are stored after processing (in subdirectories).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rejected/</span></code>  - Directory where rejected files are moved to if processing fails. (This should also be shared to user via Samba/NFS.)</p></li>
+</ul>
+</div></blockquote>
+</section>
+<section id="technology-overview">
+<h1>Technology overview<a class="headerlink" href="#technology-overview" title="Permalink to this heading">¶</a></h1>
+<blockquote>
+<div><ul class="simple">
+<li><p>Python 3.9+ (with asyncio and multiprocessing)</p></li>
+<li><p>Pytest for testing</p></li>
+<li><p>SQLAlchemy for database access</p></li>
+<li><p>Socket.IO for communicating with client</p></li>
+<li><p>FFmpeg for video transcoding</p></li>
+<li><p>MediaInfo for video metadata extraction</p></li>
+<li><p>Alembic (with custom wrapper) for database migrations</p></li>
+<li><p>Sphinx for generating docs</p></li>
+<li><p>Docopt for CLI argument parsing</p></li>
+<li><p>Docker (optional) for tests and building</p></li>
+<li><p>Debian GNU/Linux for hosting (.deb packages are preferred deployment method). Clapshot server probably won’t work properly on Windows or MacOS.</p></li>
+<li><p>Samba and NFS for submitting files (optional)</p></li>
+<li><p>Nginx (in production), for</p>
+<ul>
+<li><p>authentication (Kerberos, HTTP auth, or anything)</p></li>
+<li><p>serving videos</p></li>
+<li><p>serving web client (HTML, JS, CSS)</p></li>
+<li><p>encrypting HTTP and Websocket traffic</p></li>
+<li><p>proxying to API server (which should only be exposed to localhost)</p></li>
+</ul>
+</li>
+</ul>
+</div></blockquote>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Clapshot server documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="installation.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Jarno Elonen.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

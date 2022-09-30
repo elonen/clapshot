@@ -1,0 +1,34 @@
+clapshot\_server.video\_metadata\_reader
+========================================
+
+.. automodule:: clapshot_server.video_metadata_reader
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: custom-class-template.rst
+      :nosignatures:
+   
+      Args
+      ReaderPool
+      Results
+   
+   
+
+   
+   
+   
+
+
+

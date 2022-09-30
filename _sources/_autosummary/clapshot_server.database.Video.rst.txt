@@ -1,0 +1,44 @@
+clapshot\_server.database.Video
+===============================
+
+.. currentmodule:: clapshot_server.database
+
+.. autoclass:: Video
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+      ~Video.to_dict
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~Video.added_by_userid
+      ~Video.added_by_username
+      ~Video.added_time
+      ~Video.comments
+      ~Video.duration
+      ~Video.fps
+      ~Video.id
+      ~Video.metadata
+      ~Video.orig_filename
+      ~Video.raw_metadata_all
+      ~Video.recompression_done
+      ~Video.registry
+      ~Video.total_frames
+      ~Video.video_hash
+   
+   

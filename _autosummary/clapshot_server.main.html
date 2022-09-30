@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>clapshot_server.main &mdash; Clapshot server  documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/readthedocs-custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="clapshot_server.main.main" href="clapshot_server.main.main.html" />
+    <link rel="prev" title="clapshot_server.incoming_monitor.monitor_incoming_folder_loop" href="clapshot_server.incoming_monitor.monitor_incoming_folder_loop.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> Clapshot server
+            <img src="../_static/clapshot-logo.svg" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../introduction.html#technology-overview">Technology overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-commands.html">Command line interface</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="clapshot_server.html">clapshot_server</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.alembic.html">clapshot_server.alembic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.api_server.html">clapshot_server.api_server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.database.html">clapshot_server.database</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.incoming_monitor.html">clapshot_server.incoming_monitor</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">clapshot_server.main</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="clapshot_server.main.main.html">clapshot_server.main.main</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.multi_processor.html">clapshot_server.multi_processor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.video_compressor.html">clapshot_server.video_compressor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.video_ingesting.html">clapshot_server.video_ingesting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.video_metadata_reader.html">clapshot_server.video_metadata_reader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.video_processing_pipeline.html">clapshot_server.video_processing_pipeline</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Clapshot server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="clapshot_server.html">clapshot_server</a> &raquo;</li>
+      <li>clapshot_server.main</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-clapshot_server.main">
+<span id="clapshot-server-main"></span><h1>clapshot_server.main<a class="headerlink" href="#module-clapshot_server.main" title="Permalink to this heading">¶</a></h1>
+<p>Entry point for the Clapshot server.</p>
+<p>This is a command line program that stays in the foreground,
+so background it with process control tools like systemd or supervisord.</p>
+<p class="rubric">Functions</p>
+<table class="autosummary longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="clapshot_server.main.main.html#clapshot_server.main.main" title="clapshot_server.main.main"><code class="xref py py-obj docutils literal notranslate"><span class="pre">main</span></code></a></p></td>
+<td><p>Clapshot server - backend of a video annotation tool</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="clapshot_server.incoming_monitor.monitor_incoming_folder_loop.html" class="btn btn-neutral float-left" title="clapshot_server.incoming_monitor.monitor_incoming_folder_loop" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="clapshot_server.main.main.html" class="btn btn-neutral float-right" title="clapshot_server.main.main" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Jarno Elonen.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,35 @@
+clapshot\_server.database
+=========================
+
+.. automodule:: clapshot_server.database
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+      :toctree:
+      :template: custom-class-template.rst
+      :nosignatures:
+   
+      Comment
+      Database
+      Message
+      Video
+   
+   
+
+   
+   
+   
+
+
+

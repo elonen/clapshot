@@ -1,0 +1,25 @@
+clapshot\_server.video\_processing\_pipeline.VideoProcessingPipeline
+====================================================================
+
+.. currentmodule:: clapshot_server.video_processing_pipeline
+
+.. autoclass:: VideoProcessingPipeline
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+      ~VideoProcessingPipeline.run_forever
+   
+   
+
+   
+   
+   

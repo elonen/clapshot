@@ -1,0 +1,32 @@
+clapshot\_server.video\_ingesting.IngestingArgs
+===============================================
+
+.. currentmodule:: clapshot_server.video_ingesting
+
+.. autoclass:: IngestingArgs
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~IngestingArgs.cmpr
+      ~IngestingArgs.md
+      ~IngestingArgs.test_mock
+   
+   

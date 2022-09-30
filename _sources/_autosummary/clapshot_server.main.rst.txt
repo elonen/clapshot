@@ -1,0 +1,31 @@
+clapshot\_server.main
+=====================
+
+.. automodule:: clapshot_server.main
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+      :toctree:
+      :nosignatures:
+   
+      main
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+

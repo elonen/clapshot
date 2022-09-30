@@ -1,0 +1,32 @@
+clapshot\_server.video\_metadata\_reader.Args
+=============================================
+
+.. currentmodule:: clapshot_server.video_metadata_reader
+
+.. autoclass:: Args
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~Args.test_mock
+      ~Args.user_id
+      ~Args.src
+   
+   

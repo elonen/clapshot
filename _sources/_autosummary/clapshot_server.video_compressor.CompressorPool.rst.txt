@@ -1,0 +1,27 @@
+clapshot\_server.video\_compressor.CompressorPool
+=================================================
+
+.. currentmodule:: clapshot_server.video_compressor
+
+.. autoclass:: CompressorPool
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+      ~CompressorPool.compress
+      ~CompressorPool.do_task
+      ~CompressorPool.run_forever
+   
+   
+
+   
+   
+   

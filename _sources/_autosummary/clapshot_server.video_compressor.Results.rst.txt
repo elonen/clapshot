@@ -1,0 +1,38 @@
+clapshot\_server.video\_compressor.Results
+==========================================
+
+.. currentmodule:: clapshot_server.video_compressor
+
+.. autoclass:: Results
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~Results.details
+      ~Results.msg
+      ~Results.stderr
+      ~Results.stdout
+      ~Results.user_id
+      ~Results.src_file
+      ~Results.dst_file
+      ~Results.video_hash
+      ~Results.success
+   
+   

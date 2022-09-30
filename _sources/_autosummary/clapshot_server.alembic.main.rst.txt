@@ -1,0 +1,6 @@
+clapshot\_server.alembic.main
+=============================
+
+.. currentmodule:: clapshot_server.alembic
+
+.. autofunction:: main

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>clapshot_server.database.Database &mdash; Clapshot server  documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/readthedocs-custom.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="clapshot_server.database.Message" href="clapshot_server.database.Message.html" />
+    <link rel="prev" title="clapshot_server.database.Comment" href="clapshot_server.database.Comment.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> Clapshot server
+            <img src="../_static/clapshot-logo.svg" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../introduction.html">Introduction</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../introduction.html#technology-overview">Technology overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli-commands.html">Command line interface</a></li>
+</ul>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="clapshot_server.html">clapshot_server</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.alembic.html">clapshot_server.alembic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.api_server.html">clapshot_server.api_server</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="clapshot_server.database.html">clapshot_server.database</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="clapshot_server.database.Comment.html">clapshot_server.database.Comment</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">clapshot_server.database.Database</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#clapshot_server.database.Database"><code class="docutils literal notranslate"><span class="pre">Database</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="clapshot_server.database.Message.html">clapshot_server.database.Message</a></li>
+<li class="toctree-l3"><a class="reference internal" href="clapshot_server.database.Video.html">clapshot_server.database.Video</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.incoming_monitor.html">clapshot_server.incoming_monitor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.main.html">clapshot_server.main</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.multi_processor.html">clapshot_server.multi_processor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.video_compressor.html">clapshot_server.video_compressor</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.video_ingesting.html">clapshot_server.video_ingesting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.video_metadata_reader.html">clapshot_server.video_metadata_reader</a></li>
+<li class="toctree-l2"><a class="reference internal" href="clapshot_server.video_processing_pipeline.html">clapshot_server.video_processing_pipeline</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Clapshot server</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="clapshot_server.html">clapshot_server</a> &raquo;</li>
+          <li><a href="clapshot_server.database.html">clapshot_server.database</a> &raquo;</li>
+      <li>clapshot_server.database.Database</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="clapshot-server-database-database">
+<h1>clapshot_server.database.Database<a class="headerlink" href="#clapshot-server-database-database" title="Permalink to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="clapshot_server.database.Database">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Database</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">db_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Wrapper for DB connection and queries.
+Abstracts away the SQLAlchemy ORM from the rest of the code.</p>
+<p class="rubric">Methods</p>
+<table class="autosummary longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#clapshot_server.database.Database.add_comment" title="clapshot_server.database.Database.add_comment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_comment</span></code></a></p></td>
+<td><p>Add a new comment on a video.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#clapshot_server.database.Database.add_message" title="clapshot_server.database.Database.add_message"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_message</span></code></a></p></td>
+<td><p>Add a new message to the database.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#clapshot_server.database.Database.add_video" title="clapshot_server.database.Database.add_video"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_video</span></code></a></p></td>
+<td><p>Add a new video to the database.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#clapshot_server.database.Database.del_comment" title="clapshot_server.database.Database.del_comment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">del_comment</span></code></a></p></td>
+<td><p>Delete a comment from the database.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#clapshot_server.database.Database.del_message" title="clapshot_server.database.Database.del_message"><code class="xref py py-obj docutils literal notranslate"><span class="pre">del_message</span></code></a></p></td>
+<td><p>Delete a message from the database.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#clapshot_server.database.Database.del_video_and_comments" title="clapshot_server.database.Database.del_video_and_comments"><code class="xref py py-obj docutils literal notranslate"><span class="pre">del_video_and_comments</span></code></a></p></td>
+<td><p>Delete a video and all its comments from the database.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#clapshot_server.database.Database.edit_comment" title="clapshot_server.database.Database.edit_comment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">edit_comment</span></code></a></p></td>
+<td><p>Edit a comment (change text).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#clapshot_server.database.Database.get_all_user_videos" title="clapshot_server.database.Database.get_all_user_videos"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_all_user_videos</span></code></a></p></td>
+<td><p>Get all videos for a user.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#clapshot_server.database.Database.get_comment" title="clapshot_server.database.Database.get_comment"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_comment</span></code></a></p></td>
+<td><p>Get a comment from the database.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#clapshot_server.database.Database.get_message" title="clapshot_server.database.Database.get_message"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_message</span></code></a></p></td>
+<td><p>Get a message from the database.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#clapshot_server.database.Database.get_user_messages" title="clapshot_server.database.Database.get_user_messages"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_user_messages</span></code></a></p></td>
+<td><p>Get all messages for a user.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#clapshot_server.database.Database.get_video" title="clapshot_server.database.Database.get_video"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_video</span></code></a></p></td>
+<td><p>Get a video from the database.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#clapshot_server.database.Database.get_video_comments" title="clapshot_server.database.Database.get_video_comments"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_video_comments</span></code></a></p></td>
+<td><p>Get all comments for a video.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#clapshot_server.database.Database.set_message_seen" title="clapshot_server.database.Database.set_message_seen"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_message_seen</span></code></a></p></td>
+<td><p>Set the seen status of a message.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#clapshot_server.database.Database.set_video_recompressed" title="clapshot_server.database.Database.set_video_recompressed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_video_recompressed</span></code></a></p></td>
+<td><p>Set the recompressed flag for a video.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.add_comment">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">add_comment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">comment</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.add_comment"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.add_comment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a new comment on a video.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>comment</strong> (<a class="reference internal" href="clapshot_server.database.Comment.html#clapshot_server.database.Comment" title="clapshot_server.database.Comment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Comment</span></code></a>) – Comment object</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>ID of the new comment</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>sql.Integer</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.add_message">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">add_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.add_message"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.add_message" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a new message to the database.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>msg</strong> (<a class="reference internal" href="clapshot_server.database.Message.html#clapshot_server.database.Message" title="clapshot_server.database.Message"><code class="xref py py-class docutils literal notranslate"><span class="pre">Message</span></code></a>) – Message object</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Message object, with ID and timestamp set</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="clapshot_server.database.Message.html#clapshot_server.database.Message" title="clapshot_server.database.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.add_video">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">add_video</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">video</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.add_video"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.add_video" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a new video to the database.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>video</strong> (<a class="reference internal" href="clapshot_server.database.Video.html#clapshot_server.database.Video" title="clapshot_server.database.Video"><code class="xref py py-class docutils literal notranslate"><span class="pre">Video</span></code></a>) – Video object</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>ID of the new video</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>sql.Integer</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.del_comment">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">del_comment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">comment_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.del_comment"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.del_comment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete a comment from the database.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>comment_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>) – ID of the comment</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.10)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.del_message">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">del_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.del_message"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.del_message" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete a message from the database.
+<strong>Note</strong>: This does not check for, nor cascade to, possible replies to the message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>msg_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>) – ID of the message</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.10)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.del_video_and_comments">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">del_video_and_comments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">video_hash</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.del_video_and_comments"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.del_video_and_comments" title="Permalink to this definition">¶</a></dt>
+<dd><p>Delete a video and all its comments from the database.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>video_hash</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>) – Hash (unique identifier) of the video</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Video object</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="clapshot_server.database.Video.html#clapshot_server.database.Video" title="clapshot_server.database.Video">Video</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.edit_comment">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">edit_comment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">comment_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_comment</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.edit_comment"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.edit_comment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Edit a comment (change text).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>comment_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>) – ID of the comment</p></li>
+<li><p><strong>new_comment</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>) – New text of the comment</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.10)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.get_all_user_videos">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_all_user_videos</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.get_all_user_videos"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.get_all_user_videos" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get all videos for a user.
+<strong>Note</strong>: Return value cannot be an iterator because DB queries are short-lived.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>user_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>) – User ID</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>List of Video objects</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.10)">list</a>[<a class="reference internal" href="clapshot_server.database.Video.html#clapshot_server.database.Video" title="clapshot_server.database.Video">Video</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.get_comment">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_comment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">comment_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.get_comment"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.get_comment" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a comment from the database.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>comment_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>) – ID of the comment</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Comment object</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="clapshot_server.database.Comment.html#clapshot_server.database.Comment" title="clapshot_server.database.Comment">Comment</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.get_message">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_message</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.get_message"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.get_message" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a message from the database.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>msg_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>) – ID of the message</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Message object</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="clapshot_server.database.Message.html#clapshot_server.database.Message" title="clapshot_server.database.Message">Message</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.get_user_messages">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_user_messages</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">user_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.get_user_messages"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.get_user_messages" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get all messages for a user.
+<strong>Note</strong>: Return value cannot be an iterator because DB queries are short-lived.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>user_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>) – User ID</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>List of Message objects</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.10)">list</a>[<a class="reference internal" href="clapshot_server.database.Message.html#clapshot_server.database.Message" title="clapshot_server.database.Message">Message</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.get_video">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_video</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">video_hash</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.get_video"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.get_video" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get a video from the database.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>video_hash</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>) – Hash (unique identifier) of the video</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Video object</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="clapshot_server.database.Video.html#clapshot_server.database.Video" title="clapshot_server.database.Video">Video</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.get_video_comments">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_video_comments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">video_hash</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.get_video_comments"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.get_video_comments" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get all comments for a video.
+<strong>Note</strong>: Return value cannot be an iterator because DB queries are short-lived.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>video_hash</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>) – Hash (unique identifier) of the video</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>List of Comment objects</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.10)">list</a>[<a class="reference internal" href="clapshot_server.database.Comment.html#clapshot_server.database.Comment" title="clapshot_server.database.Comment">Comment</a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.set_message_seen">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_message_seen</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msg_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_status</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.set_message_seen"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.set_message_seen" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the seen status of a message.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>msg_id</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a>) – ID of the message</p></li>
+<li><p><strong>new_status</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a>) – New status</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.10)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="clapshot_server.database.Database.set_video_recompressed">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set_video_recompressed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">video_hash</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/clapshot_server/database.html#Database.set_video_recompressed"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#clapshot_server.database.Database.set_video_recompressed" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set the recompressed flag for a video.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>video_hash</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>) – Hash (unique identifier) of the video</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="clapshot_server.database.Comment.html" class="btn btn-neutral float-left" title="clapshot_server.database.Comment" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="clapshot_server.database.Message.html" class="btn btn-neutral float-right" title="clapshot_server.database.Message" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Jarno Elonen.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

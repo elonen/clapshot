@@ -1,0 +1,28 @@
+clapshot\_server.video\_ingesting.VideoIngestingPool
+====================================================
+
+.. currentmodule:: clapshot_server.video_ingesting
+
+.. autoclass:: VideoIngestingPool
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+      ~VideoIngestingPool.do_task
+      ~VideoIngestingPool.on_recv_compressor_results
+      ~VideoIngestingPool.on_recv_metadata
+      ~VideoIngestingPool.run_forever
+   
+   
+
+   
+   
+   

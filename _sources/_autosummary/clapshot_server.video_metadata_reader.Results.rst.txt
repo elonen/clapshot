@@ -1,0 +1,40 @@
+clapshot\_server.video\_metadata\_reader.Results
+================================================
+
+.. currentmodule:: clapshot_server.video_metadata_reader
+
+.. autoclass:: Results
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~Results.bitrate
+      ~Results.details
+      ~Results.duration
+      ~Results.fps
+      ~Results.metadata_all
+      ~Results.msg
+      ~Results.orig_codec
+      ~Results.src_file
+      ~Results.total_frames
+      ~Results.user_id
+      ~Results.success
+   
+   

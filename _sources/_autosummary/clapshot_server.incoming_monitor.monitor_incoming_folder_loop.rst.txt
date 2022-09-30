@@ -1,0 +1,6 @@
+clapshot\_server.incoming\_monitor.monitor\_incoming\_folder\_loop
+==================================================================
+
+.. currentmodule:: clapshot_server.incoming_monitor
+
+.. autofunction:: monitor_incoming_folder_loop

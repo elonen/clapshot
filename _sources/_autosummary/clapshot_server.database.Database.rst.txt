@@ -1,0 +1,39 @@
+clapshot\_server.database.Database
+==================================
+
+.. currentmodule:: clapshot_server.database
+
+.. autoclass:: Database
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+      ~Database.add_comment
+      ~Database.add_message
+      ~Database.add_video
+      ~Database.del_comment
+      ~Database.del_message
+      ~Database.del_video_and_comments
+      ~Database.edit_comment
+      ~Database.get_all_user_videos
+      ~Database.get_comment
+      ~Database.get_message
+      ~Database.get_user_messages
+      ~Database.get_video
+      ~Database.get_video_comments
+      ~Database.set_message_seen
+      ~Database.set_video_recompressed
+   
+   
+
+   
+   
+   

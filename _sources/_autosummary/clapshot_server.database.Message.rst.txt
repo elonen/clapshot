@@ -1,0 +1,41 @@
+clapshot\_server.database.Message
+=================================
+
+.. currentmodule:: clapshot_server.database
+
+.. autoclass:: Message
+   :members:
+   :show-inheritance:
+   :inherited-members:
+   :special-members: __call__, __add__, __mul__
+
+   
+   
+   .. rubric:: Methods
+
+   .. autosummary::
+      :nosignatures:
+   
+      ~Message.to_dict
+   
+   
+
+   
+   
+   .. rubric:: Attributes
+
+   .. autosummary::
+   
+      ~Message.created
+      ~Message.details
+      ~Message.event_name
+      ~Message.id
+      ~Message.message
+      ~Message.metadata
+      ~Message.ref_comment_id
+      ~Message.ref_video_hash
+      ~Message.registry
+      ~Message.seen
+      ~Message.user_id
+   
+   
