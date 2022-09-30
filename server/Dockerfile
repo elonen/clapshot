@@ -2,21 +2,21 @@ FROM python:3.9-slim
 
 
 # Install system packages
-RUN apt-get -qy update
-RUN apt-get -qy install make
-RUN apt-get -qy install ffmpeg
-RUN apt-get -qy install python3-pymediainfo
+RUN apt-get -qy update >/dev/null
+RUN apt-get -qy install make >/dev/null
+RUN apt-get -qy install ffmpeg >/dev/null
+RUN apt-get -qy install python3-pymediainfo >/dev/null
 
 # ...for build deb
-RUN apt-get -qy install build-essential debhelper devscripts equivs
-RUN apt-get -qy install python3-venv python3-dev python-dev dh-virtualenv python3-setuptools libffi-dev
+RUN apt-get -qy install build-essential debhelper devscripts equivs >/dev/null
+RUN apt-get -qy install python3-venv python3-dev python-dev dh-virtualenv python3-setuptools libffi-dev >/dev/null
 
 # Version of sqlite3 that support ALTER TABLE DROP column
 RUN echo 'deb http://ftp.debian.org/debian bookworm main' >> /etc/apt/sources.list.d/bookworm.list
-RUN apt-get -qy update
-RUN apt-get -qy install -t bookworm sqlite3
+RUN apt-get -qy update >/dev/null
+RUN apt-get -qy install -t bookworm sqlite3 >/dev/null
 RUN rm /etc/apt/sources.list.d/bookworm.list
-RUN apt-get -qy update
+RUN apt-get -qy update >/dev/null
 
 # Create regular user
 

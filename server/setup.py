@@ -23,10 +23,11 @@ setup(
     version="0.2.2",
     author="Jarno Elonen",
     author_email="elonen@iki.fi",
-    description="Backend server for Clapshot",
+    description="Backend server for Clapshot video review tool",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/elonen/clapshot",
+    license="GPLv3+",
     packages=setuptools.find_packages() + [
         'clapshot_server',
         'clapshot_server.sqlite-migrations',
@@ -35,7 +36,7 @@ setup(
     include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.9',

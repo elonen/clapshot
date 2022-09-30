@@ -1,11 +1,11 @@
 FROM node:18.9.0-slim
 
 # Install system packages
-RUN apt-get -qy update
-RUN apt-get -qy install make
+RUN apt-get -qy update >/dev/null
+RUN apt-get -qy install make >/dev/null
 
 ARG TARGET=dev
-RUN if [ "$TARGET" = "deb" ]; then apt-get -qy install make debhelper devscripts; fi
+RUN if [ "$TARGET" = "deb" ]; then apt-get -qy install make debhelper devscripts; fi >/dev/null
 
 # Create regular user
 

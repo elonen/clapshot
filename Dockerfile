@@ -3,18 +3,18 @@ FROM debian:bullseye-slim
 # Install system packages
 RUN apt-get -qy update
 
-RUN apt-get -qy install python3.9 python3-venv
-RUN apt-get -qy install ffmpeg
-RUN apt-get -qy install python3-pymediainfo
-RUN apt-get -qy install nginx
-RUN apt-get -qy install acl sudo
+RUN apt-get -qy install python3.9 python3-venv >/dev/null
+RUN apt-get -qy install ffmpeg >/dev/null
+RUN apt-get -qy install python3-pymediainfo >/dev/null
+RUN apt-get -qy install nginx >/dev/null
+RUN apt-get -qy install acl sudo >/dev/null
 
 # Version of sqlite3 that support ALTER TABLE DROP column
 RUN echo 'deb http://ftp.debian.org/debian bookworm main' >> /etc/apt/sources.list.d/bookworm.list
-RUN apt-get -qy update
-RUN apt-get -qy install -t bookworm sqlite3
+RUN apt-get -qy update >/dev/null
+RUN apt-get -qy install -t bookworm sqlite3 >/dev/null
 RUN rm /etc/apt/sources.list.d/bookworm.list
-RUN apt-get -qy update
+RUN apt-get -qy update >/dev/null
 
 
 # Add regular user (to match local user ID)

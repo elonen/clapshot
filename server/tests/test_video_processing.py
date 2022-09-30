@@ -75,7 +75,7 @@ def test_recompress_ok(temp_dir):
 
         with multiprocessing.Manager() as mgt:
             inq, outq = mgt.Queue(), mgt.Queue()
-            res = video_compressor.CompressorPool(inq, outq, max_workers=1).compress(
+            res = video_compressor.CompressorPool(inq, outq, max_workers=2).compress(
                 video_compressor.Args(src, dst_file, 1*1024**2, 'HASH123'), '')
             assert res.success
             assert str(Path(res.dst_file).absolute) == str(Path(dst_file).absolute)
@@ -240,7 +240,7 @@ def _run_video_pipeline(db_file, dst_dir, mgt, stop_test: Callable):
     p.start()
     try:
         all_res = []
-        for x in range(10):
+        for x in range(90):
             print(f"----- waiting user results round {x} -----")
             res = _wait_get(vpp.res_to_user, 1.0)
             if res:
@@ -352,7 +352,7 @@ def test_video_pipeline_reupload_ok(temp_dir):
             # Reupload as same user
             shutil.copy(src_lbr, dst_dir/"incoming")
             all_res = _run_video_pipeline(db_file, dst_dir, mgt,
-                lambda res: 'video added' in str(res).lower())
+                lambda res: 'already' in str(res).lower())
 
             ok_res = [r for r in all_res if r.success]
             assert ok_res
