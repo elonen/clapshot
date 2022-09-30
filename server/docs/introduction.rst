@@ -24,6 +24,7 @@ Data directory should be put on a large file system. It contains:
  * ``incoming/``  - For incoming files (files can submitted by Samba or NFS).
  * ``videos/``    - Directory where video files are stored after processing (in subdirectories).
  * ``rejected/``  - Directory where rejected files are moved to if processing fails. (This should also be shared to user via Samba/NFS.)
+ * ``clapshot.sqlite`` - Database file
 
 
 Technology overview

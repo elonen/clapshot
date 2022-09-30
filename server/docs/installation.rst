@@ -28,26 +28,27 @@ can be developed and tested without one. Debian package has an example
 nginx config file in ``/usr/share/doc/clapshot-server/examples/``.
 
 
-Building it
------------
+Building
+--------
 
-The recommended way to build it is to use Docker and the provided Makefile:
+The recommended way to build Clapshot is to use Docker and the provided Makefile:
 
  #. Install and start Docker
  #. In the top level (not "server/""), run ``make debian-docker``
 
 This will build Debian packages and put them in the ``dist_deb/`` directory.
 
-You can also build the Debian packages directly on your system, but not recommended, as
-it will leave behind a lot of build dependencies. See Makefiles and Dockerfiles for details.
+You can also build the Python / Debian packages directly on your system, but Docker
+is a lot cleaner. See Makefiles and Dockerfiles for details on explicit
+building.
 
 
 Running tests
 -------------
 
-Run ``make test`` to run the tests in a Docker container.
+Use ``make test`` to run all tests in a Docker container.
 
-During development running unit tests on clapshot-server can be more
-convenient to do locally (inside a Python _venv).
+During development, running unit tests locally for clapshot-server can be more
+convenient.
 
-Install a _venv (``cd server && make dev``) and run ``pytest``.
+Install a ``_venv`` by running ``cd server; make dev``. Then run ``pytest``.

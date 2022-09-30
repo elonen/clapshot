@@ -4,7 +4,7 @@ FROM python:3.9-slim
 # Install system packages
 RUN apt-get -qy update >/dev/null
 RUN apt-get -qy install make >/dev/null
-RUN apt-get -qy install ffmpeg >/dev/null
+RUN apt-get -qy install ffmpeg mscgen >/dev/null
 RUN apt-get -qy install python3-pymediainfo >/dev/null
 
 # ...for build deb
