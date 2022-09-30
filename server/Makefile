@@ -88,7 +88,6 @@ test:
 
 docs:
 	cd docs; make clean html
-	cd docs; make man
 	@echo "------------"
 	@echo "Documentation generated. See docs/_build/"
 

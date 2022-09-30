@@ -77,7 +77,7 @@ class Comment(Base):
     username = Column(sql.String, default="Anonymous")   # human readable username
     comment = Column(sql.String, default="")
     timecode = Column(sql.String, default=None, nullable=True)
-    drawing = Column(sql.String, default=None, nullable=True)  # image data URI
+    drawing = Column(sql.String, default=None, nullable=True)  # image data URI if starts with "data:", otherwise name of image file
 
     def to_dict(self):
         return {

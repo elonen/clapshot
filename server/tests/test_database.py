@@ -59,8 +59,13 @@ async def example_db(tmp_path_factory):
                 user_id=f"user.num{1+i%2}",
                 username=f"User Number{1+i%2}",
                 comment=f"Comment {i}",
-                drawing=f"Drawing {i}")
+                drawing=f"drawing_{i}.webp")
             c.id = await db.add_comment(c)
+
+            dp = Path(dst_dir / 'videos' / video_hash / 'drawings')
+            dp.mkdir(parents=True, exist_ok=True)
+            (dp / c.drawing).write_text("IMAGE_DATA")
+
             return c
         
         comments = [await mkcom(i, videos[i%3].video_hash) for i in range(5)]

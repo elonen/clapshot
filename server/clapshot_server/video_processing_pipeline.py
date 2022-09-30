@@ -98,15 +98,20 @@ class VideoProcessingPipeline():
                 self.res_to_user.put(res)
 
             # Listen to queues
+            time_to_sleep = 0
             def _select():
+                # Currently there's no proper select() for mp.queues, so
+                # emulate with sleep()ing busyloop
+                nonlocal time_to_sleep
                 res = (q for q in [
                     self.files_from_incoming,
                     self.metadata_results,
                     self.compress_results] if not q.empty())
                 if not res:
-                    # Currently there's no proper select() for mp.queues, so
-                    # emulate with sleep()ing busyloop
-                    time.sleep(0.01)
+                    time_to_sleep = min(0.2, (time_to_sleep + 0.001)*1.1)
+                else:
+                    time_to_sleep = 0.01
+                time.sleep(time_to_sleep)
                 return res
 
             while True:

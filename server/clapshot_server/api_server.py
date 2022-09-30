@@ -16,15 +16,16 @@ Nginx or Apache should be used in production for that.
 """
 
 import asyncio
-from contextlib import suppress
-from dataclasses import dataclass
 from decimal import Decimal
+import hashlib
 import logging
-from typing import Any, DefaultDict, Optional
+from typing import Any
 from aiohttp import web
 from pathlib import Path
 import socketio
 import urllib.parse
+import aiofiles
+from datauri import DataURI
 
 from .database import Database, Video, Comment, Message
 
@@ -48,11 +49,13 @@ class ClapshotApiServer:
             url_base: str,
             port: int,
             logger: logging.Logger,
+            videos_dir: Path,
             serve_dirs: dict[str, Path]):
         self.db = db
         self.url_base = url_base
         self.port = port
         self.logger = logger
+        self.videos_dir = videos_dir
         self.serve_dirs = serve_dirs
 
         self.app = web.Application(middlewares=[_cors_middleware])
@@ -79,6 +82,22 @@ class ClapshotApiServer:
                     message=f"Failed to list your videos.", details=str(e)))
 
 
+        async def _emit_new_comment(c: Comment, room: str):
+            """
+            Helper function to send comment. Reads drawing
+            from file if present and encodes into data URI.
+            """
+            data = c.to_dict()
+            if c.drawing and not c.drawing.startswith('data:'):
+                path = self.videos_dir / c.video_hash / 'drawings' / c.drawing
+                if path.exists():
+                    async with aiofiles.open(path, 'rb') as f:
+                        data['drawing'] = DataURI.make('image/webp', charset='utf-8', base64=True, data=await f.read())
+                else:
+                    data['comment'] += ' [DRAWING NOT FOUND]'
+            await sio.emit('new_comment', data, room=room)
+
+
         @sio.event
         async def open_video(sid, msg):
             try:
@@ -98,7 +117,8 @@ class ClapshotApiServer:
                     await sio.emit('open_video', fields, room=sid)
                     for c in await self.db.get_video_comments(video_hash):
                         self.logger.debug(f"Sending to sid='{sid}' comment {c}")
-                        await sio.emit('new_comment', c.to_dict(), room=sid)
+                        await _emit_new_comment(c, room=sid)
+
             except Exception as e:
                 self.logger.exception(f"Exception in lookup_video for sid '{sid}': {e}")
                 await self.push_message(dont_throw=True, msg=Message(
@@ -151,7 +171,21 @@ class ClapshotApiServer:
                         message=  f"No such video. Cannot comment."))
                     return
 
-                comment = Comment(
+                # Parse drawing data if present and write to file
+                if drawing := msg.get('drawing'):
+                    assert drawing.startswith('data:'), f"Drawing is not a data URI."
+                    img_uri = DataURI(drawing)
+                    assert str(img_uri.mimetype) == 'image/webp', f"Invalid mimetype in drawing."
+                    ext = str(img_uri.mimetype).split('/')[1]
+                    sha256 = hashlib.sha256(img_uri.data).hexdigest()
+                    fn = f"{sha256[:16]}.{ext}"
+                    drawing_path = self.videos_dir / video_hash / 'drawings' / fn
+                    drawing_path.parent.mkdir(parents=True, exist_ok=True)
+                    async with aiofiles.open(drawing_path, 'wb') as f:
+                        await f.write(img_uri.data)
+                    drawing = fn
+
+                c = Comment(
                     video_hash = video_hash,
                     parent_id = msg.get('parent_id') or None,
                     user_id = user_id,
@@ -160,8 +194,8 @@ class ClapshotApiServer:
                     timecode = msg.get('timecode') or '',
                     drawing = msg.get('drawing') or None)
 
-                await self.db.add_comment(comment)
-                await sio.emit('new_comment', comment.to_dict(), room=video_hash)
+                await self.db.add_comment(c)
+                await _emit_new_comment(c, room=video_hash)
 
             except Exception as e:
                 self.logger.exception(f"Exception in add_comment for sid '{sid}': {e}")
@@ -185,9 +219,10 @@ class ClapshotApiServer:
                 assert user_id in (old.user_id, 'admin'), "You can only edit your own comments"
 
                 await self.db.edit_comment(comment_id, comment)
+
                 await sio.emit('del_comment', {'comment_id': comment_id}, room=video_hash)
                 c = await self.db.get_comment(comment_id)
-                await sio.emit('new_comment', c.to_dict(), room=video_hash)
+                await _emit_new_comment(c, room=video_hash)
 
             except Exception as e:
                 self.logger.exception(f"Exception in edit_comment for sid '{sid}': {e}")
@@ -350,6 +385,7 @@ async def run_server(
         logger: logging.Logger,
         url_base: str,
         push_messages: asyncio.Queue,
+        videos_dir: Path,
         host='127.0.0.1',
         port: int=8086,
         serve_dirs: dict[str, Path] = {},
@@ -373,7 +409,7 @@ async def run_server(
                 logger.fatal(f"DB ERROR: {db.error_state}")
                 return False
 
-            server = ClapshotApiServer(db=db, url_base=url_base, port=port, logger=logger, serve_dirs=serve_dirs)
+            server = ClapshotApiServer(db=db, url_base=url_base, port=port, logger=logger, videos_dir=videos_dir, serve_dirs=serve_dirs)
             runner = web.AppRunner(server.app)
             await runner.setup()
             # bind to localhost only, no matter what url_base is (for security, use reverse proxy to expose)

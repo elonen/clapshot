@@ -8,6 +8,7 @@ import multiprocessing
 import os
 import signal
 import sys
+import time
 from typing import Any
 
 exiting = False
@@ -59,6 +60,8 @@ class MultiProcessor(ABC):
             while True:
                 if o := self.inq.get():
                     self.do_task(o, worker_name)
+                else:
+                    time.sleep(0.01)
         except (ConnectionResetError, EOFError, BrokenPipeError, KeyboardInterrupt):
             pass
         finally:

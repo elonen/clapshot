@@ -1,3 +1,9 @@
+clapshot-server (0.2.3-1) bullseye; urgency=low
+
+  * New upstream version
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 30 Sep 2022 12:00:00 +0000
+
 clapshot-server (0.2.2-1) bullseye; urgency=low
 
   * New (prerelease) upstream version

@@ -51,8 +51,7 @@ def main():
         level = (logging.DEBUG if args["--debug"] else logging.INFO),
         format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
         datefmt='%m-%d %H:%M:%S',
-        filename=args["--log"] or None,
-        filemode='w' if args["--log"] else None
+        filename=args["--log"] or None
     )
     logger = logging.getLogger("main")
 
@@ -101,6 +100,7 @@ def main():
                     logging.getLogger("db")),
                 logger=logging.getLogger("api"),
                 url_base=url_base,
+                videos_dir=videos_dir,
                 host=args["--host"],
                 port=int(args["--port"]),
                 push_messages=push_message_queue,

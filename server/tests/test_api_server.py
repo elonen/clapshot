@@ -17,6 +17,7 @@ from clapshot_server.api_server import SOCKET_IO_PATH, run_server
 from .test_database import example_db
 
 import socketio
+from datauri import DataURI
 
 
 random.seed()
@@ -44,6 +45,7 @@ async def api_server_and_db(example_db, request):
                     logger=logging.getLogger("clapshot.db"),
                     url_base='http://127.0.0.1/',
                     port=port,
+                    videos_dir=(db.db_file.parent / 'videos'),
                     push_messages=push_msg_queue,
                     has_started=started_evt),
                 name="api_server_and_db--server_task")
@@ -291,6 +293,9 @@ async def test_api_edit_comment(api_server_and_db):
         assert data['comment_id'] == com.id
         assert data['comment'] == 'Edited comment'
         assert data['video_hash'] == vid.video_hash
+
+        assert data['drawing'].startswith("data:image/webp")
+        assert DataURI(data['drawing']).text == "IMAGE_DATA"
 
         # Edit nonexisting comment
         await td.send('edit_comment', {'comment_id': '1234566999', 'comment': 'Edited comment 2'})
