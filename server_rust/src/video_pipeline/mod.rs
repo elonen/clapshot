@@ -2,7 +2,6 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-
 use std::str::FromStr;
 use std::{thread, time::Duration};
 use std::path::{Path, PathBuf};
@@ -14,6 +13,9 @@ use tracing;
 
 pub mod incoming_monitor;
 pub mod metadata_reader;
+
+use metadata_reader::MetadataResult;
+
 
 #[derive(Debug)]
 pub struct Args {
@@ -37,7 +39,7 @@ pub fn run_forever(
     // Thread for incoming monitor
     let (md_thread, from_md, to_md) = {
             let (arg_sender, arg_recvr) = unbounded::<metadata_reader::Args>();
-            let (res_sender, res_recvr) = unbounded::<metadata_reader::Results>();
+            let (res_sender, res_recvr) = unbounded::<MetadataResult>();
 
             let th = thread::spawn(move || {
                     metadata_reader::run_forever(arg_recvr, res_sender, 4);
@@ -77,7 +79,17 @@ pub fn run_forever(
             // Metadata reader
             recv(from_md) -> msg => {
                 match msg {
-                    Ok(metadata) => tracing::info!("Got metadata: {:?}", metadata),
+                    Ok(md_res) => { 
+                        tracing::info!("Got metadata result: {:?}", md_res);
+                        match md_res {
+                            MetadataResult::Ok(md) => {
+                                // TODO: pass along to video ingestion
+                            }
+                            MetadataResult::Err(e) => {
+                                // TODO: pass to user through API server
+                            }
+                        }
+                    },
                     Err(e) => { tracing::warn!("Metadata reader is dead. Aborting."); break; },
                 }
             },

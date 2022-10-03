@@ -1,14 +1,14 @@
 [package]
-name = "server_rust"
+name = "clapshot-server"
 version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "server_rust"
+name = "clapshot-server"
 path = "src/main.rs"
 
 [lib]
-name = "server_rust"
+name = "clapshot_server"
 path = "src/lib.rs"
 
 

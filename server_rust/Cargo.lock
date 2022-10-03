@@ -79,6 +79,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "clapshot-server"
+version = "0.1.0"
+dependencies = [
+ "assert_fs",
+ "crossbeam-channel",
+ "docopt",
+ "env_logger",
+ "log",
+ "os",
+ "path-absolutize",
+ "rust_decimal",
+ "serde_json",
+ "signal-hook",
+ "threadpool",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-test",
+]
+
+[[package]]
 name = "crossbeam-channel"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -471,26 +491,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "server_rust"
-version = "0.1.0"
-dependencies = [
- "assert_fs",
- "crossbeam-channel",
- "docopt",
- "env_logger",
- "log",
- "os",
- "path-absolutize",
- "rust_decimal",
- "serde_json",
- "signal-hook",
- "threadpool",
- "tracing",
- "tracing-subscriber",
- "tracing-test",
 ]
 
 [[package]]
