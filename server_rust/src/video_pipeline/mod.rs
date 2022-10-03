@@ -12,8 +12,8 @@ use crossbeam_channel::{Receiver, RecvTimeoutError, unbounded, select};
 
 use tracing;
 
-mod incoming_monitor;
-mod metadata_reader;
+pub mod incoming_monitor;
+pub mod metadata_reader;
 
 #[derive(Debug)]
 pub struct Args {
