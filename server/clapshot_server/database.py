@@ -23,22 +23,22 @@ class Video(Base):
     """
     Video file (DB table)
     """
-    __tablename__ = 'video'
+    __tablename__ = 'videos'
     __mapper_args__ = {"eager_defaults": True}
 
     id = sql.Column(sql.Integer, primary_key=True, autoincrement=True)  # required by SQLAlchemy
-    video_hash = Column(sql.String, index=True, unique=True)
+    video_hash = Column(sql.String, index=True, unique=True, nullable=False)
 
     added_by_userid = Column(sql.String, index=True)    # unique user id
     added_by_username = Column(sql.String)  # human readable username
     added_time = Column(sql.DateTime, server_default=sql.func.now(), nullable=False)
 
     recompression_done = Column(sql.DateTime, nullable=True, default=None)
-    orig_filename = Column(sql.String)
+    orig_filename = Column(sql.String, nullable=False)
 
-    total_frames = Column(sql.Integer)
-    duration = Column(sql.Float)
-    fps = Column(sql.String) # decimal number in seconds
+    total_frames = Column(sql.Integer, nullable=False)
+    duration = Column(sql.Float, nullable=False)
+    fps = Column(sql.String, nullable=False) # decimal number in seconds
 
     raw_metadata_all = Column(sql.String)
 
@@ -63,19 +63,19 @@ class Video(Base):
 
 class Comment(Base):
     """User comment on a video (DB table)"""
-    __tablename__ = 'comment'
+    __tablename__ = 'comments'
     __mapper_args__ = {"eager_defaults": True}
     __table_args__ = {'sqlite_autoincrement': True} # required to avoid ID reuse
 
     id = Column(sql.Integer, primary_key=True, autoincrement=True)
-    video_hash = Column(sql.Integer, sql.ForeignKey('video.video_hash'), nullable=False)
+    video_hash = Column(sql.Integer, sql.ForeignKey('videos.video_hash'), nullable=False)
 
-    parent_id = Column(sql.Integer, sql.ForeignKey('comment.id'), default=None, index=True)
+    parent_id = Column(sql.Integer, sql.ForeignKey('comments.id'), default=None, index=True)
     created = Column(sql.DateTime, server_default=sql.func.now(), nullable=False)
     edited = Column(sql.DateTime, default=None)  # set if comment has been edited since creation
-    user_id = Column(sql.String, default="anonymous")    # unique user id
-    username = Column(sql.String, default="Anonymous")   # human readable username
-    comment = Column(sql.String, default="")
+    user_id = Column(sql.String, default="anonymous", nullable=False)    # unique user id
+    username = Column(sql.String, default="Anonymous", nullable=False)   # human readable username
+    comment = Column(sql.String, default="", nullable=False)
     timecode = Column(sql.String, default=None, nullable=True)
     drawing = Column(sql.String, default=None, nullable=True)  # image data URI if starts with "data:", otherwise name of image file
 
@@ -99,21 +99,21 @@ class Comment(Base):
 
 class Message(Base):
     """Notification sent to a user (DB table)"""
-    __tablename__ = 'message'
+    __tablename__ = 'messages'
     __mapper_args__ = {"eager_defaults": True}
     __table_args__ = {'sqlite_autoincrement': True} # required to avoid ID reuse
 
     id = Column(sql.Integer, primary_key=True, autoincrement=True)
-    user_id = Column(sql.String, default="anonymous")
+    user_id = Column(sql.String, default="anonymous", nullable=False)
     created = Column(sql.DateTime, server_default=sql.func.now(), nullable=False)
-    seen = Column(sql.Boolean, default=False)
+    seen = Column(sql.Boolean, default=False, nullable=False)
 
-    ref_video_hash = Column(sql.Integer, sql.ForeignKey('video.video_hash'), nullable=True, default=None)
-    ref_comment_id = Column(sql.Integer, sql.ForeignKey('comment.id'), nullable=True, default=None)
+    ref_video_hash = Column(sql.Integer, sql.ForeignKey('videos.video_hash'), nullable=True, default=None)
+    ref_comment_id = Column(sql.Integer, sql.ForeignKey('comments.id'), nullable=True, default=None)
 
-    event_name = Column(sql.String, default="info")  # info, warning, error
-    message = Column(sql.String, default="")
-    details = Column(sql.String, default="")
+    event_name = Column(sql.String, default="info", nullable=False)  # info, warning, error
+    message = Column(sql.String, default="", nullable=False)
+    details = Column(sql.String, default="", nullable=False)
 
 
     def to_dict(self):
