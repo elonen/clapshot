@@ -1,9 +1,11 @@
+import asyncio
+import json
 import multiprocessing
 from pathlib import Path
 import random
 import sys
 import time
-import socketio
+import aiohttp
 
 from pytest_cov.embed import cleanup_on_sigterm
 cleanup_on_sigterm()
@@ -45,18 +47,19 @@ def test_main_starts(tmp_path_factory):
         assert p.is_alive()
 
         # Test API connection
-        sio = socketio.Client()
-        sio.connect(
-            url = f'http://127.0.0.1:{port}', 
-            socketio_path = '/api/socket.io',
-            headers={'X-REMOTE-USER-ID': 'user1', 'X-REMOTE-USER-NAME': 'user1.name'})
-        assert sio.connected
+        async def test_ws():
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+                async with session.ws_connect(
+                    f'http://127.0.0.1:{port}/api/ws',
+                    headers={'HTTP_X_REMOTE_USER_ID': 'user1', 'HTTP_X_REMOTE_USER_NAME': 'user1.name'}) as ws:
+                        await ws.send_str('{"cmd": "list_my_videos"}')
+                        msg = await ws.receive(timeout=5)
+                        assert msg.type == aiohttp.WSMsgType.TEXT
+                        msg = json.loads(msg.data)
+                        assert msg['cmd']
+                        assert msg['data']
 
-        sio.emit('list_my_videos', {})
-        time.sleep(1)
-        assert p.is_alive()
-
-        sio.disconnect()
+        asyncio.run(test_ws())
 
     finally:
         sys.argv = old_argv

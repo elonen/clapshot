@@ -13,12 +13,11 @@ import pytest, random
 from pathlib import Path
 
 from clapshot_server import database as DB
-from clapshot_server.api_server import SOCKET_IO_PATH, run_server
+from clapshot_server.api_server import run_server
 from .test_database import example_db
 
-import socketio
 from datauri import DataURI
-
+import aiohttp
 
 random.seed()
 import logging
@@ -31,6 +30,7 @@ async def api_server_and_db(example_db, request):
     async for (db, vid, com) in example_db:
         print("<> Fixture api_server_and_db constructing")
         assert db.error_state is None
+        ses, ws = None, None
         try:
             # ----------------------------------------
             # Server
@@ -47,7 +47,7 @@ async def api_server_and_db(example_db, request):
                     port=port,
                     videos_dir=(db.db_file.parent / 'videos'),
                     upload_dir=(db.db_file.parent / 'upload'),
-                    push_messages=push_msg_queue,
+                    msgs_to_push=push_msg_queue,
                     has_started=started_evt),
                 name="api_server_and_db--server_task")
 
@@ -59,34 +59,45 @@ async def api_server_and_db(example_db, request):
             # ----------------------------------------
             # Client
             # ----------------------------------------
-            recvq = asyncio.Queue()
-            sio = socketio.AsyncClient()
             user_id, username = "user.num1", "User Number1"
             if hasattr(request, 'param'):
                 user_id = request.param["user_id"]
                 username = request.param["username"]
 
-            await sio.connect(
-                url = f'http://127.0.0.1:{port}', 
-                socketio_path = SOCKET_IO_PATH,
-                headers={'X-REMOTE-USER-ID': user_id, 'X-REMOTE-USER-NAME': username})
+            timeout = aiohttp.ClientTimeout(total=60)
+            ses = aiohttp.ClientSession(timeout=timeout)
+            ws = await ses.ws_connect(
+                    f'http://127.0.0.1:{port}/api/ws',
+                    headers={'HTTP_X_REMOTE_USER_ID': user_id, 'HTTP_X_REMOTE_USER_NAME': username})
+            assert ws.closed is False
 
-            # Message I/O
-            @sio.on('*')
-            async def catch_all(event, data):
-                print(f"<> Fixture: server->client: '{event}': {data}")
-                recvq.put_nowait((event, data))
-            
+
+            async def get_ws_msg(timeout):
+                msg = await ws.receive(timeout)
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    msg = msg.json()
+                    cmd, data = msg['cmd'], msg['data']
+                    print(f"<> Fixture: server->client: '{cmd}': {data}")
+                    return cmd, data
+                elif msg.type == aiohttp.WSMsgType.ERROR:
+                    raise msg.data
+                elif msg.type == aiohttp.WSMsgType.CLOSED:
+                    print("<> Fixture: server->client: CLOSED")
+                elif msg.type == aiohttp.WSMsgType.CLOSE:
+                    print("<> Fixture: server->client: CLOSE")
+                else:
+                    raise ValueError(f"Unexpected message type: {msg.type}")
+
+
             async def get_msg():
                 try:
-                    return await asyncio.wait_for(recvq.get(), timeout=0.5)
+                    return await get_ws_msg(timeout=0.5)
                 except asyncio.TimeoutError:
-                    print("<> fixutre get_msg timeout. No new messages.")
-                    return None
+                    print("<> fixture get_msg timeout. No new messages.")
 
             async def send(event, data):
                 print(f"<> Fixture: client->server: '{event}': {data}")
-                await sio.emit(event, data)
+                await ws.send_json({'cmd': event, 'data': data})
 
             def break_db():
                 db.db_file.unlink()
@@ -95,7 +106,6 @@ async def api_server_and_db(example_db, request):
             class TestData:
                 send: Callable
                 get: Callable
-                recvq: asyncio.Queue
                 db: DB.Database
                 videos: list[DB.Video]
                 comments: list[DB.Comment]
@@ -103,12 +113,20 @@ async def api_server_and_db(example_db, request):
                 break_db: Callable
                 pushq: push_msg_queue
 
+            # Consume welcome message
+            assert (await get_msg())[0] == 'welcome'
+
             print("<> Fixture api_server_and_db yielding...")
-            yield TestData(send=send, get=get_msg, recvq=recvq, db=db, videos=vid, comments=com, port=port, break_db=break_db, pushq=push_msg_queue)
+            yield TestData(send=send, get=get_msg, db=db, videos=vid, comments=com, port=port, break_db=break_db, pushq=push_msg_queue)
             print("<> ...yield returned for Fixture api_server_and_db")
             
         finally:
-            print("<> Fixture api_server_and_db is canceling server_task...")
+            print("<> Fixture api_server_and_db cleaning up")
+            print("<> Fixture closing ws")
+            await ws.close()
+            print("<> Fixture closing ses")
+            await ses.close()
+            print("<> Fixture canceling server_task...")
             server_task.cancel()
             await asyncio.sleep(0)
             with suppress(asyncio.CancelledError):
@@ -251,7 +269,7 @@ async def test_api_add_plain_comment(api_server_and_db):
         
         await td.send('add_comment', {'video_hash': vid.video_hash, 'comment': 'Test comment'})
 
-        # Not joined to video's Socket.IO "room" yet, so no response
+        # No video opened by the client yet, so no response
         assert not await td.get()
 
         await _open_video(td, vid.video_hash) # Join room
@@ -376,7 +394,7 @@ async def test_api_del_comment(api_server_and_db):
 @pytest.mark.parametrize("api_server_and_db", [{'user_id': 'admin', 'username': 'Admin'}], indirect=True)
 async def test_api_del_comment_as_admin(api_server_and_db):
         async for td in api_server_and_db:
-            await _open_video(td, td.videos[0].video_hash) # Join room HASH0
+            await _open_video(td, td.videos[0].video_hash) # Join first video room
 
             # Delete comments by different users
             for i in (5,6):
@@ -392,7 +410,7 @@ async def test_api_del_comment_as_admin(api_server_and_db):
 @pytest.mark.parametrize("api_server_and_db", [{'user_id': '', 'username': ''}], indirect=True)
 async def test_api_anonymous_user(api_server_and_db):
     async for td in api_server_and_db:
-        await _open_video(td, td.videos[0].video_hash) # Join room HASH0
+        await _open_video(td, td.videos[0].video_hash) # Join first video room
 
         # crete comment
         await td.send('add_comment', {'video_hash': td.videos[0].video_hash, 'comment': 'Test comment'})

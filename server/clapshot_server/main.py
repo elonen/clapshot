@@ -18,7 +18,7 @@ def main():
     Clapshot server - backend of a video annotation tool
 
     Monitors <path>/incoming for new videos, processes them, and stores them in <path>/videos.
-    Then serves the annotations and comments via an asyncronous HTTP + Socket.IO API.
+    Then serves the annotations and comments via an asyncronous HTTP + Websocket API.
     Use a proxy server to serve files in /videos and to secure the API with HTTPS/WSS.
 
     Usage:
@@ -105,7 +105,7 @@ def main():
                 upload_dir=upload_dir,
                 host=args["--host"],
                 port=int(args["--port"]),
-                push_messages=push_message_queue,
+                msgs_to_push=push_message_queue,
                 serve_dirs={'/video': videos_dir} if args["--host-videos"] else {},
                 ingest_callback=lambda fn, user_id: vip.queue_for_ingestion(fn, user_id))
 

@@ -3,7 +3,7 @@ Introduction
 
 The server has three main functions:
 
-  1. **API server**, which listens to Socket.IO (websocket or HTTP long polling) connections
+  1. **API server**, which listens to HTTP+WS connections
      from the web frontend and/or pushes messages when something happens.
   2. **Video file processing**, which receives files, extracts metadata and transcodes if necessary.
   3. **Database**, which stores video metadata, user comments etc.
@@ -33,7 +33,7 @@ Technology overview
  * Python 3.9+ (with asyncio and multiprocessing)
  * Pytest for testing
  * SQLAlchemy for database access
- * Socket.IO for communicating with client
+ * Aiohttp for communicating with client
  * FFmpeg for video transcoding
  * MediaInfo for video metadata extraction
  * Alembic (with custom wrapper) for database migrations

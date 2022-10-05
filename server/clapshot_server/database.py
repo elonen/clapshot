@@ -46,7 +46,7 @@ class Video(Base):
     
     def to_dict(self):
         return {
-            "video_hash": self.video_hash,
+            "video_hash": str(self.video_hash),
             "added_by_userid": self.added_by_userid,
             "added_by_username": self.added_by_username,
             "added_time": self.added_time.isoformat() if self.added_time else None,
@@ -82,7 +82,7 @@ class Comment(Base):
     def to_dict(self):
         return {
             "comment_id": self.id,
-            "video_hash": self.video_hash,
+            "video_hash": str(self.video_hash),
             "parent_id": self.parent_id if self.parent_id else '',
             "created": self.created.isoformat() if self.created else None,
             "edited": self.edited.isoformat() if self.edited else None,
@@ -122,7 +122,7 @@ class Message(Base):
             "user_id": self.user_id,
             "created": self.created.isoformat() if self.created else None,
             "seen": self.seen,
-            "ref_video_hash": self.ref_video_hash,
+            "ref_video_hash": str(self.ref_video_hash),
             "ref_comment_id": self.ref_comment_id,
             "event_name": self.event_name,
             "message": self.message,

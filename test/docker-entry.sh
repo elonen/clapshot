@@ -4,20 +4,20 @@
 # in a single Docker container for demo and testing purposes.
 
 DIR="/mnt/clapshot-data/data"
-URL_BASE="http://127.0.0.1:8080/"
+URL_BASE="127.0.0.1:8080/"
 
 # Serve client with Nginx
 rm -f /etc/nginx/sites-enabled/*
 cp /usr/share/doc/clapshot-client/examples/clapshot.nginx.conf  /etc/nginx/sites-enabled/clapshot
 
 # Use same URL base as index.html for API server (as Nginx proxies localhost:8095/api to /api)
-echo "{\"api_url\": \"//\", \"upload_url\": \"${URL_BASE}api/upload\"}" > /etc/clapshot_client.conf
+echo "{\"ws_url\": \"ws://${URL_BASE}api/ws\", \"upload_url\": \"http://${URL_BASE}api/upload\"}" > /etc/clapshot_client.conf
 
 # Force web user's name to 'docker' (the user we made matche local user's UID here)
 sed -i "s/[$]remote_user/docker/g" /etc/nginx/sites-enabled/clapshot
 
 # Assume user accesses this at $URL_BASE
-sed -i "s/^url-base.*/url-base = ${URL_BASE}/g" /etc/clapshot-server.conf
+sed -i "s/^url-base.*/url-base = http://${URL_BASE}/g" /etc/clapshot-server.conf
 
 
 # Make server data dir and log accessible to docker user

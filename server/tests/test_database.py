@@ -19,27 +19,29 @@ logging.basicConfig(level=logging.INFO)
 async def example_db(tmp_path_factory):
     """
     <Video(id=1 video_hash=HASH0 orig_filename=test0.mp4 added_by_userid=user.num1 ...)>
-    <Video(id=2 video_hash=HASH1 orig_filename=test1.mp4 added_by_userid=user.num2 ...)>
-    <Video(id=3 video_hash=HASH2 orig_filename=test2.mp4 added_by_userid=user.num1 ...)>
+    <Video(id=2 video_hash=1111 orig_filename=test1.mp4 added_by_userid=user.num2 ...)>
+    <Video(id=3 video_hash=22222 orig_filename=test2.mp4 added_by_userid=user.num1 ...)>
     <Video(id=4 video_hash=HASH3 orig_filename=test3.mp4 added_by_userid=user.num2 ...)>
     <Video(id=5 video_hash=HASH4 orig_filename=test4.mp4 added_by_userid=user.num1 ...)>
     <Comment(id='1' video=HASH0 parent=None user_id='user.num1' comment='Comment 0' has-drawing=True ...)>
-    <Comment(id='2' video=HASH1 parent=None user_id='user.num2' comment='Comment 1' has-drawing=True ...)>
-    <Comment(id='3' video=HASH2 parent=None user_id='user.num1' comment='Comment 2' has-drawing=True ...)>
+    <Comment(id='2' video=1111 parent=None user_id='user.num2' comment='Comment 1' has-drawing=True ...)>
+    <Comment(id='3' video=22222 parent=None user_id='user.num1' comment='Comment 2' has-drawing=True ...)>
     <Comment(id='4' video=HASH0 parent=None user_id='user.num2' comment='Comment 3' has-drawing=True ...)>
-    <Comment(id='5' video=HASH1 parent=None user_id='user.num1' comment='Comment 4' has-drawing=True ...)>
+    <Comment(id='5' video=1111 parent=None user_id='user.num1' comment='Comment 4' has-drawing=True ...)>
     <Comment(id='6' video=HASH0 parent=1 user_id='user.num2' comment='Comment 5' has-drawing=True ...)>
     <Comment(id='7' video=HASH0 parent=1 user_id='user.num1' comment='Comment 6' has-drawing=True ...)>
     """
     dst_dir = tmp_path_factory.mktemp("clapshot_database_test")
     db_file = Path(dst_dir / "test.sqlite")
 
+    hashes = [f"HASH0", f"11111", f"22222", f"HASH3", f"HASH4"]  # Include some 10base hashes to make sure they remain strings
+
     Path(db_file).unlink(missing_ok=True)
     async with DB.Database(Path(db_file), logging.getLogger()) as db:
         assert not db.error_state, f"DB error state {db.error_state}"
         async def mkvid(i):
             v = DB.Video(
-                video_hash=f"HASH{i}",
+                video_hash=hashes[i],
                 added_by_userid=f"user.num{1+i%2}",
                 added_by_username=f"User Number{1+i%2}",
                 orig_filename=f"test{i}.mp4",
@@ -101,7 +103,7 @@ async def test_fixture_state(example_db):
         for v in vid:
             assert (await db.get_video(v.video_hash)).video_hash == v.video_hash
             comments = await db.get_video_comments(v.video_hash)
-            assert len(comments) == {'HASH0': 4, 'HASH1': 2, 'HASH2': 1, 'HASH3': 0, 'HASH4': 0}[v.video_hash]    
+            assert len(comments) == {'HASH0': 4, '11111': 2, '22222': 1, 'HASH3': 0, 'HASH4': 0}[v.video_hash]    
         for c in com:
             assert (await db.get_comment(c.id)).id == c.id
             assert (await db.get_comment(c.id)).comment == c.comment

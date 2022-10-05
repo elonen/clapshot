@@ -72,7 +72,7 @@
     {
       if (!this._board && video_elem.videoWidth>0)
       {
-        console.log("Creating drawing board");
+        //console.log("Creating drawing board");
 
         $video_is_ready = true;
 
