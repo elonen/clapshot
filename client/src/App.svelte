@@ -15,6 +15,8 @@
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
 
+  let debug_layout = false;
+
   // Messages from CommentInput component
   function onCommentInputButton(e) {
     console.log("Comment Input Button Clicked: " + e.detail.action);
@@ -297,16 +299,15 @@
 
 <svelte:window on:popstate={popHistoryState}/>
 <main>
-  <div class="w-full mb-4"><NavBar on:clear-all={onClearAll} /></div>
-  <div class="flex">
-    <div class="flex-1 bg-black">
-      <div class="grid" style="width: 100%;">
+<div class="flex flex-col w-screen h-screen {debug_layout?'border-2 border-yellow-300':''}">
+    <div class="flex-none w-full"><NavBar on:clear-all={onClearAll} /></div>
+    <div class="flex-grow w-full overflow-auto {debug_layout?'border-2 border-cyan-300':''}">
         <Notifications />
 
         {#if !(socket && socket.connected) }
 
           <!-- ========== "connecting" spinner ============= -->
-          <div transition:scale class="w-full h-full text-5xl text-slate-600 align-middle text-center">
+          <div transition:fade class="w-full h-full text-5xl text-slate-600 align-middle text-center">
             <h1 class="m-16" style="font-family: 'Yanone Kaffeesatz', sans-serif;">
               Connecting server...
             </h1>
@@ -319,25 +320,23 @@
         {:else if $video_hash}
 
           <!-- ========== video review widgets ============= -->
-          <div transition:slide class="flex w-full">
+          <div transition:slide class="flex h-full w-full {debug_layout?'border-2 border-blue-700':''}">
 
-            <div class="flex-0 transition:slide">
-              <div class="block bg-cyan-900">
+            <div transition:slide class="flex-1 flex flex-col {debug_layout?'border-2 border-purple-600':''}">
+              <div class="flex-1 bg-cyan-900">
                 <VideoPlayer bind:this={video_player} src={$video_url} />
               </div>
-              <div class="block w-full p-4">
+              <div class="flex-none w-full p-2 {debug_layout?'border-2 border-green-500':''}">
                 <CommentInput bind:this={comment_input} on:button-clicked={onCommentInputButton} />
               </div>      
             </div>
 
             {#if $all_comments.length > 0}
             <!-- ========== comment sidepanel ============= -->
-            <div class="flex-1">
-              <div class="flex-none basis-128 bg-gray-900 w-80 py-2 px-2 space-y-2 ml-2 h-screen overflow-y-scroll" transition:slide>
+            <div transition:fade class="flex-none w-72 basis-128 bg-gray-900 py-2 px-2 space-y-2 ml-2 overflow-y-auto">
                 {#each $all_comments as item}
                   <CommentCard {...item} on:display-comment={onDisplayComment} on:delete-comment={onDeleteComment} on:reply-to-comment={onReplyComment} on:edit-comment={onEditComment}/>
                 {/each}
-              </div>
             </div>
             {/if}
           </div>
@@ -346,7 +345,7 @@
         {:else}
 
           <!-- ========== video listing ============= -->        
-          <div transition:slide class="m-6 text">            
+          <div class="m-6 text">            
             <h1 class="text-4xl m-6">
               {#if $all_my_videos.length>0}
                 All your videos
@@ -389,10 +388,8 @@
           </div>
 
         {/if}
-      </div>
     </div>
-    
-  </div>
+</div>
 </main>
 
 <style>
@@ -404,5 +401,17 @@
     } to { 
         transform: rotate(360deg); 
     }
-}</style>
+}
+
+/*
+::-webkit-scrollbar {
+    display: none;
+}
+body {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+*/
+
+</style>
 

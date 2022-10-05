@@ -11,7 +11,7 @@ import logo from "../assets/clapshot-logo.svg";
 
 </script>
 
-<nav class="px-2 sm:px-4 py-2.5 rounded dark:bg-gray-900">
+<nav class="px-5 py-2.5 rounded dark:bg-gray-900">
   
   <div class="flex">
 
@@ -40,9 +40,9 @@ import logo from "../assets/clapshot-logo.svg";
     <div class="flex-0" style="visibility: {$cur_username ? 'visible': 'hidden'}">
       <span class="flex w-auto items-center">
         <h6 class="flex-1 mx-4 text-gray-500 font-semibold">{$cur_username}</h6>
-        <button class="flex-0 mr-3 text-sm bg-gray-800 rounded-full md:mr-0 focus:ring-4 focus:ring-gray-300 dark:focus:ring-gray-600" on:click|preventDefault={onClickBanner}>
+        <button class="flex-0 ring-4 ring-slate-800 text-sm rounded-full" on:click|preventDefault={onClickBanner}>
           {#if $cur_user_pic || $cur_username}
-            <Avatar userFullName={$cur_username} src={$cur_user_pic} />
+          <div class="w-10 block"><Avatar userFullName={$cur_username} src={$cur_user_pic} /></div>
           {/if}
         </button>
       </span>

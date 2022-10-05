@@ -1,3 +1,9 @@
+clapshot-client (0.2.4-1) bullseye; urgency=low
+
+  * New upstream version. More robust UI layout.
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 5 Oct 2022 15:30:00 +0000
+
 clapshot-client (0.2.2-1) bullseye; urgency=low
 
   * New (prerelease) upstream version

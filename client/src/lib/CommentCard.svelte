@@ -61,7 +61,7 @@ function onEditFieldKeyUp(e) {
 </script>
 
 <div transition:scale
-  class="block rounded-lg bg-gray-800 {!!timecode ? 'hover:bg-gray-700' : ''} shadow-lg shadow-black"
+  class="block overflow-clip rounded-lg bg-gray-800 {!!timecode ? 'hover:bg-gray-700' : ''} shadow-lg shadow-black"
   style="margin-left: {indent*1.5}em"
   on:mouseenter="{() => show_actions=true}"
   on:mouseleave="{() => show_actions=false}"
@@ -69,8 +69,8 @@ function onEditFieldKeyUp(e) {
 
 
   <div class="flex mx-2 pt-3">
-    <Avatar userFullName="{username}" src="{avatar_url}" width="32"  />
-    <h5 class="ml-3 flex-1 text-gray-500 self-end">{username}</h5>
+    <div class="flex-none w-9 h-9 block"><Avatar userFullName="{username}" src="{avatar_url}" /></div>
+    <h5 class="flex-1 ml-3 text-gray-500 self-end">{username}</h5>
     <span class="invisible text-xs font-mono">[{id}@{parent_id}]</span>
     <span
       on:click="{() => { onTimecodeClick(timecode) }}"

@@ -4,7 +4,8 @@
   import {Notifications, acts} from '@tadashi/svelte-notification'
   import {create as sdb_create} from "simple-drawing-board";
   import {onMount} from 'svelte';
-  
+  import { fade, slide, scale } from "svelte/transition";
+
   import {video_is_ready, video_fps} from '../stores.js';
 
   export let src: any;
@@ -14,10 +15,10 @@
 	let time: number = 0;
 	let duration: number;
   let paused: boolean = true;
-
   let video_canvas_container: any;
-
   let vframe_calc: VideoFrame;
+
+  let debug_layout: boolean = false; // Set to true to show CSS layout boxes
 
  
   class Draw
@@ -84,7 +85,8 @@
         this._canvas = document.createElement('canvas');
         this._canvas.width = video_elem.videoWidth;
         this._canvas.height = video_elem.videoHeight;
-        this._canvas.style.cssText = 'border: 6px solid red; cursor:crosshair; opacity: 1.0; position: absolute; top: 0; left: 0; z-index: 1000; width: 100%; height: 100%;';
+        this._canvas.classList.add("absolute", "h-full", "w-full", "top-0", "left-0", "z-[1000]");
+        this._canvas.style.cssText = 'border: 6px solid red; cursor:crosshair; opacity: 1.0;';
         video_canvas_container.appendChild(this._canvas);
 
         this._board = sdb_create(this._canvas);
@@ -276,26 +278,30 @@
 
 </script>
 
-<div on:keydown={onWindowKeyPress}>
+<div on:keydown={onWindowKeyPress} class="w-full h-full flex flex-col object-contain">
 
-  <div bind:this={video_canvas_container} class="block relative">
-    <video
-      src="{src}"
-      crossOrigin="anonymous"
-      preload="auto"
-      width="1920" height="1080"
-      style="opacity: {$video_is_ready ? 1.0 : 0}; transition: 1.0s;"
-      bind:this={video_elem}
-      on:loadedmetadata={draw.try_create_all}
-      on:click={togglePlay}
-      bind:currentTime={time}
-      bind:duration
-      bind:paused>
-      <track kind="captions">
-    </video>
+  <div  class="flex-1 grid place-items-center relative min-h-[12em]"
+       style="{debug_layout?'border: 2px solid orange;':''}">
+    <div bind:this={video_canvas_container} class="absolute h-full {debug_layout?'border-4 border-x-zinc-50':''}">
+      <video
+        transition:scale
+        src="{src}"
+        crossOrigin="anonymous"
+        preload="auto"
+        class="h-full w-full"
+        style="opacity: {$video_is_ready ? 1.0 : 0}; transition-opacity: 1.0s;"
+        bind:this={video_elem}
+        on:loadedmetadata={draw.try_create_all}
+        on:click={togglePlay}
+        bind:currentTime={time}
+        bind:duration
+        bind:paused>
+        <track kind="captions">
+      </video>
+    </div>
   </div>
   
-	<div>
+	<div class="flex-none {debug_layout?'border-2 border-red-600':''}">
 		<progress value="{(time / duration) || 0}"
       class="w-full h-[2em] hover:cursor-pointer"
       on:mousedown|preventDefault={handleMove}
@@ -303,12 +309,13 @@
       on:touchmove|preventDefault={handleMove}
     />
 
+    <!-- playback controls -->
 		<div class="flex p-1">
 			
       <!-- Play/Pause -->
-			<span class="flex-1 text-left ml-8 space-x-3 text-xl whitespace-nowrap">
+			<span class="flex-1 text-left ml-8 space-x-3 text-l whitespace-nowrap">
         <button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
-        <button class="fa-solid {paused ? 'fa-play' : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
+        <button class="w-4 fa-solid {paused ? 'fa-play' : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
         <button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
 
         <!-- Timecode -->
@@ -318,7 +325,6 @@
         </span>
 
       </span>
-
  
       <!-- Audio volume -->
       <span class="flex-0 text-center whitespace-nowrap">

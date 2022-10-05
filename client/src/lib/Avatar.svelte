@@ -91,11 +91,11 @@ https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
     });
 </script>
 
+<img bind:this={avatarImage} class:round={round} loading="lazy" alt={userFullName} />
+
 <style>
     .round {
         border-radius: 50%;
         filter: drop-shadow(2px 2px 2px rgba(0,0,0,0.3));
     }
 </style>
-
-<img bind:this={avatarImage} class:round={round} {width} loading="lazy" alt={userFullName} />
