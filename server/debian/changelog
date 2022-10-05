@@ -1,3 +1,9 @@
+clapshot-server (0.2.4-1) bullseye; urgency=low
+
+  * New upstream version:
+    - Pluralize DB table names, add NOT NULLs
+    - Hotfix: fix regression, move drawings _really_ out of DB
+
 clapshot-server (0.2.3-1) bullseye; urgency=low
 
   * New upstream version

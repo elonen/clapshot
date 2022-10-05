@@ -192,7 +192,7 @@ class ClapshotApiServer:
                     username = username,
                     comment = msg.get('comment') or '',
                     timecode = msg.get('timecode') or '',
-                    drawing = msg.get('drawing') or None)
+                    drawing = drawing or None)
 
                 await self.db.add_comment(c)
                 await _emit_new_comment(c, room=video_hash)

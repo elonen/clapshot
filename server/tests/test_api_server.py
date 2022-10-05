@@ -256,10 +256,17 @@ async def test_api_add_plain_comment(api_server_and_db):
         await _open_video(td, vid.video_hash) # Join room
         
         # Add another comment
-        await td.send('add_comment', {'video_hash': vid.video_hash, 'comment': 'Test comment 2'})
+        drw_data = DataURI.make('image/webp', charset='utf-8', base64=True, data=r'IMAGE_DATA')
+        await td.send('add_comment', {'video_hash': vid.video_hash, 'comment': 'Test comment 2', 'drawing': drw_data})
         event, data = await td.get()
         assert event == 'new_comment'
         assert data['comment'] == 'Test comment 2'
+
+        # Stored in database, the the image must be path to a file, not the actual image data
+        assert not (await td.db.get_comment(data['comment_id'])).drawing.startswith('data:image')
+
+        assert data['drawing'].startswith("data:image/webp")
+        assert DataURI(data['drawing']).text == "IMAGE_DATA"
 
         # Add a commen to a nonexisting video
         await td.send('add_comment', {'video_hash': 'bad_hash', 'comment': 'Test comment 3'})

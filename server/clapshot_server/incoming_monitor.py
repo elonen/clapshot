@@ -50,14 +50,15 @@ def monitor_incoming_folder_loop(
 
                     # Check if file is still being written to
                     cur_size = fn.stat().st_size
-                    if cur_size == last_tested_size[fn]:
-                        logger.info(f"Submitting '{fn}' for processing. ")
-                        files_to_process.put(str(fn.absolute()))
-                        submission_time[fn] = time.time()
-                        del last_tested_size[fn]
-                    else:
-                        logger.info(f"File '{fn}' size changed since last poll. Skipping it for now...")
-                        last_tested_size[fn] = cur_size
+                    if cur_size > 1 and cur_size != 4096:  # 4096 is the size of an empty file on ext4
+                        if cur_size == last_tested_size[fn]:
+                            logger.info(f"Submitting '{fn}' for processing. ")
+                            files_to_process.put(str(fn.absolute()))
+                            submission_time[fn] = time.time()
+                            del last_tested_size[fn]
+                        else:
+                            logger.info(f"File '{fn}' size changed since last poll. Skipping it for now...")
+                            last_tested_size[fn] = cur_size
 
             # Wait for a bit before checking again
             time.sleep(poll_interval)
