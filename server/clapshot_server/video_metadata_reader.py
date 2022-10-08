@@ -75,9 +75,15 @@ class ReaderPool(MultiProcessor):
         try:
             logger = logging.getLogger(logging_name)
             logger.debug(f"Reading metadata for '{src}'...")
+            assert src.exists(), f"File '{src}' does not exist"
+
+            # Try reading a bit to see that we can access it
+            with open(src, "rb") as f:
+                data = f.read(1024)
 
             video = None
             mediainfo = MediaInfo.parse(src.absolute())
+
             for track in mediainfo.tracks:
                 if track.track_type == "Video" and not test_mock.get('no_video_stream'):
                     for x in ('frame_count', 'frame_rate', 'height', 'width', 'duration', 'format'):

@@ -46,6 +46,18 @@ class VideoProcessingPipeline():
         self.reject_dir = data_dir / "rejected"
 
 
+    def queue_for_ingestion(self, videofile: Path, user_id: str):
+        """
+        Queue a video file for ingestion.
+        This gets called when API server receives an upload.
+
+        Args:
+            videofile:  Path to the video file
+            user_id:    User ID
+        """
+        self.to_metadata_reader.put(video_metadata_reader.Args(src=videofile, user_id=user_id))
+
+
     def run_forever(self, poll_interval: float = 5.0, resubmit_delay: float = 15.0) -> None:
         """
         Run the message queue manager forever.

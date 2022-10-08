@@ -240,7 +240,7 @@ class VideoIngestingPool(MultiProcessor):
         Calculate identifier ("video_hash") for the submitted video,
         based on filename, user_id, size and sample of the file contents.
         """
-        file_hash = hashlib.sha256((str(fn) + str(user_id) + str(fn.stat().st_size)).encode('utf-8'))
+        file_hash = hashlib.sha256((str(fn.name) + str(user_id) + str(fn.stat().st_size)).encode('utf-8'))
         assert fn.lstat().st_size > 0, f"File '{fn}' is empty."
         with open(fn, 'rb') as f:
             file_hash.update(f.read(32*1024))

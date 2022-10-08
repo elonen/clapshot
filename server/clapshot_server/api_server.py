@@ -19,12 +19,14 @@ import asyncio
 from decimal import Decimal
 import hashlib
 import logging
-from typing import Any
+from typing import Any, Callable
 from aiohttp import web
+from uuid import uuid4
 from pathlib import Path
 import socketio
 import urllib.parse
 import aiofiles
+import shutil
 from datauri import DataURI
 
 from .database import Database, Video, Comment, Message
@@ -50,13 +52,17 @@ class ClapshotApiServer:
             port: int,
             logger: logging.Logger,
             videos_dir: Path,
-            serve_dirs: dict[str, Path]):
+            upload_dir: Path,
+            serve_dirs: dict[str, Path],
+            ingest_callback: Callable[str, str]):
         self.db = db
         self.url_base = url_base
         self.port = port
         self.logger = logger
         self.videos_dir = videos_dir
+        self.upload_dir = upload_dir
         self.serve_dirs = serve_dirs
+        self.ingest_callback = ingest_callback
 
         self.app = web.Application(middlewares=[_cors_middleware])
         sio.attach(self.app, socketio_path=SOCKET_IO_PATH)
@@ -307,20 +313,61 @@ class ClapshotApiServer:
             self.logger.info(f'Client disconnected, sid={sid}, user_id={user_id}')
             self.userid_to_sid.pop(user_id, None)
 
-        # Handle file upload callback from Nginx
-        async def uploaded(request: web.Request) -> web.Response:
-            user_id, username = self.user_from_headers(request.headers)
-            self.logger.info("Upload-notify", request.headers, user_id, username)
-            xfile = request.headers.get('X_FILE')
-            # 'X-FILE': '/home/jarno/clapshot/server/DEV_DATADIR/upload/0000000003'
-            
-            # TODO: actually do something here
 
-            return web.Response(text="OK")
+        async def post_upload_file(request):
+            """
+            Receive a HTTP file upload from the client.
+            """
+            user_id, _ = self.user_from_headers(request.headers)
+            assert user_id , "No user_id for upload"            
+            self.logger.info(f"post_upload_file: user_id='{user_id}'")
+            
+            async for field in (await request.multipart()):
+                if field.name != 'fileupload':
+                    logger.debug(f"post_upload_file(): Skipping UNKNOWN Multipart POST field '{field.name}'")
+                else:
+                    filename = field.filename
+                    assert str(Path(filename).name) == filename, "Filename must not contain path"
+                    dst = Path(self.upload_dir) / str(uuid4()) / Path(filename).name
+                    assert not dst.exists(), f"Upload dst '{dst}' already exists, even tough it was prefixed with uuid4. Bug??"
+
+                    try:
+                        logger.info(f"post_upload_file(): Saving uploaded file '{filename}' to '{dst}'")
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+
+                        async with aiofiles.open(dst, 'wb') as outf:
+                            inq = asyncio.Queue(8)
+                            async def reader():
+                                while c := await field.read_chunk():
+                                    await inq.put(c)
+                                await inq.put(None)
+                            async def writer():
+                                while c := await inq.get():
+                                    await outf.write(c)
+                            tasks = [reader(), writer()]
+                            try:
+                                await asyncio.gather(*tasks)
+                            except Exception as e:
+                                for t in tasks:
+                                    t.cancel()
+                                logger.exception(f"post_upload_file(): Exception while saving uploaded file '{filename}' to '{dst}'")
+                                raise e
+
+                    except PermissionError as e:
+                        self.logger.error(f"post_upload_file(): Permission error saving '{filename}' to '{dst}': {e}")
+                        return web.Response(status=500, text="Permission error saving upload")
+
+                    self.logger.info(f"post_upload_file(): File saved to '{dst}'. Queueing for processing.")
+                    if self.ingest_callback:
+                        self.ingest_callback(dst, user_id)
+
+                    return web.Response(status=200, text="Upload OK")
+
+                return web.Response(status=400, text="No fileupload field in POST")
 
 
         # Register HTTP routes
-        self.app.add_routes([web.post('/api/uploaded', uploaded)])
+        self.app.router.add_post('/api/upload', post_upload_file)
         for route, path in self.serve_dirs.items():
             self.app.router.add_static(route, path)
 
@@ -368,10 +415,10 @@ class ClapshotApiServer:
 
         return: (user_id, username)
         """
-        user_id = headers.get('HTTP_X_REMOTE_USER_ID')
+        user_id = headers.get('HTTP_X_REMOTE_USER_ID') or headers.get('X-Remote-User-Id') or headers.get('X-REMOTE-USER-ID')
         if not user_id:
-            self.logger.info("No user id found in header HTTP_X_REMOTE_USER_ID, using 'anonymous'")
-        user_name = headers.get('HTTP_X_REMOTE_USER_NAME')
+            self.logger.warning("No user id found in header X-REMOTE-USER-ID, using 'anonymous'")
+        user_name = headers.get('HTTP_X_REMOTE_USER_NAME') or headers.get('X-Remote-User-Name') or headers.get('X-REMOTE-USER-NAME')
         return (user_id or 'anonymous', user_name or 'Anonymous')
 
     async def get_user(self, sid: str) -> tuple[str, str]:
@@ -386,10 +433,12 @@ async def run_server(
         url_base: str,
         push_messages: asyncio.Queue,
         videos_dir: Path,
+        upload_dir: Path,
         host='127.0.0.1',
         port: int=8086,
         serve_dirs: dict[str, Path] = {},
         has_started = asyncio.Event(),
+        ingest_callback: Callable[Path, str] = None,
     ) -> bool:
     """
     Run HTTP / Socket.IO API server forever (until this asyncio task is cancelled)
@@ -398,7 +447,15 @@ async def run_server(
         db:           Database object
         logger:       Logger instance for API server
         url_base:     Base URL for the server (e.g. https://example.com). Used e.g. to construct video URLs.
+        push_messages: Queue for messages to be pushed to clients
+        videos_dir:   Directory where videos are stored
+        upload_dir:   Directory where uploaded files are stored
+        host:         Hostname to listen on
         port:         Port to listen on
+        serve_dirs:   Dict of {route: path} for static file serving
+        has_started:  Event that is set when the server has started
+        ingest_callback: Callback function to be called when a file is uploaded. Signature: (path: Path, user_id: str) -> None
+
 
     Returns:
         True if server was started successfully, False if not.
@@ -409,7 +466,7 @@ async def run_server(
                 logger.fatal(f"DB ERROR: {db.error_state}")
                 return False
 
-            server = ClapshotApiServer(db=db, url_base=url_base, port=port, logger=logger, videos_dir=videos_dir, serve_dirs=serve_dirs)
+            server = ClapshotApiServer(db=db, url_base=url_base, port=port, logger=logger, videos_dir=videos_dir, upload_dir=upload_dir, serve_dirs=serve_dirs, ingest_callback=ingest_callback)
             runner = web.AppRunner(server.app)
             await runner.setup()
             # bind to localhost only, no matter what url_base is (for security, use reverse proxy to expose)

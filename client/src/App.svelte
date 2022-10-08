@@ -1,13 +1,12 @@
 <script lang="ts">
   import {io, Socket} from 'socket.io-client'
-
   import { fade, slide, scale } from "svelte/transition";
-
   import CommentCard from './lib/CommentCard.svelte'
   import NavBar from './lib/NavBar.svelte'
   import VideoPlayer from './lib/VideoPlayer.svelte';
   import CommentInput from './lib/CommentInput.svelte';
   import UserMessage from './lib/UserMessage.svelte';
+  import FileUpload from './lib/FileUpload.svelte';
   import {Notifications, acts} from '@tadashi/svelte-notification'
   
   import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_orig_filename, all_my_videos, user_messages} from './stores.js';
@@ -216,6 +215,10 @@
       if (!data.seen) {
         const severity = (data.event_name == 'error') ? 'danger' : 'info';
         acts.add({mode: severity, message: data.message, lifetime: 5});
+        if (severity == 'info') {
+            // Success message = probably a new video was uploaded, so refresh the list
+            socket.emit('list_my_videos', {});
+        }
       }
     }));
 
@@ -355,10 +358,10 @@
             </h1>
             <div class="gap-8">
               {#each $all_my_videos as item}
-              <div class="bg-slate-600 rounded-md p-2 m-1 mx-6 inline-block cursor-pointer" on:click|preventDefault="{()=>onClickVideo(item.video_hash)}">
+              <div class="bg-slate-600 w-72 rounded-md p-2 m-1 mx-6 inline-block cursor-pointer" on:click|preventDefault="{()=>onClickVideo(item.video_hash)}">
                 <span class="text-amber-400 text-xs pr-2 border-r border-gray-400">{item.added_time}</span>
-                <span class="text-amber-500 font-mono text-xs pr-2 border-r border-gray-400">{item.video_hash}</span>
-                <a href="/?vid={item.video_hash}" class="text-xs overflow-clip whitespace-nowrap">{item.orig_filename}</a>
+                <span class="text-amber-500 font-mono text-xs pr-2">{item.video_hash}</span>
+                <div><a href="/?vid={item.video_hash}" class="text-xs overflow-clip whitespace-nowrap">{item.orig_filename}</a></div>
               </div>          
               {/each} 
             </div> 
@@ -367,7 +370,7 @@
               <h1 class="text-2xl m-6 mt-12 text-slate-500">
                   Latest messages
               </h1>
-              <div class="gap-4">
+              <div class="gap-4 max-h-56 overflow-y-auto border-l px-2 border-gray-900">
                 {#each $user_messages as msg}
                   <UserMessage {msg} />
                 {/each} 
@@ -375,15 +378,13 @@
             {/if}
 
             {#if upload_url }
-              <h1 class="text-2xl m-6 mt-12 text-slate-500">
-                  Upload a new video
+            <div class="m-6">
+              <h1 class="text-2xl mt-12 text-slate-500">
+                Upload video
               </h1>
-              <form action="{upload_url}" method="post" enctype="multipart/form-data">
-                <input type="file" name="filename">
-                <input type="submit" name="submit" value="Upload">
-              </form>
+              <FileUpload post_url={upload_url}/>
+            </div>
             {/if}
-
 
           </div>
 

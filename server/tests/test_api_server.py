@@ -46,6 +46,7 @@ async def api_server_and_db(example_db, request):
                     url_base='http://127.0.0.1/',
                     port=port,
                     videos_dir=(db.db_file.parent / 'videos'),
+                    upload_dir=(db.db_file.parent / 'upload'),
                     push_messages=push_msg_queue,
                     has_started=started_evt),
                 name="api_server_and_db--server_task")

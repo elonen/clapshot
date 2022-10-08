@@ -68,8 +68,9 @@ def main():
 
     incoming_dir = data_dir / "incoming"
     videos_dir = data_dir / "videos"
+    upload_dir = data_dir / "upload"
     rejected_dir = data_dir / "rejected"
-    for d in (incoming_dir, videos_dir, rejected_dir):
+    for d in (incoming_dir, videos_dir, rejected_dir, upload_dir):
         d.mkdir(exist_ok=True)
 
     url_base = args["--url-base"]
@@ -101,10 +102,12 @@ def main():
                 logger=logging.getLogger("api"),
                 url_base=url_base,
                 videos_dir=videos_dir,
+                upload_dir=upload_dir,
                 host=args["--host"],
                 port=int(args["--port"]),
                 push_messages=push_message_queue,
-                serve_dirs={'/video': videos_dir} if args["--host-videos"] else {})
+                serve_dirs={'/video': videos_dir} if args["--host-videos"] else {},
+                ingest_callback=lambda fn, user_id: vip.queue_for_ingestion(fn, user_id))
 
         async def vp_result_deliverer():
             while vip_proc.is_alive():

@@ -1,4 +1,4 @@
 {
     "api_url": "//:8095",
-    "upload_url": "http://127.0.0.1/upload"
+    "upload_url": "http://127.0.0.1/api/upload"
 }
