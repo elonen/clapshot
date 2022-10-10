@@ -19,9 +19,8 @@ use crossbeam_channel::unbounded;   // Work queue
 use tracing::{info, error, warn};
 use tracing_subscriber::FmtSubscriber;
 
-
 mod video_pipeline;
-
+mod api_server;
 
 
 const USAGE: &'static str = r#"
@@ -112,6 +111,13 @@ fn main() -> Result<(), Error>
             }); 
         (th, out_q)
     };
+
+    let tf = Arc::clone(&terminate_flag);
+    let api_thread = thread::spawn(move || {
+            if let Err(e) = api_server::run_forever(tf.clone(), 3030) {
+                error!("API server failed: {}", e);
+                tf.store(true, Ordering::Relaxed);
+            }});
 
     // Loop forever, abort on SIGINT/SIGTERM or if child threads die
     while !terminate_flag.load(Ordering::Relaxed)

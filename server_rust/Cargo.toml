@@ -31,8 +31,15 @@ r2d2 = "0.8.10"
 serde = "1.0.145"
 diesel_migrations = "2.0.0"
 chrono = "0.4.22"
+warp = "0.3.3"
+tokio = { version = "1.21.2", features = ["full"] }
+futures-util = "0.3.24"
 
 [dev-dependencies]
 assert_fs = "1.0.7"
 tracing-test = {version="0.2.3", features=["no-env-filter"] }
-
+# reqwest = "0.11.12"
+reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+url = "2.2.2"
+tokio-tungstenite = "0.17.2"
+tokio-test = "0.4.2"
