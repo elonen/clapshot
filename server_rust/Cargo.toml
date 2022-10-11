@@ -25,7 +25,7 @@ path-absolutize = "3.0.13"
 serde_json = "1.0.85"
 rust_decimal = "1.26.1"
 threadpool = "1.8.1"
-diesel = { version = "2.0.0", features = ["sqlite", "r2d2", "chrono"] }
+diesel = { version = "2.0.2", features = ["sqlite", "r2d2", "chrono", "returning_clauses_for_sqlite_3_35"] }
 r2d2-diesel = "1.0.0"
 r2d2 = "0.8.10"
 serde = "1.0.145"

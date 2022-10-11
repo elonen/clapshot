@@ -1,9 +1,9 @@
-use diesel::prelude::*;
+use diesel::{prelude::*, QueryId};
 use serde::{Deserialize, Serialize};
 use super::schema::*;
 use chrono;
 
-#[derive(Debug, Queryable, Insertable, Selectable, Identifiable)]
+#[derive(Debug, Queryable, Insertable, Selectable, Identifiable, QueryId)]
 pub struct Video {
     pub id: i32,
     pub video_hash: String,
@@ -18,7 +18,7 @@ pub struct Video {
     pub raw_metadata_all: Option<String>,
 }
 
-#[derive(Debug, Associations, Queryable, Insertable, Selectable, Identifiable)]
+#[derive(Debug, Associations, Queryable, Insertable, Selectable, Identifiable, QueryId)]
 #[diesel(belongs_to(Video, foreign_key = video_hash))]
 pub struct Comment {
     pub id: i32,
