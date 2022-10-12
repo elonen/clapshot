@@ -2,14 +2,20 @@ use diesel::{prelude::*, QueryId};
 use serde::{Deserialize, Serialize};
 use super::schema::*;
 use chrono;
+use chrono::naive::serde::{ts_seconds, ts_seconds_option};
 
-#[derive(Debug, Queryable, Insertable, Selectable, Identifiable, QueryId)]
+
+#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId)]
+#[diesel(table_name = videos)]
 pub struct Video {
     pub id: i32,
     pub video_hash: String,
     pub added_by_userid: Option<String>,
     pub added_by_username: Option<String>,
+
+    #[serde(with = "ts_seconds")]
     pub added_time: chrono::NaiveDateTime,
+
     pub recompression_done: Option<String>,
     pub orig_filename: Option<String>,
     pub total_frames: Option<i32>,
@@ -18,14 +24,35 @@ pub struct Video {
     pub raw_metadata_all: Option<String>,
 }
 
-#[derive(Debug, Associations, Queryable, Insertable, Selectable, Identifiable, QueryId)]
+#[derive(Serialize, Deserialize, Debug, Insertable)]
+#[diesel(table_name = videos)]
+pub struct VideoInsert {
+    pub video_hash: String,
+    pub added_by_userid: Option<String>,
+    pub added_by_username: Option<String>,
+    pub recompression_done: Option<String>,
+    pub orig_filename: Option<String>,
+    pub total_frames: Option<i32>,
+    pub duration: Option<f32>,
+    pub fps: Option<String>,
+    pub raw_metadata_all: Option<String>,
+}
+
+// -------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Debug, Associations, Queryable, Selectable, Identifiable, QueryId)]
 #[diesel(belongs_to(Video, foreign_key = video_hash))]
 pub struct Comment {
     pub id: i32,
     pub video_hash: String,
     pub parent_id: Option<i32>,
+
+    #[serde(with = "ts_seconds")]
     pub created: chrono::NaiveDateTime,
+
+    #[serde(with = "ts_seconds_option")]
     pub edited: Option<chrono::NaiveDateTime>,
+
     pub user_id: String,
     pub username: String,
     pub comment: String,
@@ -33,11 +60,41 @@ pub struct Comment {
     pub drawing: Option<String>,
 }
 
-#[derive(Debug, Queryable, Insertable, Selectable, Identifiable)]
+#[derive(Serialize, Deserialize, Debug, Insertable)]
+#[diesel(belongs_to(Video, foreign_key = video_hash))]
+#[diesel(table_name = comments)]
+pub struct CommentInsert {
+    pub video_hash: String,
+    pub parent_id: Option<i32>,
+    pub user_id: String,
+    pub username: String,
+    pub comment: String,
+    pub timecode: Option<String>,
+    pub drawing: Option<String>,
+}
+
+// -------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable)]
 pub struct Message {
     pub id: i32,
     pub user_id: String,
+
+    #[serde(with = "ts_seconds")]
     pub created: chrono::NaiveDateTime,
+    
+    pub seen: bool,
+    pub ref_video_hash: Option<String>,
+    pub ref_comment_id: Option<i32>,
+    pub event_name: String,
+    pub message: String,
+    pub details: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Insertable)]
+#[diesel(table_name = messages)]
+pub struct MessageInsert {
+    pub user_id: String,
     pub seen: bool,
     pub ref_video_hash: Option<String>,
     pub ref_comment_id: Option<i32>,

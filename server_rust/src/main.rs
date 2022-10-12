@@ -2,6 +2,7 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
+use clapshot_server::database;
 use docopt::Docopt;
 use std::thread;
 use std::io::Error;
@@ -85,9 +86,6 @@ fn main() -> Result<(), Error>
         flag::register(*sig, Arc::clone(&terminate_flag))?;
     }
 
-
-    println!("Hello, world!?!");
-
     let argv = || vec!["server_rust", "--url-base", "http://localhost", "--data-dir", "."];
 
     tracing::info!("Parsing command line arguments");
@@ -102,6 +100,9 @@ fn main() -> Result<(), Error>
 
     let data_dir = PathBuf::from(args.get_str("--data-dir"));
 
+    let db_file = data_dir.join("clapshot.sqlite");
+    let db = Arc::new(database::connect_db_file(&db_file).unwrap());
+
     // spawn a thread to run the video processing pipeline
     let (vpp_thread, vpp_out) = {
         let (out_q, in_q) = unbounded::<video_pipeline::Args>();
@@ -114,7 +115,7 @@ fn main() -> Result<(), Error>
 
     let tf = Arc::clone(&terminate_flag);
     let api_thread = thread::spawn(move || {
-            if let Err(e) = api_server::run_forever(tf.clone(), 3030) {
+            if let Err(e) = api_server::run_forever(db, tf.clone(), 3030) {
                 error!("API server failed: {}", e);
                 tf.store(true, Ordering::Relaxed);
             }});
