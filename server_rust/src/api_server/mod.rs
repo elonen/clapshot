@@ -86,7 +86,7 @@ impl WsSessionArgs<'_> {
             // If drawing is present, read it from disk and encode it into a data URI.
             if !drawing.starts_with("data:") {
                 let path = self.server.videos_dir.join(&c.video_hash).join("drawings").join(&drawing);
-                if path.exists().await {
+                if path.exists() {
                     let data = tokio::fs::read(path).await?;
                     *drawing = format!("data:image/webp;base64,{}", base64::encode(&data));
                 } else {
@@ -296,8 +296,8 @@ async fn run_api_server_async(server_state: ServerState, port: u16) -> Res<()>
 pub async fn run_forever(db: Arc<DB>, terminate_flag: Arc<AtomicBool>, port: u16) -> Res<()> {
     run_api_server_async(ServerState::new(
         db,
-        async_std::path::Path::new("DEV_DATADIR/videos"),
-        async_std::path::Path::new("DEV_DATADIR/upload"),
+        Path::new("DEV_DATADIR/videos"),
+        Path::new("DEV_DATADIR/upload"),
         terminate_flag), port).await
 }
 
@@ -309,19 +309,19 @@ mod tests {
     use url::Url;
     use tokio_tungstenite::tungstenite::Message;
     use tokio_tungstenite::connect_async;
-    use crate::database::connect_db_url;
+    use crate::database::DB;
 
     #[tokio::test]
     async fn test_api_server_echo() {
         let terminate_flag = Arc::new(AtomicBool::new(false));
         let port = 13128;
 
-        let db = Arc::new(connect_db_url(":memory:").unwrap());
+        let db = Arc::new(DB::connect_db_url(":memory:").unwrap());
 
         let api_server_state = ServerState::new(
             db,
-            async_std::path::Path::new("DEV_DATADIR/videos"),
-            async_std::path::Path::new("DEV_DATADIR/upload"),
+            Path::new("DEV_DATADIR/videos"),
+            Path::new("DEV_DATADIR/upload"),
             terminate_flag.clone());
  
             let api_server = run_api_server_async(api_server_state, port);

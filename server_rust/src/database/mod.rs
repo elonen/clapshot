@@ -1,7 +1,3 @@
-//#![allow(dead_code)]
-//#![allow(unused_variables)]
-//#![allow(unused_imports)]
-
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager};
 use diesel::SqliteConnection;
@@ -24,11 +20,9 @@ type PooledConnection = r2d2::PooledConnection<ConnectionManager<SqliteConnectio
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
 
-
-//type DBResult<T> = Result<T, DBError>;
-//type EmptyDBResult = Result<(), DBError>;
-
-fn map_res<U>(res: QueryResult<U>) -> Result<U, DBError> {
+/// Convert a diesel result to a DBResult, turning empty result
+/// into a DBError::NotFound
+fn to_db_res<U>(res: QueryResult<U>) -> DBResult<U> {
     let res = res.optional();
     match res {
         Ok(Some(v)) => Ok(v),
@@ -37,20 +31,6 @@ fn map_res<U>(res: QueryResult<U>) -> Result<U, DBError> {
     }
 }
 
-/// Connect to SQLite database with an URL (use this for memory databases)
-pub fn connect_db_url( db_url: &str ) -> DBResult<DB> {
-    let manager = ConnectionManager::<SqliteConnection>::new(db_url);
-    let pool = Pool::builder().build(manager)
-        .map_err(|e| DBError::Other(e.to_string()))?;
-    Ok(DB { pool: pool })
-}
-
-/// Connect to SQLite database with a file path
-pub fn connect_db_file( db_file: &Path ) -> DBResult<DB> {
-    let db_url = format!("sqlite://{}", db_file.to_str().ok_or("Invalid DB file path")
-        .map_err(|e| DBError::Other(e.to_string()))?);
-    connect_db_url(&db_url)
-}
 
 pub struct DB {
     pool: Pool,
@@ -58,104 +38,33 @@ pub struct DB {
 
 impl DB {
 
+    /// Connect to SQLite database with an URL (use this for memory databases)
+    pub fn connect_db_url( db_url: &str ) -> DBResult<DB> {
+        let manager = ConnectionManager::<SqliteConnection>::new(db_url);
+        let pool = Pool::builder().build(manager)
+            .map_err(|e| DBError::Other(e.to_string()))?;
+        Ok(DB { pool: pool })
+    }
+
+    /// Connect to SQLite database with a file path
+    pub fn connect_db_file( db_file: &Path ) -> DBResult<DB> {
+        let db_url = format!("sqlite://{}", db_file.to_str().ok_or("Invalid DB file path")
+            .map_err(|e| DBError::Other(e.to_string()))?);
+        DB::connect_db_url(&db_url)
+    }
+
+
+    /// Get a connection from the pool
     pub fn conn(&self) ->  DBResult<PooledConnection> {
         self.pool.get().map_err(|e| DBError::Other(e.to_string()))
     }
 
+    /// Run DB migrations
     pub fn create_tables(&self) -> EmptyDBResult
     {
         let mut conn = self.conn()?;
         conn.run_pending_migrations(MIGRATIONS).map_err(|e| DBError::Other(e.to_string()))?;
         Ok(())
-    }
-
-    pub fn add_test_video(&self) -> EmptyDBResult
-    {
-        use models::*;
-        use schema::videos::dsl::*;
-
-        let new_video = VideoInsert {
-            video_hash: "test_hash".to_string(),
-            added_by_userid: Some("test_user".to_string()),
-            added_by_username: Some("Test User".to_string()), 
-            recompression_done: None,
-            orig_filename: Some("test.mp4".to_string()),
-            total_frames: Some(100),
-            duration: Some(10.0),
-            fps: Some("1.0".to_string()),
-            raw_metadata_all: Some("test".to_string()),
-        };
-
-        diesel::insert_into(videos)
-            .values(&new_video)
-            .execute(&mut self.conn()?)?;
-
-        Ok(())
-    }
-
-    pub fn get_test_video(&self) -> DBResult<models::Video>
-    {
-        use models::*;
-        use schema::videos::dsl::*;
-        map_res(videos.filter(video_hash.eq("test_hash")).first::<Video>(&mut self.conn()?))
-    }
-
-    pub fn add_test_comment(&self) -> EmptyDBResult
-    {
-        use models::*;
-        use schema::comments::dsl::*;
-
-        let new_comment = CommentInsert {
-            video_hash: "test_hash".to_string(),
-            parent_id: None,
-            user_id: "test_user".to_string(),
-            username: "Test User".to_string(),
-            comment: "Test comment".to_string(),
-            timecode: None,
-            drawing: None,
-        };
-
-        diesel::insert_into(comments)
-            .values(&new_comment)
-            .execute(&mut self.conn()?)?;
-
-        Ok(())
-    }
-
-    pub fn get_test_comment(&self) -> DBResult<models::Comment>
-    {
-        use models::*;
-        use schema::comments::dsl::*;
-        map_res(comments.first::<Comment>(&mut self.conn()?))
-    }
-
-    pub fn add_test_message(&self) -> EmptyDBResult
-    {
-        use models::*;
-        use schema::messages::dsl::*;
-
-        let new_message = MessageInsert {
-            user_id: "test_user".to_string(),
-            ref_video_hash: Some("test_hash".to_string()),
-            ref_comment_id: None,
-            seen: false,
-            event_name: "test_event".to_string(),
-            message: "Test message".to_string(),
-            details: "Test details".to_string(),
-        };
-
-        diesel::insert_into(messages)
-            .values(&new_message)
-            .execute(&mut self.conn()?)?;
-
-        Ok(())
-    }
-
-    pub fn get_test_message(&self) -> DBResult<models::Message>
-    {
-        use models::*;
-        use schema::messages::dsl::*;
-        map_res(messages.first::<Message>(&mut self.conn()?))
     }
 
     // -----------------------------------------------------------------------------------------------
@@ -188,7 +97,6 @@ impl DB {
         Ok(())
     }
 
-
     /// Get a video from the database.
     /// 
     /// # Arguments
@@ -201,9 +109,8 @@ impl DB {
     {
         use models::*;
         use schema::videos::dsl::*;
-        map_res(videos.filter(video_hash.eq(vh)).first::<Video>(&mut self.conn()?))
+        to_db_res(videos.filter(video_hash.eq(vh)).first::<Video>(&mut self.conn()?))
     }
-
 
     /// Delete a video and all its comments from the database.
     ///     
@@ -226,7 +133,6 @@ impl DB {
         Ok(())
     }
 
-
     /// Get all videos for a user.
     /// 
     /// # Arguments
@@ -238,9 +144,8 @@ impl DB {
     {
         use models::*;
         use schema::videos::dsl::*;
-        map_res(videos.filter(added_by_userid.eq(user_id)).load::<Video>(&mut self.conn()?))
+        to_db_res(videos.filter(added_by_userid.eq(user_id)).load::<Video>(&mut self.conn()?))
     }
-
 
     /// Add a new comment on a video.
     /// 
@@ -257,7 +162,6 @@ impl DB {
         Ok(res)
     }
 
-
     /// Get a comment from the database.
     /// 
     /// # Arguments
@@ -270,9 +174,8 @@ impl DB {
     {
         use models::*;
         use schema::comments::dsl::*;
-        map_res(comments.filter(id.eq(comment_id)).first::<Comment>(&mut self.conn()?))
+        to_db_res(comments.filter(id.eq(comment_id)).first::<Comment>(&mut self.conn()?))
     }
-
 
     /// Get all comments for a video.
     /// 
@@ -302,7 +205,6 @@ impl DB {
         Ok(res > 0)
     }
 
-
     /// Edit a comment (change text).
     /// 
     /// # Arguments
@@ -319,7 +221,6 @@ impl DB {
         Ok(res > 0)
     }
 
-
     /// Add a new message to the database.
     /// 
     /// # Arguments
@@ -335,7 +236,6 @@ impl DB {
         Ok(res)
     }
 
-
     /// Get a message from the database.
     /// 
     /// # Arguments
@@ -348,9 +248,8 @@ impl DB {
     {
         use models::*;
         use schema::messages::dsl::*;
-        map_res(messages.filter(id.eq(msg_id)).first::<Message>(&mut self.conn()?))
+        to_db_res(messages.filter(id.eq(msg_id)).first::<Message>(&mut self.conn()?))
     }
-
 
     /// Get all messages for a user.
     /// 
@@ -365,7 +264,6 @@ impl DB {
         use schema::messages::dsl::*;
         Ok(messages.filter(user_id.eq(uid)).load::<Message>(&mut self.conn()?)?)
     }
-
 
     /// Set the seen status of a message.
     /// 
@@ -382,7 +280,6 @@ impl DB {
             .set(seen.eq(new_status)).execute(&mut self.conn()?)?;
         Ok(res > 0)
     }
-
 
     /// Delete a message from the database.
     /// 
@@ -401,10 +298,8 @@ impl DB {
 }
 
 // -----------------------------------------------------------------------------------------------
-
-
-
-
+// Tests
+// -----------------------------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests
@@ -414,20 +309,58 @@ mod tests
     #[test]
     fn test_basic_db_ops() -> Result<(), Box<dyn std::error::Error>>
     {
-        let test_db = assert_fs::NamedTempFile::new("test_db.sqlite")?;
-        let db = connect_db_file(&test_db.path())?;
+        //let test_db = assert_fs::NamedTempFile::new("test_db.sqlite")?;
+        //let db = DB::connect_db_file(&test_db.path())?;
+        let db = DB::connect_db_url(":memory:")?;
         db.create_tables()?;
-        db.add_test_video()?;
-        let v = db.get_test_video()?;
+
+        let test_video = models::VideoInsert {
+            video_hash: "test_hash".to_string(),
+            added_by_userid: Some("test_user".to_string()),
+            added_by_username: Some("Test User".to_string()), 
+            recompression_done: None,
+            orig_filename: Some("test.mp4".to_string()),
+            total_frames: Some(100),
+            duration: Some(10.0),
+            fps: Some("1.0".to_string()),
+            raw_metadata_all: Some("test".to_string()),
+        };
+
+        let test_comment = models::CommentInsert {
+            video_hash: "test_hash".to_string(),
+            parent_id: None,
+            user_id: "test_user".to_string(),
+            username: "Test User".to_string(),
+            comment: "Test comment".to_string(),
+            timecode: None,
+            drawing: None,
+        };
+
+        let test_message = models::MessageInsert {
+            user_id: "test_user".to_string(),
+            ref_video_hash: Some("test_hash".to_string()),
+            ref_comment_id: None,
+            seen: false,
+            event_name: "test_event".to_string(),
+            message: "Test message".to_string(),
+            details: "Test details".to_string(),
+        };
+
+
+        db.add_video(&test_video)?;
+        let v = db.get_video("test_hash") ?;
         assert_eq!(v.video_hash, "test_hash");
 
-        db.add_test_comment()?;
-        db.get_test_comment()?;
+        db.add_comment(&test_comment)?;
+        let c = db.get_video_comments(&v.video_hash)?;
+        assert_eq!(c.len(), 1);
 
-        db.add_test_message()?;
-        db.get_test_message()?;
+        db.add_message(&test_message)?;
+        let m = db.get_user_messages(&test_message.user_id)?;
+        assert_eq!(m.len(), 1);
+        assert_eq!(m[0].message, "Test message");
 
-        test_db.close()?;
+        //test_db.close()?;
         Ok(())
     }
 }

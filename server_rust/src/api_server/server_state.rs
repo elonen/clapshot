@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use async_std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool};
 

@@ -101,7 +101,7 @@ fn main() -> Result<(), Error>
     let data_dir = PathBuf::from(args.get_str("--data-dir"));
 
     let db_file = data_dir.join("clapshot.sqlite");
-    let db = Arc::new(database::connect_db_file(&db_file).unwrap());
+    let db = Arc::new(database::DB::connect_db_file(&db_file).unwrap());
 
     // spawn a thread to run the video processing pipeline
     let (vpp_thread, vpp_out) = {
