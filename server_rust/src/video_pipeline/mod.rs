@@ -4,10 +4,10 @@
 
 use std::str::FromStr;
 use std::{thread, time::Duration};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crossbeam_channel;
-use crossbeam_channel::{Receiver, RecvTimeoutError, unbounded, select};
+use crossbeam_channel::{Receiver, unbounded, select};
 
 use tracing;
 
@@ -15,6 +15,8 @@ pub mod incoming_monitor;
 pub mod metadata_reader;
 
 use metadata_reader::MetadataResult;
+
+use crate::api_server::UserMessage;
 
 
 #[derive(Debug)]
@@ -31,13 +33,14 @@ fn do_stuff(i: &mut i32) {
 
 pub fn run_forever(
     data_dir: PathBuf,
+    user_msg_tx: crossbeam_channel::Sender<UserMessage>,
     poll_interval: f32, resubmit_delay: f32,
     inq: Receiver<Args>)
 {
     tracing::info!("Starting video processing pipeline. Polling interval: {}s, resubmit delay: {}s", poll_interval, resubmit_delay);
 
     // Thread for incoming monitor
-    let (md_thread, from_md, to_md) = {
+    let (_md_thread, from_md, to_md) = {
             let (arg_sender, arg_recvr) = unbounded::<metadata_reader::Args>();
             let (res_sender, res_recvr) = unbounded::<MetadataResult>();
 
@@ -73,7 +76,7 @@ pub fn run_forever(
             recv(inq) -> msg => {
                 match msg {
                     Ok(msg) => tracing::info!("A message was received from inq: {:?}", msg),
-                    Err(e) => { break; }
+                    Err(_) => { break; }
                 }
             }
             // Metadata reader
@@ -86,18 +89,24 @@ pub fn run_forever(
                                 // TODO: pass along to video ingestion
                             }
                             MetadataResult::Err(e) => {
-                                // TODO: pass to user through API server
+                                let details = format!("File: '{:?}'. Error: {} -- {}", e.src_file.file_name(), e.msg, e.details);
+                                tracing::error!("Metadata reader error: {}", details);
+                                user_msg_tx.send(UserMessage {
+                                        msg: format!("Error reading video metadata."),
+                                        details: Some(details),
+                                        user_id: e.user_id,
+                                    }).ok();
                             }
                         }
                     },
-                    Err(e) => { tracing::warn!("Metadata reader is dead. Aborting."); break; },
+                    Err(e) => { tracing::warn!("Metadata reader is dead ('{:?}'). Aborting.", e); break; },
                 }
             },
             // Incoming monitor
             recv(from_mon) -> msg => {
                 match msg {
                     Ok(new_file) => tracing::info!("New file found: {:?}", new_file),
-                    Err(e) => { tracing::warn!("Metadata reader is dead. Aborting."); break; },
+                    Err(e) => { tracing::warn!("Metadata reader is dead ('{:?}'). Aborting.", e); break; },
                 }
             },
         }

@@ -1,9 +1,8 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-#![allow(unused_imports)]
+//#![allow(dead_code)]
+//#![allow(unused_variables)]
+//#![allow(unused_imports)]
 
 use async_std::task::block_on;
-use tokio::task::block_in_place;
 use warp::Filter;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -13,9 +12,7 @@ use futures_util::SinkExt;
 use warp::ws::{Message};
 use warp::http::HeaderMap;
 
-use data_url::{DataUrl, mime};
-use std::path::Path;
-use async_std::path::Path as AsyncPath;
+use std::path::{Path, PathBuf};
 
 mod server_state;
 use server_state::ServerState;
@@ -23,30 +20,47 @@ use server_state::ServerState;
 mod ws_handers;
 use ws_handers::msg_dispatch;
 
+mod file_upload;
+use file_upload::handle_multipart_upload;
+
 use crate::database::DB;
 use crate::database::models;
 
 
 type Res<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-type MsgSender = tokio::sync::mpsc::UnboundedSender<Message>;
-type SenderList = Vec<MsgSender>;
+type WsMsgSender = tokio::sync::mpsc::UnboundedSender<Message>;
+type SenderList = Vec<WsMsgSender>;
 type SenderListMap = Arc<RwLock<HashMap<String, SenderList>>>;
 
-
-pub struct WsSessionArgs<'a> {
-    sid: &'a str,
-    sender: &'a MsgSender,
-    server: ServerState,
-    user_id: &'a str,
-    user_name: &'a str,
-    video_session_guard: Option<Box<tokio::sync::Mutex<dyn Send>>>,
-}
 
 pub enum SendTo<'a> {
     CurSession(),
     UserId(&'a str),
     VideoHash(&'a str),
-    MsgSender(&'a MsgSender),
+    MsgSender(&'a WsMsgSender),
+}
+
+/// Message from other server modules to user(s)
+#[derive (Clone)]
+pub struct UserMessage {
+    pub user_id: String,
+    pub msg: String,
+    pub details: Option<String>,
+}
+
+#[derive (Clone)]
+pub struct UploadResult {
+    pub video_path: PathBuf,
+    pub user_id: String,
+}
+
+pub struct WsSessionArgs<'a> {
+    sid: &'a str,
+    sender: &'a WsMsgSender,
+    server: ServerState,
+    user_id: &'a str,
+    user_name: &'a str,
+    video_session_guard: Option<Box<tokio::sync::Mutex<dyn Send>>>,
 }
 
 impl WsSessionArgs<'_> {
@@ -125,7 +139,7 @@ async fn handle_ws_session(
         video_session_guard: None,
     };
 
-    let user_session_guard = ses.server.register_user_session(&user_id, msgq_tx.clone());
+    let _user_session_guard = ses.server.register_user_session(&user_id, msgq_tx.clone());
     let (mut ws_tx, mut ws_rx) = ws.split();
 
     // Let the client know user's id and name
@@ -181,7 +195,8 @@ async fn handle_ws_session(
                                     tracing::warn!("[{}] {}: {}", sid, answ, e);
                                     if !msgq_tx.send(Message::text(answ)).is_ok() { break; }
                                     continue;
-                                }};
+                                }
+                            };
                             tracing::debug!("[{}] Cmd '{}' from '{}'", sid, cmd, ses.user_id);
 
                             if let Err(e) = msg_dispatch(&cmd, &data, &mut ses).await {
@@ -207,34 +222,66 @@ async fn handle_ws_session(
             },
 
             else => {
-                tracing::info!("[{}] Outgoing message queue dropped - closing session", sid);
-                break;
+                if ses.sender.is_closed() {
+                    tracing::info!("[{}] Message queue gone. Closing session.", sid);
+                    break;
+                }
             }
         }
     }
 }
 
+/// Extract user id and name from HTTP headers (set by nginx)
+fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String) 
+{
+    fn try_get_first_named_hdr<T>(hdrs: &HeaderMap, names: T) -> Option<String>
+        where T: IntoIterator<Item=&'static str> {
+        for n in names {
+            if let Some(val) = hdrs.get(n).or(hdrs.get(n.to_lowercase())) {
+                match val.to_str() {
+                    Ok(s) => return Some(s.into()),
+                    Err(e) => tracing::warn!("Error parsing header '{}': {}", n, e),
+        }}}
+        None
+    }
 
-/// Search headers and match case-insensitively the first one from the list 'names'.
-/// Return the value of the header if found, or None.
-fn try_get_first_named_hdr<T>(hdrs: &HeaderMap, names: T) -> Option<String>
-    where T: IntoIterator<Item=&'static str> {
-    for n in names {
-        if let Some(val) = hdrs.get(n).or(hdrs.get(n.to_lowercase())) {
-            return Some(val.to_str().unwrap().to_string());
-        }}
-    None
+    let user_id = match try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Id", "X_Remote_User_Id", "HTTP_X_REMOTE_USER_ID"]) {
+        Some(id) => id,
+        None => {
+            tracing::warn!("Missing X-Remote-User-Id in HTTP headers. Using 'anonymous' instead.");
+            "anonymous".into()
+        }};
+    let user_name = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Name", "X_Remote_User_Name", "HTTP_X_REMOTE_USER_NAME"])
+        .unwrap_or_else(|| user_id.clone());
+    
+    (user_id, user_name)
 }
 
 /// Handle HTTP requests, read authentication headers and dispatch to WebSocket handler.
-async fn run_api_server_async(server_state: ServerState, port: u16) -> Res<()>
+async fn run_api_server_async(
+    server_state: ServerState,
+    user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
+    upload_results_tx: crossbeam_channel::Sender<UploadResult>,
+    port: u16)
+        -> Res<()>
 {
     let session_counter = Arc::new(RwLock::new(0u32));
-    let server_state_cln = server_state.clone();
+    let server_state_cln1 = server_state.clone();
+    let server_state_cln2 = server_state.clone();
 
     tracing::info!("Starting API server on port {}", port);
 
     let rt_hello = warp::path("hello").map(|| "Hello, World!");
+
+    let upload_dir = server_state.upload_dir.clone();
+    let rt_upload = warp::path("upload")
+        .and(warp::post())
+        .and(warp::any().map(move || upload_dir.clone()))
+        .and(warp::any().map(move || upload_results_tx.clone()))
+        .and(warp::header::<mime::Mime>("content-type"))
+        .and(warp::header::headers_cloned())
+        .and(warp::body::stream())
+        .and_then(handle_multipart_upload);
 
     let rt_api_ws = warp::path("api").and(warp::path("ws"))
         .and(warp::header::headers_cloned())
@@ -242,17 +289,7 @@ async fn run_api_server_async(server_state: ServerState, port: u16) -> Res<()>
         .map (move|hdrs: HeaderMap, ws: warp::ws::Ws| {
 
             // Get user ID and username (from reverse proxy)
-            let (user_id, user_name) = {
-                let user_id = match try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Id", "X_Remote_User_Id", "HTTP_X_REMOTE_USER_ID"]) {
-                    Some(id) => id,
-                    None => {
-                        tracing::warn!("Missing X-Remote-User-Id in HTTP headers. Using 'anonymous' instead.");
-                        "anonymous".to_string()
-                    }};
-                let user_name = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Name", "X_Remote_User_Name", "HTTP_X_REMOTE_USER_NAME"])
-                    .unwrap_or_else(|| user_id.clone());
-                (user_id, user_name)
-            };
+            let (user_id, user_name) = parse_auth_headers(&hdrs);
 
             // Increment session counter
             let sid = {
@@ -272,7 +309,7 @@ async fn run_api_server_async(server_state: ServerState, port: u16) -> Res<()>
             })
         });
 
-    let routes = rt_hello.or(rt_api_ws);
+    let routes = rt_hello.or(rt_api_ws).or(rt_upload);
     let routes = routes.with(warp::log("api_server"));
 
     let routes = routes.with(warp::cors()
@@ -282,23 +319,59 @@ async fn run_api_server_async(server_state: ServerState, port: u16) -> Res<()>
 
     let (_addr, server) = warp::serve(routes)
         .bind_with_graceful_shutdown(([127, 0, 0, 1], port), async move {
-            while !server_state_cln.terminate_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            while !server_state_cln1.terminate_flag.load(std::sync::atomic::Ordering::Relaxed) {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
         });
-    server.await;
+
+    let server_state = server_state_cln2;
+    let msg_relay = async move {
+        while !server_state.terminate_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            while let Ok(m) = user_msg_rx.try_recv() {
+                let msg = models::MessageInsert  {
+                    event_name: "message".into(),
+                    user_id: m.user_id.clone(),
+                    message: m.msg,
+                    details: m.details.unwrap_or("".into()),
+                    seen: false, ref_comment_id: None, ref_video_hash: None,
+                };
+                if let Err(e) = server_state.db.add_message(&msg) {
+                    tracing::error!("Failed to save user notification in DB: {:?}", e);
+                }
+                if let Ok(data) = serde_json::to_value(msg) {
+                    let msg = Message::text(serde_json::json!({
+                        "cmd": "message", "data": data }).to_string());
+                    if let Err(_) = server_state.send_to_all_user_sessions(&m.user_id, &msg) {
+                        tracing::error!("Failed to send user notification '{}'", m.user_id);
+                    }
+                }
+            }
+        };
+    };
+
+    tokio::join!(server, msg_relay);
+
+
     tracing::info!("API server stopped");
     Ok(())
 }
 
 
 #[tokio::main]
-pub async fn run_forever(db: Arc<DB>, terminate_flag: Arc<AtomicBool>, port: u16) -> Res<()> {
-    run_api_server_async(ServerState::new(
-        db,
+pub async fn run_forever(
+    db: Arc<DB>,
+    user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
+    upload_res_tx: crossbeam_channel::Sender<UploadResult>,
+    terminate_flag: Arc<AtomicBool>,
+    port: u16)
+        -> Res<()>
+{
+    let state = ServerState::new( db,
         Path::new("DEV_DATADIR/videos"),
         Path::new("DEV_DATADIR/upload"),
-        terminate_flag), port).await
+        terminate_flag );
+    run_api_server_async(state, user_msg_rx, upload_res_tx, port).await
 }
 
 // ---------------------------------------------------------------------------
@@ -317,6 +390,8 @@ mod tests {
         let port = 13128;
 
         let db = Arc::new(DB::connect_db_url(":memory:").unwrap());
+        let (_user_msg_tx, user_msg_rx) = crossbeam_channel::unbounded::<UserMessage>();
+        let (upload_tx, _upload_rx) = crossbeam_channel::unbounded::<UploadResult>();
 
         let api_server_state = ServerState::new(
             db,
@@ -324,7 +399,7 @@ mod tests {
             Path::new("DEV_DATADIR/upload"),
             terminate_flag.clone());
  
-            let api_server = run_api_server_async(api_server_state, port);
+            let api_server = run_api_server_async(api_server_state, user_msg_rx, upload_tx, port);
 
         let testit = async move {
             let url = Url::parse("ws://127.0.0.1:13128/api/ws").unwrap();

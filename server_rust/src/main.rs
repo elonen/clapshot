@@ -103,22 +103,24 @@ fn main() -> Result<(), Error>
     let db_file = data_dir.join("clapshot.sqlite");
     let db = Arc::new(database::DB::connect_db_file(&db_file).unwrap());
 
-    // spawn a thread to run the video processing pipeline
-    let (vpp_thread, vpp_out) = {
-        let (out_q, in_q) = unbounded::<video_pipeline::Args>();
-        let th = thread::spawn(move || {
-                video_pipeline::run_forever(
-                    data_dir, 3.0, 15.0, in_q);
-            }); 
-        (th, out_q)
-    };
-
     let tf = Arc::clone(&terminate_flag);
+    let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
+    let (upload_tx, upload_rx) = unbounded::<api_server::UploadResult>();
     let api_thread = thread::spawn(move || {
-            if let Err(e) = api_server::run_forever(db, tf.clone(), 3030) {
+            if let Err(e) = api_server::run_forever(db, user_msg_rx, upload_tx, tf.clone(), 3030) {
                 error!("API server failed: {}", e);
                 tf.store(true, Ordering::Relaxed);
             }});
+
+    // spawn a thread to run the video processing pipeline
+    let (vpp_thread, vpp_out) = {
+        let (outq, inq) = unbounded::<video_pipeline::Args>();
+        let th = thread::spawn(move || {
+                video_pipeline::run_forever(
+                    data_dir, user_msg_tx, 3.0, 15.0, inq);
+            }); 
+        (th, outq)
+    };
 
     // Loop forever, abort on SIGINT/SIGTERM or if child threads die
     while !terminate_flag.load(Ordering::Relaxed)

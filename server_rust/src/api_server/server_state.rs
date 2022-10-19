@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool};
 
 use tokio::sync::Mutex;
 
-use super::{MsgSender, SenderList, SenderListMap, Res};
+use super::{WsMsgSender, SenderList, SenderListMap, Res};
 use crate::database::DB;
 
 /// Lists of all active connections and other server state vars
@@ -34,7 +34,7 @@ impl ServerState {
 
     /// Register a new sender (API connection) for a user_id. One user can have multiple connections.
     /// Returns a guard that will remove the sender when dropped.
-    pub fn register_user_session(&self, user_id: &str, sender: MsgSender) -> Box<Mutex<dyn Send>> {
+    pub fn register_user_session(&self, user_id: &str, sender: WsMsgSender) -> Box<Mutex<dyn Send>> {
         self.add_sender_to_maplist(user_id, sender, &self.user_id_to_senders)
     }
 
@@ -53,7 +53,7 @@ impl ServerState {
     /// Register a new sender (API connection) as a viewer for a video.
     /// One video can have multiple viewers (including the same user, using different connections).
     /// Returns a guard that will remove the sender when dropped.
-    pub fn link_session_to_video(&self, video_hash: &str, sender: MsgSender) -> Box<Mutex<dyn Send>> {
+    pub fn link_session_to_video(&self, video_hash: &str, sender: WsMsgSender) -> Box<Mutex<dyn Send>> {
         self.add_sender_to_maplist(video_hash, sender, &self.video_hash_to_senders)
     }
 
@@ -70,12 +70,12 @@ impl ServerState {
     }
 
     // Common implementations for the above add functions.
-    fn add_sender_to_maplist(&self, key: &str, sender: MsgSender, maplist: &SenderListMap) -> Box<Mutex<dyn Send>> {
+    fn add_sender_to_maplist(&self, key: &str, sender: WsMsgSender, maplist: &SenderListMap) -> Box<Mutex<dyn Send>> {
         let mut list = maplist.write().unwrap();
         let senders = list.entry(key.to_string()).or_insert(Vec::new());
         senders.push(sender.clone());
 
-        struct Guard { maplist: SenderListMap, sender: MsgSender, key: String }
+        struct Guard { maplist: SenderListMap, sender: WsMsgSender, key: String }
         impl Drop for Guard {
             fn drop(&mut self) {
                 if let Ok(mut list) = self.maplist.write() {
