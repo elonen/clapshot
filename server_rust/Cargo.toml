@@ -44,6 +44,7 @@ futures-util = { version = "0.3.24", default-features = false }
 futures = "0.3.24"
 mime = "0.3.16"
 uuid = {version = "1.2.1", features=["v4"] }
+file-owner = "0.1.1"
 
 [dev-dependencies]
 assert_fs = "1.0.7"

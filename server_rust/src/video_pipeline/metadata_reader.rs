@@ -8,12 +8,8 @@ use tracing;
 use rust_decimal::prelude::*;
 use std::sync::atomic::AtomicBool;
 
+use super::IncomingFile;
 
-#[derive(Debug, Clone)]
-pub struct Args {
-    pub file_path: PathBuf,
-    pub user_id: String,
-}
 
 #[derive(Debug, Clone)]
 pub struct Metadata {
@@ -71,7 +67,7 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
 /// * `json` - Mediainfo JSON output
 /// * `args` - Metadata request arguments
 /// * `get_file_size` - Closure to get the file size (only called if bitrate is not available and we need to calculate it)
-fn extract_variables<F>(json: serde_json::Value, args: &Args, get_file_size: F) -> Result<Metadata, String>
+fn extract_variables<F>(json: serde_json::Value, args: &IncomingFile, get_file_size: F) -> Result<Metadata, String>
     where F: FnOnce() -> Result<u64, String>
 {
     let tracks = json["media"]["track"].as_array().ok_or("No media tracks found")?;
@@ -106,7 +102,7 @@ fn extract_variables<F>(json: serde_json::Value, args: &Args, get_file_size: F) 
 }
 
 /// Run mediainfo and extract the metadata
-fn read_metadata_from_file(args: &Args) -> Result<Metadata, String>
+fn read_metadata_from_file(args: &IncomingFile) -> Result<Metadata, String>
 {
     let json = run_mediainfo(&args.file_path)?;
     extract_variables(json, args, || Ok(args.file_path.metadata().map_err(|e| format!("Failed to get file size: {:?}", e))?.len()))
@@ -121,7 +117,7 @@ fn read_metadata_from_file(args: &Args) -> Result<Metadata, String>
 /// * `inq` - channel to receive new files to process
 /// * `outq` - channel to send results to
 /// * `n_workers` - number of threads to use for processing
-pub fn run_forever(inq: Receiver<Args>, outq: Sender<MetadataResult>, n_workers: usize)
+pub fn run_forever(inq: Receiver<IncomingFile>, outq: Sender<MetadataResult>, n_workers: usize)
 {
     tracing::info!("Starting.");
     let pool = ThreadPool::new(n_workers);
@@ -160,7 +156,7 @@ pub fn run_forever(inq: Receiver<Args>, outq: Sender<MetadataResult>, n_workers:
 // Unit tests =====================================================================================
 
 #[cfg(test)]
-fn test_fixture(has_bitrate: bool, has_fps: bool) -> (Args, serde_json::Value)
+fn test_fixture(has_bitrate: bool, has_fps: bool) -> (IncomingFile, serde_json::Value)
 {
     let bitrate = if has_bitrate { r#", "BitRate": "1000""# } else { "" };
     let fps = if has_fps { r#", "FrameRate": "30""# } else { "" };
@@ -172,7 +168,7 @@ fn test_fixture(has_bitrate: bool, has_fps: bool) -> (Args, serde_json::Value)
                     {}{}
                 }} ] }} }}"#, bitrate, fps)).unwrap();
 
-    let args = Args {
+    let args = IncomingFile {
         file_path: PathBuf::from("test.mp4"),
         user_id: "test_user".to_string()};
 

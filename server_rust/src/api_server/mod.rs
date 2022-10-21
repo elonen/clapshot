@@ -12,7 +12,7 @@ use futures_util::SinkExt;
 use warp::ws::{Message};
 use warp::http::HeaderMap;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 mod server_state;
 use server_state::ServerState;
@@ -23,9 +23,8 @@ use ws_handers::msg_dispatch;
 mod file_upload;
 use file_upload::handle_multipart_upload;
 
-use crate::database::DB;
-use crate::database::models;
-
+use crate::database::{models, DB};
+use crate::video_pipeline::IncomingFile;
 
 type Res<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 type WsMsgSender = tokio::sync::mpsc::UnboundedSender<Message>;
@@ -41,17 +40,13 @@ pub enum SendTo<'a> {
 }
 
 /// Message from other server modules to user(s)
-#[derive (Clone)]
+#[derive (Clone, Debug)]
 pub struct UserMessage {
+    pub ok: bool,
     pub user_id: String,
     pub msg: String,
     pub details: Option<String>,
-}
-
-#[derive (Clone)]
-pub struct UploadResult {
-    pub video_path: PathBuf,
-    pub user_id: String,
+    pub video_hash: Option<String>
 }
 
 pub struct WsSessionArgs<'a> {
@@ -261,7 +256,7 @@ fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String)
 async fn run_api_server_async(
     server_state: ServerState,
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
-    upload_results_tx: crossbeam_channel::Sender<UploadResult>,
+    upload_results_tx: crossbeam_channel::Sender<IncomingFile>,
     port: u16)
         -> Res<()>
 {
@@ -330,11 +325,12 @@ async fn run_api_server_async(
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             while let Ok(m) = user_msg_rx.try_recv() {
                 let msg = models::MessageInsert  {
-                    event_name: "message".into(),
+                    event_name: (if m.ok {"ok"} else {"error"}).into(),
                     user_id: m.user_id.clone(),
                     message: m.msg,
                     details: m.details.unwrap_or("".into()),
-                    seen: false, ref_comment_id: None, ref_video_hash: None,
+                    seen: false, ref_comment_id: None,
+                    ref_video_hash: m.video_hash,
                 };
                 if let Err(e) = server_state.db.add_message(&msg) {
                     tracing::error!("Failed to save user notification in DB: {:?}", e);
@@ -362,7 +358,7 @@ async fn run_api_server_async(
 pub async fn run_forever(
     db: Arc<DB>,
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
-    upload_res_tx: crossbeam_channel::Sender<UploadResult>,
+    upload_res_tx: crossbeam_channel::Sender<IncomingFile>,
     terminate_flag: Arc<AtomicBool>,
     port: u16)
         -> Res<()>
@@ -391,7 +387,7 @@ mod tests {
 
         let db = Arc::new(DB::connect_db_url(":memory:").unwrap());
         let (_user_msg_tx, user_msg_rx) = crossbeam_channel::unbounded::<UserMessage>();
-        let (upload_tx, _upload_rx) = crossbeam_channel::unbounded::<UploadResult>();
+        let (upload_tx, _upload_rx) = crossbeam_channel::unbounded::<IncomingFile>();
 
         let api_server_state = ServerState::new(
             db,

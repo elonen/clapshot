@@ -2,7 +2,6 @@
 #![allow(unused_variables)]
 #![allow(unused_imports)]
 
-use clapshot_server::database;
 use docopt::Docopt;
 use std::thread;
 use std::io::Error;
@@ -20,8 +19,9 @@ use crossbeam_channel::unbounded;   // Work queue
 use tracing::{info, error, warn};
 use tracing_subscriber::FmtSubscriber;
 
-mod video_pipeline;
-mod api_server;
+use clapshot_server::database;
+use clapshot_server::api_server;
+use clapshot_server::video_pipeline;
 
 
 const USAGE: &'static str = r#"
@@ -59,6 +59,19 @@ Options:
 
 fn main() -> Result<(), Error>
 {
+    let argv = || vec!["server_rust", "--url-base", "http://localhost", "--data-dir", "DEV_DATADIR/"];
+
+    let args = Docopt::new(USAGE)
+        .and_then(|d| d.argv(argv().into_iter()).parse())
+        .unwrap_or_else(|e| e.exit());
+
+    let port_str = args.get_str("--port");
+    let port = port_str.parse::<u16>().unwrap();
+
+    let debug: bool = args.get_bool("--debug");
+    let data_dir = PathBuf::from(args.get_str("--data-dir"));
+
+
     // Setup logging
     //if std::env::var_os("RUST_LOG").is_none() {
     //    std::env::set_var("RUST_LOG", "debug") };
@@ -67,10 +80,10 @@ fn main() -> Result<(), Error>
     //    .with_max_level(tracing::Level::TRACE).finish();
 
     let log_sbsc = tracing_subscriber::fmt()
-        //.compact() // for production
-        .pretty() // for development
-        .with_file(true)
-        .with_line_number(true)
+        .compact() // for production
+        //.pretty() // for development
+        .with_file(debug)
+        .with_line_number(debug)
         .with_thread_ids(true)
         .with_target(true)
         .finish();
@@ -86,56 +99,37 @@ fn main() -> Result<(), Error>
         flag::register(*sig, Arc::clone(&terminate_flag))?;
     }
 
-    let argv = || vec!["server_rust", "--url-base", "http://localhost", "--data-dir", "."];
-
-    tracing::info!("Parsing command line arguments");
-
-    let args = Docopt::new(USAGE)
-        .and_then(|d| d.argv(argv().into_iter()).parse())
-        .unwrap_or_else(|e| e.exit());
-
-    let port_str = args.get_str("--port");
-    let port = port_str.parse::<u16>().unwrap();
-    println!("port: {}", port);
-
-    let data_dir = PathBuf::from(args.get_str("--data-dir"));
-
     let db_file = data_dir.join("clapshot.sqlite");
     let db = Arc::new(database::DB::connect_db_file(&db_file).unwrap());
 
+    // Run API server
     let tf = Arc::clone(&terminate_flag);
     let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
-    let (upload_tx, upload_rx) = unbounded::<api_server::UploadResult>();
+    let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
     let api_thread = thread::spawn(move || {
             if let Err(e) = api_server::run_forever(db, user_msg_rx, upload_tx, tf.clone(), 3030) {
                 error!("API server failed: {}", e);
                 tf.store(true, Ordering::Relaxed);
             }});
 
-    // spawn a thread to run the video processing pipeline
-    let (vpp_thread, vpp_out) = {
-        let (outq, inq) = unbounded::<video_pipeline::Args>();
-        let th = thread::spawn(move || {
+    // Run video processing pipeline
+    let tf = Arc::clone(&terminate_flag);
+    let vpp_thread = thread::spawn(move || {
                 video_pipeline::run_forever(
-                    data_dir, user_msg_tx, 3.0, 15.0, inq);
+                    tf.clone(), data_dir, user_msg_tx, 3.0, 15.0, upload_rx);
             }); 
-        (th, outq)
-    };
 
     // Loop forever, abort on SIGINT/SIGTERM or if child threads die
     while !terminate_flag.load(Ordering::Relaxed)
     {
-        tracing::info!("Hello, world! (from main thread)");
         thread::sleep(std::time::Duration::from_secs(1));
-
         if vpp_thread.is_finished() {
-            tracing::error!("Video pipeline thread is dead. Aborting.");
-            break;
+            tracing::info!("Video pipeline thread finished.");
+            terminate_flag.store(true, Ordering::Relaxed);
         }
     }
 
     tracing::warn!("Got kill signal. Cleaning up.");
-    drop(vpp_out); // = signal exit
     vpp_thread.join().unwrap();
 
     tracing::warn!("Cleanup done. Exiting.");

@@ -3,9 +3,9 @@ use warp::http::HeaderMap;
 use futures::stream::TryStreamExt;
 use mpart_async::server::MultipartStream;
 use std::convert::Infallible;
-
 use std::path::{Path, PathBuf};
 
+use crate::video_pipeline::IncomingFile;
 use super::parse_auth_headers;
 
 
@@ -19,7 +19,7 @@ use super::parse_auth_headers;
 /// * `body` - The request body (stream)
 pub async fn handle_multipart_upload(
     upload_dir: std::path::PathBuf,
-    upload_done: crossbeam_channel::Sender<super::UploadResult>,
+    upload_done: crossbeam_channel::Sender<IncomingFile>,
     mime: mime::Mime,
     hdrs: HeaderMap,
     body: impl warp::Stream<Item = Result<impl bytes::Buf, warp::Error>> + Unpin)
@@ -119,7 +119,7 @@ pub async fn handle_multipart_upload(
         }
     }
 
-    if let Err(e) = upload_done.send(super::UploadResult{ video_path: uploaded_file, user_id: user_id }) {
+    if let Err(e) = upload_done.send(IncomingFile{ file_path: uploaded_file, user_id: user_id }) {
         tracing::error!("Failed to send upload ok signal: {:?}", e);
         return Ok(warp::reply::with_status("Internal error: failed to send upload ok signal".into(), warp::http::StatusCode::INTERNAL_SERVER_ERROR));
     }
