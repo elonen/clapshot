@@ -52,6 +52,7 @@ Options:
  -l FILE --log FILE     Log to file instead of stdout
  -w N --workers N       Max number of workers for video processing [default: 0]
                         (0 = number of CPU cores)
+ -b VBR --bitrate VBR   Target (max) bitrate for transcoding, in Mbps [default: 2.5]
  -d --debug             Enable debug logging
  -h --help              Show this screen
 "#;
@@ -70,6 +71,15 @@ fn main() -> Result<(), Error>
 
     let debug: bool = args.get_bool("--debug");
     let data_dir = PathBuf::from(args.get_str("--data-dir"));
+
+    let mut n_workers = args.get_str("--workers").parse::<usize>().unwrap_or(0);
+    if n_workers == 0 { n_workers = num_cpus::get(); }
+
+    let bitrate_mbps = args.get_str("--bitrate").parse::<f32>().unwrap_or(2.5);
+    if bitrate_mbps < 0.1 {
+        return Err(Error::new(std::io::ErrorKind::InvalidInput, "Bitrate must be >= 0.1"));
+    }
+    let target_bitrate = (bitrate_mbps * 1_000_000.0) as u32;
 
 
     // Setup logging
@@ -106,18 +116,21 @@ fn main() -> Result<(), Error>
     let tf = Arc::clone(&terminate_flag);
     let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
     let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
-    let api_thread = thread::spawn(move || {
+    let api_thread = { 
+        let db = db.clone();
+        thread::spawn(move || {
             if let Err(e) = api_server::run_forever(db, user_msg_rx, upload_tx, tf.clone(), 3030) {
                 error!("API server failed: {}", e);
                 tf.store(true, Ordering::Relaxed);
-            }});
+            }})};
 
     // Run video processing pipeline
     let tf = Arc::clone(&terminate_flag);
-    let vpp_thread = thread::spawn(move || {
-                video_pipeline::run_forever(
-                    tf.clone(), data_dir, user_msg_tx, 3.0, 15.0, upload_rx);
-            }); 
+    let vpp_thread = {
+            let db = db.clone();
+            thread::spawn(move || { video_pipeline::run_forever(
+                db, tf.clone(), data_dir, user_msg_tx, 3.0, 15.0, target_bitrate, upload_rx, n_workers)})
+        };
 
     // Loop forever, abort on SIGINT/SIGTERM or if child threads die
     while !terminate_flag.load(Ordering::Relaxed)

@@ -39,11 +39,14 @@ pub enum SendTo<'a> {
     MsgSender(&'a WsMsgSender),
 }
 
+#[derive (Clone, Debug)]
+pub enum UserMessageTopic { Ok(), Error(), Progress() }
+
 /// Message from other server modules to user(s)
 #[derive (Clone, Debug)]
 pub struct UserMessage {
-    pub ok: bool,
-    pub user_id: String,
+    pub topic: UserMessageTopic,
+    pub user_id: Option<String>,
     pub msg: String,
     pub details: Option<String>,
     pub video_hash: Option<String>
@@ -324,24 +327,53 @@ async fn run_api_server_async(
         while !server_state.terminate_flag.load(std::sync::atomic::Ordering::Relaxed) {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             while let Ok(m) = user_msg_rx.try_recv() {
-                let msg = models::MessageInsert  {
-                    event_name: (if m.ok {"ok"} else {"error"}).into(),
-                    user_id: m.user_id.clone(),
-                    message: m.msg,
-                    details: m.details.unwrap_or("".into()),
-                    seen: false, ref_comment_id: None,
-                    ref_video_hash: m.video_hash,
+                let topic_str = match m.topic{
+                    UserMessageTopic::Ok() => "ok",
+                    UserMessageTopic::Error() => "error",
+                    UserMessageTopic::Progress() => "progress",
                 };
-                if let Err(e) = server_state.db.add_message(&msg) {
-                    tracing::error!("Failed to save user notification in DB: {:?}", e);
-                }
-                if let Ok(data) = serde_json::to_value(msg) {
-                    let msg = Message::text(serde_json::json!({
-                        "cmd": "message", "data": data }).to_string());
-                    if let Err(_) = server_state.send_to_all_user_sessions(&m.user_id, &msg) {
-                        tracing::error!("Failed to send user notification '{}'", m.user_id);
+
+                let msg = models::MessageInsert  {
+                    event_name: topic_str.into(),
+                    user_id: m.user_id.clone().unwrap_or("".into()),
+                    message: m.msg.clone(),
+                    details: m.details.clone().unwrap_or("".into()),
+                    seen: false, ref_comment_id: None,
+                    ref_video_hash: m.video_hash.clone()
+                };
+                
+                match m.user_id {
+                    // Message to a single user
+                    Some(user_id) => {
+                        if let Err(e) = server_state.db.add_message(&msg) {
+                            tracing::error!("Failed to save user notification in DB: {:?}", e);
+                        }
+                        if let Ok(data) = serde_json::to_value(msg) {
+                            let msg = Message::text(serde_json::json!({
+                                "cmd": "message", "data": data }).to_string());
+                            if let Err(_) = server_state.send_to_all_user_sessions(&user_id, &msg) {
+                                tracing::error!("Failed to send user notification '{}'", user_id);
+                            }
+                        }
+                    },
+                    None => {
+                        // Message to all watchers of a video
+                        match m.video_hash {
+                            Some(vh) => {
+                                if let Ok(data) = serde_json::to_value(msg) {
+                                    let msg = Message::text(serde_json::json!({
+                                        "cmd": "message", "data": data }).to_string());
+                                    if let Err(_) = server_state.send_to_all_video_sessions(&vh, &msg) {
+                                        tracing::error!("Failed to send  notification to video hash '{}'", vh);
+                                    }
+                                }        
+                            },
+                            None => {
+                                tracing::error!("Received message with no user_id or video_hash: {:?}", m);
+                            }
+                        }
                     }
-                }
+                };
             }
         };
     };

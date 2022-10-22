@@ -20,9 +20,10 @@ pub mod incoming_monitor;
 pub mod metadata_reader;
 
 mod cleanup_rejected;
+mod video_compressor;
 
 use metadata_reader::MetadataResult;
-use crate::api_server::UserMessage;
+use crate::api_server::{UserMessage, UserMessageTopic};
 use crate::database::error::DBError;
 use cleanup_rejected::clean_up_rejected_file;
 use crate::database::{DB, models};
@@ -30,6 +31,14 @@ use crate::database::{DB, models};
 #[derive (Clone, Debug)]
 pub struct IncomingFile {
     pub file_path: PathBuf,
+    pub user_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DetailedMsg {
+    pub msg: String,
+    pub details: String,
+    pub src_file: PathBuf,
     pub user_id: String,
 }
 
@@ -54,18 +63,145 @@ fn calc_video_hash(file_path: &PathBuf, user_id: &str) -> Result<String, Box<dyn
     Ok(hash[0..8].to_string())
 }
 
+/// Process new video after metadata reader has finished.
+/// Move the file to the appropriate directory, and update the database.
+/// See if the video is a duplicate, and submit it for transcoding if necessary.
+fn ingest_video(
+        vh: &str,
+        md: &metadata_reader::Metadata,
+        videos_dir: &Path,
+        target_bitrate: u32,
+        db: &DB,
+        user_msg_tx: &crossbeam_channel::Sender<UserMessage>,
+        cmpr_tx: &crossbeam_channel::Sender<video_compressor::CmprInput>)
+            -> Result<bool, Box<dyn std::error::Error>>
+{
+    tracing::debug!("Video hash for {:?} = {}", md.src_file, vh);
+
+    let src = PathBuf::from(&md.src_file);
+    if !src.is_file() { return Err("Source file not found".into()); }
+
+    let dir_for_video = videos_dir.join(&vh);
+
+    // Video already exists on disk?
+    if dir_for_video.exists() {
+        match db.get_video(&vh) {
+            Ok(v) => {
+                let new_owner = &md.user_id;
+                if v.added_by_userid == Some(new_owner.clone()) {
+                    tracing::info!("User '{new_owner}' already has video {vh}");
+                    user_msg_tx.send(UserMessage {
+                        topic: UserMessageTopic::Ok(),
+                        msg: "You already have this video".to_string(),
+                        details: None,
+                        user_id: Some(new_owner.clone()),
+                        video_hash: Some(vh.to_string())
+                    }).ok();
+                    return Ok(false);
+                } else {
+                    return Err(format!("Hash collision?!? Video '{vh}' already owned by '{new_owner}'.").into());
+                }
+            },
+            Err(DBError::NotFound()) => {
+                // File exists, but not in DB. Remove file and reprocess.
+                tracing::info!("Dir for '{vh}' exists, but not in DB. Deleting old dir and reprocessing.");
+                std::fs::remove_dir_all(&dir_for_video)?;
+            }
+            Err(e) => {
+                return Err(format!("Error checking DB for video '{}': {:?}", vh, e).into());
+            }
+        }
+    }
+    assert!(!dir_for_video.exists()); // Should have been deleted above
+
+    // Move src file to orig/
+    tracing::debug!("Creating dir '{:?}'...", dir_for_video);
+    std::fs::create_dir(&dir_for_video)?;
+
+    let dir_for_orig = dir_for_video.join("orig");
+    std::fs::create_dir(&dir_for_orig)?;
+    let src_moved = dir_for_orig.join(src.file_name().ok_or("Bad filename")?);
+
+    tracing::debug!("Moving '{:?}' to '{:?}'...", src, src_moved);
+    std::fs::rename(&src, &src_moved)?;
+    if !src_moved.exists() { return Err("Failed to move src file to orig/".into()); }
+
+    // Add to DB
+    tracing::info!("Adding video '{}' to DB. Src '{:?}', owner '{}'", vh, src_moved, md.user_id);
+    db.add_video(&models::VideoInsert {
+        video_hash: vh.to_string(),
+        added_by_userid: Some(md.user_id.clone()),
+        added_by_username: Some(md.user_id.clone()),  // TODO: get username from somewhere
+        recompression_done: None,
+        orig_filename: Some(src.file_name().ok_or("Bad filename")?.to_string_lossy().into_owned()),
+        total_frames: Some(md.total_frames as i32),
+        duration: md.duration.to_f32(),
+        fps: Some(md.fps.to_string()),
+        raw_metadata_all: Some(md.metadata_all.clone()),
+    })?;
+
+    // Check if it needs recompressing
+    fn calc_transcoding_bitrate(md: &metadata_reader::Metadata, target_max_bitrate: u32) -> Option<u32> {
+        let new_bitrate = std::cmp::max(md.bitrate/2, std::cmp::min(md.bitrate, target_max_bitrate));
+        let already_fine = (new_bitrate >= md.bitrate || (md.bitrate as f32) <= 1.2 * (target_max_bitrate as f32)) &&
+            md.orig_codec.to_lowercase() == "h264" &&
+            md.src_file.ends_with(".mp4");
+        if already_fine { None } else { Some(new_bitrate) }
+    }
+    let transcode = match calc_transcoding_bitrate(md, target_bitrate) {
+        Some(new_bitrate) => {
+            tracing::info!("Video {} ('{:?}') requires transcoding", vh, md.src_file);
+            let dst = dir_for_video.join(format!("transcoded_br{}_{}.mp4", new_bitrate, uuid::Uuid::new_v4()));
+            cmpr_tx.send(video_compressor::CmprInput {
+                src: src_moved,
+                dst,
+                video_bitrate: new_bitrate,
+                video_hash: vh.to_string(),
+                user_id: md.user_id.clone(),
+            }).map(|_| true).map_err(|e| format!("Error sending to transcoding: {:?}", e))
+        },
+        None => {
+            tracing::info!("Video {} ('{:?}') ok, not transcoding.", vh, md.src_file);
+            Ok(false)
+        }
+    };
+
+    // Send ok message to user
+    user_msg_tx.send(UserMessage {
+            topic: UserMessageTopic::Ok(),
+            msg: "Video added".to_string() + if transcode.clone().unwrap_or(true) {". Transcoding..."} else {""},
+            details: None,
+            user_id: Some(md.user_id.clone()),
+            video_hash: Some(vh.to_string())
+        })?;
+
+    transcode.map_err(|e| e.into())
+}
+
+
 
 
 pub fn run_forever(
+    db: Arc<DB>,
     terminate_flag: Arc<AtomicBool>,
     data_dir: PathBuf,
     user_msg_tx: crossbeam_channel::Sender<UserMessage>,
-    poll_interval: f32, resubmit_delay: f32,
-    upload_rx: Receiver<IncomingFile>)
+    poll_interval: f32,
+    resubmit_delay: f32,
+    target_bitrate: u32,
+    upload_rx: Receiver<IncomingFile>,
+    n_workers: usize)
 {
     tracing::info!("Starting video processing pipeline. Polling interval: {}s, resubmit delay: {}s", poll_interval, resubmit_delay);
 
-    // Thread for incoming monitor
+    // Create folder for processed videos
+    let videos_dir = data_dir.join("videos");
+    if let Err(e) = std::fs::create_dir_all(&videos_dir) {
+        tracing::error!("Error creating videos dir '{:?}': {:?}", videos_dir, e);
+        return;
+    }
+
+    // Thread for incoming folder scanner
     let (_md_thread, from_md, to_md) = {
             let (arg_sender, arg_recvr) = unbounded::<IncomingFile>();
             let (res_sender, res_recvr) = unbounded::<MetadataResult>();
@@ -75,7 +211,6 @@ pub fn run_forever(
                 });
             (th, res_recvr, arg_sender)
         };
-
 
     // Thread for metadata reader
     let (mon_thread, from_mon, mon_exit) = {
@@ -94,6 +229,13 @@ pub fn run_forever(
         (th, incoming_recvr, exit_sender)
     };
 
+    // Thread for video compressor
+    let (cmpr_in_tx, cmpr_in_rx) = unbounded::<video_compressor::CmprInput>();
+    let (cmpr_out_tx, cmpr_out_rx) = unbounded::<video_compressor::CmprOutput>();
+    let (cmpr_prog_tx, cmpr_prog_rx) = unbounded::<(String, String)>();
+    thread::spawn(move || {
+        video_compressor::run_forever(cmpr_in_rx, cmpr_out_tx, cmpr_prog_tx, n_workers);
+    });
 
     loop {
         select! {
@@ -118,148 +260,137 @@ pub fn run_forever(
             recv(from_md) -> msg => {
                 match msg {
                     Ok(md_res) => { 
-                        match md_res {
+                        let (vh, ing_res) = match md_res {
                             MetadataResult::Ok(md) => {
                                 tracing::debug!("Got metadata for {:?}", md.src_file);
-
-                                // TODO: pass along to video ingestion
-
-                                fn ingest_video(
-                                        md: &metadata_reader::Metadata,
-                                        videos_dir: &Path,
-                                        db: &DB,
-                                        user_msg_tx: &crossbeam_channel::Sender<UserMessage>
-                                    ) -> Result<(), Box<dyn std::error::Error>>
-                                {
-                                    let vh = calc_video_hash(&md.src_file, &md.user_id)?;
-                                    tracing::debug!("Video hash for {:?} = {}", md.src_file, vh);
-
-                                    let src = PathBuf::from(&md.src_file);
-                                    if !src.is_file() { return Err("Source file not found".into()); }
-
-                                    let new_dir = videos_dir.join(&vh);
-                                    if new_dir.exists() {
-                                        match db.get_video(&vh) {
-                                            Ok(v) => {
-                                                let new_owner = &md.user_id;
-                                                if v.added_by_userid == Some(new_owner.clone()) {
-                                                    tracing::info!("User '{new_owner}' already has video {vh}");
-                                                    user_msg_tx.send(UserMessage {
-                                                        ok: true,
-                                                        msg: format!("Error reading video metadata."),
-                                                        details: None,
-                                                        user_id: new_owner.clone(),
-                                                        video_hash: Some(vh)
-                                                    }).ok();
-                                                    return Ok(());
-                                                } else {
-                                                    return Err(format!("Hash collision?!? Video '{vh}' already owned by '{new_owner}'.").into());
-                                                }
-                                            },
-                                            Err(DBError::NotFound()) => {
-                                                // File exists, but not in DB. Remove file and reprocess.
-                                                tracing::info!("Dir for '{vh}' exists, but not in DB. Deleting old dir and reprocessing.");
-                                                std::fs::remove_dir_all(&new_dir)?;
-                                            }
-                                            Err(e) => {
-                                                return Err(format!("Error checking DB for video '{}': {:?}", vh, e).into());
-                                            }
-                                        }
-                                    }
-                                    assert!(!new_dir.exists()); // Should have been deleted above
-
-                                    // Move src file to orig/
-                                    tracing::debug!("Creating dir '{:?}'...", new_dir);
-                                    std::fs::create_dir(&new_dir)?;
-
-                                    let dir_for_orig = new_dir.join("orig");
-                                    std::fs::create_dir(&dir_for_orig)?;
-                                    let new_src = dir_for_orig.join(src.file_name().ok_or("Bad filename")?);
-
-                                    tracing::debug!("Moving '{:?}' to '{:?}'...", src, new_src);
-                                    std::fs::rename(&src, &new_src)?;
-                                    if !new_src.exists() { return Err("Failed to move src file to orig/".into()); }
-
-                                    // Add to DB
-                                    tracing::info!("Adding video '{}' to DB. Src '{:?}', owner '{}'", vh, new_src, md.user_id);
-                                    db.add_video(&models::VideoInsert {
-                                        video_hash: vh.clone(),
-                                        added_by_userid: Some(md.user_id.clone()),
-                                        added_by_username: Some(md.user_id.clone()),  // TODO: get username from somewhere
-                                        recompression_done: None,
-                                        orig_filename: Some(src.file_name().ok_or("Bad filename")?.to_string_lossy().into_owned()),
-                                        total_frames: Some(md.total_frames as i32),
-                                        duration: md.duration.to_f32(),
-                                        fps: Some(md.fps.to_string()),
-                                        raw_metadata_all: Some(md.metadata_all.clone()),
-                                    })?;
-
-
-                                    // TODO: add to recompression queue if necessary
-                                    /*
-                                        # Schedule recompression if needed
-                                        new_bitrate = self._calc_recompression_bitrate(md)
-                                        if new_bitrate:
-                                            self.compress_q.put( video_compressor.Args(
-                                                    src = src,
-                                                    dst = new_dir / f'temp_{uuid4()}.mp4',
-                                                    video_bitrate = new_bitrate,
-                                                    video_hash = video_hash,
-                                                    user_id = md.user_id
-                                                ))
-                                    */
-
-                                    Ok(())
+                                match calc_video_hash(&md.src_file, &md.user_id) {
+                                    Err(e) => {
+                                        (None, Err(DetailedMsg {
+                                            msg: "Video hashing error".into(),
+                                            details: e.to_string(),
+                                            src_file: md.src_file.clone(),
+                                            user_id: md.user_id.clone(),
+                                        }))
+                                    },
+                                    Ok(vh) => {
+                                        let ing_res = ingest_video(&vh, &md, &videos_dir, target_bitrate, &db, &user_msg_tx, &cmpr_in_tx).map_err(|e| {
+                                            DetailedMsg {
+                                                msg: "Video ingestion failed".into(),
+                                                details: e.to_string(),
+                                                src_file: md.src_file.clone(),
+                                                user_id: md.user_id.clone(),
+                                            }});
+                                        (Some(vh), ing_res)
+                                    },
                                 }
-                                /*
-                                // TODO:
-
-                                if let Err(e) = ingest_video(&md, &data_dir.join("videos"), &db,) {
-                                        clean_up_rejected_file(&data_dir, &md.src_file, Some(format!("Error: {:?}", e))).unwrap_or_else(|e| {
-                                            tracing::error!("Clean up of '{:?}' also failed: {:?}", &md.src_file, e);
-                                        });
-                                }
-                                */
                             }
-                            MetadataResult::Err(e) => {
-                                let details = format!("File: '{:?}'. Error: {} -- {}", e.src_file.file_name(), e.msg, e.details);
-                                tracing::error!("Metadata reader error: {}", details);
-
-                                let cleanup_err = match clean_up_rejected_file(&data_dir, &e.src_file, None) {
-                                        Err(e) => { format!(" Cleanup also failed: {:?}", e) },
-                                        Ok(()) => { "".into() }
-                                    };
-
-                                user_msg_tx.send(UserMessage {
-                                        ok: false,
-                                        msg: format!("Error reading video metadata."),
-                                        details: Some(details + &cleanup_err),
-                                        user_id: e.user_id,
-                                        video_hash: None
-                                    }).ok();
-                            }
+                            MetadataResult::Err(e) => (None, Err(e))
+                        };
+                        // Relay errors, if any.
+                        // No need to send ok message here, variations of it are sent from ingest_video().
+                        if let Err(e) = ing_res {
+                            tracing::error!("Error ingesting file '{:?}' (owner '{:?}', hash '{:?}'): {:?}", e.src_file, e.user_id, vh, e.msg);
+                            let cleanup_err = match clean_up_rejected_file(&data_dir, &e.src_file, None) {
+                                    Err(e) => { format!(" Cleanup also failed: {:?}", e) },
+                                    Ok(()) => { "".into() } };
+                            user_msg_tx.send(UserMessage {
+                                    topic: UserMessageTopic::Error(),
+                                    msg: "Error reading video metadata.".into(),
+                                    details: Some(e.details + &cleanup_err),
+                                    user_id: Some(e.user_id),
+                                    video_hash: vh
+                                }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                         }
                     },
                     Err(e) => { tracing::warn!("Metadata reader is dead ('{:?}'). Exit.", e); break; },
                 }
             },
-            // Incoming monitor
+            // Incoming file from monitor
             recv(from_mon) -> msg => {
                 match msg {
                     Ok(new_file) => {
-                        tracing::info!("New file in incoming: {:?}", new_file);
-                        assert!(false);
+                        // Relay to metadata reader
+                        to_md.send(new_file).unwrap_or_else(|e| {
+                            tracing::error!("FATAL. Error sending file to metadata reader: {:?}", e);
+                            terminate_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                        });
                     },
                     Err(e) => { tracing::warn!("Metadata reader is dead ('{:?}'). Exit.", e); break; },
                 }
             },
+            // Video compressor progress
+            recv(cmpr_prog_rx) -> msg => {
+                match msg {
+                    Ok((vh, msg)) => {
+                        user_msg_tx.send(UserMessage {
+                                topic: UserMessageTopic::Progress(),
+                                msg: msg,
+                                details: None,
+                                user_id: None,
+                                video_hash: Some(vh)
+                            }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
+                    },
+                    Err(e) => { tracing::warn!("Video compressor is dead ('{:?}'). Exit.", e); break; },
+                }
+            },
+            // Video compressor output
+            recv(cmpr_out_rx) -> msg => {
+                match msg {
+                    Err(e) => { tracing::warn!("Video compressor is dead ('{:?}'). Exit.", e); break; },
+                    Ok(res) => {
+                        if res.success {
+
+                            let videos_dir = videos_dir.clone();
+                            let db = db.clone();
+                            let vh = res.video_hash.clone();
+                            
+                            let linked_ok = (move || {
+                                let vh_dir = videos_dir.join(&vh);
+                                if !vh_dir.exists() {
+                                    if let Err(e) = std::fs::create_dir(&vh_dir) {
+                                        tracing::error!("Video hash dir '{:?}' was missing after transcoding, and creating it failed. Probably a bug. -- {:?}", vh_dir, e);
+                                        return false;
+                                    }}
+                                let symlink_path = vh_dir.join("video.mp4");
+                                if let Err(e) = std::os::unix::fs::symlink(&res.dst_file, &symlink_path) {
+                                    tracing::error!("Failed to create symlink '{:?}' -> '{:?}': {:?}", symlink_path, res.dst_file, e);
+                                    return false;
+                                }
+                                if let Err(e) = db.set_video_recompressed(&vh) {
+                                    tracing::error!("Error setting video as recompressed: {:?}", e);
+                                    return false;
+                                }
+                                true
+                            })();
+
+                            // Send success message
+                            user_msg_tx.send(UserMessage {
+                                    topic: if linked_ok {UserMessageTopic::Ok()} else {UserMessageTopic::Error()},
+                                    msg: "Video transcoded.".to_string() + if linked_ok {""} else {" But linking or DB failed."},
+                                    details: None,
+                                    user_id: Some(res.dmsg.user_id),
+                                    video_hash: Some(res.video_hash.clone())
+                                }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
+                        }
+                        else {
+                            tracing::error!("Video compression failed for '{:?}': {:?}", res.dst_file, res.dmsg);
+                            user_msg_tx.send(UserMessage {
+                                    topic: UserMessageTopic::Error(),
+                                    msg: "Video transcoding failed.".into(),
+                                    details: Some(res.dmsg.details),
+                                    user_id: Some(res.dmsg.user_id),
+                                    video_hash: Some(res.video_hash)
+                                }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
+                        }
+                    }
+                }
+            }
         }
 
         if mon_thread.is_finished() {
             tracing::error!("Incoming monitor finished. Exit.");
             break;
         }
-
         if terminate_flag.load(std::sync::atomic::Ordering::Relaxed) {
             tracing::info!("Termination flag set. Exit.");
             break;

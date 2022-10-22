@@ -8,7 +8,7 @@ use tracing;
 use rust_decimal::prelude::*;
 use std::sync::atomic::AtomicBool;
 
-use super::IncomingFile;
+use super::{IncomingFile, DetailedMsg};
 
 
 #[derive(Debug, Clone)]
@@ -21,14 +21,6 @@ pub struct Metadata {
     pub fps: Decimal,
     pub bitrate: u32,
     pub metadata_all: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct DetailedMsg {
-    pub msg: String,
-    pub details: String,
-    pub src_file: PathBuf,
-    pub user_id: String,
 }
 
 pub type MetadataResult = Result<Metadata, DetailedMsg>;
