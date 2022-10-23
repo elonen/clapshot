@@ -177,7 +177,7 @@
   {
     let raw_msg = JSON.stringify({cmd: event_name, data: data});
     if (is_connected()) {
-      //console.log("ws_emit(): Sending: " + raw_msg);
+      console.log("ws_emit(): Sending: " + raw_msg);
       ws_socket.send(raw_msg);
     }
     else {
@@ -261,6 +261,9 @@
       {
         const cmd = msg_json.cmd;
         const data = msg_json.data;
+
+        console.log("[RAW SERVER] cmd: '" + cmd + "', data size = " + JSON.stringify(data).length);
+        
         switch (cmd) 
         {
           case 'welcome':
@@ -293,7 +296,7 @@
             break;
 
           case 'open_video':
-            //console.log("[SERVER] open_video: " + JSON.stringify(data));
+            console.log("[SERVER] open_video: " + JSON.stringify(data));
             $video_url = data.video_url;
             $video_hash = data.video_hash;
             $video_fps = data.fps;
@@ -302,6 +305,7 @@
             break;
 
           case 'new_comment':
+            console.log("[SERVER] new_comment: " + JSON.stringify(data));
             {
               function reorder_comments(old_order) {
                 // Helper to show comment threads in the right order and with correct indentation

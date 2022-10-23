@@ -13,11 +13,12 @@ use path_absolutize::*;
 use tracing;
 
 use crate::video_pipeline::metadata_reader;
+use super::cleanup_rejected::clean_up_rejected_file;
 
 pub enum Void {}
 
-
 pub fn run_forever(
+    data_dir: PathBuf,
     incoming_dir: PathBuf,
     poll_interval: f32,
     resubmit_delay: f32,
@@ -36,7 +37,7 @@ pub fn run_forever(
             Err(RecvTimeoutError::Disconnected) => { break; }
             _ => {}
         }
-        tracing::debug!("Polling incoming");
+        //tracing::debug!("Polling incoming");
         match incoming_dir.read_dir() {
             Ok(entries) => {
 
@@ -56,18 +57,16 @@ pub fn run_forever(
                         // Check if file is still being written to
                         if sz > 1 && sz != 4096 {  // 4096 = size of an empty file on ext4
                             if &sz == last_tested_size.get(&path).unwrap_or(&0) {
-                                tracing::info!("Submitting {:?} for processing.", &path);
                                 match get_file_owner_name(&path) {
                                     Err(e) => {
                                         tracing::error!("Cannot ingest file. Failed to get owner's name for '{:?}': {}", &path, e);
-
-
-                                        // TODO: Move file to rejected/ folder
-
-
+                                        clean_up_rejected_file(&data_dir, &path, None).unwrap_or_else(|e| {
+                                            tracing::error!("Clean up of '{:?}' also failed: {:?}", &path, e);
+                                        });
                                         continue;
                                     }
                                     Ok(owner) => {
+                                        tracing::info!("Submitting {:?} for processing.", &path);
                                         if let Err(e) = incoming_sender.send(
                                                 super::IncomingFile {file_path: path.clone(), user_id: owner}) {
                                             tracing::error!("Failed to send incoming file '{:?}' to processing queue: {:?}", &path, e);

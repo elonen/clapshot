@@ -111,11 +111,17 @@ impl WsSessionArgs<'_> {
                 tracing::warn!("Comment '{}' has data URI drawing stored in DB. Should be on disk.", c.id);
             }
         }
-        self.emit_cmd("new_comment", &serde_json::to_value(c)? , send_to).map(|_| ())
+        let mut fields = serde_json::to_value(c)?;
+        fields["comment_id"] = fields["id"].take();  // swap id with comment_id, because the client expects comment_id        
+        self.emit_cmd("new_comment", &fields , send_to).map(|_| ())
     }
 
 }
 
+
+fn abbv(msg: &str) -> String {
+    if msg.len() > 200 { msg[..200].to_string() + " (...)" } else { msg.to_string() }
+}
 
 
 /// User has connected to our WebSocket endpoint.
@@ -161,7 +167,7 @@ async fn handle_ws_session(
 
             // Message in queue? Send to client.
             Some(msg) = msgq_rx.recv() => {
-                tracing::debug!("[{}] Sending message to client: {:?}", sid, msg);
+                tracing::debug!("[{}] Sending message to client: {}", sid, abbv(msg.to_str().unwrap_or("<msg.to_str() failed>")));
                 if let Err(e) = ws_tx.send(msg).await {
                     tracing::error!("[{}] Error sending message - closing session: {}", sid, e);
                     break;
@@ -272,7 +278,7 @@ async fn run_api_server_async(
     let rt_hello = warp::path("hello").map(|| "Hello, World!");
 
     let upload_dir = server_state.upload_dir.clone();
-    let rt_upload = warp::path("upload")
+    let rt_upload = warp::path("api").and(warp::path("upload"))
         .and(warp::post())
         .and(warp::any().map(move || upload_dir.clone()))
         .and(warp::any().map(move || upload_results_tx.clone()))
@@ -280,6 +286,10 @@ async fn run_api_server_async(
         .and(warp::header::headers_cloned())
         .and(warp::body::stream())
         .and_then(handle_multipart_upload);
+
+    let rt_videos = warp::path("videos").and(
+        warp::fs::dir(server_state_cln1.videos_dir.clone())
+            .with(warp::log("videos")));
 
     let rt_api_ws = warp::path("api").and(warp::path("ws"))
         .and(warp::header::headers_cloned())
@@ -307,13 +317,13 @@ async fn run_api_server_async(
             })
         });
 
-    let routes = rt_hello.or(rt_api_ws).or(rt_upload);
-    let routes = routes.with(warp::log("api_server"));
+    let routes = rt_hello.or(rt_api_ws).or(rt_upload).or(rt_videos);
 
-    let routes = routes.with(warp::cors()
+    let routes = routes.with(warp::log("api_server"))
+        .with(warp::cors()
         .allow_any_origin()
         .allow_methods(vec!["GET", "POST"])
-        .allow_headers(vec!["Content-Type"]));
+        .allow_headers(vec!["x-file-name"]));
 
     let (_addr, server) = warp::serve(routes)
         .bind_with_graceful_shutdown(([127, 0, 0, 1], port), async move {
@@ -342,38 +352,30 @@ async fn run_api_server_async(
                     ref_video_hash: m.video_hash.clone()
                 };
                 
-                match m.user_id {
-                    // Message to a single user
-                    Some(user_id) => {
-                        if let Err(e) = server_state.db.add_message(&msg) {
-                            tracing::error!("Failed to save user notification in DB: {:?}", e);
-                        }
-                        if let Ok(data) = serde_json::to_value(msg) {
-                            let msg = Message::text(serde_json::json!({
-                                "cmd": "message", "data": data }).to_string());
-                            if let Err(_) = server_state.send_to_all_user_sessions(&user_id, &msg) {
-                                tracing::error!("Failed to send user notification '{}'", user_id);
-                            }
-                        }
-                    },
-                    None => {
-                        // Message to all watchers of a video
-                        match m.video_hash {
-                            Some(vh) => {
-                                if let Ok(data) = serde_json::to_value(msg) {
-                                    let msg = Message::text(serde_json::json!({
-                                        "cmd": "message", "data": data }).to_string());
-                                    if let Err(_) = server_state.send_to_all_video_sessions(&vh, &msg) {
-                                        tracing::error!("Failed to send  notification to video hash '{}'", vh);
-                                    }
-                                }        
-                            },
-                            None => {
-                                tracing::error!("Received message with no user_id or video_hash: {:?}", m);
-                            }
+                // Message to a single user
+                if let Some(user_id) = m.user_id {
+                    if let Err(e) = server_state.db.add_message(&msg) {
+                        tracing::error!("Failed to save user notification in DB: {:?}", e);
+                    }
+                    if let Ok(data) = serde_json::to_value(&msg) {
+                        let msg = Message::text(serde_json::json!({
+                            "cmd": "message", "data": data }).to_string());
+                        if let Err(_) = server_state.send_to_all_user_sessions(&user_id, &msg) {
+                            tracing::error!("Failed to send user notification '{}'", user_id);
                         }
                     }
                 };
+                // Message to all watchers of a video
+                if let Some(vh) = m.video_hash {
+                    if let Ok(data) = serde_json::to_value(&msg) {
+                        let msg = Message::text(serde_json::json!({
+                            "cmd": "message", "data": data }).to_string());
+                        if let Err(_) = server_state.send_to_all_video_sessions(&vh, &msg) {
+                            tracing::error!("Failed to send  notification to video hash '{}'", vh);
+                        }
+                    }        
+                };
+                
             }
         };
     };
@@ -392,12 +394,14 @@ pub async fn run_forever(
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
     upload_res_tx: crossbeam_channel::Sender<IncomingFile>,
     terminate_flag: Arc<AtomicBool>,
+    url_base: String,
     port: u16)
         -> Res<()>
 {
     let state = ServerState::new( db,
         Path::new("DEV_DATADIR/videos"),
         Path::new("DEV_DATADIR/upload"),
+        &url_base,
         terminate_flag );
     run_api_server_async(state, user_msg_rx, upload_res_tx, port).await
 }
@@ -425,6 +429,7 @@ mod tests {
             db,
             Path::new("DEV_DATADIR/videos"),
             Path::new("DEV_DATADIR/upload"),
+            &format!("http://127.0.0.1:{port}"),
             terminate_flag.clone());
  
             let api_server = run_api_server_async(api_server_state, user_msg_rx, upload_tx, port);

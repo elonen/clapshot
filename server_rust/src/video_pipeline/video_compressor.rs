@@ -6,7 +6,7 @@ use threadpool::ThreadPool;
 
 use super::DetailedMsg;
 
-pub type ProgressSender = crossbeam_channel::Sender<(String, String)>;
+pub type ProgressSender = crossbeam_channel::Sender<(String, String, String)>;
 
 
 #[derive(Debug, Clone)]
@@ -79,6 +79,9 @@ fn count_frames( src: &str ) -> i32
 /// 
 fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
 {
+    tracing::info!("Compressing video: hash={} owner={} src={:?}",
+        args.video_hash, args.user_id, args.src);
+
     let src_str = match args.src.to_str() {
         Some(s) => s,
         None => return err2cout("Invalid src path", "", &args) }.to_string();
@@ -89,28 +92,28 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
 
     // Open a named pipe for ffmpeg to write progress reports to.
     // If this fails, ignore it and just don't show progress.
-    let (ppipe_fname, ppipe_f) = {
+    let ppipe_fname = {
         let fname = args.dst.with_extension("progress").with_extension("pipe");
         match fname.to_str() {
             None => { Err("Invalid dst path".to_string()) }
-            Some(fname) => std::fs::File::create(&fname)
-                .map(|f| (fname.to_string(), f))
+            Some(fname) => unix_named_pipe::create(&fname, None)
+                .map(|_| fname.to_string())
                 .map_err(|e| e.to_string())
-        }.map_or_else(
-            |e| { tracing::warn!("Won't track FFMPEG progress; failed to create pipe file: {}", e); (None, None) },
-             |f| (Some(f.0), Some(f.1)))
+        }.map_or_else(|e| { tracing::warn!("Won't track FFMPEG progress; failed to create pipe file: {}", e); None}, |f| Some(f))
     };
     
     // Start encoder thread
     let ffmpeg_thread = {
         let src_str = src_str.clone();
         let dst_str = dst_str.clone();
+        let ppipe_fname = ppipe_fname.clone();        
         std::thread::spawn(move || {
+            tracing::debug!("Starting ffmpeg thread");
             // ffmpeg -i INPUT.MOV  -progress - -nostats -vcodec libx265 -vf scale=1280:-8 -map 0 -acodec aac -ac 2 -strict experimental -b:v 2500000 -b:a 128000 OUTPUT.mp4
             let mut cmd = &mut Command::new("ffmpeg");
             cmd = cmd.args(&["-i", &src_str]);
-            if let Some(pipe,) = ppipe_fname {
-                cmd = cmd.args(&["-progress", &pipe]);
+            if let Some(pfn) = ppipe_fname {
+                cmd = cmd.args(&["-progress", &pfn]);
             }
             cmd = cmd.args(&[
                 "-nostats",
@@ -124,13 +127,16 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                 "-b:a", &format!("{}", 128000),
                 &dst_str
             ]);
+            tracing::debug!("Running ffmpeg: {:?}", cmd);
             match cmd.output() {
-                Ok(res) => {(
-                    if res.status.success() {None} else {Some("FFMPEG exited with error".to_string())},
-                    String::from_utf8_lossy(&res.stdout).to_string(),
-                    String::from_utf8_lossy(&res.stderr).to_string(),
-                )},
+                Ok(res) => {
+                    tracing::debug!("ffmpeg finished");
+                    (if res.status.success() {None} else {Some("FFMPEG exited with error".to_string())},
+                        String::from_utf8_lossy(&res.stdout).to_string(),
+                        String::from_utf8_lossy(&res.stderr).to_string() )
+                },
                 Err(e) => {
+                    tracing::error!("ffmpeg exec failed: {:?}", e);
                     (Some(e.to_string()), "".into(), "".into())
                 }
             }
@@ -142,14 +148,25 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
     let progress_thread =
     {
         let progress_terminate = progress_terminate.clone();
-        match ppipe_f {
+        let user_id = args.user_id.clone();
+        match ppipe_fname {
             None => std::thread::spawn(move || {}),
-            Some(pipe) => {
+            Some(pfn) => {
                 let vh = args.video_hash.clone();
                 let src_str = src_str.clone();
                 std::thread::spawn(move || {
+                    tracing::debug!("Starting progress thread");
+
                     let total_frames = count_frames(&src_str);
-                    let reader = &mut std::io::BufReader::new(&pipe);
+
+                    let f = match unix_named_pipe::open_read(&pfn) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            tracing::error!("Failed to open pipe file: {}", e);
+                            return;
+                        }
+                    };
+                    let reader = &mut std::io::BufReader::new(&f);
 
                     let mut msg : Option<String> = None;
                     let mut frame = -1;
@@ -159,7 +176,15 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                     {
                         // Read progress lines from pipe & parse
                         match reader.lines().next() {
-                            Some(Err(e)) => { tracing::debug!("Error reading progress pipe: {}", e); break; },
+                            Some(Err(e)) => {
+                                // Pipe is non-blocking, so ignore EAGAIN, handle others
+                                if e.kind() != std::io::ErrorKind::WouldBlock {
+                                    tracing::error!("Failed to read from pipe: {:?}", e);
+                                    break;
+                                } else {
+                                    std::thread::sleep(std::time::Duration::from_millis(100));
+                                }
+                        },
                             None => { tracing::debug!("Progress pipe EOF"); break; }
                             Some(Ok(l)) => {
                                 // FFMPEG Progress "chunk" looks like this:
@@ -198,7 +223,7 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                                         }}}
                                 // Send progress message (if any)
                                 if let Some(msg) = msg.take() {
-                                    if let Err(e) = progress.send((vh.clone(), msg)) {
+                                    if let Err(e) = progress.send((vh.clone(), user_id.clone(), msg)) {
                                         tracing::debug!("Failed to send FFMPEG progress message. Ending progress tracking. -- {:?}", e);
                                         return;
                                     }}
@@ -215,10 +240,12 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
             (Some("FFMPEG thread panicked".to_string()), "".into(), format!("{:?}", e))
         }
     };
+    tracing::debug!("FFMPEG thread ended/joined");
     progress_terminate.store(true, std::sync::atomic::Ordering::Relaxed);
     if let Err(e) = progress_thread.join() {
         tracing::warn!("FFMPEG progress reporter thread panicked (ignoring): {:?}", e);
     }
+    tracing::debug!("FFMPEG progress reporter thread ended/joined");
 
     CmprOutput {
         success: err_msg.is_none(),

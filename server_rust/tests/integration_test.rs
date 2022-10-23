@@ -25,7 +25,6 @@ type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
 
 #[test]
 #[traced_test]
-//#[instrument(level = "error")]  // silence tracing logs
 fn test_integ_metadata_reader_ok() -> Result<()>
 {
     let data_dir = assert_fs::TempDir::new()?;

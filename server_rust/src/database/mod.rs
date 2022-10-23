@@ -59,8 +59,15 @@ impl DB {
         self.pool.get().map_err(|e| DBError::Other(e.to_string()))
     }
 
-    /// Run DB migrations
-    pub fn create_tables(&self) -> EmptyDBResult
+    // Check if database is up-to-date compared to the embedded migrations
+    pub fn migrations_needed(&self) -> DBResult<bool> {
+        let mut conn = self.conn()?;
+        MigrationHarness::has_pending_migration(&mut conn, MIGRATIONS)
+            .map_err(|e| DBError::Other(e.to_string()))
+    }
+
+    /// Run DB migrations (or create DB if empty)
+    pub fn run_migrations(&self) -> EmptyDBResult
     {
         let mut conn = self.conn()?;
         conn.run_pending_migrations(MIGRATIONS).map_err(|e| DBError::Other(e.to_string()))?;
@@ -312,7 +319,7 @@ mod tests
         //let test_db = assert_fs::NamedTempFile::new("test_db.sqlite")?;
         //let db = DB::connect_db_file(&test_db.path())?;
         let db = DB::connect_db_url(":memory:")?;
-        db.create_tables()?;
+        db.run_migrations()?;
 
         let test_video = models::VideoInsert {
             video_hash: "test_hash".to_string(),

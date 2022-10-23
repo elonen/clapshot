@@ -2,6 +2,8 @@
 //#![allow(unused_variables)]
 //#![allow(unused_imports)]
 
+#![allow(unused_parens)]
+
 use std::io::Read;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -69,6 +71,7 @@ fn calc_video_hash(file_path: &PathBuf, user_id: &str) -> Result<String, Box<dyn
 fn ingest_video(
         vh: &str,
         md: &metadata_reader::Metadata,
+        data_dir: &Path,
         videos_dir: &Path,
         target_bitrate: u32,
         db: &DB,
@@ -89,14 +92,20 @@ fn ingest_video(
             Ok(v) => {
                 let new_owner = &md.user_id;
                 if v.added_by_userid == Some(new_owner.clone()) {
+
                     tracing::info!("User '{new_owner}' already has video {vh}");
                     user_msg_tx.send(UserMessage {
                         topic: UserMessageTopic::Ok(),
                         msg: "You already have this video".to_string(),
                         details: None,
                         user_id: Some(new_owner.clone()),
-                        video_hash: Some(vh.to_string())
+                        video_hash: None  // Don't pass video hash here, otherwise the pre-existing video would be deleted!
                     }).ok();
+
+                    clean_up_rejected_file(&data_dir, &src, Some(vh.into())).unwrap_or_else(|e| {
+                        tracing::error!("Cleanup of '{:?}' failed: {:?}", &src, e);
+                    });
+
                     return Ok(false);
                 } else {
                     return Err(format!("Hash collision?!? Video '{vh}' already owned by '{new_owner}'.").into());
@@ -143,14 +152,21 @@ fn ingest_video(
     // Check if it needs recompressing
     fn calc_transcoding_bitrate(md: &metadata_reader::Metadata, target_max_bitrate: u32) -> Option<u32> {
         let new_bitrate = std::cmp::max(md.bitrate/2, std::cmp::min(md.bitrate, target_max_bitrate));
-        let already_fine = (new_bitrate >= md.bitrate || (md.bitrate as f32) <= 1.2 * (target_max_bitrate as f32)) &&
-            md.orig_codec.to_lowercase() == "h264" &&
-            md.src_file.ends_with(".mp4");
-        if already_fine { None } else { Some(new_bitrate) }
+        let ext = md.src_file.extension().unwrap_or(std::ffi::OsStr::new("")).to_string_lossy().to_lowercase();
+
+        let bitrate_fine = (new_bitrate >= md.bitrate || (md.bitrate as f32) <= 1.2 * (target_max_bitrate as f32));
+        let codec_fine = ["h264", "avc", "hevc", "h265"].contains(&md.orig_codec.to_lowercase().as_str());
+        let container_fine = ["mp4", "mkv"].contains(&ext.as_str());        
+
+        if !bitrate_fine { tracing::info!("Transcoding because: bitrate too high old {} > new {}", md.bitrate, new_bitrate); }
+        if !codec_fine { tracing::info!("Transcoding because: codec not supported '{}'", md.orig_codec); }
+        if !container_fine { tracing::info!("Transcoding because: container not supported '{:?}'", md.src_file.extension()); }
+
+        if bitrate_fine && codec_fine && container_fine { None } else { Some(new_bitrate) }
     }
     let transcode = match calc_transcoding_bitrate(md, target_bitrate) {
         Some(new_bitrate) => {
-            tracing::info!("Video {} ('{:?}') requires transcoding", vh, md.src_file);
+            tracing::info!("Video {} ('{:?}') requires transcoding (orig bitrate={}, new={})", vh, md.src_file, md.bitrate, new_bitrate);
             let dst = dir_for_video.join(format!("transcoded_br{}_{}.mp4", new_bitrate, uuid::Uuid::new_v4()));
             cmpr_tx.send(video_compressor::CmprInput {
                 src: src_moved,
@@ -220,6 +236,7 @@ pub fn run_forever(
         let data_dir = data_dir.clone();
         let th = thread::spawn(move || {
                 if let Err(e) = incoming_monitor::run_forever(
+                        data_dir.clone(),
                         (data_dir.join("incoming") ).clone(),
                         poll_interval, resubmit_delay,
                         incoming_sender,
@@ -232,7 +249,7 @@ pub fn run_forever(
     // Thread for video compressor
     let (cmpr_in_tx, cmpr_in_rx) = unbounded::<video_compressor::CmprInput>();
     let (cmpr_out_tx, cmpr_out_rx) = unbounded::<video_compressor::CmprOutput>();
-    let (cmpr_prog_tx, cmpr_prog_rx) = unbounded::<(String, String)>();
+    let (cmpr_prog_tx, cmpr_prog_rx) = unbounded::<(String, String, String)>();
     thread::spawn(move || {
         video_compressor::run_forever(cmpr_in_rx, cmpr_out_tx, cmpr_prog_tx, n_workers);
     });
@@ -249,7 +266,7 @@ pub fn run_forever(
                             user_id: msg.user_id}).unwrap_or_else(|e| {
                                 tracing::error!("Error sending file to metadata reader: {:?}", e);
                                 clean_up_rejected_file(&data_dir, &msg.file_path, None).unwrap_or_else(|e| {
-                                    tracing::error!("Clean up of '{:?}' also failed: {:?}", &msg.file_path, e);
+                                    tracing::error!("Cleanup of '{:?}' failed: {:?}", &msg.file_path, e);
                                 });
                             });
                     },
@@ -273,7 +290,7 @@ pub fn run_forever(
                                         }))
                                     },
                                     Ok(vh) => {
-                                        let ing_res = ingest_video(&vh, &md, &videos_dir, target_bitrate, &db, &user_msg_tx, &cmpr_in_tx).map_err(|e| {
+                                        let ing_res = ingest_video(&vh, &md, &data_dir, &videos_dir, target_bitrate, &db, &user_msg_tx, &cmpr_in_tx).map_err(|e| {
                                             DetailedMsg {
                                                 msg: "Video ingestion failed".into(),
                                                 details: e.to_string(),
@@ -321,12 +338,12 @@ pub fn run_forever(
             // Video compressor progress
             recv(cmpr_prog_rx) -> msg => {
                 match msg {
-                    Ok((vh, msg)) => {
+                    Ok((vh, user_id, msg)) => {
                         user_msg_tx.send(UserMessage {
                                 topic: UserMessageTopic::Progress(),
                                 msg: msg,
                                 details: None,
-                                user_id: None,
+                                user_id: Some(user_id),
                                 video_hash: Some(vh)
                             }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                     },
@@ -343,6 +360,11 @@ pub fn run_forever(
                             let videos_dir = videos_dir.clone();
                             let db = db.clone();
                             let vh = res.video_hash.clone();
+
+                            // Get filename from path
+                            fn get_filename(p: &str) -> Result<String, Box<dyn std::error::Error>> {
+                                Ok(Path::new(p).file_name().ok_or("bad path")?.to_str().ok_or("bad encoding")?.to_string())
+                            }
                             
                             let linked_ok = (move || {
                                 let vh_dir = videos_dir.join(&vh);
@@ -351,8 +373,12 @@ pub fn run_forever(
                                         tracing::error!("Video hash dir '{:?}' was missing after transcoding, and creating it failed. Probably a bug. -- {:?}", vh_dir, e);
                                         return false;
                                     }}
+                                let dst_filename = match get_filename(&res.dst_file) {
+                                    Ok(f) => f,
+                                    Err(e) => { tracing::error!("{:?}", e); return false; }
+                                };
                                 let symlink_path = vh_dir.join("video.mp4");
-                                if let Err(e) = std::os::unix::fs::symlink(&res.dst_file, &symlink_path) {
+                                if let Err(e) = std::os::unix::fs::symlink(dst_filename, &symlink_path) {
                                     tracing::error!("Failed to create symlink '{:?}' -> '{:?}': {:?}", symlink_path, res.dst_file, e);
                                     return false;
                                 }

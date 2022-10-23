@@ -1,4 +1,4 @@
 {
     "ws_url": "ws://127.0.0.1:8095/api/ws",
-    "upload_url": "http://127.0.0.1/api/upload"
+    "upload_url": "http://127.0.0.1:8095/api/upload"
 }

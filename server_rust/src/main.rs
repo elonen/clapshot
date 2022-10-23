@@ -53,14 +53,15 @@ Options:
  -w N --workers N       Max number of workers for video processing [default: 0]
                         (0 = number of CPU cores)
  -b VBR --bitrate VBR   Target (max) bitrate for transcoding, in Mbps [default: 2.5]
+ --migrate              Migrate database to latest version. Make a backup first.
+
  -d --debug             Enable debug logging
  -h --help              Show this screen
 "#;
 
-
-fn main() -> Result<(), Error>
+fn main() -> Result<(), Box<dyn std::error::Error>>
 {
-    let argv = || vec!["server_rust", "--url-base", "http://localhost", "--data-dir", "DEV_DATADIR/"];
+    let argv = || vec!["clapshot-server", "--bitrate", "8", "--migrate", "--debug", "--url-base", "http://127.0.0.1:8095", "--data-dir", "DEV_DATADIR/"];
 
     let args = Docopt::new(USAGE)
         .and_then(|d| d.argv(argv().into_iter()).parse())
@@ -76,41 +77,58 @@ fn main() -> Result<(), Error>
     if n_workers == 0 { n_workers = num_cpus::get(); }
 
     let bitrate_mbps = args.get_str("--bitrate").parse::<f32>().unwrap_or(2.5);
-    if bitrate_mbps < 0.1 {
-        return Err(Error::new(std::io::ErrorKind::InvalidInput, "Bitrate must be >= 0.1"));
-    }
+    if bitrate_mbps < 0.1 { return Err("Bitrate must be >= 0.1".into()); }
     let target_bitrate = (bitrate_mbps * 1_000_000.0) as u32;
+
+    let url_base = args.get_str("--url-base").to_string();
 
 
     // Setup logging
-    //if std::env::var_os("RUST_LOG").is_none() {
-    //    std::env::set_var("RUST_LOG", "debug") };
-
-    //let subscriber = FmtSubscriber::builder()
-    //    .with_max_level(tracing::Level::TRACE).finish();
-
+    if std::env::var_os("RUST_LOG").is_none() {
+        std::env::set_var("RUST_LOG", "debug,clapshot_server=debug");
+    };
     let log_sbsc = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .compact() // for production
-        //.pretty() // for development
-        .with_file(debug)
-        .with_line_number(debug)
+        //.pretty() // for debugging
+        .with_file(false)
+        .with_line_number(false)
         .with_thread_ids(true)
         .with_target(true)
         .finish();
-    tracing::subscriber::set_global_default(log_sbsc).expect("tracing::subscriber::set_global_default failed");
 
+    tracing::subscriber::set_global_default(log_sbsc).expect("tracing::subscriber::set_global_default failed");
+    tracing::debug!("Debug logging enabled");
 
     // Setup SIGINT / SIGTERM handling
     let terminate_flag = Arc::new(AtomicBool::new(false));
     for sig in TERM_SIGNALS {
-        // Exit immediate on a second signal (e.g. double CTRL-C)
         flag::register_conditional_shutdown(*sig, 1, Arc::clone(&terminate_flag))?;
-        // Set flag on first signal
         flag::register(*sig, Arc::clone(&terminate_flag))?;
     }
 
     let db_file = data_dir.join("clapshot.sqlite");
     let db = Arc::new(database::DB::connect_db_file(&db_file).unwrap());
+
+    // Check & apply database migrations
+    if args.get_bool("--migrate") && db.migrations_needed()? {
+        match db.run_migrations() {
+            Ok(_) => {
+                assert!(!db.migrations_needed()?);
+                tracing::warn!("Database migrated Ok. Continuing.");
+            },
+            Err(e) => { return Err("Error migrating database".into()); },
+        }
+    } else {
+        match db.migrations_needed() {
+            Ok(false) => {},
+            Ok(true) => {
+                eprintln!("Database migrations needed. Make a backup and run `clapshot-server --migrate`");
+                std::process::exit(1);
+            },
+            Err(e) => { return Err("Error checking database migrations".into()); },
+        }
+    }
 
     // Run API server
     let tf = Arc::clone(&terminate_flag);
@@ -119,7 +137,7 @@ fn main() -> Result<(), Error>
     let api_thread = { 
         let db = db.clone();
         thread::spawn(move || {
-            if let Err(e) = api_server::run_forever(db, user_msg_rx, upload_tx, tf.clone(), 3030) {
+            if let Err(e) = api_server::run_forever(db, user_msg_rx, upload_tx, tf.clone(), url_base.to_string(), port) {
                 error!("API server failed: {}", e);
                 tf.store(true, Ordering::Relaxed);
             }})};

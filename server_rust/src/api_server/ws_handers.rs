@@ -100,8 +100,24 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_
         }
         Ok(v) => {
             ses.video_session_guard = Some(ses.server.link_session_to_video(video_hash, ses.sender.clone()));
-            let fields = serde_json::to_value(&v)?;
+            let mut fields = serde_json::to_value(&v)?;
+
+            // Use transcoded or orig video?
+            let (file, uri) = match v.recompression_done {
+                Some(_) => Ok(("video.mp4".into(), "video.mp4".into())),
+                None => match &v.orig_filename {
+                    Some(f) => Ok((format!("orig/{}", f), format!("orig/{}", urlencoding::encode(f)))),
+                    None => Err("No video file".to_string())
+                }}?;
+
+            if !ses.server.videos_dir.join(&v.video_hash).join(&file).exists() {
+                tracing::error!("Open video failed. File not found: {}", file);
+                return Err("Video file not found".into());
+            }
+
+            fields["video_url"] = json!(format!("{}/videos/{}/{}", ses.server.url_base, &v.video_hash, uri));
             ses.emit_cmd("open_video", &fields, super::SendTo::CurSession() )?;
+
             for c in ses.server.db.get_video_comments(video_hash)? {
                 ses.emit_new_comment(c, super::SendTo::CurSession()).await?;
             }

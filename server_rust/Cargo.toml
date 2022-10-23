@@ -20,7 +20,7 @@ log = "0.4.17"
 os = "0.1.0"
 signal-hook = "0.3.14"
 tracing = "0.1.36"
-tracing-subscriber = "0.3.15"
+tracing-subscriber = {version = "0.3.15", features = ["env-filter"] }
 path-absolutize = "3.0.13"
 serde_json = "1.0.85"
 rust_decimal = "1.26.1"
@@ -40,13 +40,14 @@ sha2 = "0.10.6"
 hex = "0.4.3"
 mpart-async = "0.6.1"
 bytes = "1.2.1"
-futures-util = { version = "0.3.24", default-features = false }
+futures-util = { version = "0.3.24" }
 futures = "0.3.24"
 mime = "0.3.16"
 uuid = {version = "1.2.1", features=["v4"] }
 file-owner = "0.1.1"
 unix-named-pipe = "0.2.0"
 num_cpus = "1.13.1"
+urlencoding = "2.1.2"
 
 [dev-dependencies]
 assert_fs = "1.0.7"

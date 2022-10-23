@@ -15,18 +15,20 @@ pub struct ServerState {
     pub db: Arc<DB>,
     pub videos_dir: PathBuf,
     pub upload_dir: PathBuf,
+    pub url_base: String,
     user_id_to_senders: SenderListMap,
     video_hash_to_senders: SenderListMap,
 }
 
 impl ServerState {
 
-    pub fn new(db: Arc<DB>, videos_dir: &Path, upload_dir: &Path, terminate_flag: Arc<AtomicBool>) -> ServerState {
+    pub fn new(db: Arc<DB>, videos_dir: &Path, upload_dir: &Path, url_base: &str, terminate_flag: Arc<AtomicBool>) -> ServerState {
         ServerState {
             db,
             videos_dir: videos_dir.to_path_buf(),
             upload_dir: upload_dir.to_path_buf(),
             terminate_flag,
+            url_base: url_base.to_string(),
             user_id_to_senders: Arc::new(RwLock::new(HashMap::<String, SenderList>::new())),
             video_hash_to_senders: Arc::new(RwLock::new(HashMap::<String, SenderList>::new())),
         }
