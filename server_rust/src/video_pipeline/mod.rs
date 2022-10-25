@@ -79,7 +79,12 @@ fn ingest_video(
         cmpr_tx: &crossbeam_channel::Sender<video_compressor::CmprInput>)
             -> Result<bool, Box<dyn std::error::Error>>
 {
-    tracing::debug!("Video hash for {:?} = {}", md.src_file, vh);
+    let _span = tracing::info_span!("INGEST_VIDEO",
+        vh = %vh,
+        user=md.user_id,
+        filename=%md.src_file.file_name().unwrap_or_default().to_string_lossy()).entered();
+
+        tracing::info!(file=%md.src_file.display(), "Ingesting file.");
 
     let src = PathBuf::from(&md.src_file);
     if !src.is_file() { return Err("Source file not found".into()); }
@@ -93,7 +98,7 @@ fn ingest_video(
                 let new_owner = &md.user_id;
                 if v.added_by_userid == Some(new_owner.clone()) {
 
-                    tracing::info!("User '{new_owner}' already has video {vh}");
+                    tracing::info!("User already has this video.");
                     user_msg_tx.send(UserMessage {
                         topic: UserMessageTopic::Ok(),
                         msg: "You already have this video".to_string(),
@@ -103,12 +108,12 @@ fn ingest_video(
                     }).ok();
 
                     clean_up_rejected_file(&data_dir, &src, Some(vh.into())).unwrap_or_else(|e| {
-                        tracing::error!("Cleanup of '{:?}' failed: {:?}", &src, e);
+                        tracing::error!(details=e, "Cleanup failed.");
                     });
 
                     return Ok(false);
                 } else {
-                    return Err(format!("Hash collision?!? Video '{vh}' already owned by '{new_owner}'.").into());
+                    return Err(format!("Hash collision?!? Video '{vh}' already owned by another user '{new_owner}'.").into());
                 }
             },
             Err(DBError::NotFound()) => {
@@ -117,26 +122,26 @@ fn ingest_video(
                 std::fs::remove_dir_all(&dir_for_video)?;
             }
             Err(e) => {
-                return Err(format!("Error checking DB for video '{}': {:?}", vh, e).into());
+                return Err(format!("Error checking DB for video '{}': {}", vh, e).into());
             }
         }
     }
     assert!(!dir_for_video.exists()); // Should have been deleted above
 
     // Move src file to orig/
-    tracing::debug!("Creating dir '{:?}'...", dir_for_video);
+    tracing::debug!(dir=%dir_for_video.display(), "Creating video has dir.");
     std::fs::create_dir(&dir_for_video)?;
 
     let dir_for_orig = dir_for_video.join("orig");
     std::fs::create_dir(&dir_for_orig)?;
     let src_moved = dir_for_orig.join(src.file_name().ok_or("Bad filename")?);
 
-    tracing::debug!("Moving '{:?}' to '{:?}'...", src, src_moved);
+    tracing::debug!("Moving '{}' to '{}'", src.display(), src_moved.display());
     std::fs::rename(&src, &src_moved)?;
     if !src_moved.exists() { return Err("Failed to move src file to orig/".into()); }
 
     // Add to DB
-    tracing::info!("Adding video '{}' to DB. Src '{:?}', owner '{}'", vh, src_moved, md.user_id);
+    tracing::info!("Adding video to DB.");
     db.add_video(&models::VideoInsert {
         video_hash: vh.to_string(),
         added_by_userid: Some(md.user_id.clone()),
@@ -150,23 +155,26 @@ fn ingest_video(
     })?;
 
     // Check if it needs recompressing
-    fn calc_transcoding_bitrate(md: &metadata_reader::Metadata, target_max_bitrate: u32) -> Option<u32> {
+    fn needs_transcoding(md: &metadata_reader::Metadata, target_max_bitrate: u32) -> Option<u32> {
         let new_bitrate = std::cmp::max(md.bitrate/2, std::cmp::min(md.bitrate, target_max_bitrate));
         let ext = md.src_file.extension().unwrap_or(std::ffi::OsStr::new("")).to_string_lossy().to_lowercase();
-
-        let bitrate_fine = (new_bitrate >= md.bitrate || (md.bitrate as f32) <= 1.2 * (target_max_bitrate as f32));
-        let codec_fine = ["h264", "avc", "hevc", "h265"].contains(&md.orig_codec.to_lowercase().as_str());
-        let container_fine = ["mp4", "mkv"].contains(&ext.as_str());        
-
-        if !bitrate_fine { tracing::info!("Transcoding because: bitrate too high old {} > new {}", md.bitrate, new_bitrate); }
-        if !codec_fine { tracing::info!("Transcoding because: codec not supported '{}'", md.orig_codec); }
-        if !container_fine { tracing::info!("Transcoding because: container not supported '{:?}'", md.src_file.extension()); }
-
-        if bitrate_fine && codec_fine && container_fine { None } else { Some(new_bitrate) }
+        {
+            let bitrate_fine = (new_bitrate >= md.bitrate || (md.bitrate as f32) <= 1.2 * (target_max_bitrate as f32));
+            let codec_fine = ["h264", "avc", "hevc", "h265"].contains(&md.orig_codec.to_lowercase().as_str());
+            let container_fine = ["mp4", "mkv"].contains(&ext.as_str());        
+    
+            if !bitrate_fine { Some(format!("bitrate too high: old {} > new {}", md.bitrate, new_bitrate)) }
+            else if !codec_fine { Some(format!("codec not supported: '{}'", md.orig_codec)) }
+            else if !container_fine { Some(format!("container not supported : '{}'", md.src_file.extension().unwrap_or_default().to_string_lossy())) }
+            else { None }
+        }.map(|reason| {
+                tracing::info!("Transcoding because: {reason}.");
+                new_bitrate
+        })
     }
-    let transcode = match calc_transcoding_bitrate(md, target_bitrate) {
+
+    let transcode = match needs_transcoding(md, target_bitrate) {
         Some(new_bitrate) => {
-            tracing::info!("Video {} ('{:?}') requires transcoding (orig bitrate={}, new={})", vh, md.src_file, md.bitrate, new_bitrate);
             let dst = dir_for_video.join(format!("transcoded_br{}_{}.mp4", new_bitrate, uuid::Uuid::new_v4()));
             cmpr_tx.send(video_compressor::CmprInput {
                 src: src_moved,
@@ -177,7 +185,7 @@ fn ingest_video(
             }).map(|_| true).map_err(|e| format!("Error sending to transcoding: {:?}", e))
         },
         None => {
-            tracing::info!("Video {} ('{:?}') ok, not transcoding.", vh, md.src_file);
+            tracing::info!("Video ok already, not transcoding.");
             Ok(false)
         }
     };
@@ -208,12 +216,12 @@ pub fn run_forever(
     upload_rx: Receiver<IncomingFile>,
     n_workers: usize)
 {
-    tracing::info!("Starting video processing pipeline. Polling interval: {}s, resubmit delay: {}s", poll_interval, resubmit_delay);
+    tracing::info!("Starting video processing pipeline.");
 
     // Create folder for processed videos
     let videos_dir = data_dir.join("videos");
     if let Err(e) = std::fs::create_dir_all(&videos_dir) {
-        tracing::error!("Error creating videos dir '{:?}': {:?}", videos_dir, e);
+        tracing::error!(details=%e, "Error creating videos dir '{}'.", videos_dir.display());
         return;
     }
 
@@ -241,7 +249,7 @@ pub fn run_forever(
                         poll_interval, resubmit_delay,
                         incoming_sender,
                         exit_recvr) {
-                    tracing::error!("Error from incoming monitor: {:?}", e);
+                    tracing::error!(details=e, "Error from incoming monitor.");
                 }});
         (th, incoming_recvr, exit_sender)
     };
@@ -254,6 +262,7 @@ pub fn run_forever(
         video_compressor::run_forever(cmpr_in_rx, cmpr_out_tx, cmpr_prog_tx, n_workers);
     });
 
+    let _span = tracing::info_span!("PIPELINE").entered();
     loop {
         select! {
             // Pass HTTP upload results to metadata reader
@@ -356,21 +365,31 @@ pub fn run_forever(
                     Err(e) => { tracing::warn!("Video compressor is dead ('{:?}'). Exit.", e); break; },
                     Ok(res) => {
                         if res.success {
-
                             let videos_dir = videos_dir.clone();
                             let db = db.clone();
                             let vh = res.video_hash.clone();
+
+                            // Write out stdout/stderr to separate files
+                            for (name, data) in [("stdout", &res.stdout), ("stderr", &res.stderr)].iter() {
+                                let path = videos_dir.join(&vh).join(name);
+                                tracing::debug!(video=%vh, file=?path, "Writing {} from ffmpeg", name);
+                                match std::fs::write(&path, data) {
+                                    Ok(_) => {},
+                                    Err(e) => {
+                                        tracing::error!(file=?path, details=%e, "Error writing {:?}", name);
+                            }}}
 
                             // Get filename from path
                             fn get_filename(p: &str) -> Result<String, Box<dyn std::error::Error>> {
                                 Ok(Path::new(p).file_name().ok_or("bad path")?.to_str().ok_or("bad encoding")?.to_string())
                             }
                             
+                            // Symlink to transcoded file
                             let linked_ok = (move || {
                                 let vh_dir = videos_dir.join(&vh);
                                 if !vh_dir.exists() {
                                     if let Err(e) = std::fs::create_dir(&vh_dir) {
-                                        tracing::error!("Video hash dir '{:?}' was missing after transcoding, and creating it failed. Probably a bug. -- {:?}", vh_dir, e);
+                                        tracing::error!(details=%e, "Video hash dir {:?} was missing after transcoding, and creating it failed. Probably a bug.", vh_dir);
                                         return false;
                                     }}
                                 let dst_filename = match get_filename(&res.dst_file) {
@@ -379,11 +398,11 @@ pub fn run_forever(
                                 };
                                 let symlink_path = vh_dir.join("video.mp4");
                                 if let Err(e) = std::os::unix::fs::symlink(dst_filename, &symlink_path) {
-                                    tracing::error!("Failed to create symlink '{:?}' -> '{:?}': {:?}", symlink_path, res.dst_file, e);
+                                    tracing::error!(details=%e, "Failed to create symlink {:?} -> {:?}", symlink_path, res.dst_file);
                                     return false;
                                 }
                                 if let Err(e) = db.set_video_recompressed(&vh) {
-                                    tracing::error!("Error setting video as recompressed: {:?}", e);
+                                    tracing::error!(details=%e, "Error marking video as recompressed in DB");
                                     return false;
                                 }
                                 true
@@ -396,10 +415,10 @@ pub fn run_forever(
                                     details: None,
                                     user_id: Some(res.dmsg.user_id),
                                     video_hash: Some(res.video_hash.clone())
-                                }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
+                                }).unwrap_or_else(|e| { tracing::error!(details=%e, "Error sending user message"); });
                         }
                         else {
-                            tracing::error!("Video compression failed for '{:?}': {:?}", res.dst_file, res.dmsg);
+                            tracing::error!(video=res.video_hash, details=?res.dmsg, "Video compression failed");
                             user_msg_tx.send(UserMessage {
                                     topic: UserMessageTopic::Error(),
                                     msg: "Video transcoding failed.".into(),
@@ -432,5 +451,5 @@ pub fn run_forever(
         }
     }
 
-    tracing::warn!("Clean exit.");
+    tracing::info!("Exiting.");
 }

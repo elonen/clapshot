@@ -25,6 +25,9 @@ pub fn run_forever(
     incoming_sender: Sender<super::IncomingFile>,
     exit_evt: Receiver<Void>) -> Result<(), Box<dyn std::error::Error>>
 {
+    let _span = tracing::info_span!("INCOMING").entered();
+    tracing::info!(dir=data_dir.to_str(), poll_interval=poll_interval, resubmit_delay=resubmit_delay, "Starting.");
+
     let mut last_tested_size: std::collections::HashMap<PathBuf, u64> = std::collections::HashMap::new();
     let mut submission_time: std::collections::HashMap<PathBuf, std::time::Instant> = std::collections::HashMap::new();
 
@@ -37,7 +40,7 @@ pub fn run_forever(
             Err(RecvTimeoutError::Disconnected) => { break; }
             _ => {}
         }
-        //tracing::debug!("Polling incoming");
+        //tracing::trace!("Polling dir.");
         match incoming_dir.read_dir() {
             Ok(entries) => {
 
@@ -53,23 +56,25 @@ pub fn run_forever(
                 }
 
                 for (path, sz) in names_and_sizes {
+                    let _span = tracing::debug_span!("Considering file.", path=path.to_str()).entered();
+
                     if !submission_time.contains_key(&path) {
                         // Check if file is still being written to
                         if sz > 1 && sz != 4096 {  // 4096 = size of an empty file on ext4
                             if &sz == last_tested_size.get(&path).unwrap_or(&0) {
                                 match get_file_owner_name(&path) {
                                     Err(e) => {
-                                        tracing::error!("Cannot ingest file. Failed to get owner's name for '{:?}': {}", &path, e);
+                                        tracing::error!(details=%e, "Cannot ingest. Failed to get owner's name for file.");
                                         clean_up_rejected_file(&data_dir, &path, None).unwrap_or_else(|e| {
-                                            tracing::error!("Clean up of '{:?}' also failed: {:?}", &path, e);
+                                            tracing::error!(details=%e, "Clean up also failed.");
                                         });
                                         continue;
                                     }
                                     Ok(owner) => {
-                                        tracing::info!("Submitting {:?} for processing.", &path);
+                                        tracing::info!("Submitting for processing.");
                                         if let Err(e) = incoming_sender.send(
                                                 super::IncomingFile {file_path: path.clone(), user_id: owner}) {
-                                            tracing::error!("Failed to send incoming file '{:?}' to processing queue: {:?}", &path, e);
+                                            tracing::error!(details=%e, "Failed to send incoming file to processing queue.");
                                         }
                                     },
                                 };
@@ -80,17 +85,16 @@ pub fn run_forever(
             },
             Err(e) => {
                 // Directory listing failed. Cannot continue monitoring.
-                tracing::error!("Error monitoring {:?} - aborting: {:?}",
+                tracing::error!(details=%e, "Error monitoring dir {:?} - aborting.",
                     match incoming_dir.absolutize() {
                         Ok(Cow::Owned(p)) => p,     // Got absolute path
                         _ => incoming_dir.clone(),  // Some error happened, use original
-                    },
-                    e);
+                    });
                 break;
             }
         }
     }
 
-    tracing::warn!("Clean exit.");
+    tracing::info!("Exiting.");
     Ok(())
 }

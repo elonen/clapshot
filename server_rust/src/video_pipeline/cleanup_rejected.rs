@@ -35,10 +35,10 @@ pub fn clean_up_rejected_file(data_dir: &Path, src_file: &Path, video_hash: Opti
             let src_size = std::fs::metadata(src_file)?.len();
             let dest_size = std::fs::metadata(&move_to)?.len();
             if src_size == dest_size {
-                tracing::warn!("File '{:?}' already exists in rejects dir, but size is identical. Deleting original.", move_to);
+                tracing::warn!("File '{}' already exists in rejects dir, but size is identical. Deleting original.", move_to.display());
                 std::fs::remove_file(src_file)?;
             } else {
-                return Err(format!("File '{:?}' already exists in rejects dir, and size is different. Not deleting original ({:?}).", move_to, &src_file).into());
+                return Err(format!("File '{}' already exists in rejects dir, and size is different. Not deleting original ('{}').", move_to.display(), &src_file.display()).into());
             }
         }
         // Purge (rm -rf) video hash dir if it exists
@@ -46,7 +46,7 @@ pub fn clean_up_rejected_file(data_dir: &Path, src_file: &Path, video_hash: Opti
             assert!(vh.len() > 0);
             let video_dir = data_dir.join("videos").join(&vh);
             if video_dir.exists() {
-                tracing::info!("File '{:?}' was rejected. Deleting video dir '{:?}'.", src_file, video_dir);
+                tracing::info!(file=%src_file.display(), "File was rejected. Deleting video dir '{}'.", video_dir.display());
                 std::fs::remove_dir_all(video_dir)?;
             }
         }

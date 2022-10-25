@@ -29,6 +29,9 @@ pub struct CmprOutput {
 }
 
 fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> CmprOutput {
+    let details_str = format!("{:?}", err);
+    tracing::error!(details=&details_str, "err2cout: {}", msg_txt);
+
     CmprOutput {
         success: false,
         dst_file: args.dst.to_str().unwrap_or("<invalid path>").to_string(),
@@ -37,7 +40,7 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
         stderr: "".into(),
         dmsg: DetailedMsg {
             msg: msg_txt.to_string(),
-            details: format!("{:?}", err),
+            details: details_str,
             src_file: args.src.clone(),
             user_id: args.user_id.clone()
         },
@@ -61,11 +64,11 @@ fn count_frames( src: &str ) -> i32
             if output.status.success() {
                 match String::from_utf8_lossy(&output.stdout).trim().parse::<u32>() {
                     Ok(n) => { return n as i32; },
-                    Err(e) => { tracing::error!("Frame counting '{}' failed: {}", src, e); }
+                    Err(e) => { tracing::error!(details=%e, "Frame counting '{}' failed.", src); }
                 }
-            } else { tracing::error!("Frame counting '{}' failed; ffprobe exited with error: {}", src, String::from_utf8_lossy(&output.stderr)); }
+            } else { tracing::error!(details=%String::from_utf8_lossy(&output.stderr), "Frame counting '{}' failed; ffprobe exited with error.", src); }
         },
-        Err(e) => { tracing::error!("Frame counting '{}' failed: {}", src, e); }
+        Err(e) => { tracing::error!(details=%e, "Frame counting '{}' failed.", src); }
     };
     -1
 }
@@ -79,8 +82,12 @@ fn count_frames( src: &str ) -> i32
 /// 
 fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
 {
-    tracing::info!("Compressing video: hash={} owner={} src={:?}",
-        args.video_hash, args.user_id, args.src);
+    let _span = tracing::info_span!("run_ffmpeg",
+        video = %args.video_hash,
+        user = %args.user_id,
+        thread = ?std::thread::current().id()).entered();
+
+    tracing::info!(src=%args.src.display(), dst=%args.dst.display(), bitrate=%args.video_bitrate, "Compressing video");
 
     let src_str = match args.src.to_str() {
         Some(s) => s,
@@ -99,7 +106,7 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
             Some(fname) => unix_named_pipe::create(&fname, None)
                 .map(|_| fname.to_string())
                 .map_err(|e| e.to_string())
-        }.map_or_else(|e| { tracing::warn!("Won't track FFMPEG progress; failed to create pipe file: {}", e); None}, |f| Some(f))
+        }.map_or_else(|e| { tracing::warn!(details=e, "Won't track FFMPEG progress; failed to create pipe file."); None}, |f| Some(f))
     };
     
     // Start encoder thread
@@ -108,7 +115,9 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
         let dst_str = dst_str.clone();
         let ppipe_fname = ppipe_fname.clone();        
         std::thread::spawn(move || {
-            tracing::debug!("Starting ffmpeg thread");
+            let _span = tracing::info_span!("ffmpeg_thread",
+                thread = ?std::thread::current().id()).entered();
+    
             // ffmpeg -i INPUT.MOV  -progress - -nostats -vcodec libx265 -vf scale=1280:-8 -map 0 -acodec aac -ac 2 -strict experimental -b:v 2500000 -b:a 128000 OUTPUT.mp4
             let mut cmd = &mut Command::new("ffmpeg");
             cmd = cmd.args(&["-i", &src_str]);
@@ -127,16 +136,17 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                 "-b:a", &format!("{}", 128000),
                 &dst_str
             ]);
-            tracing::debug!("Running ffmpeg: {:?}", cmd);
+            tracing::info!("Calling ffmpeg");
+            tracing::debug!("Exec: {:?}", cmd);
             match cmd.output() {
                 Ok(res) => {
-                    tracing::debug!("ffmpeg finished");
+                    tracing::info!("ffmpeg finished");
                     (if res.status.success() {None} else {Some("FFMPEG exited with error".to_string())},
                         String::from_utf8_lossy(&res.stdout).to_string(),
                         String::from_utf8_lossy(&res.stderr).to_string() )
                 },
                 Err(e) => {
-                    tracing::error!("ffmpeg exec failed: {:?}", e);
+                    tracing::error!(details=%e, "ffmpeg exec failed");
                     (Some(e.to_string()), "".into(), "".into())
                 }
             }
@@ -155,14 +165,15 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                 let vh = args.video_hash.clone();
                 let src_str = src_str.clone();
                 std::thread::spawn(move || {
-                    tracing::debug!("Starting progress thread");
-
+                    let _span = tracing::info_span!("progress_thread",
+                        thread = ?std::thread::current().id()).entered();
+    
                     let total_frames = count_frames(&src_str);
 
                     let f = match unix_named_pipe::open_read(&pfn) {
                         Ok(f) => f,
                         Err(e) => {
-                            tracing::error!("Failed to open pipe file: {}", e);
+                            tracing::error!(details=%e, "Failed to open named pipe.");
                             return;
                         }
                     };
@@ -179,7 +190,7 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                             Some(Err(e)) => {
                                 // Pipe is non-blocking, so ignore EAGAIN, handle others
                                 if e.kind() != std::io::ErrorKind::WouldBlock {
-                                    tracing::error!("Failed to read from pipe: {:?}", e);
+                                    tracing::error!(details=%e, "Failed to read from pipe.");
                                     break;
                                 } else {
                                     std::thread::sleep(std::time::Duration::from_millis(100));
@@ -193,7 +204,7 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                                 //       <...some other key-value pairs...>
                                 //    progress=continue
                                 match l.find("=") {
-                                    None => { tracing::debug!("Skipping invalid FFMPEG progress log line: '{}'", l); }
+                                    None => { tracing::debug!(input=l, "Skipping invalid FFMPEG progress chunk line."); }
                                     Some(idx) => {
                                         let (key, val) = l.split_at(idx);
                                         let val = &val[1..];
@@ -201,12 +212,12 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                                             "frame" => {
                                                 match val.parse::<i32>() {
                                                     Ok(n) => { frame = n; },
-                                                    Err(e) => { tracing::warn!("Invalid frame# in FFMPEG progress log: {}", e); }
+                                                    Err(e) => { tracing::warn!(details=%e, "Invalid frame# in FFMPEG progress log."); }
                                                 }},
                                             "fps" => {
                                                 match val.parse::<f32>() {
                                                     Ok(n) => { fps = n; },
-                                                    Err(e) => { tracing::warn!("Invalid fps in FFMPEG progress log: {}", e); }
+                                                    Err(e) => { tracing::warn!(details=%e, "Invalid fps in FFMPEG progress log."); }
                                                 }},
                                             "progress" => {
                                                 match val {
@@ -224,7 +235,7 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                                 // Send progress message (if any)
                                 if let Some(msg) = msg.take() {
                                     if let Err(e) = progress.send((vh.clone(), user_id.clone(), msg)) {
-                                        tracing::debug!("Failed to send FFMPEG progress message. Ending progress tracking. -- {:?}", e);
+                                        tracing::debug!(details=%e, "Failed to send FFMPEG progress message. Ending progress tracking.");
                                         return;
                                     }}
                             }}}})
@@ -236,16 +247,16 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
     let (err_msg, stdout, stderr) = match ffmpeg_thread.join() {
         Ok(res) => res,
         Err(e) => {
-            tracing::error!("FFMPEG thread panicked: {:?}", e);
+            tracing::error!(details=?e, "FFMPEG thread panicked.");
             (Some("FFMPEG thread panicked".to_string()), "".into(), format!("{:?}", e))
         }
     };
-    tracing::debug!("FFMPEG thread ended/joined");
+    tracing::debug!("FFMPEG encoder thread joined.");
     progress_terminate.store(true, std::sync::atomic::Ordering::Relaxed);
     if let Err(e) = progress_thread.join() {
-        tracing::warn!("FFMPEG progress reporter thread panicked (ignoring): {:?}", e);
+        tracing::warn!(details=?e, "FFMPEG progress reporter thread panicked (ignoring).");
     }
-    tracing::debug!("FFMPEG progress reporter thread ended/joined");
+    tracing::debug!("FFMPEG progress thread joined.");
 
     CmprOutput {
         success: err_msg.is_none(),
@@ -276,9 +287,10 @@ pub fn run_forever(
     progress: ProgressSender,
     n_workers: usize)
 {
-    tracing::info!("Starting.");
-    let pool = ThreadPool::new(n_workers);
+    let _span = tracing::info_span!("COMPR").entered();
+    tracing::info!(n_workers = n_workers, "Starting.");
 
+    let pool = ThreadPool::new(n_workers);
     loop {
         match inq.recv() {
             Ok(args) => {
@@ -293,11 +305,11 @@ pub fn run_forever(
                     }});
             },
             Err(e) => {
-                tracing::info!("Input queue closed ({e}). Exiting.");
+                tracing::info!(details=%e, "Input queue closed.");
                 break;
             }
         }
     }
 
-    tracing::info!("Clean exit.");
+    tracing::info!("Exiting.");
 }

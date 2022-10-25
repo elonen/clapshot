@@ -119,7 +119,7 @@ impl WsSessionArgs<'_> {
 }
 
 
-fn abbv(msg: &str) -> String {
+fn abbrv(msg: &str) -> String {
     if msg.len() > 200 { msg[..200].to_string() + " (...)" } else { msg.to_string() }
 }
 
@@ -150,7 +150,7 @@ async fn handle_ws_session(
     if let Err(e) = ses.emit_cmd("welcome", 
             &serde_json::json!({ "user_id": user_id, "username": username }), 
             SendTo::CurSession()) {
-        tracing::error!("Error sending welcome message. Closing session. -- {}", e);
+        tracing::error!(details=%e, "Error sending welcome message. Closing session.");
         return;
     }
 
@@ -167,9 +167,9 @@ async fn handle_ws_session(
 
             // Message in queue? Send to client.
             Some(msg) = msgq_rx.recv() => {
-                tracing::debug!("[{}] Sending message to client: {}", sid, abbv(msg.to_str().unwrap_or("<msg.to_str() failed>")));
+                tracing::debug!(msg = abbrv(msg.to_str().unwrap_or("<msg.to_str() failed>")), "Sending message to client.");
                 if let Err(e) = ws_tx.send(msg).await {
-                    tracing::error!("[{}] Error sending message - closing session: {}", sid, e);
+                    tracing::error!(details=%e, "Error sending message - closing session.");
                     break;
                 }
             },
@@ -178,7 +178,7 @@ async fn handle_ws_session(
             Some(msg) = ws_rx.next() => {
                 match msg {
                     Err(e) => {
-                        tracing::error!("[{}] Error receiving message - closing session: {}", sid, e);
+                        tracing::error!(details=%e, "Error receiving message - closing session.");
                         break;
                     },
                     Ok(msg) => {
@@ -188,20 +188,30 @@ async fn handle_ws_session(
                                 let msg_str = msg.to_str().unwrap_or("!!msg was supposed to .is_text()!!");
                                 let json: serde_json::Value = serde_json::from_str(msg_str)?;
                                 let cmd = json["cmd"].as_str().ok_or("Missing cmd")?.to_string();
+
+                                if cmd.len() > 64 { return Err("Cmd too long".into()); }
                                 let data = json.get("data").unwrap_or(&serde_json::json!({})).clone();
+
+                                // Check data fields for length. Only "drawing" is allowed to be long.
+                                for (k, v) in data.as_object().unwrap_or(&serde_json::Map::new()) {
+                                    if k != "drawing" && v.as_str().map(|s| s.len() > 2048).unwrap_or(false) {
+                                        return Err("Field too long".into());
+                                    }
+                                }                                
                                 Ok((cmd, data))
                             }
 
                             let (cmd, data) = match parse_msg(&msg) {
                                 Ok((cmd, data)) => (cmd, data),
                                 Err(e) => {
-                                    let answ = format!("Error parsing JSON message.");
-                                    tracing::warn!("[{}] {}: {}", sid, answ, e);
-                                    if !msgq_tx.send(Message::text(answ)).is_ok() { break; }
-                                    continue;
+                                    tracing::warn!(details=%e, "Error parsing JSON message. Closing session.");
+                                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                                    if !msgq_tx.send(Message::text(format!("Invalid message, bye: {}", e))).is_ok() { break; }
+                                    break;
                                 }
                             };
-                            tracing::debug!("[{}] Cmd '{}' from '{}'", sid, cmd, ses.user_id);
+                            tracing::debug!(cmd=%cmd, "Msg from client.");
+
 
                             if let Err(e) = msg_dispatch(&cmd, &data, &mut ses).await {
                                     if let Some(e) = e.downcast_ref::<tokio::sync::mpsc::error::SendError<Message>>() {
@@ -215,10 +225,10 @@ async fn handle_ws_session(
                                 };
 
                         } else if msg.is_close() {
-                            tracing::info!("[{}] Received close message", sid);
+                            tracing::info!("Got websocket close message.");
                             break
                         } else {
-                            tracing::error!("[{}] Received unexpected message - closing session: {:?}", sid, msg);
+                            tracing::error!(msg=?msg, "Got unexpected message - closing session.");
                             break
                         };
                     }
@@ -227,7 +237,7 @@ async fn handle_ws_session(
 
             else => {
                 if ses.sender.is_closed() {
-                    tracing::info!("[{}] Message queue gone. Closing session.", sid);
+                    tracing::info!("Sender channel gone. Closing session.");
                     break;
                 }
             }
@@ -244,7 +254,7 @@ fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String)
             if let Some(val) = hdrs.get(n).or(hdrs.get(n.to_lowercase())) {
                 match val.to_str() {
                     Ok(s) => return Some(s.into()),
-                    Err(e) => tracing::warn!("Error parsing header '{}': {}", n, e),
+                    Err(e) => tracing::warn!(details=%e, "Error parsing header '{}'.", n),
         }}}
         None
     }
@@ -269,11 +279,11 @@ async fn run_api_server_async(
     port: u16)
         -> Res<()>
 {
-    let session_counter = Arc::new(RwLock::new(0u32));
+    let session_counter = Arc::new(RwLock::new(0u64));
     let server_state_cln1 = server_state.clone();
     let server_state_cln2 = server_state.clone();
 
-    tracing::info!("Starting API server on port {}", port);
+    tracing::info!(port=port, "Starting API server.");
 
     let rt_hello = warp::path("hello").map(|| "Hello, World!");
 
@@ -303,7 +313,7 @@ async fn run_api_server_async(
             let sid = {
                 let mut counter = session_counter.write().unwrap();
                 *counter += 1;
-                format!("{}-{}", user_id, *counter)
+                (*counter).to_string()
             };
 
             let server_state = server_state.clone();
@@ -311,9 +321,10 @@ async fn run_api_server_async(
                 // Diesel SQLite calls are blocking, so run a thread per user session
                 // even though we're using async/await
                 tokio::task::spawn_blocking( move || {
+                    let _span = tracing::info_span!("ws_session", sid=%sid, user=%user_id).entered();
                     block_on(handle_ws_session(ws, sid, user_id, user_name, server_state));
                 }).await.unwrap_or_else(|e| {
-                    tracing::error!("Error joining handle_ws_session thread: {}", e); });
+                    tracing::error!(details=%e, "Error joining handle_ws_session thread."); });
             })
         });
 
@@ -355,13 +366,13 @@ async fn run_api_server_async(
                 // Message to a single user
                 if let Some(user_id) = m.user_id {
                     if let Err(e) = server_state.db.add_message(&msg) {
-                        tracing::error!("Failed to save user notification in DB: {:?}", e);
+                        tracing::error!(details=%e, "Failed to save user notification in DB.");
                     }
                     if let Ok(data) = serde_json::to_value(&msg) {
                         let msg = Message::text(serde_json::json!({
                             "cmd": "message", "data": data }).to_string());
-                        if let Err(_) = server_state.send_to_all_user_sessions(&user_id, &msg) {
-                            tracing::error!("Failed to send user notification '{}'", user_id);
+                        if let Err(e) = server_state.send_to_all_user_sessions(&user_id, &msg) {
+                            tracing::error!(user=user_id, details=%e, "Failed to send user notification.");
                         }
                     }
                 };
@@ -371,11 +382,11 @@ async fn run_api_server_async(
                         let msg = Message::text(serde_json::json!({
                             "cmd": "message", "data": data }).to_string());
                         if let Err(_) = server_state.send_to_all_video_sessions(&vh, &msg) {
-                            tracing::error!("Failed to send  notification to video hash '{}'", vh);
+                            tracing::error!(video=vh, "Failed to send notification to video hash.");
                         }
                     }        
                 };
-                
+
             }
         };
     };
@@ -383,7 +394,7 @@ async fn run_api_server_async(
     tokio::join!(server, msg_relay);
 
 
-    tracing::info!("API server stopped");
+    tracing::info!("Exiting.");
     Ok(())
 }
 
@@ -398,6 +409,7 @@ pub async fn run_forever(
     port: u16)
         -> Res<()>
 {
+    let _span = tracing::info_span!("API").entered();
     let state = ServerState::new( db,
         Path::new("DEV_DATADIR/videos"),
         Path::new("DEV_DATADIR/upload"),

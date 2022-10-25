@@ -89,16 +89,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
     };
     let log_sbsc = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .compact() // for production
         //.pretty() // for debugging
         .with_file(false)
         .with_line_number(false)
-        .with_thread_ids(true)
-        .with_target(true)
+        .with_thread_ids(false)
+        .with_target(false)
         .finish();
 
     tracing::subscriber::set_global_default(log_sbsc).expect("tracing::subscriber::set_global_default failed");
-    tracing::debug!("Debug logging enabled");
 
     // Setup SIGINT / SIGTERM handling
     let terminate_flag = Arc::new(AtomicBool::new(false));
@@ -115,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
         match db.run_migrations() {
             Ok(_) => {
                 assert!(!db.migrations_needed()?);
-                tracing::warn!("Database migrated Ok. Continuing.");
+                tracing::warn!(file=%db_file.display(), "Database migrated Ok. Continuing.");
             },
             Err(e) => { return Err("Error migrating database".into()); },
         }
@@ -151,19 +149,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
         };
 
     // Loop forever, abort on SIGINT/SIGTERM or if child threads die
-    while !terminate_flag.load(Ordering::Relaxed)
-    {
+    while !terminate_flag.load(Ordering::Relaxed) {
         thread::sleep(std::time::Duration::from_secs(1));
         if vpp_thread.is_finished() {
-            tracing::info!("Video pipeline thread finished.");
             terminate_flag.store(true, Ordering::Relaxed);
         }
     }
 
     tracing::warn!("Got kill signal. Cleaning up.");
     vpp_thread.join().unwrap();
-
-    tracing::warn!("Cleanup done. Exiting.");
     Ok(())
 }
 

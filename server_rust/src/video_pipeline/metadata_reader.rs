@@ -111,14 +111,16 @@ fn read_metadata_from_file(args: &IncomingFile) -> Result<Metadata, String>
 /// * `n_workers` - number of threads to use for processing
 pub fn run_forever(inq: Receiver<IncomingFile>, outq: Sender<MetadataResult>, n_workers: usize)
 {
-    tracing::info!("Starting.");
+    let _span = tracing::info_span!("MD").entered();
+    tracing::info!(n_workers = n_workers, "Starting.");
+
     let pool = ThreadPool::new(n_workers);
     let pool_is_healthy  = std::sync::Arc::new(AtomicBool::new(true));
 
     while pool_is_healthy.load(Ordering::Relaxed) {
         match inq.recv() {
             Ok(args) => {
-                tracing::info!("Got message: {:?}", args);
+                tracing::info!(file=%args.file_path.display(), user=args.user_id, "Scanning file.");
                 let pool_is_healthy = pool_is_healthy.clone();
                 let outq = outq.clone();
                 pool.execute(move || {
@@ -130,18 +132,18 @@ pub fn run_forever(inq: Receiver<IncomingFile>, outq: Sender<MetadataResult>, n_
                                     src_file: args.file_path.clone(),
                                     user_id: args.user_id.clone() }}))
                     {
-                        tracing::error!("Result send failed! Aborting. -- {:?}", e);
+                        tracing::error!(details=%e, "Result send failed! Aborting.");
                         pool_is_healthy.store(false, Ordering::Relaxed);
                     }});
             },
             Err(RecvError) => {
-                tracing::info!("Channel closed. Exiting.");
+                tracing::info!("Incoming queue closed.");
                 break;
             }
         }
     }
 
-    tracing::warn!("Clean exit.");
+    tracing::info!("Exiting.");
 }
 
 
