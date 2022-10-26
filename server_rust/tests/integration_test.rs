@@ -3,7 +3,7 @@
 #![allow(unused_imports)]
 
 
-use std::error;
+use std::{error, any};
 use std::{path::PathBuf, str::FromStr};
 use std::{thread, time::Duration};
 
@@ -19,13 +19,11 @@ use tracing;
 use tracing::{error, info, warn, instrument};
 use tracing_test::traced_test;
 
-type Result<T> = std::result::Result<T, Box<dyn error::Error>>;
-
 
 
 #[test]
 #[traced_test]
-fn test_integ_metadata_reader_ok() -> Result<()>
+fn test_integ_metadata_reader_ok() -> anyhow::Result<()>
 {
     let data_dir = assert_fs::TempDir::new()?;
     data_dir.copy_from("tests/assets/", &["*.mov"])?;

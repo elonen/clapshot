@@ -6,12 +6,13 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 type WsMsg = warp::ws::Message;
 
-type Res<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+type Res<T> = anyhow::Result<T>;
 type MsgSender = tokio::sync::mpsc::UnboundedSender<WsMsg>;
 type SenderList = Vec<MsgSender>;
 type SenderListMap = Arc<RwLock<HashMap<String, SenderList>>>;
 
 use serde_json::json;
+use anyhow::{anyhow, bail, Context};
 
 use data_url::{DataUrl, mime};
 use sha2::{Sha256, Digest};
@@ -90,14 +91,12 @@ pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut WsSessionArg
 /// Send them the video info and all comments related to it.
 /// Register the session as a viewer of the video (video_session_guard).
 pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let video_hash = data["video_hash"].as_str().ok_or("video_hash missing")?;
+    let video_hash = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
     match ses.server.db.get_video(video_hash) {
         Err(DBError::NotFound()) => {
             send_user_error!(ses, Topic::Video(video_hash), "No such video.");
         }
-        Err(e) => {
-            return Err(e.into());
-        }
+        Err(e) => { bail!(e); }
         Ok(v) => {
             ses.video_session_guard = Some(ses.server.link_session_to_video(video_hash, ses.sender.clone()));
             let mut fields = serde_json::to_value(&v)?;
@@ -107,12 +106,12 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_
                 Some(_) => Ok(("video.mp4".into(), "video.mp4".into())),
                 None => match &v.orig_filename {
                     Some(f) => Ok((format!("orig/{}", f), format!("orig/{}", urlencoding::encode(f)))),
-                    None => Err("No video file".to_string())
+                    None => Err(anyhow!("No video file"))
                 }}?;
 
             if !ses.server.videos_dir.join(&v.video_hash).join(&file).exists() {
                 tracing::error!("Open video failed. File not found: {}", file);
-                return Err("Video file not found".into());
+                bail!("Video file not found");
             }
 
             fields["video_url"] = json!(format!("{}/videos/{}/{}", ses.server.url_base, &v.video_hash, uri));
@@ -127,7 +126,7 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_
 }
 
 pub async fn msg_del_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let video_hash = data["video_hash"].as_str().ok_or("video_hash missing")?;
+    let video_hash = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
     match ses.server.db.get_video(video_hash) {
         Ok(v) => {
             if Some(ses.user_id.to_string()) != v.added_by_userid && ses.user_id != "admin" {
@@ -142,13 +141,13 @@ pub async fn msg_del_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>
         Err(DBError::NotFound()) => {
             send_user_error!(ses, Topic::Video(video_hash), "No such video. Cannot delete.");
         }
-        Err(e) => { return Err(e.into()); }
+        Err(e) => { bail!(e); }
     }
     Ok(())
 }
 
 pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let vh = data["video_hash"].as_str().ok_or("video_hash missing")?.to_string();
+    let vh = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
 
     if let Err(DBError::NotFound())  = ses.server.db.get_video(&vh) {
         send_user_error!(ses, Topic::Video(&vh), "No such video. Cannot comment.");
@@ -161,13 +160,12 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
         if d.starts_with("data:") {
 
             // Convert data URI to bytes
-            let img_uri = DataUrl::process(&d)
-                .map_err(|e| format!("Invalid drawing data URI"))?;
+            let img_uri = DataUrl::process(&d).map_err(|e| anyhow!("Invalid drawing data URI"))?;
             
             if img_uri.mime_type().type_ != "image" || img_uri.mime_type().subtype != "webp" {
-                return Err(format!("Invalid mimetype in drawing: {:?}", img_uri.mime_type()).into());
+                bail!("Invalid mimetype in drawing: {:?}", img_uri.mime_type())
             }
-            let img_data = img_uri.decode_to_vec().map_err(|e| format!("Failed to decode drawing data URI: {:?}", e))?;
+            let img_data = img_uri.decode_to_vec().map_err(|e| anyhow!("Failed to decode drawing data URI: {:?}", e))?;
 
             // Make up a filename
             fn sha256hex( data: &[u8] ) -> String {
@@ -182,9 +180,9 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
             // Write to file
             let drawing_path = ses.server.videos_dir.join(&vh).join("drawings").join(&fname);
             std::fs::create_dir_all(drawing_path.parent().unwrap())
-                .map_err(|e| format!("Failed to create drawings dir: {:?}", e))?;
+                .map_err(|e| anyhow!("Failed to create drawings dir: {:?}", e))?;
             async_std::fs::write(drawing_path, img_data.0).await.map_err(
-                |e| format!("Failed to write drawing file: {:?}", e))?;
+                |e| anyhow!("Failed to write drawing file: {:?}", e))?;
             
             // Replace data URI with filename
             drwn = Some(fname);
@@ -192,16 +190,16 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
     };
 
     let c = models::CommentInsert {
-        video_hash: vh.clone(),
+        video_hash: vh.to_string(),
         parent_id: data["parent_id"].as_i64().map(|x| x as i32),
         user_id: ses.user_id.into(),
         username: ses.user_name.into(),
-        comment: data["comment"].as_str().ok_or("comment missing")?.to_string(),
+        comment: data["comment"].as_str().ok_or(anyhow!("comment missing"))?.to_string(),
         timecode: data["timecode"].as_str().map(String::from),
         drawing: drwn,
     };
     let new_id = ses.server.db.add_comment(&c)
-        .map_err(|e| format!("Failed to add comment: {:?}", e))?;
+        .map_err(|e| anyhow!("Failed to add comment: {:?}", e))?;
     let c = ses.server.db.get_comment(new_id)?;
 
     // Send to all clients watching this video
@@ -210,8 +208,8 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
 }
 
 pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let comment_id = data["comment_id"].as_i64().ok_or("comment_id missing")? as i32;
-    let new_text = data["comment"].as_str().ok_or("comment missing")?.to_string();
+    let comment_id = data["comment_id"].as_i64().ok_or(anyhow!("comment_id missing"))? as i32;
+    let new_text = data["comment"].as_str().ok_or(anyhow!("comment missing"))?.to_string();
 
     match ses.server.db.get_comment(comment_id) {
         Ok(old) => {
@@ -228,13 +226,13 @@ pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<
         Err(DBError::NotFound()) => {
             send_user_error!(ses, Topic::None, "No such comment. Cannot edit.");
         }
-        Err(e) => { return Err(e.into()); }
+        Err(e) => { bail!(e); }
     }
     Ok(())
 }
 
 pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let comment_id = data["comment_id"].as_i64().ok_or("comment_id missing")? as i32;
+    let comment_id = data["comment_id"].as_i64().ok_or(anyhow!("comment_id missing"))? as i32;
 
     match ses.server.db.get_comment(comment_id) {
         Ok(cmt) => {
@@ -254,7 +252,7 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
         Err(DBError::NotFound()) => {
             send_user_error!(ses, Topic::None, "No such comment. Cannot delete.");
         }
-        Err(e) => { return Err(e.into()); }
+        Err(e) => { bail!(e); }
     }
     Ok(())
 }
@@ -288,7 +286,7 @@ pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut WsSessi
         "list_my_messages" => msg_list_my_messages(data, ses).await,
         "logout" => msg_logout(data, ses).await,
         "echo" => {
-            let answ = format!("Echo: {}", data.as_str().ok_or("data not found")?);
+            let answ = format!("Echo: {}", data.as_str().ok_or(anyhow!("data not found"))?);
             ses.sender.send(WsMsg::text(answ))?;
             Ok(())
         },

@@ -11,14 +11,17 @@ use futures_util::stream::StreamExt;
 use futures_util::SinkExt;
 use warp::ws::{Message};
 use warp::http::HeaderMap;
+use std::sync::atomic::Ordering::Relaxed;
 
-use std::path::Path;
+use std::path::{PathBuf};
+use anyhow::{anyhow, bail};
 
 mod server_state;
 use server_state::ServerState;
 
 mod ws_handers;
 use ws_handers::msg_dispatch;
+mod tests;
 
 mod file_upload;
 use file_upload::handle_multipart_upload;
@@ -26,7 +29,7 @@ use file_upload::handle_multipart_upload;
 use crate::database::{models, DB};
 use crate::video_pipeline::IncomingFile;
 
-type Res<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+type Res<T> = anyhow::Result<T>;
 type WsMsgSender = tokio::sync::mpsc::UnboundedSender<Message>;
 type SenderList = Vec<WsMsgSender>;
 type SenderListMap = Arc<RwLock<HashMap<String, SenderList>>>;
@@ -160,7 +163,7 @@ async fn handle_ws_session(
         {
             // Termination flag set? Exit.
             _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
-                if ses.server.terminate_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                if ses.server.terminate_flag.load(Relaxed) {
                     tracing::info!("Termination flag set. Closing session.");
                     break;
              }},
@@ -187,16 +190,14 @@ async fn handle_ws_session(
                             fn parse_msg(msg: &Message) -> Res<(String, serde_json::Value)> {
                                 let msg_str = msg.to_str().unwrap_or("!!msg was supposed to .is_text()!!");
                                 let json: serde_json::Value = serde_json::from_str(msg_str)?;
-                                let cmd = json["cmd"].as_str().ok_or("Missing cmd")?.to_string();
+                                let cmd = json["cmd"].as_str().ok_or(anyhow!("Missing cmd"))?.trim().to_string();
 
-                                if cmd.len() > 64 { return Err("Cmd too long".into()); }
+                                if cmd.len() == 0 || cmd.len() > 64 { bail!("Bad cmd") }
                                 let data = json.get("data").unwrap_or(&serde_json::json!({})).clone();
 
                                 // Check data fields for length. Only "drawing" is allowed to be long.
                                 for (k, v) in data.as_object().unwrap_or(&serde_json::Map::new()) {
-                                    if k != "drawing" && v.as_str().map(|s| s.len() > 2048).unwrap_or(false) {
-                                        return Err("Field too long".into());
-                                    }
+                                    if k != "drawing" && v.as_str().map(|s| s.len() > 2048).unwrap_or(false) { bail!("Field too long"); }
                                 }                                
                                 Ok((cmd, data))
                             }
@@ -277,7 +278,6 @@ async fn run_api_server_async(
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
     upload_results_tx: crossbeam_channel::Sender<IncomingFile>,
     port: u16)
-        -> Res<()>
 {
     let session_counter = Arc::new(RwLock::new(0u64));
     let server_state_cln1 = server_state.clone();
@@ -338,14 +338,14 @@ async fn run_api_server_async(
 
     let (_addr, server) = warp::serve(routes)
         .bind_with_graceful_shutdown(([127, 0, 0, 1], port), async move {
-            while !server_state_cln1.terminate_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            while !server_state_cln1.terminate_flag.load(Relaxed) {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
         });
 
     let server_state = server_state_cln2;
     let msg_relay = async move {
-        while !server_state.terminate_flag.load(std::sync::atomic::Ordering::Relaxed) {
+        while !server_state.terminate_flag.load(Relaxed) {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             while let Ok(m) = user_msg_rx.try_recv() {
                 let topic_str = match m.topic{
@@ -392,76 +392,26 @@ async fn run_api_server_async(
     };
 
     tokio::join!(server, msg_relay);
-
-
     tracing::info!("Exiting.");
-    Ok(())
 }
 
 
 #[tokio::main]
 pub async fn run_forever(
     db: Arc<DB>,
+    videos_dir: PathBuf,
+    upload_dir: PathBuf,
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
     upload_res_tx: crossbeam_channel::Sender<IncomingFile>,
     terminate_flag: Arc<AtomicBool>,
     url_base: String,
     port: u16)
-        -> Res<()>
 {
     let _span = tracing::info_span!("API").entered();
     let state = ServerState::new( db,
-        Path::new("DEV_DATADIR/videos"),
-        Path::new("DEV_DATADIR/upload"),
+        &videos_dir,
+        &upload_dir,
         &url_base,
         terminate_flag );
     run_api_server_async(state, user_msg_rx, upload_res_tx, port).await
-}
-
-// ---------------------------------------------------------------------------
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use url::Url;
-    use tokio_tungstenite::tungstenite::Message;
-    use tokio_tungstenite::connect_async;
-    use crate::database::DB;
-
-    #[tokio::test]
-    async fn test_api_server_echo() {
-        let terminate_flag = Arc::new(AtomicBool::new(false));
-        let port = 13128;
-
-        let db = Arc::new(DB::connect_db_url(":memory:").unwrap());
-        let (_user_msg_tx, user_msg_rx) = crossbeam_channel::unbounded::<UserMessage>();
-        let (upload_tx, _upload_rx) = crossbeam_channel::unbounded::<IncomingFile>();
-
-        let api_server_state = ServerState::new(
-            db,
-            Path::new("DEV_DATADIR/videos"),
-            Path::new("DEV_DATADIR/upload"),
-            &format!("http://127.0.0.1:{port}"),
-            terminate_flag.clone());
- 
-            let api_server = run_api_server_async(api_server_state, user_msg_rx, upload_tx, port);
-
-        let testit = async move {
-            let url = Url::parse("ws://127.0.0.1:13128/api/ws").unwrap();
-            let (mut ws_stream, _) = connect_async(url).await.unwrap();
-            ws_stream.send(Message::text("{\"cmd\": \"echo\", \"data\": \"hello\"}")).await.unwrap();
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
-            let msg = ws_stream.next().await.unwrap().unwrap();
-            assert!( msg.to_string().to_lowercase().contains("welcome"));
-
-            let msg = ws_stream.next().await.unwrap().unwrap();
-            assert_eq!(msg.to_string(), "Echo: hello");
-
-            terminate_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-        };
-
-        let (res, _) = tokio::join!(api_server, testit);
-        res.unwrap()
-    }
 }

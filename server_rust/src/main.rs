@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use signal_hook::consts::TERM_SIGNALS;
 use signal_hook::flag;
 use std::sync::Arc;
+use anyhow::bail;
 
 use crossbeam_channel::unbounded;   // Work queue
 
@@ -59,7 +60,7 @@ Options:
  -h --help              Show this screen
 "#;
 
-fn main() -> Result<(), Box<dyn std::error::Error>>
+fn main() -> anyhow::Result<()>
 {
     let argv = || vec!["clapshot-server", "--bitrate", "8", "--migrate", "--debug", "--url-base", "http://127.0.0.1:8095", "--data-dir", "DEV_DATADIR/"];
 
@@ -77,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
     if n_workers == 0 { n_workers = num_cpus::get(); }
 
     let bitrate_mbps = args.get_str("--bitrate").parse::<f32>().unwrap_or(2.5);
-    if bitrate_mbps < 0.1 { return Err("Bitrate must be >= 0.1".into()); }
+    if bitrate_mbps < 0.1 { bail!("Bitrate must be >= 0.1"); }
     let target_bitrate = (bitrate_mbps * 1_000_000.0) as u32;
 
     let url_base = args.get_str("--url-base").to_string();
@@ -115,7 +116,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
                 assert!(!db.migrations_needed()?);
                 tracing::warn!(file=%db_file.display(), "Database migrated Ok. Continuing.");
             },
-            Err(e) => { return Err("Error migrating database".into()); },
+            Err(e) => { bail!("Error migrating database: {:?}", e); },
         }
     } else {
         match db.migrations_needed() {
@@ -124,7 +125,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
                 eprintln!("Database migrations needed. Make a backup and run `clapshot-server --migrate`");
                 std::process::exit(1);
             },
-            Err(e) => { return Err("Error checking database migrations".into()); },
+            Err(e) => { bail!("Error checking database migrations: {:?}", e); },
         }
     }
 
@@ -134,11 +135,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>>
     let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
     let api_thread = { 
         let db = db.clone();
+        let data_dir = data_dir.clone();
         thread::spawn(move || {
-            if let Err(e) = api_server::run_forever(db, user_msg_rx, upload_tx, tf.clone(), url_base.to_string(), port) {
-                error!("API server failed: {}", e);
-                tf.store(true, Ordering::Relaxed);
-            }})};
+            api_server::run_forever(
+                    db,
+                    data_dir.join("videos"),
+                    data_dir.join("upload"),
+                    user_msg_rx, 
+                    upload_tx, 
+                    tf.clone(), 
+                    url_base.to_string(),
+                    port) 
+            })};
 
     // Run video processing pipeline
     let tf = Arc::clone(&terminate_flag);

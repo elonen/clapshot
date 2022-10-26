@@ -48,6 +48,9 @@ file-owner = "0.1.1"
 unix-named-pipe = "0.2.0"
 num_cpus = "1.13.1"
 urlencoding = "2.1.2"
+rand = "0.8.5"
+thiserror = "1.0.37"
+anyhow = "1.0.66"
 
 [dev-dependencies]
 assert_fs = "1.0.7"

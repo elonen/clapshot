@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool};
 
 use tokio::sync::Mutex;
+use anyhow::anyhow;
 
 use super::{WsMsgSender, SenderList, SenderListMap, Res};
 use crate::database::DB;
@@ -45,7 +46,7 @@ impl ServerState {
     /// Returns the number of messages sent.
     pub fn send_to_all_user_sessions(&self, user_id: &str, msg: &super::Message) -> Res<u32> {
         let mut total_sent = 0u32;
-        let map = self.user_id_to_senders.read().map_err(|e| format!("Sender map poisoned: {}", e))?;
+        let map = self.user_id_to_senders.read().map_err(|e| anyhow!("Sender map poisoned: {}", e))?;
         for sender in map.get(user_id).unwrap_or(&vec![]).iter() {
             sender.send(msg.clone())?;
             total_sent += 1; };
@@ -64,7 +65,7 @@ impl ServerState {
     /// Returns the number of messages sent.
     pub fn send_to_all_video_sessions(&self, video_hash: &str, msg: &super::Message) -> Res<u32> {
         let mut total_sent = 0u32;
-        let map = self.video_hash_to_senders.read().map_err(|e| format!("Sender map poisoned: {}", e))?;
+        let map = self.video_hash_to_senders.read().map_err(|e| anyhow!("Sender map poisoned: {}", e))?;
         for sender in map.get(video_hash).unwrap_or(&vec![]).iter() {
             sender.send(msg.clone())?;
             total_sent += 1; };

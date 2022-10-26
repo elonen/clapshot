@@ -1,6 +1,7 @@
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager};
 use diesel::SqliteConnection;
+use anyhow::{Context, anyhow};
 
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
@@ -41,36 +42,36 @@ impl DB {
     /// Connect to SQLite database with an URL (use this for memory databases)
     pub fn connect_db_url( db_url: &str ) -> DBResult<DB> {
         let manager = ConnectionManager::<SqliteConnection>::new(db_url);
-        let pool = Pool::builder().build(manager)
-            .map_err(|e| DBError::Other(e.to_string()))?;
+        let pool = Pool::builder().build(manager).context("Failed to build DB pool")?;
         Ok(DB { pool: pool })
     }
 
     /// Connect to SQLite database with a file path
     pub fn connect_db_file( db_file: &Path ) -> DBResult<DB> {
-        let db_url = format!("sqlite://{}", db_file.to_str().ok_or("Invalid DB file path")
-            .map_err(|e| DBError::Other(e.to_string()))?);
+        let db_url = format!("sqlite://{}", db_file.to_str().ok_or(anyhow!("Invalid DB file path"))
+            .context("Failed to connect DB file")?);
         DB::connect_db_url(&db_url)
     }
 
 
     /// Get a connection from the pool
     pub fn conn(&self) ->  DBResult<PooledConnection> {
-        self.pool.get().map_err(|e| DBError::Other(e.to_string()))
+        self.pool.get().map_err(|e| anyhow!("Failed to get connection from pool: {:?}", e).into())
     }
 
     // Check if database is up-to-date compared to the embedded migrations
     pub fn migrations_needed(&self) -> DBResult<bool> {
         let mut conn = self.conn()?;
         MigrationHarness::has_pending_migration(&mut conn, MIGRATIONS)
-            .map_err(|e| DBError::Other(e.to_string()))
+            .map_err(|e| anyhow!("Failed to check migrations: {:?}", e).into())
     }
 
     /// Run DB migrations (or create DB if empty)
     pub fn run_migrations(&self) -> EmptyDBResult
     {
         let mut conn = self.conn()?;
-        conn.run_pending_migrations(MIGRATIONS).map_err(|e| DBError::Other(e.to_string()))?;
+        let migr = conn.run_pending_migrations(MIGRATIONS).map_err(|e| anyhow!("Failed to apply migrations: {:?}", e))?;
+        for m in migr { tracing::info!("Applied DB migration: {}", m); }
         Ok(())
     }
 
@@ -314,7 +315,7 @@ mod tests
     use super::*;
 
     #[test]
-    fn test_basic_db_ops() -> Result<(), Box<dyn std::error::Error>>
+    fn test_basic_db_ops() -> anyhow::Result<()>
     {
         //let test_db = assert_fs::NamedTempFile::new("test_db.sqlite")?;
         //let db = DB::connect_db_file(&test_db.path())?;

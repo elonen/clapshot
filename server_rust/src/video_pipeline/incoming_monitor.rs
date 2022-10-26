@@ -11,6 +11,7 @@ use async_std::net::Incoming;
 use crossbeam_channel::{Sender, Receiver, RecvTimeoutError};
 use path_absolutize::*;
 use tracing;
+use anyhow::anyhow;
 
 use crate::video_pipeline::metadata_reader;
 use super::cleanup_rejected::clean_up_rejected_file;
@@ -23,7 +24,7 @@ pub fn run_forever(
     poll_interval: f32,
     resubmit_delay: f32,
     incoming_sender: Sender<super::IncomingFile>,
-    exit_evt: Receiver<Void>) -> Result<(), Box<dyn std::error::Error>>
+    exit_evt: Receiver<Void>) -> anyhow::Result<()>
 {
     let _span = tracing::info_span!("INCOMING").entered();
     tracing::info!(dir=data_dir.to_str(), poll_interval=poll_interval, resubmit_delay=resubmit_delay, "Starting.");
@@ -51,8 +52,8 @@ pub fn run_forever(
                         stat.is_file().then(|| (entry.path(), stat.len()))
                     }).collect::<Vec<_>>();
 
-                fn get_file_owner_name(path: &Path) -> Result<String, Box<dyn std::error::Error>> {
-                    path.owner()?.name()?.ok_or("Unnamed OS user".into())
+                fn get_file_owner_name(path: &Path) -> anyhow::Result<String> {
+                    path.owner()?.name()?.ok_or(anyhow!("Unnamed OS user for file {:?}", path))
                 }
 
                 for (path, sz) in names_and_sizes {
