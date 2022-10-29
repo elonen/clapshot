@@ -184,17 +184,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "065374052e7df7ee4047b1160cca5e1467a12351a40b3da123c870ba0b8eda2a"
 
 [[package]]
-name = "atty"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
-dependencies = [
- "hermit-abi",
- "libc",
- "winapi",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -318,10 +307,9 @@ dependencies = [
  "chrono",
  "crossbeam-channel",
  "data-url",
- "diesel 2.0.2",
+ "diesel",
  "diesel_migrations",
  "docopt",
- "env_logger",
  "file-owner",
  "futures",
  "futures-util",
@@ -330,10 +318,8 @@ dependencies = [
  "mime",
  "mpart-async",
  "num_cpus",
- "os",
  "path-absolutize",
  "r2d2",
- "r2d2-diesel",
  "rand",
  "reqwest",
  "rust_decimal",
@@ -354,6 +340,7 @@ dependencies = [
  "urlencoding",
  "uuid",
  "warp",
+ "whoami",
 ]
 
 [[package]]
@@ -427,35 +414,14 @@ checksum = "8d7439c3735f405729d52c3fbbe4de140eaf938a1fe47d227c27f8254d4302a5"
 
 [[package]]
 name = "diesel"
-version = "1.4.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b28135ecf6b7d446b43e27e225622a038cc4e2930a1022f51cdb97ada19b8e4d"
-dependencies = [
- "byteorder",
- "diesel_derives 1.4.1",
-]
-
-[[package]]
-name = "diesel"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68c186a7418a2aac330bb76cde82f16c36b03a66fb91db32d20214311f9f6545"
 dependencies = [
  "chrono",
- "diesel_derives 2.0.0",
+ "diesel_derives",
  "libsqlite3-sys",
  "r2d2",
-]
-
-[[package]]
-name = "diesel_derives"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45f5098f628d02a7a0f68ddba586fb61e80edec3bdc1be3b921f4ceec60858d3"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -476,7 +442,7 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9ae22beef5e9d6fab9225ddb073c1c6c1a7a6ded5019d5da11d1e5c5adc34e2"
 dependencies = [
- "diesel 2.0.2",
+ "diesel",
  "migrations_internals",
  "migrations_macros",
 ]
@@ -528,19 +494,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9852635589dc9f9ea1b6fe9f05b50ef208c85c834a562f0c6abb1c475736ec2b"
 dependencies = [
  "cfg-if",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c90bf5f19754d10198ccb95b70664fc925bd1fc090a0fd9a6ebc54acc8cd6272"
-dependencies = [
- "atty",
- "humantime",
- "log",
- "regex",
- "termcolor",
 ]
 
 [[package]]
@@ -862,12 +815,6 @@ name = "httpdate"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
-
-[[package]]
-name = "humantime"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hyper"
@@ -1210,12 +1157,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e82dad04139b71a90c080c8463fe0dc7902db5192d939bd0950f074d014339e1"
 
 [[package]]
-name = "os"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ffda62bb984a82b17675005290ffa19b76fb74c3774cb8bed86bccb628ca911"
-
-[[package]]
 name = "parking"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1413,16 +1354,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "r2d2-diesel"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb9c29bad92da76d02bc2c020452ebc3a3fe6fa74cfab91e711c43116e4fb1a3"
-dependencies = [
- "diesel 1.4.8",
- "r2d2",
-]
-
-[[package]]
 name = "rand"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1516,6 +1447,7 @@ dependencies = [
  "js-sys",
  "log",
  "mime",
+ "mime_guess",
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
@@ -1526,6 +1458,7 @@ dependencies = [
  "serde_urlencoded",
  "tokio",
  "tokio-rustls",
+ "tokio-util 0.7.4",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -1807,15 +1740,6 @@ dependencies = [
  "redox_syscall",
  "remove_dir_all",
  "winapi",
-]
-
-[[package]]
-name = "termcolor"
-version = "1.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bab24d30b911b2376f3a13cc2cd443142f0c81dda04c118693e35b3835757755"
-dependencies = [
- "winapi-util",
 ]
 
 [[package]]
@@ -2413,6 +2337,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d743fdedc5c64377b5fc2bc036b01c7fd642205a0d96356034ae3404d49eb7fb"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "whoami"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6631b6a2fd59b1841b622e8f1a7ad241ef0a46f2d580464ce8140ac94cbd571"
+dependencies = [
+ "bumpalo",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

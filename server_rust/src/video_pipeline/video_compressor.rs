@@ -126,9 +126,10 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
             }
             cmd = cmd.args(&[
                 "-nostats",
-                "-vcodec", "libx265",
+                "-vcodec", "libx264",
                 "-vf", &format!("scale={}:{}", 1920, -8),
-                "-map", "0",
+                "-map", "0",  // copy all streams
+                "-preset", "faster",
                 "-acodec", "aac",
                 "-ac", "2",
                 "-strict", "experimental",

@@ -75,7 +75,7 @@ pub struct CommentInsert {
 
 // -------------------------------------------------------
 
-#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable)]
+#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable)]
 pub struct Message {
     pub id: i32,
     pub user_id: String,
@@ -91,7 +91,7 @@ pub struct Message {
     pub details: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Insertable)]
+#[derive(Serialize, Deserialize, Debug, Default, Insertable)]
 #[diesel(table_name = messages)]
 pub struct MessageInsert {
     pub user_id: String,
@@ -102,3 +102,14 @@ pub struct MessageInsert {
     pub message: String,
     pub details: String,
 }
+
+pub fn to_json<T: serde::Serialize>(t: &T) -> Result<serde_json::Value, serde_json::Error> {
+    serde_json::to_value(&t)
+}
+
+impl Video { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
+impl VideoInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
+impl Comment { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
+impl CommentInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
+impl Message { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
+impl MessageInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }

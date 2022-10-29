@@ -21,7 +21,13 @@ use server_state::ServerState;
 
 mod ws_handers;
 use ws_handers::msg_dispatch;
-mod tests;
+
+#[macro_use]
+#[cfg(test)]
+pub mod test_utils;
+
+#[cfg(test)]
+pub mod tests;
 
 mod file_upload;
 use file_upload::handle_multipart_upload;
@@ -92,8 +98,7 @@ impl WsSessionArgs<'_> {
                 tracing::error!("Failed to persist user notification: {}", e);
                 return Err(e.into());
             }};
-        let serde_ser = serde_json::to_value(msg)?;
-        self.emit_cmd("message", &serde_ser, SendTo::UserId(&msg.user_id)).map(|_| ())           
+        self.emit_cmd("message", &msg.to_json()?, SendTo::UserId(&msg.user_id)).map(|_| ())           
     }
 
     pub async fn emit_new_comment(&self, mut c: models::Comment, send_to: SendTo<'_>) -> Res<()> {
@@ -114,7 +119,7 @@ impl WsSessionArgs<'_> {
                 tracing::warn!("Comment '{}' has data URI drawing stored in DB. Should be on disk.", c.id);
             }
         }
-        let mut fields = serde_json::to_value(c)?;
+        let mut fields = c.to_json()?;
         fields["comment_id"] = fields["id"].take();  // swap id with comment_id, because the client expects comment_id        
         self.emit_cmd("new_comment", &fields , send_to).map(|_| ())
     }
@@ -206,13 +211,15 @@ async fn handle_ws_session(
                                 Ok((cmd, data)) => (cmd, data),
                                 Err(e) => {
                                     tracing::warn!(details=%e, "Error parsing JSON message. Closing session.");
-                                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                                    if !msgq_tx.send(Message::text(format!("Invalid message, bye: {}", e))).is_ok() { break; }
+                                    #[cfg(not(test))] {
+                                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                                    }
+                                    let answ = format!("Invalid message, bye -- {}", e);
+                                    ws_tx.send(Message::text(format!(r#"{{"cmd":"error", "data":{{"message": "{}"}}}}"#, answ))).await.ok();
                                     break;
                                 }
                             };
                             tracing::debug!(cmd=%cmd, "Msg from client.");
-
 
                             if let Err(e) = msg_dispatch(&cmd, &data, &mut ses).await {
                                     if let Some(e) = e.downcast_ref::<tokio::sync::mpsc::error::SendError<Message>>() {
@@ -221,7 +228,7 @@ async fn handle_ws_session(
                                     } else {
                                         let answ = format!("Error handling command '{}'.", cmd);
                                         tracing::warn!("[{}] {}: {}", sid, answ, e);
-                                        if !msgq_tx.send(Message::text(answ)).is_ok() { break; };
+                                        if ws_tx.send(Message::text(format!(r#"{{"cmd":"error", "data":{{"message": "{}"}}}}"#, answ))).await.is_err() { break; };
                                     }
                                 };
 
@@ -368,7 +375,7 @@ async fn run_api_server_async(
                     if let Err(e) = server_state.db.add_message(&msg) {
                         tracing::error!(details=%e, "Failed to save user notification in DB.");
                     }
-                    if let Ok(data) = serde_json::to_value(&msg) {
+                    if let Ok(data) = msg.to_json() {
                         let msg = Message::text(serde_json::json!({
                             "cmd": "message", "data": data }).to_string());
                         if let Err(e) = server_state.send_to_all_user_sessions(&user_id, &msg) {
@@ -378,7 +385,7 @@ async fn run_api_server_async(
                 };
                 // Message to all watchers of a video
                 if let Some(vh) = m.video_hash {
-                    if let Ok(data) = serde_json::to_value(&msg) {
+                    if let Ok(data) = &msg.to_json() {
                         let msg = Message::text(serde_json::json!({
                             "cmd": "message", "data": data }).to_string());
                         if let Err(_) = server_state.send_to_all_video_sessions(&vh, &msg) {

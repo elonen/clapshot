@@ -167,9 +167,9 @@ fn ingest_video(
             let codec_fine = ["h264", "avc", "hevc", "h265"].contains(&md.orig_codec.to_lowercase().as_str());
             let container_fine = ["mp4", "mkv"].contains(&ext.as_str());        
     
-            if !bitrate_fine { Some(format!("bitrate is too high: old {} > new {}", md.bitrate, new_bitrate)) }
+            if !container_fine { Some(format!("container '{}' not supported", md.src_file.extension().unwrap_or_default().to_string_lossy())) }
             else if !codec_fine { Some(format!("codec '{}' not supported", md.orig_codec)) }
-            else if !container_fine { Some(format!("container '{}' not supported", md.src_file.extension().unwrap_or_default().to_string_lossy())) }
+            else if !bitrate_fine { Some(format!("bitrate is too high: old {} > new {}", md.bitrate, new_bitrate)) }
             else { None }
         }.map(|reason| (reason, new_bitrate) )
     }
@@ -337,7 +337,7 @@ pub fn run_forever(
                             user_msg_tx.send(UserMessage {
                                     topic: UserMessageTopic::Error(),
                                     msg: "Error reading video metadata.".into(),
-                                    details: Some(e.details + &cleanup_err),
+                                    details: Some(format!("'{}': ", e.src_file.file_name().unwrap_or_default().to_string_lossy()) + &e.details + &cleanup_err),
                                     user_id: Some(e.user_id),
                                     video_hash: vh
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
@@ -386,7 +386,7 @@ pub fn run_forever(
 
                             // Write out stdout/stderr to separate files
                             for (name, data) in [("stdout", &res.stdout), ("stderr", &res.stderr)].iter() {
-                                let path = videos_dir.join(&vh).join(name);
+                                let path = videos_dir.join(&vh).join(format!("{}.txt", name));
                                 tracing::debug!(video=%vh, file=?path, "Writing {} from ffmpeg", name);
                                 match std::fs::write(&path, data) {
                                     Ok(_) => {},

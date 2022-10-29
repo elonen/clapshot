@@ -1,28 +1,6 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-#![allow(unused_imports)]
-
 use docopt::Docopt;
-use std::thread;
-use std::io::Error;
-use std::path::{PathBuf};
-
-// For termination signals
-use std::sync::atomic::{AtomicBool, Ordering};
-use signal_hook::consts::TERM_SIGNALS;
-use signal_hook::flag;
-use std::sync::Arc;
+use std::path::PathBuf;
 use anyhow::bail;
-
-use crossbeam_channel::unbounded;   // Work queue
-
-// For logging
-use tracing::{info, error, warn};
-use tracing_subscriber::FmtSubscriber;
-
-use clapshot_server::database;
-use clapshot_server::api_server;
-use clapshot_server::video_pipeline;
 
 
 const USAGE: &'static str = r#"
@@ -62,7 +40,8 @@ Options:
 
 fn main() -> anyhow::Result<()>
 {
-    let argv = || vec!["clapshot-server", "--bitrate", "8", "--migrate", "--debug", "--url-base", "http://127.0.0.1:8095", "--data-dir", "DEV_DATADIR/"];
+    let argv = std::env::args;
+    //let argv = || vec!["clapshot-server", "--bitrate", "8", "--migrate", "--debug", "--url-base", "http://127.0.0.1:8095", "--data-dir", "DEV_DATADIR/"];
 
     let args = Docopt::new(USAGE)
         .and_then(|d| d.argv(argv().into_iter()).parse())
@@ -83,10 +62,17 @@ fn main() -> anyhow::Result<()>
 
     let url_base = args.get_str("--url-base").to_string();
 
+    let migrate = args.get_bool("--migrate");
+
+    let poll_interval = args.get_str("--poll").parse::<f32>().unwrap_or(3.0);
+    let resubmit_delay = poll_interval * 5.0;
+
 
     // Setup logging
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "debug,clapshot_server=debug");
+        if debug {
+            std::env::set_var("RUST_LOG", "debug,clapshot_server=debug");
+        }
     };
     let log_sbsc = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -99,73 +85,5 @@ fn main() -> anyhow::Result<()>
 
     tracing::subscriber::set_global_default(log_sbsc).expect("tracing::subscriber::set_global_default failed");
 
-    // Setup SIGINT / SIGTERM handling
-    let terminate_flag = Arc::new(AtomicBool::new(false));
-    for sig in TERM_SIGNALS {
-        flag::register_conditional_shutdown(*sig, 1, Arc::clone(&terminate_flag))?;
-        flag::register(*sig, Arc::clone(&terminate_flag))?;
-    }
-
-    let db_file = data_dir.join("clapshot.sqlite");
-    let db = Arc::new(database::DB::connect_db_file(&db_file).unwrap());
-
-    // Check & apply database migrations
-    if args.get_bool("--migrate") && db.migrations_needed()? {
-        match db.run_migrations() {
-            Ok(_) => {
-                assert!(!db.migrations_needed()?);
-                tracing::warn!(file=%db_file.display(), "Database migrated Ok. Continuing.");
-            },
-            Err(e) => { bail!("Error migrating database: {:?}", e); },
-        }
-    } else {
-        match db.migrations_needed() {
-            Ok(false) => {},
-            Ok(true) => {
-                eprintln!("Database migrations needed. Make a backup and run `clapshot-server --migrate`");
-                std::process::exit(1);
-            },
-            Err(e) => { bail!("Error checking database migrations: {:?}", e); },
-        }
-    }
-
-    // Run API server
-    let tf = Arc::clone(&terminate_flag);
-    let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
-    let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
-    let api_thread = { 
-        let db = db.clone();
-        let data_dir = data_dir.clone();
-        thread::spawn(move || {
-            api_server::run_forever(
-                    db,
-                    data_dir.join("videos"),
-                    data_dir.join("upload"),
-                    user_msg_rx, 
-                    upload_tx, 
-                    tf.clone(), 
-                    url_base.to_string(),
-                    port) 
-            })};
-
-    // Run video processing pipeline
-    let tf = Arc::clone(&terminate_flag);
-    let vpp_thread = {
-            let db = db.clone();
-            thread::spawn(move || { video_pipeline::run_forever(
-                db, tf.clone(), data_dir, user_msg_tx, 3.0, 15.0, target_bitrate, upload_rx, n_workers)})
-        };
-
-    // Loop forever, abort on SIGINT/SIGTERM or if child threads die
-    while !terminate_flag.load(Ordering::Relaxed) {
-        thread::sleep(std::time::Duration::from_secs(1));
-        if vpp_thread.is_finished() {
-            terminate_flag.store(true, Ordering::Relaxed);
-        }
-    }
-
-    tracing::warn!("Got kill signal. Cleaning up.");
-    vpp_thread.join().unwrap();
-    Ok(())
+    clapshot_server::run_clapshot(data_dir, migrate, url_base, port, n_workers, target_bitrate, poll_interval, resubmit_delay)
 }
-

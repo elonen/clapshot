@@ -109,11 +109,12 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_
                     None => Err(anyhow!("No video file"))
                 }}?;
 
+            /*
             if !ses.server.videos_dir.join(&v.video_hash).join(&file).exists() {
                 tracing::error!("Open video failed. File not found: {}", file);
                 bail!("Video file not found");
             }
-
+            */
             fields["video_url"] = json!(format!("{}/videos/{}/{}", ses.server.url_base, &v.video_hash, uri));
             ses.emit_cmd("open_video", &fields, super::SendTo::CurSession() )?;
 
@@ -215,7 +216,7 @@ pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<
         Ok(old) => {
             let vh = old.video_hash;
             if ses.user_id != old.user_id && ses.user_id != "admin" {
-                send_user_error!(ses, Topic::Video(&vh), "You can only edit your own comments");
+                send_user_error!(ses, Topic::Video(&vh), "Failed to edit comment.", "You can only edit your own comments", true);
                 return Ok(());
             }
             ses.server.db.edit_comment(comment_id, &new_text)?;
@@ -224,7 +225,7 @@ pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<
             ses.emit_new_comment(c, super::SendTo::VideoHash(&vh)).await?;
         }
         Err(DBError::NotFound()) => {
-            send_user_error!(ses, Topic::None, "No such comment. Cannot edit.");
+            send_user_error!(ses, Topic::None, "Failed to edit comment.", "No such comment. Cannot edit.", true);
         }
         Err(e) => { bail!(e); }
     }
@@ -238,19 +239,19 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
         Ok(cmt) => {
             let vh = cmt.video_hash;
             if ses.user_id != cmt.user_id && ses.user_id != "admin" {
-                send_user_error!(ses, Topic::Video(&vh), "You can only delete your own comments");
+                send_user_error!(ses, Topic::Video(&vh), "Failed to delete comment.", "You can only delete your own comments", true);
                 return Ok(());
             }
             let all_comm = ses.server.db.get_video_comments(&vh)?;
             if all_comm.iter().any(|c| c.parent_id == Some(comment_id)) {
-                send_user_error!(ses, Topic::Video(&vh), "Comment has replies. Cannot delete.");
+                send_user_error!(ses, Topic::Video(&vh), "Failed to delete comment.", "Comment has replies. Cannot delete.", true);
                 return Ok(());
             }
             ses.server.db.del_comment(comment_id)?;
             ses.emit_cmd("del_comment", &json!({ "comment_id": comment_id }), super::SendTo::VideoHash(&vh))?;
         }
         Err(DBError::NotFound()) => {
-            send_user_error!(ses, Topic::None, "No such comment. Cannot delete.");
+            send_user_error!(ses, Topic::None, "Failed to delete comment.", "No such comment. Cannot delete.", true);
         }
         Err(e) => { bail!(e); }
     }

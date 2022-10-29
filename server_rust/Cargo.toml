@@ -15,9 +15,7 @@ path = "src/lib.rs"
 [dependencies]
 crossbeam-channel = "0.5.6"
 docopt = "1.1.1"
-env_logger = "0.9.1"
 log = "0.4.17"
-os = "0.1.0"
 signal-hook = "0.3.14"
 tracing = "0.1.36"
 tracing-subscriber = {version = "0.3.15", features = ["env-filter"] }
@@ -26,7 +24,6 @@ serde_json = "1.0.85"
 rust_decimal = "1.26.1"
 threadpool = "1.8.1"
 diesel = { version = "2.0.2", features = ["sqlite", "r2d2", "chrono", "returning_clauses_for_sqlite_3_35"] }
-r2d2-diesel = "1.0.0"
 r2d2 = "0.8.10"
 serde = "1.0.145"
 diesel_migrations = "2.0.0"
@@ -55,9 +52,9 @@ anyhow = "1.0.66"
 [dev-dependencies]
 assert_fs = "1.0.7"
 tracing-test = {version="0.2.3", features=["no-env-filter"] }
-# reqwest = "0.11.12"
-reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls", "multipart", "stream"] }
 url = "2.2.2"
-tokio-tungstenite = "0.17.2"
 tokio-test = "0.4.2"
 mime = "0.3.16"
+whoami = "1.2.3"
+tokio-tungstenite = "0.17.2"

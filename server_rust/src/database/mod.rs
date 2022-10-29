@@ -6,12 +6,16 @@ use anyhow::{Context, anyhow};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 use std::path::{Path};
+use std::sync::atomic::AtomicBool;
 
 use chrono::offset::Local;
 
 pub mod schema;
 pub mod models;
 pub mod error;
+
+#[cfg(test)]
+pub mod tests;
 
 use error::{DBError, DBResult, EmptyDBResult};
 
@@ -35,6 +39,7 @@ fn to_db_res<U>(res: QueryResult<U>) -> DBResult<U> {
 
 pub struct DB {
     pool: Pool,
+    broken_for_test: AtomicBool,
 }
 
 impl DB {
@@ -43,7 +48,7 @@ impl DB {
     pub fn connect_db_url( db_url: &str ) -> DBResult<DB> {
         let manager = ConnectionManager::<SqliteConnection>::new(db_url);
         let pool = Pool::builder().build(manager).context("Failed to build DB pool")?;
-        Ok(DB { pool: pool })
+        Ok(DB { pool: pool, broken_for_test: AtomicBool::new(false) })
     }
 
     /// Connect to SQLite database with a file path
@@ -56,6 +61,10 @@ impl DB {
 
     /// Get a connection from the pool
     pub fn conn(&self) ->  DBResult<PooledConnection> {
+        if self.broken_for_test.load(std::sync::atomic::Ordering::Relaxed) {
+            let bad_pool = Pool::builder().build(ConnectionManager::<SqliteConnection>::new("sqlite:///dev/urandom")).context("Failed to build 'broken' DB pool")?;
+            return bad_pool.get().map_err(|e| anyhow!("Failed to get connection from pool: {:?}", e).into());
+        };
         self.pool.get().map_err(|e| anyhow!("Failed to get connection from pool: {:?}", e).into())
     }
 
@@ -73,6 +82,11 @@ impl DB {
         let migr = conn.run_pending_migrations(MIGRATIONS).map_err(|e| anyhow!("Failed to apply migrations: {:?}", e))?;
         for m in migr { tracing::info!("Applied DB migration: {}", m); }
         Ok(())
+    }
+
+    /// "Corrupt" the connection for testing so that subsequent queries fail
+    pub fn break_db(&self) {
+        self.broken_for_test.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     // -----------------------------------------------------------------------------------------------
@@ -303,72 +317,4 @@ impl DB {
         Ok(res > 0)
     }
 
-}
-
-// -----------------------------------------------------------------------------------------------
-// Tests
-// -----------------------------------------------------------------------------------------------
-
-#[cfg(test)]
-mod tests
-{
-    use super::*;
-
-    #[test]
-    fn test_basic_db_ops() -> anyhow::Result<()>
-    {
-        //let test_db = assert_fs::NamedTempFile::new("test_db.sqlite")?;
-        //let db = DB::connect_db_file(&test_db.path())?;
-        let db = DB::connect_db_url(":memory:")?;
-        db.run_migrations()?;
-
-        let test_video = models::VideoInsert {
-            video_hash: "test_hash".to_string(),
-            added_by_userid: Some("test_user".to_string()),
-            added_by_username: Some("Test User".to_string()), 
-            recompression_done: None,
-            orig_filename: Some("test.mp4".to_string()),
-            total_frames: Some(100),
-            duration: Some(10.0),
-            fps: Some("1.0".to_string()),
-            raw_metadata_all: Some("test".to_string()),
-        };
-
-        let test_comment = models::CommentInsert {
-            video_hash: "test_hash".to_string(),
-            parent_id: None,
-            user_id: "test_user".to_string(),
-            username: "Test User".to_string(),
-            comment: "Test comment".to_string(),
-            timecode: None,
-            drawing: None,
-        };
-
-        let test_message = models::MessageInsert {
-            user_id: "test_user".to_string(),
-            ref_video_hash: Some("test_hash".to_string()),
-            ref_comment_id: None,
-            seen: false,
-            event_name: "test_event".to_string(),
-            message: "Test message".to_string(),
-            details: "Test details".to_string(),
-        };
-
-
-        db.add_video(&test_video)?;
-        let v = db.get_video("test_hash") ?;
-        assert_eq!(v.video_hash, "test_hash");
-
-        db.add_comment(&test_comment)?;
-        let c = db.get_video_comments(&v.video_hash)?;
-        assert_eq!(c.len(), 1);
-
-        db.add_message(&test_message)?;
-        let m = db.get_user_messages(&test_message.user_id)?;
-        assert_eq!(m.len(), 1);
-        assert_eq!(m[0].message, "Test message");
-
-        //test_db.close()?;
-        Ok(())
-    }
 }
