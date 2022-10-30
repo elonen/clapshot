@@ -1,7 +1,39 @@
 [package]
 name = "clapshot-server"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
+
+description = "Clapshot video review tool (backend)"
+homepage = "https://github.com/elonen/clapshot"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+
+
+[package.metadata.deb]
+
+maintainer = "Jarno Elonen <elonen@iki.fi>"
+copyright = "2022, Jarno Elonen <elonen@iki.fi>"
+section = "unknown"
+changelog = "debian/changelog"
+
+depends = "$auto, python3, ffmpeg, mediainfo"
+
+extended-description = """\
+Clapshot is a multiuser web app for reviewing and commenting video files.
+This package provides the backend server that communicates with clients
+over websocket, processes video files and maintains a databases of them.
+"""
+
+assets = [
+    ["target/release/clapshot-server", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/clapshot-server/README", "644"],
+    ["debian/additional_files/clapshot-server.conf", "etc/", "644"],
+    ["debian/additional_files/run-with-conf.sh", "usr/share/clapshot-server/", "755"],
+]
+conf-files = ["/etc/clapshot-server.conf"]
+maintainer-scripts = "debian/"
+systemd-units = { enable = false }
+
 
 [[bin]]
 name = "clapshot-server"

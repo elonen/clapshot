@@ -1,0 +1,4 @@
+This package uses cargo-deb. Build a package by issuing:
+
+$ cargo install cargo-deb
+$ cargo deb

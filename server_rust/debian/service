@@ -1,0 +1,14 @@
+[Unit]
+Description=Clapshot server
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=2
+User=www-data
+ExecStart=/bin/bash /usr/share/clapshot-server/run-with-conf.sh /etc/clapshot-server.conf
+
+[Install]
+WantedBy=multi-user.target
