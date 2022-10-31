@@ -1,3 +1,7 @@
+**/dist_deb
+**/target
+**/DEV_DATADIR
+
 **/__pycache__
 **/.venv
 **/.classpath
@@ -24,5 +28,4 @@
 **/obj
 **/secrets.dev.yaml
 **/values.dev.yaml
-**/DEV_DATADIR
 

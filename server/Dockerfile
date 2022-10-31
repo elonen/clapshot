@@ -1,25 +1,62 @@
-FROM python:3.9-slim
+FROM debian:bookworm-slim AS rust-bookworm-slim
 
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH \
+    RUST_VERSION=1.65.0
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        gcc \
+        libc6-dev \
+        wget \
+        ; \
+    dpkgArch="$(dpkg --print-architecture)"; \
+    case "${dpkgArch##*-}" in \
+        amd64) rustArch='x86_64-unknown-linux-gnu'; rustupSha256='5cc9ffd1026e82e7fb2eec2121ad71f4b0f044e88bca39207b3f6b769aaa799c' ;; \
+        armhf) rustArch='armv7-unknown-linux-gnueabihf'; rustupSha256='48c5ecfd1409da93164af20cf4ac2c6f00688b15eb6ba65047f654060c844d85' ;; \
+        arm64) rustArch='aarch64-unknown-linux-gnu'; rustupSha256='e189948e396d47254103a49c987e7fb0e5dd8e34b200aa4481ecc4b8e41fb929' ;; \
+        i386) rustArch='i686-unknown-linux-gnu'; rustupSha256='0e0be29c560ad958ba52fcf06b3ea04435cb3cd674fbe11ce7d954093b9504fd' ;; \
+        *) echo >&2 "unsupported architecture: ${dpkgArch}"; exit 1 ;; \
+    esac; \
+    url="https://static.rust-lang.org/rustup/archive/1.25.1/${rustArch}/rustup-init"; \
+    wget "$url"; \
+    echo "${rustupSha256} *rustup-init" | sha256sum -c -; \
+    chmod +x rustup-init; \
+    ./rustup-init -y --no-modify-path --profile minimal --default-toolchain $RUST_VERSION --default-host ${rustArch}; \
+    rm rustup-init; \
+    chmod -R a+w $RUSTUP_HOME $CARGO_HOME; \
+    rustup --version; \
+    cargo --version; \
+    rustc --version; \
+    apt-get remove -y --auto-remove \
+        wget \
+        ; \
+    rm -rf /var/lib/apt/lists/*;
+
+
+
+FROM rust-bookworm-slim AS chef
+
+# Install system packages
+RUN apt-get -qy update
+RUN apt-get -qy install acl sudo >/dev/null
 
 # Install system packages
 RUN apt-get -qy update >/dev/null
 RUN apt-get -qy install make >/dev/null
-RUN apt-get -qy install ffmpeg mscgen >/dev/null
-RUN apt-get -qy install python3-pymediainfo >/dev/null
+RUN apt-get -qy install ffmpeg >/dev/null
+RUN apt-get -qy install mediainfo >/dev/null
+RUN apt-get -qy install mscgen >/dev/null
+RUN apt-get -qy install sqlite3 >/dev/null
 
-# ...for build deb
-RUN apt-get -qy install build-essential debhelper devscripts equivs >/dev/null
-RUN apt-get -qy install python3-venv python3-dev python-dev dh-virtualenv python3-setuptools libffi-dev >/dev/null
-
-# Version of sqlite3 that support ALTER TABLE DROP column
-RUN echo 'deb http://ftp.debian.org/debian bookworm main' >> /etc/apt/sources.list.d/bookworm.list
-RUN apt-get -qy update >/dev/null
-RUN apt-get -qy install -t bookworm sqlite3 >/dev/null
-RUN rm /etc/apt/sources.list.d/bookworm.list
-RUN apt-get -qy update >/dev/null
+# Rust build deps
+RUN apt-get -qy install libssl-dev >/dev/null
+RUN apt-get -qy install libsqlite3-dev >/dev/null
 
 # Create regular user
-
 ARG USER=docker
 ARG UID=1000
 ARG GID=1000
@@ -29,25 +66,32 @@ RUN test -n "${USER}" && test -n "${UID}" && test -n "${GID}"
 RUN groupadd -f ${USER} --gid=${GID}
 RUN useradd -m ${USER} --uid=${UID} --gid=${GID} || true
 RUN mkdir -p /app
-RUN chown ${UID}:${GID} /app
+RUN chown -R ${UID}:${GID} /app
 
-# Keeps Python from generating .pyc files in the container
-ENV PYTHONDONTWRITEBYTECODE=1
-# Turn off buffering for easier container logging
-ENV PYTHONUNBUFFERED=1
-
-
-WORKDIR /app
-COPY requirements.txt /app/
 USER ${UID}:${GID}
-RUN python3.9 -m venv _venv
-RUN _venv/bin/pip install --upgrade pip
-RUN _venv/bin/pip install wheel
-RUN _venv/bin/pip install -r requirements.txt
+WORKDIR /app
+
+RUN cargo install cargo-chef
+RUN cargo install cargo-deb
 
 
-COPY --chown=${UID}:${GID} . /app
-RUN make install
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare  --recipe-path recipe.json
+
+
+
+FROM chef AS builder
+
+# Build deps (for Docker layering)
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+RUN rm -f target/release/clapshot-server
+
+# Copy sources & build
+COPY . .
+RUN make
 RUN ls -l /
 RUN ls -l /app
 

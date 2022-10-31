@@ -70,7 +70,7 @@ mod integration_test
 
 
     macro_rules! cs_main_test {
-        ([$ws:ident, $data_dir:ident, $incoming_dir:ident] $($body:tt)*) => {
+        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $bitrate:expr] $($body:tt)*) => {
             {
                 let $data_dir = assert_fs::TempDir::new().unwrap();
                 let $incoming_dir = $data_dir.join("incoming");
@@ -79,7 +79,7 @@ mod integration_test
                 let port = 10000 + (rand::random::<u16>() % 10000);
                 let url_base = format!("http://127.0.0.1:{}", port);
                 let ws_url = format!("{}/api/ws", url_base.replace("http", "ws"));
-                let target_bitrate = 500_000;
+                let target_bitrate = $bitrate;
                 let th = {
                     let poll_interval = 0.1;
                     let data_dir = $data_dir.path().to_path_buf();
@@ -104,7 +104,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_no_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir] 
+        cs_main_test! {[ws, data_dir, incoming_dir, 2500_000]
             // Copy test file to incoming dir
             let mp4_file = "60fps-example.mp4";
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
@@ -137,7 +137,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_corrupted_video() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir] 
+        cs_main_test! {[ws, data_dir, incoming_dir, 500_000] 
             // Copy test file to incoming dir
             let f = incoming_dir.join("garbage.mp4");
             std::fs::File::create(&f).unwrap().set_len(123000).unwrap();
@@ -162,7 +162,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_and_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir] 
+        cs_main_test! {[ws, data_dir, incoming_dir, 500_000] 
             // Copy test file to incoming dir
             let mov_file = "NASA_Red_Lettuce_excerpt.mov";
             data_dir.copy_from("src/tests/assets/", &[mov_file]).unwrap();

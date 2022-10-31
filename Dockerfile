@@ -3,9 +3,9 @@ FROM debian:bullseye-slim
 # Install system packages
 RUN apt-get -qy update
 
-RUN apt-get -qy install python3.9 python3-venv >/dev/null
+RUN apt-get -qy install python3 >/dev/null
 RUN apt-get -qy install ffmpeg >/dev/null
-RUN apt-get -qy install python3-pymediainfo >/dev/null
+RUN apt-get -qy install mediainfo >/dev/null
 RUN apt-get -qy install nginx >/dev/null
 RUN apt-get -qy install acl sudo >/dev/null
 

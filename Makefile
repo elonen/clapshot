@@ -8,16 +8,12 @@ default:
 	@echo "Make target 'debian-docker' explicitly."
 
 
-client/dist_deb:
-	(cd client; make debian-docker)
-
-server/dist_deb:
-	(cd server; make debian-docker)
-
 clean-debian:
 	rm -rf dist_deb
 
-debian-docker: client/dist_deb server/dist_deb
+debian-docker:
+	(cd client; make debian-docker)
+	(cd server; make debian-docker)
 	mkdir -p dist_deb
 	cp client/dist_deb/* dist_deb/
 	cp server/dist_deb/* dist_deb/
@@ -39,5 +35,5 @@ run-docker: clean-debian debian-docker
 	DOCKER_BUILDKIT=1 docker build -t clapshot-comb --build-arg UID=${UID} --build-arg GID=${GID} .
 	# Add a simple test video to incoming already
 	mkdir -p test/VOLUME/data/incoming
-	cp server/tests/assets/60fps-example.mp4 test/VOLUME/data/incoming/
+	cp server/src/tests/assets/60fps-example.mp4 test/VOLUME/data/incoming/
 	docker run --rm -it -p 0.0.0.0:8080:80 --mount type=bind,source="$$(pwd)"/test/VOLUME,target=/mnt/clapshot-data  clapshot-comb

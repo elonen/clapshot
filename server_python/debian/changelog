@@ -1,8 +1,3 @@
-clapshot-server (0.3.0-1) bullseye; urgency=low
-
-  * New upstream version:
-    - Complete rewrite in Rust
-
 clapshot-server (0.2.4-1) bullseye; urgency=low
 
   * New upstream version:

@@ -37,10 +37,14 @@ pub fn run_clapshot(
     }
 
     let db_file = data_dir.join("clapshot.sqlite");
+    let was_missing = !db_file.exists();
+    if was_missing {
+        eprintln!("Database file not found, running migrations to create it.");
+    }
     let db = Arc::new(database::DB::connect_db_file(&db_file).unwrap());
 
     // Check & apply database migrations
-    if  migrate && db.migrations_needed()? {
+    if  (migrate || was_missing) && db.migrations_needed()? {
         match db.run_migrations() {
             Ok(_) => {
                 assert!(!db.migrations_needed()?);
