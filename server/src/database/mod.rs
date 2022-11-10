@@ -47,7 +47,7 @@ impl DB {
     /// Connect to SQLite database with an URL (use this for memory databases)
     pub fn connect_db_url( db_url: &str ) -> DBResult<DB> {
         let manager = ConnectionManager::<SqliteConnection>::new(db_url);
-        let pool = Pool::builder().build(manager).context("Failed to build DB pool")?;
+        let pool = Pool::builder().max_size(1).build(manager).context("Failed to build DB pool")?;
         Ok(DB { pool: pool, broken_for_test: AtomicBool::new(false) })
     }
 
@@ -253,6 +253,7 @@ impl DB {
     pub fn add_message(&self, msg: &models::MessageInsert) -> DBResult<models::Message>
     {
         use schema::messages::dsl::*;
+        assert!(msg.event_name != "progress", "Must not add progress messages to database");
         let res = diesel::insert_into(messages)
             .values(msg).get_result(&mut self.conn()?)?;
         Ok(res)

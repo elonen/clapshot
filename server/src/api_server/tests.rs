@@ -116,11 +116,16 @@ async fn test_api_open_video()
     api_test! {[ws, ts] 
         for vid in &ts.videos {
             let (_cmd, data) = open_video(&mut ws, &vid.video_hash).await;
-            let v = serde_json::from_value::<models::Video>(data).unwrap();
+            let v = serde_json::from_value::<models::Video>(data.clone()).unwrap();
             assert_eq!(v.video_hash, vid.video_hash);
             assert_eq!(v.added_by_userid, vid.added_by_userid);
             assert_eq!(v.added_by_username, vid.added_by_username);
             assert_eq!(v.orig_filename, vid.orig_filename);
+
+            // Double slashes in the path are an error (empty path component)
+            let video_url = data.get("video_url").unwrap().as_str().unwrap();
+            let after_https = video_url.split("://").nth(1).unwrap();
+            assert!(!after_https.contains("//"));
         }
 
         // Break the database

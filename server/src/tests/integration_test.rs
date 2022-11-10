@@ -120,6 +120,11 @@ mod integration_test
             let (cmd, data) = open_video(&mut ws, vh).await;
             assert_eq!(data["orig_filename"].as_str().unwrap(), mp4_file);
 
+            // Double slashes in the path are an error (empty path component)
+            let video_url = data.get("video_url").unwrap().as_str().unwrap();
+            let after_https = video_url.split("://").nth(1).unwrap();
+            assert!(!after_https.contains("//"));
+
             // Check that video was moved to videos dir and symlinked
             assert!(data_dir.path().join("videos").join(vh).join("orig").join(mp4_file).is_file());
             assert!(!incoming_dir.join(mp4_file).exists());

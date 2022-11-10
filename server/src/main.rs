@@ -60,7 +60,8 @@ fn main() -> anyhow::Result<()>
     if bitrate_mbps < 0.1 { bail!("Bitrate must be >= 0.1"); }
     let target_bitrate = (bitrate_mbps * 1_000_000.0) as u32;
 
-    let url_base = args.get_str("--url-base").to_string();
+    let url_base = args.get_str("--url-base").to_string()
+        .strip_suffix("/").unwrap_or("").to_string(); // strip trailing slash, if any
 
     let migrate = args.get_bool("--migrate");
 

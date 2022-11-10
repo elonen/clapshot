@@ -372,8 +372,10 @@ async fn run_api_server_async(
                 
                 // Message to a single user
                 if let Some(user_id) = m.user_id {
-                    if let Err(e) = server_state.db.add_message(&msg) {
-                        tracing::error!(details=%e, "Failed to save user notification in DB.");
+                    if !matches!(m.topic, UserMessageTopic::Progress()) {
+                        if let Err(e) = server_state.db.add_message(&msg) {
+                            tracing::error!(details=%e, "Failed to save user notification in DB.");
+                        }
                     }
                     if let Ok(data) = msg.to_json() {
                         let msg = Message::text(serde_json::json!({
@@ -414,6 +416,7 @@ pub async fn run_forever(
     url_base: String,
     port: u16)
 {
+    assert!(!url_base.ends_with('/')); // Should have been stripped by caller
     let _span = tracing::info_span!("API").entered();
     let state = ServerState::new( db,
         &videos_dir,

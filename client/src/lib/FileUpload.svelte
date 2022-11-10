@@ -6,7 +6,7 @@
     let progress_bar: HTMLProgressElement;
     let status_txt: string = "";
     let uploading_now: boolean = false;
-    let form: HTMLFormElement
+    let form: HTMLFormElement = null;
 
     function upload()
     {
@@ -30,7 +30,7 @@
         setTimeout(() => {
             //status_txt = "";
             uploading_now = false;
-            form.reset();
+            if (form) { form.reset(); }
             progress_bar.value = 0;
         }, 3000);
     }

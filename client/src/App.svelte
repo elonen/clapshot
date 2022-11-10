@@ -8,13 +8,14 @@
   import FileUpload from './lib/FileUpload.svelte';
   import {Notifications, acts} from '@tadashi/svelte-notification'
 
-  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_orig_filename, all_my_videos, user_messages} from './stores.js';
+  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_orig_filename, all_my_videos, user_messages, video_progress_msg} from './stores.js';
     
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
   let debug_layout: boolean = false;
   let ui_connected_state: boolean = false; // true if UI should look like we're connected to the server
 
+  let last_video_progress_msg_ts = Date.now();  // used to hide video_progress_msg after a few seconds
 
   // Messages from CommentInput component
   function onCommentInputButton(e) {
@@ -263,8 +264,12 @@
         const data = msg_json.data;
 
         console.log("[RAW SERVER] cmd: '" + cmd + "', data size = " + JSON.stringify(data).length);
+
+        if (Date.now() - last_video_progress_msg_ts > 5000) {          
+          $video_progress_msg = null; // timeout progress message after a while
+        }
         
-        switch (cmd) 
+        switch (cmd)
         {
           case 'welcome':
             //console.log("[SERVER] welcome: " + JSON.stringify(data));
@@ -284,15 +289,23 @@
 
           case 'message':
             //console.log("[SERVER] message: " + JSON.stringify(data));
-            $user_messages = $user_messages.filter((m) => m.id != data.id);
-            $user_messages.push(data);
-            $user_messages = $user_messages.sort((a, b) => a.id > b.id ? -1 : a.id < b.id ? 1 : 0);
-            if (!data.seen) {
-              const severity = (data.event_name == 'error') ? 'danger' : 'info';
-              acts.add({mode: severity, message: data.message, lifetime: 5});
-              if (severity == 'info') {
-                refresh_my_videos();
-            }};
+            if ( data.event_name == 'progress' ) {
+              if (data.ref_video_hash == $video_hash) {
+                $video_progress_msg = data.message;
+                last_video_progress_msg_ts = Date.now();
+              }
+            }
+            else {
+              $user_messages = $user_messages.filter((m) => m.id != data.id);
+              $user_messages.push(data);
+              $user_messages = $user_messages.sort((a, b) => a.id > b.id ? -1 : a.id < b.id ? 1 : 0);
+              if (!data.seen) {
+                const severity = (data.event_name == 'error') ? 'danger' : 'info';
+                acts.add({mode: severity, message: data.message, lifetime: 5});
+                if (severity == 'info') {
+                  refresh_my_videos();
+              }};
+            }
             break;
 
           case 'open_video':
@@ -303,7 +316,7 @@
             $video_orig_filename = data.orig_filename;    
             $all_comments = [];
             break;
-
+            
           case 'new_comment':
             console.log("[SERVER] new_comment: " + JSON.stringify(data));
             {
