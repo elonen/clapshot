@@ -31,7 +31,8 @@ test:
 	(cd client; make test-docker)
 	(cd server; make test-docker)
 
-run-docker: clean-debian debian-docker
+#run-docker: clean-debian debian-docker
+run-docker: debian-docker
 	DOCKER_BUILDKIT=1 docker build -t clapshot-comb --build-arg UID=${UID} --build-arg GID=${GID} .
 	# Add a simple test video to incoming already
 	mkdir -p test/VOLUME/data/incoming

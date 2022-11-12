@@ -15,7 +15,6 @@
     let cur_color = "red";
 
     export function forceDrawMode(on: boolean) {
-        console.log("Forcing draw mode: " + on);
         draw_mode = on;
     }
 

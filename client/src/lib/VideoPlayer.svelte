@@ -4,9 +4,12 @@
   import {Notifications, acts} from '@tadashi/svelte-notification'
   import {create as sdb_create} from "simple-drawing-board";
   import {onMount} from 'svelte';
-  import { fade, slide, scale } from "svelte/transition";
+  import {fade, slide, scale} from "svelte/transition";
 
   import {video_is_ready, video_fps} from '../stores.js';
+
+  import {createEventDispatcher} from 'svelte';
+  const dispatch = createEventDispatcher();
 
   export let src: any;
 
@@ -33,7 +36,7 @@
     set color(color: string) {
       this._color = color;
       draw.board.setLineColor(this._color);
-      draw.canvas.style.border = "6px solid " + this._color;
+      draw.canvas.style.outline = "5px solid " + this._color;
     }
 
     get board() {
@@ -63,7 +66,7 @@
       comb_canvas.width  = video_elem.videoWidth;
       comb_canvas.height = video_elem.videoHeight;
       var ctx = comb_canvas.getContext('2d');
-      ctx.drawImage(video_elem, 0, 0);
+      // ctx.drawImage(video_elem, 0, 0);   // Removed, as frame capture is now done when draw mode is entered
       ctx.drawImage(this._canvas, 0, 0);
       return comb_canvas.toDataURL("image/webp", 0.8);
     }
@@ -85,8 +88,9 @@
         this._canvas = document.createElement('canvas');
         this._canvas.width = video_elem.videoWidth;
         this._canvas.height = video_elem.videoHeight;
-        this._canvas.classList.add("absolute", "h-full", "w-full", "top-0", "left-0", "z-[1000]");
-        this._canvas.style.cssText = 'border: 6px solid red; cursor:crosshair; opacity: 1.0;';
+        this._canvas.classList.add("absolute", "max-h-full", "max-w-full", "z-[1000]");
+        this._canvas.style.cssText = 'outline: 5px solid red; outline-offset: -5px; cursor:crosshair; left: 50%; top: 50%; transform: translate(-50%, -50%);';
+
         video_canvas_container.appendChild(this._canvas);
 
         this._board = sdb_create(this._canvas);
@@ -108,16 +112,18 @@
 	function handleMove(e: any) {
 		if (!duration) return; // video not loaded yet
 		if (e.type !== 'touchmove' && !(e.buttons & 1)) return; // mouse not down
-
 		const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
 		const { left, right } = this.getBoundingClientRect();
 		time = duration * (clientX - left) / (right - left);
-    draw.board?.clear();
+    seekSideEffects();
 	}
 
 	function togglePlay() {
-    if (paused) video_elem.play(); else video_elem.pause();
-    draw.board?.clear();
+    if (paused) {
+      seekSideEffects();
+      video_elem.play();
+    }
+    else video_elem.pause();
 	}
 
 	function format_tc(seconds: number) : string {
@@ -163,8 +169,8 @@
       } else {
         vframe_calc.seekForward(frames, null);
       }
+      seekSideEffects();
     }
-    draw.board?.clear();
   }
 
   function onWindowKeyPress(e: any) {
@@ -213,13 +219,19 @@
     e.preventDefault();
   }
 
+  function seekSideEffects() {
+    draw.board?.clear();
+    onToggleDraw(false);
+    dispatch('seeked', {});
+  }
+
   export function seekTo(value: string, fmt: string) {
     // fmt should be either "SMPTE" or "frame"
     try {
+      seekSideEffects();
       let ops = new Object();
       ops[fmt] = value;
       vframe_calc.seekTo(ops);
-      draw.board?.clear();
     } catch(err) {
       acts.add({mode: 'warning', message: `Seek failed to: ${fmt} ${value}`, lifetime: 3});
     }
@@ -235,9 +247,12 @@
   // These are called from PARENT component on user interaction
   export function onToggleDraw(mode_on: boolean) {
     try {
+      draw.board.clear();
       if (mode_on) {
-        draw.board.clear();
-        draw.canvas.style.border = "6px solid " + draw.color;
+        draw.canvas.style.outline = "5px solid " + draw.color;
+        draw.canvas.style.cursor = "crosshair";
+        var ctx = draw.canvas.getContext('2d');
+        ctx.drawImage(video_elem, 0, 0);
         draw.canvas.style.visibility = "visible";
       } else {
         draw.canvas.style.visibility = "hidden";
@@ -265,10 +280,10 @@
 
   export async function setDrawing(drawing: string) {
     try {
-      console.log("setDrawing");
       await draw.board.fillImageByDataURL(drawing, { isOverlay: false })
       draw.canvas.style.visibility = "visible";
-      draw.canvas.style.border = "none";
+      draw.canvas.style.cursor = "";
+      draw.canvas.style.outline = "none";
     }
     catch(err) {
       acts.add({mode: 'error', message: `Failed to show image.`, lifetime: 3});

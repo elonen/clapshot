@@ -1,3 +1,7 @@
+clapshot-client (0.3.0-1) bullseye; urgency=low
+
+  * New upstream version. Fixes for drawings and Rust server.
+
 clapshot-client (0.2.4-1) bullseye; urgency=low
 
   * New upstream version. More robust UI layout.

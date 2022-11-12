@@ -72,6 +72,18 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<models::Vi
         .collect::<Vec<_>>();
     comments.extend(more_comments);
 
+    // Add another comment with empty drawing (caused an error at one point)
+    let c = models::CommentInsert {
+        video_hash: videos[0].video_hash.clone(),
+        parent_id: None,
+        timecode: None,
+        user_id: "user.num1".to_string(),
+        username: "User Number1".to_string(),
+        comment: "Comment_with_empty_drawing".to_string(),
+        drawing: Some("".into()),
+    };
+    db.add_comment(&c).unwrap();
+
     (std::sync::Arc::new(db), data_dir, videos, comments)
 }
 
@@ -100,7 +112,7 @@ fn test_fixture_state() -> anyhow::Result<()>
         assert_eq!(db.get_video(&v.video_hash)?.video_hash, v.video_hash);
         let comments = db.get_video_comments(&v.video_hash)?;
         assert_eq!(comments.len(), match v.video_hash.as_str() {
-            "HASH0" => 4,
+            "HASH0" => 5,
             "11111" => 2,
             "22222" => 1,
             "HASH3" => 0,

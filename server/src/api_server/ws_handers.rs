@@ -119,7 +119,11 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_
             ses.emit_cmd("open_video", &fields, super::SendTo::CurSession() )?;
 
             for c in ses.server.db.get_video_comments(video_hash)? {
-                ses.emit_new_comment(c, super::SendTo::CurSession()).await?;
+                let cid = c.id;
+                if let Err(e) = ses.emit_new_comment(c, super::SendTo::CurSession()).await {
+                    tracing::error!("Error sending comment: {}", e);
+                    send_user_error!(ses, Topic::Comment(cid), format!("Error sending comment #{cid}: {:?}", e));
+                }
             }
         }
     }

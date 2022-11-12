@@ -78,7 +78,7 @@ function onEditFieldKeyUp(e) {
         {#if drawing_data && drawing_data != ""}
           <i class="fas fa-pen"></i>
         {/if}
-        {timecode}
+        {timecode ? timecode : ""}
     </span>
   </div>
 

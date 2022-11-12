@@ -103,20 +103,22 @@ impl WsSessionArgs<'_> {
 
     pub async fn emit_new_comment(&self, mut c: models::Comment, send_to: SendTo<'_>) -> Res<()> {
         if let Some(drawing) = &mut c.drawing {
-            // If drawing is present, read it from disk and encode it into a data URI.
-            if !drawing.starts_with("data:") {
-                let path = self.server.videos_dir.join(&c.video_hash).join("drawings").join(&drawing);
-                if path.exists() {
-                    let data = tokio::fs::read(path).await?;
-                    *drawing = format!("data:image/webp;base64,{}", base64::encode(&data));
+            if drawing != "" {
+                // If drawing is present, read it from disk and encode it into a data URI.
+                if !drawing.starts_with("data:") {
+                    let path = self.server.videos_dir.join(&c.video_hash).join("drawings").join(&drawing);
+                    if path.exists() {
+                        let data = tokio::fs::read(path).await?;
+                        *drawing = format!("data:image/webp;base64,{}", base64::encode(&data));
+                    } else {
+                        tracing::warn!("Drawing file not found for comment: {}", c.id);
+                        c.comment += " [DRAWING NOT FOUND]";
+                    }
                 } else {
-                    tracing::warn!("Drawing file not found for comment: {}", c.id);
-                    c.comment += " [DRAWING NOT FOUND]";
+                    // If drawing is already a data URI, just use it as is.
+                    // This shouldn't happen anymore, but it's here just in case.
+                    tracing::warn!("Comment '{}' has data URI drawing stored in DB. Should be on disk.", c.id);
                 }
-            } else {
-                // If drawing is already a data URI, just use it as is.
-                // This shouldn't happen anymore, but it's here just in case.
-                tracing::warn!("Comment '{}' has data URI drawing stored in DB. Should be on disk.", c.id);
             }
         }
         let mut fields = c.to_json()?;

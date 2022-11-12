@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { fade, slide, scale } from "svelte/transition";
+  import {fade, slide, scale} from "svelte/transition";
   import CommentCard from './lib/CommentCard.svelte'
   import NavBar from './lib/NavBar.svelte'
   import VideoPlayer from './lib/VideoPlayer.svelte';
@@ -9,7 +9,7 @@
   import {Notifications, acts} from '@tadashi/svelte-notification'
 
   import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_orig_filename, all_my_videos, user_messages, video_progress_msg} from './stores.js';
-    
+
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
   let debug_layout: boolean = false;
@@ -103,6 +103,11 @@
   function onClickVideo(new_video_hash) {
     ws_emit('open_video', {video_hash: new_video_hash});
     history.pushState(new_video_hash, null, '/?vid='+new_video_hash);  // Point URL to video
+  }
+
+  function onVideoSeeked(e) {
+    //console.log("App: seeked()");
+    comment_input.forceDrawMode(false);  // Close draw mode when video frame is changed
   }
 
   function popHistoryState(e) {
@@ -254,6 +259,14 @@
       setTimeout(() => { if (!is_connected()) ui_connected_state = false; }, 3000);
     });
 
+    function log_abbreviated(str: string) {
+      const max_len = 180;
+      if (str.length > max_len)
+        return str.substr(0, max_len) + "(...)";
+      else
+        return str;
+    }
+
     // Incoming messages
     ws_socket.addEventListener("message", function (event)
     {
@@ -263,7 +276,7 @@
         const cmd = msg_json.cmd;
         const data = msg_json.data;
 
-        console.log("[RAW SERVER] cmd: '" + cmd + "', data size = " + JSON.stringify(data).length);
+        log_abbreviated("[RAW SERVER] cmd: '" + cmd + "', data size = " + JSON.stringify(data).length);
 
         if (Date.now() - last_video_progress_msg_ts > 5000) {          
           $video_progress_msg = null; // timeout progress message after a while
@@ -272,7 +285,7 @@
         switch (cmd)
         {
           case 'welcome':
-            //console.log("[SERVER] welcome: " + JSON.stringify(data));
+            //log_abbreviated("[SERVER] welcome: " + JSON.stringify(data));
             $cur_username = data.username;
             $cur_user_id = data.user_id
             break;
@@ -283,12 +296,12 @@
             break;
 
           case 'user_videos':
-            //console.log("[SERVER] user_videos: " + JSON.stringify(data));
+            log_abbreviated("[SERVER] user_videos: " + JSON.stringify(data));
             $all_my_videos = data.videos;
             break;
 
           case 'message':
-            //console.log("[SERVER] message: " + JSON.stringify(data));
+            log_abbreviated("[SERVER] message: " + JSON.stringify(data));
             if ( data.event_name == 'progress' ) {
               if (data.ref_video_hash == $video_hash) {
                 $video_progress_msg = data.message;
@@ -309,7 +322,7 @@
             break;
 
           case 'open_video':
-            console.log("[SERVER] open_video: " + JSON.stringify(data));
+            log_abbreviated("[SERVER] open_video: " + JSON.stringify(data));
             $video_url = data.video_url;
             $video_hash = data.video_hash;
             $video_fps = data.fps;
@@ -318,7 +331,7 @@
             break;
             
           case 'new_comment':
-            console.log("[SERVER] new_comment: " + JSON.stringify(data));
+            log_abbreviated("[SERVER] new_comment: " + JSON.stringify(data));
             {
               function reorder_comments(old_order) {
                 // Helper to show comment threads in the right order and with correct indentation
@@ -359,18 +372,18 @@
                   });
                 $all_comments = reorder_comments($all_comments);
               } else {
-                console.log("Comment not for this video. Ignoring.");
+                log_abbreviated("Comment not for this video. Ignoring.");
               }
             }
             break;
 
           case 'del_comment':
-            //console.log("[SERVER] del_comment: " + data.comment_id);
+            //log_abbreviated("[SERVER] del_comment: " + data.comment_id);
             $all_comments = $all_comments.filter((c) => c.id != data.comment_id);
             break;
 
           default:
-            console.log("[SERVER] UNKNOWN CMD '"+data.cmd+"': " + JSON.stringify(data));
+            log_abbreviated("[SERVER] UNKNOWN CMD '"+data.cmd+"': " + JSON.stringify(data));
             break;
         }
       });
@@ -407,7 +420,7 @@
 
             <div transition:slide class="flex-1 flex flex-col {debug_layout?'border-2 border-purple-600':''}">
               <div class="flex-1 bg-cyan-900">
-                <VideoPlayer bind:this={video_player} src={$video_url} />
+                <VideoPlayer bind:this={video_player} src={$video_url} on:seeked={onVideoSeeked} />
               </div>
               <div class="flex-none w-full p-2 {debug_layout?'border-2 border-green-500':''}">
                 <CommentInput bind:this={comment_input} on:button-clicked={onCommentInputButton} />
