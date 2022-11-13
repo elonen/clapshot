@@ -29,6 +29,7 @@ Options:
  -m TOPIC --mute TOPIC    Mute logging for a topic (can be repeated). Sets level to WARNING.
                         See logs logs for available topics.
  -l FILE --log FILE     Log to file instead of stdout
+ -j --json              Log in JSON format
  -w N --workers N       Max number of workers for video processing [default: 0]
                         (0 = number of CPU cores)
  -b VBR --bitrate VBR   Target (max) bitrate for transcoding, in Mbps [default: 2.5]
@@ -53,6 +54,9 @@ fn main() -> anyhow::Result<()>
     let debug: bool = args.get_bool("--debug");
     let data_dir = PathBuf::from(args.get_str("--data-dir"));
 
+    let log_file = args.get_str("--log").to_string();
+    let json_log = args.get_bool("--json");
+
     let mut n_workers = args.get_str("--workers").parse::<usize>().unwrap_or(0);
     if n_workers == 0 { n_workers = num_cpus::get(); }
 
@@ -68,23 +72,35 @@ fn main() -> anyhow::Result<()>
     let poll_interval = args.get_str("--poll").parse::<f32>().unwrap_or(3.0);
     let resubmit_delay = poll_interval * 5.0;
 
+    let log_to_stdout = log_file == "" || log_file == "-";
+    let (log_writer, _guard) = if log_to_stdout {
+            tracing_appender::non_blocking(std::io::stdout())
+        } else {
+            let f = std::fs::OpenOptions::new().create(true).append(true).open(log_file)?;
+            tracing_appender::non_blocking(f)
+        };
 
     // Setup logging
     if std::env::var_os("RUST_LOG").is_none() {
-        if debug {
-            std::env::set_var("RUST_LOG", "debug,clapshot_server=debug");
-        }
+        std::env::set_var("RUST_LOG", if debug {"debug,clapshot_server=debug"} else {"info,clapshot_server=info"});
     };
     let log_sbsc = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        //.pretty() // for debugging
         .with_file(false)
         .with_line_number(false)
         .with_thread_ids(false)
         .with_target(false)
-        .finish();
+        //.pretty() // for debugging
+        .with_writer(log_writer)
+        .with_ansi(log_to_stdout);
 
-    tracing::subscriber::set_global_default(log_sbsc).expect("tracing::subscriber::set_global_default failed");
+    //let log_sbsc = if json_log { log_sbsc.json().finish() } else { log_sbsc.finish() };
+    if json_log {
+        tracing::subscriber::set_global_default(log_sbsc.json().finish())
+    } else {
+        tracing::subscriber::set_global_default(log_sbsc.finish())
+    }.expect("tracing::subscriber::set_global_default failed");
+
 
     clapshot_server::run_clapshot(data_dir, migrate, url_base, port, n_workers, target_bitrate, poll_interval, resubmit_delay)
 }
