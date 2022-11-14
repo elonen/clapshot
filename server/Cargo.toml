@@ -59,7 +59,7 @@ diesel = { version = "2.0.2", features = ["sqlite", "r2d2", "chrono", "returning
 r2d2 = "0.8.10"
 serde = "1.0.145"
 diesel_migrations = "2.0.0"
-chrono = { version = "0.4.22", features = ["serde"] }
+chrono = { version = "0.4.23", features = ["serde"] }
 warp = "0.3.3"
 tokio = { version = "1.21.2", features = ["full"] }
 data-url = "0.2.0"
