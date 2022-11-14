@@ -70,7 +70,7 @@ hex = "0.4.3"
 mpart-async = "0.6.1"
 bytes = "1.2.1"
 futures-util = { version = "0.3.24" }
-futures = "0.3.24"
+futures = "0.3.25"
 mime = "0.3.16"
 uuid = {version = "1.2.1", features=["v4"] }
 file-owner = "0.1.1"
