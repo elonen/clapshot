@@ -57,7 +57,7 @@ rust_decimal = "1.26.1"
 threadpool = "1.8.1"
 diesel = { version = "2.0.2", features = ["sqlite", "r2d2", "chrono", "returning_clauses_for_sqlite_3_35"] }
 r2d2 = "0.8.10"
-serde = "1.0.145"
+serde = "1.0.147"
 diesel_migrations = "2.0.0"
 chrono = { version = "0.4.23", features = ["serde"] }
 warp = "0.3.3"
