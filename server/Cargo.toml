@@ -49,30 +49,30 @@ crossbeam-channel = "0.5.6"
 docopt = "1.1.1"
 log = "0.4.17"
 signal-hook = "0.3.14"
-tracing = "0.1.36"
+tracing = "0.1.37"
 tracing-subscriber = {version = "0.3.15", features = ["env-filter", "json"] }
 path-absolutize = "3.0.13"
-serde_json = "1.0.85"
+serde_json = "1.0.87"
 rust_decimal = "1.26.1"
 threadpool = "1.8.1"
 diesel = { version = "2.0.2", features = ["sqlite", "r2d2", "chrono", "returning_clauses_for_sqlite_3_35"] }
 r2d2 = "0.8.10"
-serde = "1.0.145"
+serde = "1.0.147"
 diesel_migrations = "2.0.0"
-chrono = { version = "0.4.22", features = ["serde"] }
+chrono = { version = "0.4.23", features = ["serde"] }
 warp = "0.3.3"
 tokio = { version = "1.21.2", features = ["full"] }
 data-url = "0.2.0"
-base64 = "0.13.0"
+base64 = "0.13.1"
 async-std = "1.12.0"
 sha2 = "0.10.6"
 hex = "0.4.3"
 mpart-async = "0.6.1"
 bytes = "1.2.1"
 futures-util = { version = "0.3.24" }
-futures = "0.3.24"
+futures = "0.3.25"
 mime = "0.3.16"
-uuid = {version = "1.2.1", features=["v4"] }
+uuid = {version = "1.2.2", features=["v4"] }
 file-owner = "0.1.1"
 unix-named-pipe = "0.2.0"
 num_cpus = "1.13.1"
@@ -84,7 +84,7 @@ tracing-appender = "0.2.2"
 timeago = "0.3.1"
 
 [dev-dependencies]
-assert_fs = "1.0.7"
+assert_fs = "1.0.9"
 tracing-test = {version="0.2.3", features=["no-env-filter"] }
 reqwest = { version = "0.11", default-features = false, features = ["blocking", "json", "rustls-tls", "multipart", "stream"] }
 url = "2.2.2"
