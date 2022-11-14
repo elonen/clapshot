@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use super::schema::*;
 use chrono;
 use chrono::naive::serde::{ts_seconds, ts_seconds_option};
+use chrono::TimeZone;
+use timeago;
 
 
 #[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId)]
@@ -111,5 +113,15 @@ impl Video { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Erro
 impl VideoInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
 impl Comment { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
 impl CommentInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
-impl Message { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
+
+impl Message { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
+    to_json(&self).map(|mut v| {
+        // Turn timestamp into a human-readable timeago string
+        let created_utc: chrono::DateTime<chrono::Utc> = chrono::Utc.from_utc_datetime(&self.created);
+        let time_ago_str = timeago::Formatter::new().convert_chrono(created_utc, chrono::Local::now());
+        v["created"] = serde_json::json!(time_ago_str);
+        v
+    })
+}}
+
 impl MessageInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }

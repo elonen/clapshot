@@ -310,7 +310,7 @@
             }
             else {
               $user_messages = $user_messages.filter((m) => m.id != data.id);
-              $user_messages.push(data);
+              if (data.created) { $user_messages.push(data); }
               $user_messages = $user_messages.sort((a, b) => a.id > b.id ? -1 : a.id < b.id ? 1 : 0);
               if (!data.seen) {
                 const severity = (data.event_name == 'error') ? 'danger' : 'info';

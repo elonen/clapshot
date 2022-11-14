@@ -12,15 +12,17 @@ let show_details: boolean = false;
     </span>
     <span class="text-xs text-gray-500 pl-2 border-l border-gray-400">{msg.created}</span>
 
-    {#if msg.event_name == "error"}
-        <span class="font-mono text-xs pl-2 border-l border-gray-400 line-through text-gray-700">
-            {msg.ref_video_hash}
-        </span>
-    {:else}
-        <a class="font-mono text-xs pl-2 border-l border-gray-400 text-amber-600"
-            href="/?vid={msg.ref_video_hash}">
-            {msg.ref_video_hash}
-        </a>
+    {#if msg.ref_video_hash }
+        {#if msg.event_name == "error"}
+            <span class="font-mono text-xs pl-2 border-l border-gray-400 line-through text-gray-700">
+                {msg.ref_video_hash}
+            </span>
+        {:else}
+            <a class="font-mono text-xs pl-2 border-l border-gray-400 text-amber-600"
+                href="/?vid={msg.ref_video_hash}">
+                {msg.ref_video_hash}
+            </a>
+        {/if}
     {/if}
 
     <span class="text-gray-400 text-sm pl-2 border-l border-gray-400 pr-2">{msg.message}</span>

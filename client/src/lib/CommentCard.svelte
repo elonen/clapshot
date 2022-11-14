@@ -71,10 +71,10 @@ function onEditFieldKeyUp(e) {
   <div class="flex mx-2 pt-3">
     <div class="flex-none w-9 h-9 block"><Avatar userFullName="{username}" src="{avatar_url}" /></div>
     <h5 class="flex-1 ml-3 text-gray-500 self-end">{username}</h5>
-    <span class="invisible text-xs font-mono">[{id}@{parent_id}]</span>
+    <span class="flex-none hidden text-xs font-mono">[{id}@{parent_id}]</span>
     <span
       on:click="{() => { onTimecodeClick(timecode) }}"
-      class="pl-2 flex-0 text-xs italic text-yellow-700 hover:text-yellow-500 hover:underline cursor-pointer self-end">
+      class="pl-2 flex-0 text-xs italic whitespace-nowrap text-yellow-700 hover:text-yellow-500 hover:underline cursor-pointer self-end">
         {#if drawing_data && drawing_data != ""}
           <i class="fas fa-pen"></i>
         {/if}
@@ -82,11 +82,11 @@ function onEditFieldKeyUp(e) {
     </span>
   </div>
 
-  <div class="p-2">
+  <div class="p-2" lang="en">
     {#if editing}
       <input class="w-full outline-dashed bg-slate-500" type="text" use:callFocus bind:value="{comment}" on:keyup={onEditFieldKeyUp} on:blur="{(e)=>{editing=false;}}" />
     {:else}
-      <p class="text-gray-300 text-base break-all">
+      <p class="text-gray-300 text-base hyphenate">
         {comment}
         {#if edited}
           <span class="text-xs italic text-gray-500"> (edited)</span>
@@ -117,3 +117,14 @@ function onEditFieldKeyUp(e) {
   {/if}
 
 </div>
+
+
+<style>
+  .hyphenate {
+    -webkit-hyphens: auto;
+    -moz-hyphens: auto;
+    -ms-hyphens: auto;
+    hyphens: auto;
+    word-break: break-word;
+  }
+</style>

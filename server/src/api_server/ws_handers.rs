@@ -99,7 +99,7 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_
         Err(e) => { bail!(e); }
         Ok(v) => {
             ses.video_session_guard = Some(ses.server.link_session_to_video(video_hash, ses.sender.clone()));
-            let mut fields = serde_json::to_value(&v)?;
+            let mut fields = v.to_json()?;
 
             // Use transcoded or orig video?
             let (file, uri) = match v.recompression_done {
@@ -265,7 +265,7 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
 pub async fn msg_list_my_messages(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
     let msgs = ses.server.db.get_user_messages(&ses.user_id)?;
     for m in msgs {
-        ses.emit_cmd("message", &serde_json::to_value(&m)?, super::SendTo::CurSession())?;
+        ses.emit_cmd("message", &m.to_json()?, super::SendTo::CurSession())?;
         if !m.seen {
             ses.server.db.set_message_seen(m.id, true)?;
         }
