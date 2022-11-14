@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "@fortawesome/fontawesome-free": "^6.2.0",
-    "@picmo/popup-picker": "^5.7.0",
+    "@picmo/popup-picker": "^5.7.2",
     "@picmo/renderer-twemoji": "^5.7.0",
     "@sveltejs/vite-plugin-svelte": "^1.0.2",
     "@tadashi/svelte-notification": "^1.1.0",
