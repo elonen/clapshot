@@ -79,14 +79,29 @@ async fn test_api_list_user_videos()
 #[traced_test]
 async fn test_api_del_video()
 {
-    api_test! {[ws, ts] 
-        
-        // Delete a video
-        assert!(ts.db.get_video(&ts.videos[0].video_hash).is_ok());
-        write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"video_hash":"{}"}}}}"#, ts.videos[0].video_hash)).await;
-        let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "ok");
-        assert!(matches!(ts.db.get_video(&ts.videos[0].video_hash).unwrap_err(), DBError::NotFound()));
+    api_test! {[ws, ts]
+
+        // Delete one successfully
+        {
+            assert!(ts.db.get_video(&ts.videos[0].video_hash).is_ok());
+            write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"video_hash":"{}"}}}}"#, ts.videos[0].video_hash)).await;
+            let (_cmd, data) = expect_cmd_data(&mut ws).await;
+            assert_eq!(data["event_name"], "ok");
+            assert!(!data["details"].as_str().unwrap().contains("WARNING"));
+
+            // Make sure the dir is gone
+            assert!(matches!(ts.db.get_video(&ts.videos[0].video_hash).unwrap_err(), DBError::NotFound()));
+
+            // Make sure it's in trash, and DB row was backed up on disk
+            let trash_dir = ts.videos_dir.join("trash");
+            let first_trash_dir = trash_dir.read_dir().unwrap().next().unwrap().unwrap().path();
+            let backup_path = first_trash_dir.join("db_backup.json");
+            assert!(backup_path.to_string_lossy().contains(&ts.videos[0].video_hash));
+            assert!(backup_path.is_file());
+            let backup_json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(backup_path).unwrap()).unwrap();
+            assert_eq!(backup_json["video_hash"], ts.videos[0].video_hash);
+            assert_eq!(backup_json["orig_filename"], ts.videos[0].orig_filename.clone().unwrap());
+        }
 
         // Fail to delete a non-existent video
         write(&mut ws, r#"{"cmd":"del_video","data":{"video_hash":"non-existent"}}"#).await;

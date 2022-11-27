@@ -7,6 +7,7 @@
   import UserMessage from './lib/UserMessage.svelte';
   import FileUpload from './lib/FileUpload.svelte';
   import {Notifications, acts} from '@tadashi/svelte-notification'
+  import VideoListPopup from './lib/VideoListPopup.svelte';
 
   import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_orig_filename, all_my_videos, user_messages, video_progress_msg} from './stores.js';
 
@@ -391,6 +392,16 @@
 
   }
 
+  function onClickDeleteVideo(video_hash: string, video_name: string) {
+    if (confirm("Are you sure you want to delete '" + video_name + "'?")) {
+      ws_emit('del_video', {video_hash: video_hash});
+
+      // After 2 seconds, refresh the list of videos
+      function refresh_my_videos() { ws_emit('list_my_videos', {}); }
+      setTimeout(refresh_my_videos, 2000);
+    }
+  }
+
 </script>
 
 <svelte:window on:popstate={popHistoryState}/>
@@ -454,8 +465,9 @@
               <div class="bg-slate-600 w-72 rounded-md p-2 m-1 mx-6 inline-block cursor-pointer" on:click|preventDefault="{()=>onClickVideo(item.video_hash)}">
                 <span class="text-amber-400 text-xs pr-2 border-r border-gray-400">{item.added_time}</span>
                 <span class="text-amber-500 font-mono text-xs pr-2">{item.video_hash}</span>
+                <VideoListPopup onDelete={() => { onClickDeleteVideo(item.video_hash, item.orig_filename) }} />
                 <div><a href="/?vid={item.video_hash}" class="text-xs overflow-clip whitespace-nowrap">{item.orig_filename}</a></div>
-              </div>          
+              </div>
               {/each} 
             </div> 
 

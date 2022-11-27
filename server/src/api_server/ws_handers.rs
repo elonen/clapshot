@@ -20,6 +20,7 @@ use hex;
 
 use super::WsSessionArgs;
 
+use crate::api_server::server_state::ServerState;
 use crate::database::error::DBError;
 use crate::database::{models, DB};
 use crate::database::schema::comments::drawing;
@@ -138,9 +139,46 @@ pub async fn msg_del_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>
                 send_user_error!(ses, Topic::Video(video_hash), "Video not owned by you. Cannot delete.");
             } else {
                 ses.server.db.del_video_and_comments(video_hash)?;
-                let details = format!("Added by {:?} ({:?}) on {}. Filename was '{:?}'",
+                let mut details = format!("Added by {:?} ({:?}) on {}. Filename was {:?}.",
                     v.added_by_username, v.added_by_userid, v.added_time, v.orig_filename);
-                send_user_ok!(ses, Topic::Video(video_hash), "Video deleted.", details, true);
+
+                fn backup_video_db_row(server: &ServerState, v: &models::Video) -> Res<()> {
+                    let backup_file = server.videos_dir.join(v.video_hash.clone()).join("db_backup.json");
+                    if backup_file.exists() {
+                        std::fs::remove_file(&backup_file)?;
+                    }
+                    let json_str = serde_json::to_string_pretty(&v)?;
+                    std::fs::write(&backup_file, json_str)?;
+                    Ok(())
+                }
+
+                fn move_video_to_trash(server: &ServerState, video_hash: &str) -> Res<()>
+                {
+                    let video_dir = server.videos_dir.join(video_hash);
+                    let trash_dir = server.videos_dir.join("trash");
+                    if !trash_dir.exists() {
+                        std::fs::create_dir(&trash_dir)?;
+                    }
+                    let hash_and_datetime = format!("{}_{}", video_hash, chrono::Utc::now().format("%Y%m%d-%H%M%S"));
+                    let video_trash_dir = trash_dir.join(hash_and_datetime);
+                    std::fs::rename(&video_dir, &video_trash_dir)?;
+                    Ok(())
+                }
+
+                let mut cleanup_errors = false;
+                if let Err(e) = backup_video_db_row(&ses.server, &v) {
+                    details.push_str(&format!(" WARNING: DB row backup failed: {:?}.", e));
+                    cleanup_errors = true;
+
+                }
+                if let Err(e) = move_video_to_trash(&ses.server, video_hash) {
+                    details.push_str(&format!(" WARNING: Move to trash failed: {:?}.", e));
+                    cleanup_errors = true;
+                }
+                
+                send_user_ok!(ses, Topic::Video(video_hash),
+                    if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
+                    details, true);
             }
         }
         Err(DBError::NotFound()) => {
