@@ -1,3 +1,10 @@
+clapshot-client (0.3.1-1) bullseye; urgency=low
+
+  * New upstream version:
+    - Adds video delete to GUI.
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 27 Nov 2022 21:48:00 +0000
+
 clapshot-server (0.3.0-1) bullseye; urgency=low
 
   * New upstream version:
