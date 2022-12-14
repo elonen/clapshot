@@ -1,3 +1,10 @@
+clapshot-client (0.3.2-1) bullseye; urgency=low
+
+  * New upstream version:
+    - Upgrade crate versions
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 14 Dec 2022 15:53:00 +0000
+
 clapshot-client (0.3.1-1) bullseye; urgency=low
 
   * New upstream version:
