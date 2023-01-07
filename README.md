@@ -5,18 +5,18 @@
 
 ## Introduction
 
-Clapshot is a self-hosted, web-based, open source video review / annotation tool.
-It consists of an API server (written in Rust) and web UI (frontend, written in Svelte).
+Clapshot is a self-hosted, web-based, open source video review/annotation tool.
+It consists of an API server (written in Rust) and a web UI (written in Svelte).
 
 ![Review UI screenshot](doc/video-commenting.webp)
 
-Users can submit videos by a) HTTP upload or b) copying them to `incoming` directory (e.g. via Samba).
-If bitrate exceeds configured target or codec/container is not recognized as supported (guaranteed to be viewable in browser),
-the server transcodes the video with FFMPEG.
+Users can submit videos by HTTP upload or by copying them to `incoming` directory (e.g. via Samba).
+If bitrate exceeds configured target or codec/container is not recognized as supported (guaranteed to be viewable in a browser),
+server transcodes the video with FFMPEG.
 
 After a video is ingested succesfully, users can view the file, add comments, draw annotations
 and reply to each other's comments. Videos are stored on disk as files, while metadata and comments
-go into an Sqlite 3.5+ database file.
+go to an Sqlite 3.5+ database file.
 
 ![Video listing screenshot](doc/video-list.webp)
 
@@ -24,26 +24,24 @@ go into an Sqlite 3.5+ database file.
 ### Demo
 
 To try out Clapshot in a Docker container, check out the repo and run `make run-docker`.
-This builds .deb packages in Docker, installs them in a production-like environment, starts the server and an
-Nginx proxy in front of it. Watch the console output for a URL to open in a browser.
 
 ## Deployment in production
 
-The server is started with the `clapshot-server` command, whch stays in the
+The server is started with command `clapshot-server`. It stays in the
 foreground, and should therefore be started by a process manager.
 
-Preferred deployment and upgrade method is to install it (and the client) as Debian
-packages. Whereas `clapshot-server` is a forgeround binary that is gets options as command line options,
+Preferred deployment and upgrade method is to install server and client as Debian
+packages. Whereas `clapshot-server` is a foreground binary that is configured with command line options,
 the Debian package contains a systemd service file that demonizes it, and config file `/etc/clapshot-server.conf` that is
-translated into the appropriate CLI options. 
+translated into the appropriate CLI options automatically. 
 
-Server should be put behind a reverse proxy (e.g. nginx) in production, but
+Server should be put behind a reverse proxy in production, but
 can be developed and tested without one. The server .deb package contains
 an example Nginx config file (`/usr/share/doc/clapshot-server/examples/`) that
 
  1. reverse proxies the server API (websocket),
  2. serves out frontend files (.html .js .css),
- 3. serves video files from `videos/` directory, and
+ 3. serves uploaded video files from `videos/` directory, and
  4. contains examples on how to add HTTPS and authentication
 
 Clapshot server itself contains no authentication code. Instead, it trusts
@@ -58,11 +56,11 @@ The recommended way to build Clapshot is to use Docker and the provided Makefile
  1. Install and start Docker
  2. At the top level (not "server/" or "client/"), run `make debian-docker`
 
-This will build Debian packages and put them in the ``dist_deb/`` directory.
+This will build Debian packages and put them in the `dist_deb/` directory.
 
 You can also build everything directly on your system, but Docker
 is cleaner and doesn't require installing extra dependecies.
-See Makefiles and Dockerfiles for details on explicit building.
+See Makefiles and Dockerfiles for details.
 
 ## Running tests
 
@@ -75,7 +73,7 @@ convenient. To do so, install Rust + Cargo and issue `cd server; make test-local
 
 Although .deb packages and the bundled config file are the recommended way to run
 Clapshot in production (`systemctl start clapshot-server.service`), it is also possible to
-run the server directly from the command line and have all logging go to stdout.
+run the server directly from command line and have all logging go to stdout.
 This is useful for development and debugging. Call `clapshot-server --help` to show startup options.
 
 
@@ -84,8 +82,8 @@ This is useful for development and debugging. Call `clapshot-server --help` to s
 Clapshot is functional but not very feature rich - at least not yet. It was started
 and is currently being maintained / developed for a specific project so releases for
 the general public and generic use are not a priority. That said, feel free to try
-if it fits your uses and to contribute in development.
+if it fits your use case and to contribute in development.
 
 ## License
 
-Clapshot is licensed under GPL v3, (c) 2022 by Jarno Elonen
+Clapshot is licensed under GPL v3, (c) 2022,2023 by Jarno Elonen
