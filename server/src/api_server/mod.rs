@@ -39,10 +39,12 @@ type Res<T> = anyhow::Result<T>;
 type WsMsgSender = tokio::sync::mpsc::UnboundedSender<Message>;
 type SenderList = Vec<WsMsgSender>;
 type SenderListMap = Arc<RwLock<HashMap<String, SenderList>>>;
+type StringToStringMap = Arc<RwLock<HashMap<String, String>>>;
 
 
 pub enum SendTo<'a> {
     CurSession(),
+    CurCollab(),
     UserId(&'a str),
     VideoHash(&'a str),
     MsgSender(&'a WsMsgSender),
@@ -67,25 +69,32 @@ pub struct WsSessionArgs<'a> {
     server: ServerState,
     user_id: &'a str,
     user_name: &'a str,
+    cur_video_hash: Option<String>,
+    cur_collab_id: Option<String>,
     video_session_guard: Option<Box<tokio::sync::Mutex<dyn Send>>>,
+    collab_session_guard: Option<Box<tokio::sync::Mutex<dyn Send>>>,
 }
 
 impl WsSessionArgs<'_> {
 
     /// Send a command to client websocket(s).
     /// 
-    /// If send_to is a string, it is interpreted either as a video hash or user id.
+    /// If send_to is a string, it is interpreted either as a video hash or user id. Returns the
+    /// number of sessions the message was sent to.
+    /// 
     /// - If it turns out to be a video hash, the message is sent to all websocket
     ///     that are watching it.
     /// - If it's a user id, the message is sent to all websocket connections that user has open.
     /// - If it's a MsgSender, the message is sent to that connection only.
     /// - If it's a SendTo::CurSession, the message is sent to the current session only.
+    /// - If it's a SendTo::CurCollab, the message is sent to all users in the current collab session.
     pub fn emit_cmd(&self, cmd: &str, data: &serde_json::Value, send_to: SendTo) -> Res<u32>
     {
         let msg = serde_json::json!({ "cmd": cmd, "data": data });
         let msg = Message::text(msg.to_string());
         match send_to {
             SendTo::CurSession() => { self.sender.send(msg)?; Ok(1u32) },
+            SendTo::CurCollab() => { self.server.send_to_all_collab_users(&self.cur_collab_id, &msg) },
             SendTo::UserId(user_id) => { self.server.send_to_all_user_sessions(user_id, &msg) },
             SendTo::VideoHash(video_hash) => { self.server.send_to_all_video_sessions(video_hash, &msg) },
             SendTo::MsgSender(sender) => { sender.send(msg)?; Ok(1u32) },
@@ -150,7 +159,10 @@ async fn handle_ws_session(
         server: server_state,
         user_id: &user_id,
         user_name: &username,
+        cur_video_hash: None,
+        cur_collab_id: None,
         video_session_guard: None,
+        collab_session_guard: None,
     };
 
     let _user_session_guard = ses.server.register_user_session(&user_id, msgq_tx.clone());

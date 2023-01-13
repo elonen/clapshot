@@ -9,7 +9,7 @@
   import {Notifications, acts} from '@tadashi/svelte-notification'
   import VideoListPopup from './lib/VideoListPopup.svelte';
 
-  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_orig_filename, all_my_videos, user_messages, video_progress_msg} from './stores.js';
+  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_orig_filename, all_my_videos, user_messages, video_progress_msg, collab_id} from './stores.js';
 
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
@@ -17,6 +17,9 @@
   let ui_connected_state: boolean = false; // true if UI should look like we're connected to the server
 
   let last_video_progress_msg_ts = Date.now();  // used to hide video_progress_msg after a few seconds
+
+  let collab_dialog_ack = false;  // true if user has clicked "OK" on the collab dialog
+  let last_collab_controlling_user = null;    // last user to control the video in a collab session
 
   // Messages from CommentInput component
   function onCommentInputButton(e) {
@@ -54,6 +57,8 @@
     comment_input.forceDrawMode(false);
     if (e.detail.drawing)    
       video_player.setDrawing(e.detail.drawing);
+    if (collab_id)
+     ws_emit('collab_report', {paused: true, seek_time: video_player.getCurTime(), drawing: e.detail.drawing});
   }
 
   function onDeleteComment(e) {
@@ -85,6 +90,9 @@
   function closeVideo() {
     // Close current video, list all user's own videos.
     // This is called from onClearAll event and history.back()
+    ws_emit('leave_collab', {});
+    $collab_id = null;
+   
     console.log("Clear all");
     $video_hash = null;
     $video_url = null;
@@ -111,6 +119,10 @@
     comment_input.forceDrawMode(false);  // Close draw mode when video frame is changed
   }
 
+  function onCollabReport(e) {
+    ws_emit('collab_report', {paused: e.detail.paused, seek_time: e.detail.seek_time, drawing: e.detail.drawing});
+  }
+
   function popHistoryState(e) {
     console.log("popHistoryState: " + e.state);
     if (e.state && e.state !== '/')
@@ -122,15 +134,20 @@
   // Parse URL to see if we have a video to open
   const urlParams = new URLSearchParams(window.location.search);
   urlParams.forEach((value, key) => {
-    if (key != "vid") {
+    if (key != "vid" && key != "collab") {
       console.log("Got UNKNOWN URL parameter: '" + key + "'. Value= " + value);
       acts.add({mode: 'warn', message: "Unknown URL parameter: '" + key + "'", lifetime: 5});
     }
   });
   $video_hash = urlParams.get('vid');
+  const prev_collab_id = $collab_id;
+  $collab_id = urlParams.get('collab');
   if ($video_hash) {
-    console.log("Video hash: " + video_hash);
-    history.pushState($video_hash, null, '/?vid='+$video_hash);
+    // console.log("Video hash: " + video_hash);
+    if ($collab_id)
+      history.pushState($video_hash, null, '/?vid='+$video_hash+'&collab='+$collab_id);
+    else
+      history.pushState($video_hash, null, '/?vid='+$video_hash);
   }
 
   let upload_url: string = "";
@@ -263,9 +280,16 @@
     function log_abbreviated(str: string) {
       const max_len = 180;
       if (str.length > max_len)
-        return str.substr(0, max_len) + "(...)";
-      else
-        return str;
+        str = str.substr(0, max_len) + "(...)";
+      console.log(str);
+    }
+
+    if (prev_collab_id != $collab_id) {
+      // We have a new collab id. Close old and open new one.
+      if (prev_collab_id)
+        ws_emit('leave_collab', {});
+      if ($collab_id)
+        ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
     }
 
     // Incoming messages
@@ -329,6 +353,8 @@
             $video_fps = data.fps;
             $video_orig_filename = data.orig_filename;    
             $all_comments = [];
+            if ($collab_id)
+              ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
             break;
             
           case 'new_comment':
@@ -383,6 +409,19 @@
             $all_comments = $all_comments.filter((c) => c.id != data.comment_id);
             break;
 
+          case 'collab_cmd':
+            log_abbreviated("[SERVER] collab_cmd: " + JSON.stringify(data));
+            if (!data.paused) {
+              video_player.collabPlay(data.seek_time);
+            } else {
+              video_player.collabPause(data.seek_time, data.drawing);
+            }
+            if (last_collab_controlling_user != data.from_user) {
+              last_collab_controlling_user = data.from_user;
+              acts.add({mode: 'info', message: last_collab_controlling_user + " is controlling", lifetime: 5});
+            }
+            break;
+
           default:
             log_abbreviated("[SERVER] UNKNOWN CMD '"+data.cmd+"': " + JSON.stringify(data));
             break;
@@ -431,11 +470,11 @@
 
             <div transition:slide class="flex-1 flex flex-col {debug_layout?'border-2 border-purple-600':''}">
               <div class="flex-1 bg-cyan-900">
-                <VideoPlayer bind:this={video_player} src={$video_url} on:seeked={onVideoSeeked} />
+                <VideoPlayer bind:this={video_player} src={$video_url} on:seeked={onVideoSeeked} on:collabReport={onCollabReport} />
               </div>
               <div class="flex-none w-full p-2 {debug_layout?'border-2 border-green-500':''}">
                 <CommentInput bind:this={comment_input} on:button-clicked={onCommentInputButton} />
-              </div>      
+              </div>
             </div>
 
             {#if $all_comments.length > 0}
@@ -448,6 +487,18 @@
             {/if}
           </div>
 
+          {#if $collab_id && !collab_dialog_ack}
+          <div class="fixed top-0 left-0 w-full h-full flex justify-center items-center">
+              <div class="bg-gray-900 text-white p-4 rounded-md shadow-lg text-center leading-loose">
+                <p class="text-xl text-green-500">Collaborative viewing session active.</p>
+                <p class="">Session ID is <code class="text-green-700">{$collab_id}</code></p>
+                <p class="">Actions like seek, play and draw are mirrored to all participants.</p>
+                <p class="">To invite people, copy browser URL and send it to them.</p>
+                <p class="">Exit by clicking the green icon in header.</p>
+                <button class="bg-gray-800 hover:bg-gray-700 text-green m-2 p-2 rounded-md shadow-lg" on:click|preventDefault="{()=>collab_dialog_ack=true}">Understood</button>
+              </div>
+          </div>
+          {/if}
 
         {:else}
 

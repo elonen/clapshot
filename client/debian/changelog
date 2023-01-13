@@ -1,6 +1,13 @@
+clapshot-client (0.4.0-1) bullseye; urgency=low
+
+  * New upstream version
+    - New feature: collaborative review mode.
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 13 Jan 2023 23:22:00 +0000
+
 clapshot-client (0.3.1-1) bullseye; urgency=low
 
-  * New upstream version:
+  * New upstream version
     - Adds video delete to GUI.
 
  -- Jarno Elonen <elonen@iki.fi>  Wed, 27 Nov 2022 21:48:00 +0000

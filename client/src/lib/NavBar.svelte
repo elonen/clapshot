@@ -1,13 +1,15 @@
 <script lang="ts">
 import { createEventDispatcher } from 'svelte';
 import Avatar from './Avatar.svelte';
-import { cur_username, cur_user_pic, video_orig_filename, video_hash, video_progress_msg } from "../stores.js";
+import { cur_username, cur_user_pic, video_orig_filename, video_hash, video_progress_msg, collab_id } from "../stores.js";
 import logo from "../assets/clapshot-logo.svg";
 
   const dispatch = createEventDispatcher();
   function onClickBanner() {
     dispatch("clear-all", {});
   }
+
+  const random_session_id = Math.random().toString(36).substring(2, 15);
 
 </script>
 
@@ -30,6 +32,11 @@ import logo from "../assets/clapshot-logo.svg";
           <h2 class=" text-lg text-center">
             {$video_hash}
             <a href="?vid={$video_hash}" class="text-gray-700 hover:text-gray-500"><i class="fas fa-share-square text-sm"></i></a>
+            {#if $collab_id}
+              <a href="?vid={$video_hash}" class="text-green-500 hover:text-orange-600" title="Collaborative session active. Click to exit."><i class="fas fa-users text-sm"></i></a>
+            {:else}
+              <a href="?vid={$video_hash}&collab={random_session_id}" title="Start collaborative session" class="text-gray-700 hover:text-gray-500"><i class="fas fa-user-plus text-sm"></i></a>
+            {/if}
           </h2>
         <span class="mx-4 text-xs text-center">{$video_orig_filename}</span>  
         {#if $video_progress_msg}

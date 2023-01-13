@@ -16,3 +16,5 @@ export let video_is_ready = writable(false);
 
 export let all_comments = writable([]);
 export let user_messages = writable([]);
+
+export let collab_id = writable(null);

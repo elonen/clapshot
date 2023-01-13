@@ -6,7 +6,7 @@
   import {onMount} from 'svelte';
   import {fade, slide, scale} from "svelte/transition";
 
-  import {video_is_ready, video_fps} from '../stores.js';
+  import {video_is_ready, video_fps, collab_id} from '../stores.js';
 
   import {createEventDispatcher} from 'svelte';
   const dispatch = createEventDispatcher();
@@ -23,7 +23,14 @@
 
   let debug_layout: boolean = false; // Set to true to show CSS layout boxes
 
- 
+
+  function send_collab_report() {
+    if ($collab_id) {
+      let drawing = paused ? getDrawing(true) : null;
+      dispatch('collabReport', {paused: video_elem.paused, seek_time: video_elem.currentTime, drawing: drawing});
+    }
+  }
+
   class Draw
   {
     constructor() {
@@ -58,9 +65,15 @@
       return this._canvas.toDataURL() === blankCanvas.toDataURL()
     }
 
-    getDataUrl(): string
+    // Returns the drawing as a data URL, or an empty string if the drawing is empty.
+    // If including_empty is true, then the data URL is returned even if the
+    // drawing is empty -- this is useful for sending screenshot of current
+    // video frame even without the drawing, mainly used as a work-around
+    // for sharing exact frame with others since HTML video element seeking
+    // is currently (Jan 2023) not necessarily frame-precise. 
+    getDataUrl(including_empty: boolean = False): string
     {
-      if (this.isEmpty())
+      if (this.isEmpty() && !including_empty)
         return "";
       let comb_canvas = document.createElement('canvas');
       comb_canvas.width  = video_elem.videoWidth;
@@ -91,6 +104,15 @@
         this._canvas.classList.add("absolute", "max-h-full", "max-w-full", "z-[1000]");
         this._canvas.style.cssText = 'outline: 5px solid red; outline-offset: -5px; cursor:crosshair; left: 50%; top: 50%; transform: translate(-50%, -50%);';
 
+        // add mouse up listener to the canvas
+        this._canvas.addEventListener('mouseup', function(e) {
+          if (e.button == 0 && draw.canvas.style.visibility == "visible") {
+            console.log("Mouse up");
+            send_collab_report();
+          }
+        });
+
+
         video_canvas_container.appendChild(this._canvas);
 
         this._board = sdb_create(this._canvas);
@@ -112,10 +134,14 @@
 	function handleMove(e: any) {
 		if (!duration) return; // video not loaded yet
 		if (e.type !== 'touchmove' && !(e.buttons & 1)) return; // mouse not down
+    video_elem.pause();
 		const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
 		const { left, right } = this.getBoundingClientRect();
 		time = duration * (clientX - left) / (right - left);
+    video_elem.currentTime = time;
     seekSideEffects();
+    paused = true;
+    send_collab_report();
 	}
 
 	function togglePlay() {
@@ -124,6 +150,7 @@
       video_elem.play();
     }
     else video_elem.pause();
+    send_collab_report();
 	}
 
 	function format_tc(seconds: number) : string {
@@ -153,6 +180,10 @@
 	}
 
 
+  export function getCurTime() {
+    return video_elem.currentTime;
+  }
+
   export function getCurTimecode() {
     return format_tc(time);
   }
@@ -170,6 +201,7 @@
         vframe_calc.seekForward(frames, null);
       }
       seekSideEffects();
+      send_collab_report();
     }
   }
 
@@ -274,8 +306,26 @@
     draw.board?.redo();
   }
 
-  export function getDrawing() {
-    return draw.getDataUrl();
+  export function getDrawing(including_empty: boolean = false) : string | null {
+    return draw.getDataUrl(including_empty);
+  }
+
+  export function collabPlay(seek_time: number) {
+    video_elem.pause();
+    time = seek_time;
+    seekSideEffects();
+    video_elem.play();
+  }
+
+  export function collabPause(seek_time: number, drawing: string) {
+    if (!paused)
+      video_elem.pause();
+    if (time != seek_time) {
+      time = seek_time;
+      seekSideEffects();
+    }
+    if (drawing && drawing != getDrawing(true))
+      setDrawing(drawing);
   }
 
   export async function setDrawing(drawing: string) {
@@ -335,8 +385,8 @@
 
         <!-- Timecode -->
         <span class="flex-0 mx-4 text-sm font-mono">
-          <input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => seekTo(e.target.value, 'SMPTE')}/>
-          FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => seekTo(e.target.value, 'frame')}/>
+          <input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => {seekTo(e.target.value, 'SMPTE'); send_collab_report();}}/>
+          FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => {seekTo(e.target.value, 'frame'); send_collab_report();}}/>
         </span>
 
       </span>

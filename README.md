@@ -18,6 +18,11 @@ After a video is ingested succesfully, users can view the file, add comments, dr
 and reply to each other's comments. Videos are stored on disk as files, while metadata and comments
 go to an Sqlite 3.5+ database file.
 
+Version 0.4.0 has _collaborative review sessions_, where playback controls and drawings
+are mirrored in real-time to all participants. It's meant to supplement remote video conferences
+such as Google Meets that don't play video well over screen sharing. Click the "head plus" icon
+in page header to start it.
+
 ![Video listing screenshot](doc/video-list.webp)
 
 
@@ -28,7 +33,7 @@ To try out Clapshot in a Docker container, check out the repo and run `make run-
 ## Deployment in production
 
 The server is started with command `clapshot-server`. It stays in the
-foreground, and should therefore be started by a process manager.
+foreground, and should therefore be started by a process manager such as systemd.
 
 Preferred deployment and upgrade method is to install server and client as Debian
 packages. Whereas `clapshot-server` is a foreground binary that is configured with command line options,
@@ -79,11 +84,11 @@ This is useful for development and debugging. Call `clapshot-server --help` to s
 
 ## Development status
 
-Clapshot is functional but not very feature rich - at least not yet. It was started
-and is currently being maintained / developed for a specific project so releases for
+Clapshot is usable but not very polished or feature rich. It was started
+and is currently being maintained / developed for a specific project, so releases for
 the general public and generic use are not a priority. That said, feel free to try
 if it fits your use case and to contribute in development.
 
 ## License
 
-Clapshot is licensed under GPL v3, (c) 2022,2023 by Jarno Elonen
+Clapshot is licensed under GPL v3, (c) 2022, 2023 by Jarno Elonen

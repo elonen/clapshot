@@ -128,6 +128,7 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_
             }
         }
     }
+    ses.cur_video_hash = Some(video_hash.into());
     Ok(())
 }
 
@@ -311,6 +312,67 @@ pub async fn msg_list_my_messages(data: &serde_json::Value, ses: &mut WsSessionA
     Ok(())
 }
 
+pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
+    let collab_id = data["collab_id"].as_str().ok_or(anyhow!("collab_id missing"))?;
+    let video_hash = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
+
+    if let Some(collab_id) = ses.cur_collab_id.clone() {
+        if ses.server.sender_is_collab_participant(collab_id.as_str(), &ses.sender) {
+            tracing::debug!("{} is already in collab {}. Ignoring double join.", ses.user_name, collab_id);
+            return Ok(());
+        }
+    }
+
+    ses.collab_session_guard = None;
+    ses.cur_collab_id = None;
+
+    match ses.server.db.get_video(video_hash) {
+        Err(DBError::NotFound()) => {
+            send_user_error!(ses, Topic::Video(video_hash), "No such video.");
+        }
+        Err(e) => { bail!(e); }
+        Ok(v) => {
+            match ses.server.link_session_to_collab(collab_id, video_hash, ses.sender.clone()) {
+                Ok(csg) => {
+                    ses.collab_session_guard = Some(csg);
+                    ses.cur_collab_id = Some(collab_id.to_string());
+                    ses.emit_cmd("message", &json!({"event_name": "ok", "message": format!("'{}' joined collab", ses.user_name)}), super::SendTo::CurCollab())?;
+                }
+                Err(e) => {
+                    send_user_error!(ses, Topic::Video(video_hash), format!("Failed to join collab session: {}", e));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+pub async fn msg_leave_collab(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
+    if ses.cur_collab_id.is_some() {
+        ses.emit_cmd("message", &json!({"event_name": "ok", "message": format!("'{}' left collab", ses.user_name)}), super::SendTo::CurCollab())?;
+        ses.collab_session_guard = None;
+        ses.cur_collab_id = None;
+    }
+    Ok(())
+}
+
+pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
+    if ses.cur_collab_id.is_none() {
+        send_user_error!(ses, Topic::None, "Report rejected: no active collab session.");
+        return Ok(());
+    }
+    let paused = data["paused"].as_bool().ok_or(anyhow!("paused missing"))?;
+    let seek_time = data["seek_time"].as_f64().ok_or(anyhow!("seek_time missing"))?;
+    let img_url = data["drawing"].as_str();
+    let msg = if img_url.is_some() {
+        json!({ "paused": paused, "seek_time": seek_time, "drawing": img_url, "from_user": &ses.user_name })
+    } else {
+        json!({ "paused": paused, "seek_time": seek_time, "from_user": &ses.user_name })
+    };
+    ses.emit_cmd("collab_cmd", &msg, super::SendTo::CurCollab()).map(|_| ())
+}
+
+
 pub async fn msg_logout(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
     tracing::info!("logout: user={}", ses.user_id);
     drop(ses.sender);
@@ -327,6 +389,9 @@ pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut WsSessi
         "edit_comment" => msg_edit_comment(data, ses).await,
         "del_comment" => msg_del_comment(data, ses).await,
         "list_my_messages" => msg_list_my_messages(data, ses).await,
+        "join_collab" => msg_join_collab(data, ses).await,
+        "leave_collab" => msg_leave_collab(data, ses).await,
+        "collab_report" => msg_collab_report(data, ses).await,
         "logout" => msg_logout(data, ses).await,
         "echo" => {
             let answ = format!("Echo: {}", data.as_str().ok_or(anyhow!("data not found"))?);
