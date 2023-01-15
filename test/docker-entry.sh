@@ -52,8 +52,7 @@ echo <<- "EOF"
                   | |
                   |_|
 
----  Browse http://127.0.0.1:8080 then    ---
----  copy some videos to ./test/VOLUME/    ---
+---  Browse http://127.0.0.1:8080  ---
 ==============================================
 EOF
 
