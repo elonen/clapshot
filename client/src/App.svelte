@@ -21,6 +21,13 @@
   let collab_dialog_ack = false;  // true if user has clicked "OK" on the collab dialog
   let last_collab_controlling_user = null;    // last user to control the video in a collab session
 
+  function log_abbreviated(str: string) {
+      const max_len = 180;
+      if (str.length > max_len)
+        str = str.substr(0, max_len) + "(...)";
+      console.log(str);
+  }
+
   // Messages from CommentInput component
   function onCommentInputButton(e) {
     if (e.detail.action == "send")
@@ -57,8 +64,10 @@
     comment_input.forceDrawMode(false);
     if (e.detail.drawing)    
       video_player.setDrawing(e.detail.drawing);
-    if (collab_id)
-     ws_emit('collab_report', {paused: true, seek_time: video_player.getCurTime(), drawing: e.detail.drawing});
+    if ($collab_id) {
+      console.log("Collab: onDisplayComment. collab_id: '" + $collab_id + "'");
+      ws_emit('collab_report', {paused: true, seek_time: video_player.getCurTime(), drawing: e.detail.drawing});
+    }
   }
 
   function onDeleteComment(e) {
@@ -120,7 +129,8 @@
   }
 
   function onCollabReport(e) {
-    ws_emit('collab_report', {paused: e.detail.paused, seek_time: e.detail.seek_time, drawing: e.detail.drawing});
+    if ($collab_id)
+      ws_emit('collab_report', {paused: e.detail.paused, seek_time: e.detail.seek_time, drawing: e.detail.drawing});
   }
 
   function popHistoryState(e) {
@@ -201,7 +211,7 @@
   {
     let raw_msg = JSON.stringify({cmd: event_name, data: data});
     if (is_connected()) {
-      console.log("ws_emit(): Sending: " + raw_msg);
+      log_abbreviated("ws_emit(): Sending: " + raw_msg);
       ws_socket.send(raw_msg);
     }
     else {
@@ -276,13 +286,6 @@
       setTimeout(() => { connect_websocket(ws_url); }, reconnect_delay);
       setTimeout(() => { if (!is_connected()) ui_connected_state = false; }, 3000);
     });
-
-    function log_abbreviated(str: string) {
-      const max_len = 180;
-      if (str.length > max_len)
-        str = str.substr(0, max_len) + "(...)";
-      console.log(str);
-    }
 
     if (prev_collab_id != $collab_id) {
       // We have a new collab id. Close old and open new one.
