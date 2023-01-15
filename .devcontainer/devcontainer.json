@@ -32,6 +32,6 @@
 	// Comment out to connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
 	"remoteUser": "node",
 
-	// Use public DNS server, as default seems to be a guess that may not
-	"onCreateCommand": "echo 'nameserver 8.8.8.8' > /etc/resolv.conf"
+	// Use public DNS server, as default seems to be a guess that may not. Ignore if failes, as it may not be needed.
+	"onCreateCommand": "(echo 'nameserver 8.8.8.8' > /etc/resolv.conf) || true"
 }
