@@ -6,9 +6,11 @@
   import {onMount} from 'svelte';
   import {fade, slide, scale} from "svelte/transition";
 
-  import {video_is_ready, video_fps, collab_id} from '../stores.js';
+  import {all_comments, video_is_ready, video_fps, collab_id} from '../stores.js';
 
   import {createEventDispatcher} from 'svelte';
+  import CommentTimelinePin from './CommentTimelinePin.svelte';
+    import { each } from 'svelte/internal';
   const dispatch = createEventDispatcher();
 
   export let src: any;
@@ -22,6 +24,17 @@
   let vframe_calc: VideoFrame;
 
   let debug_layout: boolean = false; // Set to true to show CSS layout boxes
+
+  let commentsWithTc = [];  // Will be populated by the store once video is ready (=frame rate is known)
+
+  function refreshCommentPins() {
+    // Make pins for all comments with timecode
+    commentsWithTc = [];
+    all_comments.subscribe(comments => {
+      for (let c of comments) { if (c.timecode) { commentsWithTc.push(c); } }
+      commentsWithTc = commentsWithTc.sort((a, b) => a.timecode - b.timecode);
+    });
+  }
 
 
   function send_collab_report() {
@@ -97,6 +110,8 @@
           frameRate: $video_fps,
           callback: function(response) { console.log(response); } });
 
+        refreshCommentPins(); // Creates CommentTimelinePin components, now that we can calculate timecodes properly
+
         // Create the drawing board
         this._canvas = document.createElement('canvas');
         this._canvas.width = video_elem.videoWidth;
@@ -111,7 +126,6 @@
             send_collab_report();
           }
         });
-
 
         video_canvas_container.appendChild(this._canvas);
 
@@ -128,6 +142,7 @@
     // Force the video to load
     if (!video_elem.videoWidth) { video_elem.load(); }
     draw.try_create_all();
+    all_comments.subscribe((v) => { refreshCommentPins(); });
 	});
 
 
@@ -340,6 +355,12 @@
     }
   }
 
+  function tcToDurationFract(timecode: string) {
+    /// Convert SMPTE timecode to a fraction of the video duration (0-1)
+    if (!vframe_calc) { return 0; }
+    let pos = vframe_calc.toMilliseconds(timecode)/1000.0;
+    return pos / duration;
+  }
 
 </script>
 
@@ -367,12 +388,21 @@
   </div>
   
 	<div class="flex-none {debug_layout?'border-2 border-red-600':''}">
-		<progress value="{(time / duration) || 0}"
-      class="w-full h-[2em] hover:cursor-pointer"
-      on:mousedown|preventDefault={handleMove}
-      on:mousemove={handleMove}
-      on:touchmove|preventDefault={handleMove}
-    />
+
+    <div class="flex-1 space-y-0 leading-none">
+      <progress value="{(time / duration) || 0}"
+        class="w-full h-[2em] hover:cursor-pointer"
+        on:mousedown|preventDefault={handleMove}
+        on:mousemove={handleMove}
+        on:touchmove|preventDefault={handleMove}
+      />
+      {#each commentsWithTc as item}
+        <CommentTimelinePin {...item}
+          x_loc={tcToDurationFract(item.timecode)}
+          on:click={(e) => { dispatch('commentPinClicked', {id: item.id});}}
+          />
+      {/each}
+    </div>
 
     <!-- playback controls -->
 		<div class="flex p-1">

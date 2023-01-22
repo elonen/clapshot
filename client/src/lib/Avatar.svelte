@@ -3,56 +3,51 @@ This is all derivative of the codepen and gist linked below. I claim none of it 
 Any work in here that is original enough to need a license is offered under the MIT license:
 https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
 -->
-<script>
-    export let userFullName;
+<script context="module">
     export let avatarColors = [
         "#1abc9c",
         "#2ecc71",
         "#3498db",
         "#9b59b6",
-        "#34495e",
         "#16a085",
         "#27ae60",
         "#2980b9",
         "#8e44ad",
-        "#2c3e50",
         "#f1c40f",
         "#e67e22",
         "#e74c3c",
-        "#ecf0f1",
-        "#95a5a6",
         "#f39c12",
         "#d35400",
         "#c0392b",
         "#bdc3c7",
-        "#7f8c8d",
     ];
+
+    // Convert a username to a hex color
+    export function hexColorForUsername(name) {
+        let checksum = 0;
+        for (let i=0; i<name.length; i++)
+            checksum += name.charCodeAt(i)*i;
+        return avatarColors[checksum % avatarColors.length];
+    }
+</script>
+
+<script>
+    export let userFullName;
     import { onMount } from "svelte";
-    export let width = 32;
+    export let width = "32";
     export let round = true;
     export let src = null;
-    let avatarImage;
 
     /*
-     * LetterAvatar
-     *
-     * Artur Heinze
-     * Create Letter avatar based on Initials
-     * based on https://gist.github.com/leecrossley/6027780
-     * 
-     * This component is based on https://codepen.io/arturheinze/pen/ZGvOMw
+     * LetterAvatar. Based on https://codepen.io/arturheinze/pen/ZGvOMw, which is based on https://gist.github.com/leecrossley/6027780
      */
-    function LetterAvatar(name, size) {
+    function MakeLetterAvatar(name, size) {
         name = name || "";
         size = size || 60;
 
-        var colours = avatarColors,
-            nameSplit = String(name).toUpperCase().split(" "),
-            initials,
-            colourIndex,
-            canvas,
-            context;
+        var initials, canvas, context;
 
+        var nameSplit = String(name).toUpperCase().split(" ");
         if (nameSplit.length == 1) {
             initials = nameSplit[0] ? nameSplit[0].charAt(0) : "?";
         } else {
@@ -66,13 +61,12 @@ https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
         for (let i=0; i<name.length; i++)
             checksum += name.charCodeAt(i)*i;
 
-        colourIndex = checksum % 20;
         canvas = document.createElement("canvas");
         canvas.width = size;
         canvas.height = size;
         context = canvas.getContext("2d");
 
-        context.fillStyle = colours[colourIndex - 1];
+        context.fillStyle = hexColorForUsername(name);
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.font = "bold " + Math.round(canvas.width / 2.2) + "px Arial";
         context.font
@@ -83,11 +77,14 @@ https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
         let dataURI = canvas.toDataURL();
         canvas = null;
 
-        return dataURI;
+        return dataURI;  // Base64 encoded data url string + colour hex
     }
 
+    const letterAvatar = MakeLetterAvatar(userFullName, parseFloat(width));
+
+    let avatarImage;
     onMount(() => {
-        avatarImage.src = (src && (src!=="")) ? src : LetterAvatar(userFullName, width);
+        avatarImage.src = (src && (src!=="")) ? src : letterAvatar;
     });
 </script>
 

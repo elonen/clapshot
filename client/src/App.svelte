@@ -133,6 +133,21 @@
       ws_emit('collab_report', {paused: e.detail.paused, seek_time: e.detail.seek_time, drawing: e.detail.drawing});
   }
 
+  function onCommentPinClicked(e) {
+      // Find corresponding comment in the list, scroll to it and highlight
+      let comment_id = e.detail.id;
+    let comment = $all_comments.find(c => c.id == comment_id);
+    if (comment) {
+      onDisplayComment({detail: {timecode: comment.timecode, drawing: comment.drawing_data}});
+      let comment_card = document.getElementById("comment_card_" + comment_id);
+      if (comment_card) {
+        comment_card.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"});
+        setTimeout(() => { comment_card.classList.add("highlighted_comment"); }, 500);
+        setTimeout(() => { comment_card.classList.remove("highlighted_comment"); }, 3000);
+      }
+    }
+  }
+
   function popHistoryState(e) {
     console.log("popHistoryState: " + e.state);
     if (e.state && e.state !== '/')
@@ -473,7 +488,12 @@
 
             <div transition:slide class="flex-1 flex flex-col {debug_layout?'border-2 border-purple-600':''}">
               <div class="flex-1 bg-cyan-900">
-                <VideoPlayer bind:this={video_player} src={$video_url} on:seeked={onVideoSeeked} on:collabReport={onCollabReport} />
+                <VideoPlayer
+                  bind:this={video_player} src={$video_url}
+                  on:seeked={onVideoSeeked}
+                  on:collabReport={onCollabReport} 
+                  on:commentPinClicked={onCommentPinClicked}
+                  />
               </div>
               <div class="flex-none w-full p-2 {debug_layout?'border-2 border-green-500':''}">
                 <CommentInput bind:this={comment_input} on:button-clicked={onCommentInputButton} />
@@ -482,7 +502,7 @@
 
             {#if $all_comments.length > 0}
             <!-- ========== comment sidepanel ============= -->
-            <div transition:fade class="flex-none w-72 basis-128 bg-gray-900 py-2 px-2 space-y-2 ml-2 overflow-y-auto">
+            <div id="comment_list" transition:fade class="flex-none w-72 basis-128 bg-gray-900 py-2 px-2 space-y-2 ml-2 overflow-y-auto">
                 {#each $all_comments as item}
                   <CommentCard {...item} on:display-comment={onDisplayComment} on:delete-comment={onDeleteComment} on:reply-to-comment={onReplyComment} on:edit-comment={onEditComment}/>
                 {/each}

@@ -61,6 +61,7 @@ function onEditFieldKeyUp(e) {
 </script>
 
 <div transition:scale
+  id="comment_card_{id}"
   class="block overflow-clip rounded-lg bg-gray-800 {!!timecode ? 'hover:bg-gray-700' : ''} shadow-lg shadow-black"
   style="margin-left: {indent*1.5}em"
   on:mouseenter="{() => show_actions=true}"
@@ -126,5 +127,16 @@ function onEditFieldKeyUp(e) {
     -ms-hyphens: auto;
     hyphens: auto;
     word-break: break-word;
+  }
+
+  .highlight { 
+    animation-name: glow;
+    animation-duration: .4s;
+    border: blue 1px solid;
+  }
+
+  @keyframes glow {
+    0% { box-shadow: 0px 0px 15px 10px rgba(255, 255, 0, 1); }
+    100% { box-shadow: 0px 0px 0px 0px rgba(255, 255, 0, 1); }
   }
 </style>
