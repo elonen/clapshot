@@ -28,7 +28,14 @@ in page header to start it.
 
 ### Demo
 
-To try out Clapshot in a Docker container, check out the repo and run `make run-docker`.
+To try out Clapshot using Docker, either run
+```bash
+docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data \
+  elonen/clapshot:0.4.0-demo
+```
+...to download a demo image from Docker Hub, or check out the repo and run `make run-docker` to build it manually.
+
+Once the server is running, open your browser at http://127.0.0.1:8080
 
 ## Deployment in production
 

@@ -1,4 +1,4 @@
-.PHONY:  clean docker test run-docker run
+.PHONY:  clean docker test run-docker run build-docker-demo
 
 UID=$(shell id -u)
 GID=$(shell id -g)
@@ -38,3 +38,8 @@ run-docker: debian-docker
 	mkdir -p test/VOLUME/data/incoming
 	cp server/src/tests/assets/60fps-example.mp4 test/VOLUME/data/incoming/
 	docker run --rm -it -p 0.0.0.0:8080:80 --mount type=bind,source="$$(pwd)"/test/VOLUME,target=/mnt/clapshot-data  clapshot-comb
+
+build-docker-demo: debian-docker
+	@which jq || (echo "ERROR: Please install jq first." && exit 1)
+	$(eval PVER="$(shell jq -r '.version' client/package.json)")
+	docker build -t clapshot:${PVER}-demo --build-arg UID=1002 --build-arg GID=1002 .
