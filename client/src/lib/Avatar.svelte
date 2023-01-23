@@ -47,7 +47,7 @@ https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
 
         var initials, canvas, context;
 
-        var nameSplit = String(name).toUpperCase().split(" ");
+        var nameSplit = String(name).toUpperCase().replace(".", " ").split(" ");
         if (nameSplit.length == 1) {
             initials = nameSplit[0] ? nameSplit[0].charAt(0) : "?";
         } else {
