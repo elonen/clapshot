@@ -7,10 +7,11 @@
   import {fade, slide, scale} from "svelte/transition";
 
   import {all_comments, video_is_ready, video_fps, collab_id} from '../stores.js';
+  import Avatar from './Avatar.svelte';
 
   import {createEventDispatcher} from 'svelte';
   import CommentTimelinePin from './CommentTimelinePin.svelte';
-    import { each } from 'svelte/internal';
+  import { each } from 'svelte/internal';
   const dispatch = createEventDispatcher();
 
   export let src: any;
@@ -384,6 +385,13 @@
         bind:paused>
         <track kind="captions">
       </video>
+
+      <!--    TODO: maybe show actively controlling collaborator's avatar like this?
+      <div class="absolute top-0 left-0 w-full h-full z-1">
+        <div class="flex-none w-6 h-6 block"><Avatar userFullName="Username Here"/></div>
+      </div>
+    -->
+
     </div>
   </div>
   

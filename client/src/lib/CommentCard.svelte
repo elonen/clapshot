@@ -50,9 +50,10 @@ function callFocus(elem) {
 }
 
 function onEditFieldKeyUp(e) {
-  if (e.key == "Enter") {
+  if ((e.key == "Enter" && !e.shiftKey) || e.key == "Escape") {
     console.log("Enter pressed");
     editing = false;
+    comment = comment.trim();
     if (comment != "") 
       dispatch("edit-comment", {'comment_id': id, 'comment_text': comment});
   }  
@@ -85,7 +86,7 @@ function onEditFieldKeyUp(e) {
 
   <div class="p-2" lang="en">
     {#if editing}
-      <input class="w-full outline-dashed bg-slate-500" type="text" use:callFocus bind:value="{comment}" on:keyup={onEditFieldKeyUp} on:blur="{(e)=>{editing=false;}}" />
+      <textarea class="w-full outline-dashed bg-slate-500" rows=3 type="text" use:callFocus bind:value={comment} on:keyup={onEditFieldKeyUp} on:blur="{(e)=>{editing=false; comment=comment.trim()}}"></textarea>
     {:else}
       <p class="text-gray-300 text-base hyphenate">
         {comment}
