@@ -58,8 +58,11 @@ an example Nginx config file (`/usr/share/doc/clapshot-server/examples/`) that
 
 Clapshot server itself contains no authentication code. Instead, it trusts
 HTTP server (reverse proxy) to take care of that (e.g. by Kerberos or HTTP basic-auth) and
-to pass authenticated user ID and username in request headers. See the Nginx example conf file for details.
-There's currently no authorization (that is, all authenticated users are assumed to have same privileges). 
+to pass authenticated user ID and username in request headers.
+
+Authorization is also supposed to be handled on web server (at least currently).
+See for example https://github.com/elonen/ldap_authz_proxy on how to
+authorize users against Active Directory/LDAP using Nginx.
 
 ## Building
 
@@ -98,4 +101,4 @@ if it fits your use case and to contribute in development.
 
 ## License
 
-Clapshot is licensed under GPL v3, (c) 2022, 2023 by Jarno Elonen
+Clapshot is licensed under GPL v3, Copyright 2022, 2023 by Jarno Elonen
