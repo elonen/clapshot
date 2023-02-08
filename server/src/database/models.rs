@@ -95,7 +95,7 @@ pub struct Message {
     pub details: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Insertable)]
+#[derive(Serialize, Deserialize, Debug, Default, Insertable, Clone)]
 #[diesel(table_name = messages)]
 pub struct MessageInsert {
     pub user_id: String,

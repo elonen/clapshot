@@ -102,12 +102,16 @@ impl WsSessionArgs<'_> {
     }
     
     pub fn push_notify_message(&self, msg: &models::MessageInsert, persist: bool) -> Res<()> {
-        if persist {
-            if let Err(e) = self.server.db.add_message(msg) {
-                tracing::error!("Failed to persist user notification: {}", e);
-                return Err(e.into());
-            }};
-        self.emit_cmd("message", &msg.to_json()?, SendTo::UserId(&msg.user_id)).map(|_| ())           
+        let send_res = self.emit_cmd("message", &msg.to_json()?, SendTo::UserId(&msg.user_id));
+        if let Ok(sent_count) = send_res {
+            if persist {
+                self.server.db.add_message(&models::MessageInsert {
+                    seen: msg.seen || sent_count > 0,
+                    ..msg.clone()
+                })?;
+            }
+        };
+        send_res.map(|_| ())
     }
 
     pub async fn emit_new_comment(&self, mut c: models::Comment, send_to: SendTo<'_>) -> Res<()> {
@@ -383,22 +387,7 @@ async fn run_api_server_async(
                     seen: false, ref_comment_id: None,
                     ref_video_hash: m.video_hash.clone()
                 };
-                
-                // Message to a single user
-                if let Some(user_id) = m.user_id {
-                    if !matches!(m.topic, UserMessageTopic::Progress()) {
-                        if let Err(e) = server_state.db.add_message(&msg) {
-                            tracing::error!(details=%e, "Failed to save user notification in DB.");
-                        }
-                    }
-                    if let Ok(data) = msg.to_json() {
-                        let msg = Message::text(serde_json::json!({
-                            "cmd": "message", "data": data }).to_string());
-                        if let Err(e) = server_state.send_to_all_user_sessions(&user_id, &msg) {
-                            tracing::error!(user=user_id, details=%e, "Failed to send user notification.");
-                        }
-                    }
-                };
+
                 // Message to all watchers of a video
                 if let Some(vh) = m.video_hash {
                     if let Ok(data) = &msg.to_json() {
@@ -410,6 +399,28 @@ async fn run_api_server_async(
                     }        
                 };
 
+                // Message to a single user
+                // Save it to the database, marking it as seen if sending it to the user succeeds
+                if let Some(user_id) = m.user_id {
+                    let mut user_was_online = false;
+                    if let Ok(data) = msg.to_json() {
+                        let msg = Message::text(serde_json::json!({
+                            "cmd": "message", "data": data }).to_string());
+                        match server_state.send_to_all_user_sessions(&user_id, &msg) {
+                            Ok(session_cnt) => { user_was_online = session_cnt>0 },
+                            Err(e) => tracing::error!(user=user_id, details=%e, "Failed to send user notification."),
+                        }
+                    }
+                    if !matches!(m.topic, UserMessageTopic::Progress()) {
+                        let msg = models::MessageInsert {
+                            seen: msg.seen || user_was_online,
+                            ..msg
+                        };
+                        if let Err(e) = server_state.db.add_message(&msg) {
+                            tracing::error!(details=%e, "Failed to save user notification in DB.");
+                        }
+                    }
+                };
             }
         };
     };
