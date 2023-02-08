@@ -5,7 +5,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-Restart=always
+Restart=no
 RestartSec=2
 User=www-data
 ExecStart=/bin/bash /usr/share/clapshot-server/run-with-conf.sh /etc/clapshot-server.conf

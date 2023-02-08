@@ -1,3 +1,12 @@
+clapshot-client (0.5.0-1) bullseye; urgency=low
+
+  * New feature: Support for HTTP uploading multiple videos at once.
+  * New feature: Rename clips.
+  * Bugfix: User notifications were often shown twice.
+  * Bugfix: Failed upload removed old video from disk in certain cases.
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 8 Feb 2023 22:59:00 +0000
+
 clapshot-client (0.4.1-1) bullseye; urgency=low
 
   * New feature: show comment pins on timeline.
