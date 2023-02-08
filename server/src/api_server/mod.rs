@@ -13,6 +13,8 @@ use warp::ws::{Message};
 use warp::http::HeaderMap;
 use std::sync::atomic::Ordering::Relaxed;
 
+use base64::{Engine as _, engine::general_purpose as Base64GP};
+
 use std::path::{PathBuf};
 use anyhow::{anyhow, bail};
 
@@ -122,7 +124,7 @@ impl WsSessionArgs<'_> {
                     let path = self.server.videos_dir.join(&c.video_hash).join("drawings").join(&drawing);
                     if path.exists() {
                         let data = tokio::fs::read(path).await?;
-                        *drawing = format!("data:image/webp;base64,{}", base64::encode(&data));
+                        *drawing = format!("data:image/webp;base64,{}", Base64GP::STANDARD_NO_PAD.encode(&data));
                     } else {
                         tracing::warn!("Drawing file not found for comment: {}", c.id);
                         c.comment += " [DRAWING NOT FOUND]";
