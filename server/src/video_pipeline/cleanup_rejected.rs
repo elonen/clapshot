@@ -42,15 +42,6 @@ pub fn clean_up_rejected_file(data_dir: &Path, src_file: &Path, video_hash: Opti
                 bail!("File '{}' already exists in rejects dir, and size is different. Not deleting original ('{}').", move_to.display(), &src_file.display());
             }
         }
-        // Purge (rm -rf) video hash dir if it exists
-        if let Some(vh) = video_hash {
-            assert!(vh.len() > 0);
-            let video_dir = data_dir.join("videos").join(&vh);
-            if video_dir.exists() {
-                tracing::info!(file=%src_file.display(), "File was rejected. Deleting video dir '{}'.", video_dir.display());
-                std::fs::remove_dir_all(video_dir)?;
-            }
-        }
     }
 
     Ok(())

@@ -1,7 +1,7 @@
 <script lang="ts">
 import { createEventDispatcher } from 'svelte';
 import Avatar from './Avatar.svelte';
-import { cur_username, cur_user_pic, video_orig_filename, video_hash, video_progress_msg, collab_id } from "../stores.js";
+import { cur_username, cur_user_pic, video_title, video_hash, video_progress_msg, collab_id } from "../stores.js";
 import logo from "../assets/clapshot-logo.svg";
 
   const dispatch = createEventDispatcher();
@@ -38,7 +38,7 @@ import logo from "../assets/clapshot-logo.svg";
               <a href="?vid={$video_hash}&collab={random_session_id}" title="Start collaborative session" class="text-gray-700 hover:text-gray-500"><i class="fas fa-user-plus text-sm"></i></a>
             {/if}
           </h2>
-        <span class="mx-4 text-xs text-center">{$video_orig_filename}</span>  
+        <span class="mx-4 text-xs text-center">{$video_title}</span>
         {#if $video_progress_msg}
           <span class="text-cyan-800 mx-4 text-xs text-center">{$video_progress_msg}</span>
         {/if}

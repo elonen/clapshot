@@ -110,12 +110,6 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_
                     None => Err(anyhow!("No video file"))
                 }}?;
 
-            /*
-            if !ses.server.videos_dir.join(&v.video_hash).join(&file).exists() {
-                tracing::error!("Open video failed. File not found: {}", file);
-                bail!("Video file not found");
-            }
-            */
             fields["video_url"] = json!(format!("{}/videos/{}/{}", ses.server.url_base, &v.video_hash, uri));
             ses.emit_cmd("open_video", &fields, super::SendTo::CurSession() )?;
 
@@ -184,6 +178,37 @@ pub async fn msg_del_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>
         }
         Err(DBError::NotFound()) => {
             send_user_error!(ses, Topic::Video(video_hash), "No such video. Cannot delete.");
+        }
+        Err(e) => { bail!(e); }
+    }
+    Ok(())
+}
+
+pub async fn msg_rename_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
+    let video_hash = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
+    let new_name = data["new_name"].as_str().ok_or(anyhow!("new_name missing"))?;
+
+    match ses.server.db.get_video(video_hash) {
+        Ok(v) => {
+            if Some(ses.user_id.to_string()) != v.added_by_userid && ses.user_id != "admin" {
+                send_user_error!(ses, Topic::Video(video_hash), "Video not owned by you. Cannot rename.");
+            } else {
+                let new_name = new_name.trim();
+                if new_name.is_empty() || !new_name.chars().any(|c| c.is_alphanumeric()) {
+                    send_user_error!(ses, Topic::Video(video_hash), "Invalid video name (must have letters/numbers)");
+                    return Ok(());
+                }
+                if new_name.len() > 160 {
+                    send_user_error!(ses, Topic::Video(video_hash), "Video name too long (max 160)");
+                    return Ok(());
+                }
+                ses.server.db.rename_video(video_hash, new_name)?;
+                send_user_ok!(ses, Topic::Video(video_hash), "Video renamed.", 
+                    format!("New name: '{}'", new_name), true);
+            }
+        }
+        Err(DBError::NotFound()) => {
+            send_user_error!(ses, Topic::Video(video_hash), "No such video. Cannot rename.");
         }
         Err(e) => { bail!(e); }
     }
@@ -385,6 +410,7 @@ pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut WsSessi
         "list_my_videos" => msg_list_my_videos(data, ses).await,
         "open_video" => msg_open_video(data, ses).await,
         "del_video" => msg_del_video(data, ses).await,
+        "rename_video" => msg_rename_video(data, ses).await,
         "add_comment" => msg_add_comment(data, ses).await,
         "edit_comment" => msg_edit_comment(data, ses).await,
         "del_comment" => msg_del_comment(data, ses).await,

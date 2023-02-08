@@ -20,6 +20,7 @@ pub struct Video {
 
     pub recompression_done: Option<String>,
     pub orig_filename: Option<String>,
+    pub title: Option<String>,
     pub total_frames: Option<i32>,
     pub duration: Option<f32>,
     pub fps: Option<String>,
@@ -34,6 +35,7 @@ pub struct VideoInsert {
     pub added_by_username: Option<String>,
     pub recompression_done: Option<String>,
     pub orig_filename: Option<String>,
+    pub title: Option<String>,
     pub total_frames: Option<i32>,
     pub duration: Option<f32>,
     pub fps: Option<String>,

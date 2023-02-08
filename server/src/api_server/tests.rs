@@ -136,6 +136,7 @@ async fn test_api_open_video()
             assert_eq!(v.added_by_userid, vid.added_by_userid);
             assert_eq!(v.added_by_username, vid.added_by_username);
             assert_eq!(v.orig_filename, vid.orig_filename);
+            assert_eq!(v.title, vid.orig_filename);
 
             // Double slashes in the path are an error (empty path component)
             let video_url = data.get("video_url").unwrap().as_str().unwrap();
@@ -161,6 +162,35 @@ async fn test_api_open_bad_video()
         assert_eq!(data["event_name"], "error");
     }
 }
+
+#[tokio::test]
+#[traced_test]
+async fn test_api_rename_video()
+{
+    api_test! {[ws, ts] 
+        let vid = &ts.videos[0];
+        let (_cmd, _data) = open_video(&mut ws, &vid.video_hash).await;
+
+        // Rename the video (with leading/trailing whitespace that will be trimmed)
+        write(&mut ws, &format!(r#"{{"cmd":"rename_video","data":{{"video_hash":"{}","new_name":"  New name  "}}}}"#, vid.video_hash)).await;
+        let (_cmd, data) = expect_cmd_data(&mut ws).await;
+        assert_eq!(data["event_name"], "ok");
+
+        // Make sure the video was renamed in the DB
+        let v = ts.db.get_video(&vid.video_hash).unwrap();
+        assert_eq!(v.title, Some("New name".to_string()));
+
+        // Try to enter an invalid name
+        write(&mut ws, &format!(r#"{{"cmd":"rename_video","data":{{"video_hash":"{}","new_name":" /._  "}}}}"#, vid.video_hash)).await;
+        let (_cmd, data) = expect_cmd_data(&mut ws).await;
+        assert_eq!(data["event_name"], "error");
+
+        // Make sure name wasn't changed
+        let v = ts.db.get_video(&vid.video_hash).unwrap();
+        assert_eq!(v.title, Some("New name".to_string()));
+    }
+}
+
 
 
 #[tokio::test]

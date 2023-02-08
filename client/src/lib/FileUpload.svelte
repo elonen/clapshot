@@ -2,26 +2,28 @@
 
     export let post_url: string;
 
-    let input_el: HTMLInputElement;
     let progress_bar: HTMLProgressElement;
     let status_txt: string = "";
     let uploading_now: boolean = false;
     let form: HTMLFormElement = null;
+    let files: FileList = null;
 
     function upload()
     {
-        var file = input_el.files[0];
-        var formdata = new FormData();
-        formdata.append("fileupload", file);
-        // store filename in headers
-        var ajax = new XMLHttpRequest();
-        ajax.upload.addEventListener("progress", progressHandler, false);
-        ajax.addEventListener("load", completeHandler, false);
-        ajax.addEventListener("error", errorHandler, false) ;
-        ajax.addEventListener("abort", abortHandler, false);
-        ajax.open("POST", post_url); 
-        ajax.setRequestHeader("X-FILE-NAME", file.name);
-        ajax.send(formdata);
+        for (let i = 0; i < files.length; i++) {
+            var file = files[i];
+            var formdata = new FormData();
+            formdata.append("fileupload", file);
+            // store filename in headers
+            var ajax = new XMLHttpRequest();
+            ajax.upload.addEventListener("progress", progressHandler, false);
+            ajax.addEventListener("load", completeHandler, false);
+            ajax.addEventListener("error", errorHandler, false) ;
+            ajax.addEventListener("abort", abortHandler, false);
+            ajax.open("POST", post_url);
+            ajax.setRequestHeader("X-FILE-NAME", file.name);
+            ajax.send(formdata);
+        }
     }
 
     function afterUpload()
@@ -65,7 +67,12 @@
 <div class="my-4">
     <div style="display: {uploading_now ? 'none' : 'block'}">
         <form method="post" enctype="multipart/form-data" bind:this="{form}">
-            <input type="file" bind:this={input_el} on:change={upload}>
+            <input
+                bind:files
+                multiple
+                type="file"
+                on:change={upload}
+            />
         </form>
     </div>
     <div style="display: {uploading_now ? 'block' : 'none'}">

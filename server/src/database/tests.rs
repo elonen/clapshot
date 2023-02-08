@@ -35,6 +35,7 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<models::Vi
             added_by_userid: Some(format!("user.num{}", 1 + i % 2)),
             added_by_username: Some(format!("User Number{}", 1 + i % 2)),
             orig_filename: Some(format!("test{}.mp4", i)),
+            title: Some(format!("test{}.mp4", i)),
             recompression_done: None,
             total_frames: Some((i * 1000) as i32),
             duration: Some((i * 100) as f32),
@@ -165,6 +166,26 @@ fn test_comment_delete() -> anyhow::Result<()> {
     };
     let new_id = db.add_comment(&c)?;
     assert_ne!(new_id, com[6].id, "Comment ID was re-used after deletion. This would mix up comment threads in the UI.");
+    Ok(())
+}
+
+#[test]
+#[traced_test]
+fn test_rename_video() -> anyhow::Result<()> {
+    let (db, _data_dir, _vid, _com) = make_test_db();
+
+    // Rename video #1
+    let new_name = "New name";
+    db.rename_video(&"11111".to_string(), new_name)?;
+
+    // Check that video #1 has new name
+    let v = db.get_video(&"11111".to_string())?;
+    assert_eq!(v.title, Some(new_name.into()));
+
+    // Check that video #2 still has old name
+    let v = db.get_video(&"22222".to_string())?;
+    assert_ne!(v.title, Some(new_name.into()));
+
     Ok(())
 }
 

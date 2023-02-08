@@ -9,7 +9,7 @@
   import {Notifications, acts} from '@tadashi/svelte-notification'
   import VideoListPopup from './lib/VideoListPopup.svelte';
 
-  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_orig_filename, all_my_videos, user_messages, video_progress_msg, collab_id} from './stores.js';
+  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id} from './stores.js';
 
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
@@ -106,7 +106,7 @@
     $video_hash = null;
     $video_url = null;
     $video_fps = null;
-    $video_orig_filename = null;
+    $video_title = null;
     $all_comments = [];
     $video_is_ready = false;
     ws_emit('list_my_videos', {});
@@ -369,7 +369,7 @@
             $video_url = data.video_url;
             $video_hash = data.video_hash;
             $video_fps = data.fps;
-            $video_orig_filename = data.orig_filename;    
+            $video_title = data.title;
             $all_comments = [];
             if ($collab_id)
               ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
@@ -450,12 +450,22 @@
   }
 
   function onClickDeleteVideo(video_hash: string, video_name: string) {
+    log_abbreviated("onClickDeleteVideo: " + video_hash + " / " + video_name);
     if (confirm("Are you sure you want to delete '" + video_name + "'?")) {
       ws_emit('del_video', {video_hash: video_hash});
 
       // After 2 seconds, refresh the list of videos
       function refresh_my_videos() { ws_emit('list_my_videos', {}); }
       setTimeout(refresh_my_videos, 2000);
+    }
+  }
+
+  function onClickRenameVideo(video_hash: string, video_name: string) {
+    log_abbreviated("onClickRenameVideo: " + video_hash + " / " + video_name);
+    let new_name = prompt("Rename video to:", video_name);
+    if (new_name) {
+      ws_emit('rename_video', {video_hash: video_hash, new_name: new_name});
+      ws_emit('list_my_videos', {});
     }
   }
 
@@ -536,11 +546,13 @@
             </h1>
             <div class="gap-8">
               {#each $all_my_videos as item}
-              <div class="bg-slate-600 w-72 rounded-md p-2 m-1 mx-6 inline-block cursor-pointer" on:click|preventDefault="{()=>onClickVideo(item.video_hash)}">
+              <div class="bg-slate-600 w-72 rounded-md p-2 m-1 mx-6 inline-block cursor-pointer" on:click|preventDefault="{()=>onClickVideo(item.video_hash)}" >
                 <span class="text-amber-400 text-xs pr-2 border-r border-gray-400">{item.added_time}</span>
                 <span class="text-amber-500 font-mono text-xs pr-2">{item.video_hash}</span>
-                <VideoListPopup onDelete={() => { onClickDeleteVideo(item.video_hash, item.orig_filename) }} />
-                <div><a href="/?vid={item.video_hash}" class="text-xs overflow-clip whitespace-nowrap">{item.orig_filename}</a></div>
+                <VideoListPopup
+                  onDel={() => { onClickDeleteVideo(item.video_hash, item.title) }}
+                  onRename={() => { onClickRenameVideo(item.video_hash, item.title) }} />
+                <div><a href="/?vid={item.video_hash}" class="text-xs overflow-clip whitespace-nowrap">{item.title}</a></div>
               </div>
               {/each} 
             </div> 

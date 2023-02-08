@@ -405,8 +405,12 @@
         on:touchmove|preventDefault={handleMove}
       />
       {#each commentsWithTc as item}
-        <CommentTimelinePin {...item}
-          x_loc={tcToDurationFract(item.timecode)}
+        <CommentTimelinePin
+          id={item.id},
+          username={item.username},
+          comment={item.comment},
+          avatar_url={item.avatar_url},
+          x_loc={tcToDurationFract(item.timecode).toString()}
           on:click={(e) => { dispatch('commentPinClicked', {id: item.id});}}
           />
       {/each}

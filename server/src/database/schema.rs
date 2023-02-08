@@ -9,6 +9,7 @@ diesel::table! {
         added_time -> Timestamp,
         recompression_done -> Nullable<Timestamp>,
         orig_filename -> Nullable<Text>,
+        title -> Nullable<Text>,
         total_frames -> Nullable<Integer>,
         duration -> Nullable<Float>,
         fps -> Nullable<Text>,

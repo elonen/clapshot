@@ -22,7 +22,7 @@ use error::{DBError, DBResult, EmptyDBResult};
 pub type Pool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 type PooledConnection = r2d2::PooledConnection<ConnectionManager<SqliteConnection>>;
 
-pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
 
 /// Convert a diesel result to a DBResult, turning empty result
@@ -155,6 +155,25 @@ impl DB {
         Ok(())
     }
 
+    /// Rename a video (title).
+    /// 
+    /// # Arguments
+    /// * `vh` - Hash (unique identifier) of the video
+    /// * `new_name` - New title
+    /// 
+    /// # Returns
+    /// * `EmptyResult`
+    /// * `Err(NotFound)` - Video not found
+    /// * `Err(Other)` - Other error
+    pub fn rename_video(&self, vh: &str, new_name: &str) -> EmptyDBResult
+    {
+        use schema::videos::dsl::*;
+        diesel::update(videos.filter(video_hash.eq(vh)))
+            .set(title.eq(new_name))
+            .execute(&mut self.conn()?)?;
+        Ok(())
+    }
+    
     /// Get all videos for a user.
     /// 
     /// # Arguments

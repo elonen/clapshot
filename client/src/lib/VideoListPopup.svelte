@@ -1,5 +1,6 @@
 <script lang="ts">
-    export let onDelete: Function = null;
+    export let onRename: Function = null;
+    export let onDel: Function = null;
 
     let pos = { x: 0, y: 0 }
     let menu = { w: 0, h: 0 }
@@ -35,14 +36,23 @@
         showMenu = false;
     }
 
-    function remove() {
-        onDelete();
-        showMenu = false;
-    }
     let menuItems = [
         {
+            'name': 'rename',
+            'handler': () => {
+                showMenu = false;
+                // Delay onRename() to next cycle to allow the menu to close first
+                setTimeout(() => { onRename(); }, 0);
+            },
+            'displayText': "Rename",
+            'class': 'fa-solid fa-edit'
+        },
+        {
             'name': 'trash',
-            'onClick': remove,
+            'handler': () => {
+                onDel();
+                showMenu = false;
+            },
             'displayText': "Delete",
             'class': 'fa-solid fa-trash-can'
         },
@@ -58,7 +68,7 @@
                 {#if item.name == "hr"}
                     <hr>
                 {:else}
-                    <li><button on:click|stopPropagation={item.onClick}><i class={item.class}></i>{item.displayText}</button></li>
+                    <li><button on:click|stopPropagation={item.handler}><i class={item.class}></i>{item.displayText}</button></li>
                 {/if}
             {/each}
         </ul>

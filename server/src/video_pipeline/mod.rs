@@ -88,15 +88,17 @@ fn ingest_video(
         user=md.user_id,
         filename=%md.src_file.file_name().unwrap_or_default().to_string_lossy()).entered();
 
-        tracing::info!(file=%md.src_file.display(), "Ingesting file.");
+    tracing::info!(file=%md.src_file.display(), "Ingesting file.");
 
     let src = PathBuf::from(&md.src_file);
     if !src.is_file() { bail!("Source file not found: {:?}", src) }
 
     let dir_for_video = videos_dir.join(&vh);
+    tracing::debug!("Video dir = {:?}", dir_for_video);
 
     // Video already exists on disk?
     if dir_for_video.exists() {
+        tracing::debug!("Video dir already exists.");
         match db.get_video(&vh) {
             Ok(v) => {
                 let new_owner = &md.user_id;
@@ -121,7 +123,7 @@ fn ingest_video(
                 }
             },
             Err(DBError::NotFound()) => {
-                // File exists, but not in DB. Remove file and reprocess.
+                // File exists, but not in DB. Remove files and reprocess.
                 tracing::info!("Dir for '{vh}' exists, but not in DB. Deleting old dir and reprocessing.");
                 std::fs::remove_dir_all(&dir_for_video)?;
             }
@@ -144,6 +146,8 @@ fn ingest_video(
     std::fs::rename(&src, &src_moved)?;
     if !src_moved.exists() { bail!("Failed to move {:?} file to orig/", src_moved) }
 
+    let orig_filename = src.file_name().ok_or(anyhow!("Bad filename: {:?}", src))?.to_string_lossy().into_owned();
+
     // Add to DB
     tracing::info!("Adding video to DB.");
     db.add_video(&models::VideoInsert {
@@ -151,7 +155,8 @@ fn ingest_video(
         added_by_userid: Some(md.user_id.clone()),
         added_by_username: Some(md.user_id.clone()),  // TODO: get username from somewhere
         recompression_done: None,
-        orig_filename: Some(src.file_name().ok_or(anyhow!("Bad filename: {:?}", src))?.to_string_lossy().into_owned()),
+        orig_filename: Some(orig_filename.clone()),
+        title: Some(orig_filename),
         total_frames: Some(md.total_frames as i32),
         duration: md.duration.to_f32(),
         fps: Some(md.fps.to_string()),
