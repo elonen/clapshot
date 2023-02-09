@@ -80,6 +80,18 @@ macro_rules! send_user_ok(
 /// Send user a list of all videos they have.
 pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
     let videos = ses.server.db.get_all_user_videos(&ses.user_id)?;
+    let videos = videos.into_iter().map(|v| {
+            let mut fields = v.to_json()?;
+            if let Some(sheet_dims) = v.thumb_sheet_dims {
+                let (sheet_w, sheet_h) = sheet_dims.split_once('x').ok_or(anyhow!("Invalid sheet dims"))?;
+                fields["thumb_sheet_cols"] = json!(sheet_w.parse::<u32>()?);
+                fields["thumb_sheet_rows"] = json!(sheet_h.parse::<u32>()?);
+                fields["thumb_url"] = json!(format!("{}/videos/{}/thumbs/thumb.webp", ses.server.url_base, &v.video_hash));
+                fields["thumb_sheet_url"] = json!(format!("{}/videos/{}/thumbs/sheet-{}.webp", ses.server.url_base, &v.video_hash, sheet_dims));
+            };
+            Ok(fields)
+        }).collect::<Res<Vec<serde_json::Value>>>()?;
+
     ses.emit_cmd("user_videos", &json!({
             "username": ses.user_name.clone(),
             "user_id": ses.user_id.clone(),

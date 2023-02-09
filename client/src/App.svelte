@@ -341,6 +341,8 @@
           case 'user_videos':
             log_abbreviated("[SERVER] user_videos: " + JSON.stringify(data));
             $all_my_videos = data.videos;
+            console.log("Got " + $all_my_videos.length + " videos");
+            console.log($all_my_videos);
             break;
 
           case 'message':
@@ -469,6 +471,70 @@
     }
   }
 
+function installThumbScrubber(e: MouseEvent, item: object)
+{
+  let sheet_cols = item.thumb_sheet_cols;
+  let sheet_rows = item.thumb_sheet_rows;
+  let bgImg =  new Image();
+  
+  bgImg.onload = (le) => {
+    // Total size of sprite sheet in pixels
+    let sheet_w_px = le.target.naturalWidth;
+    let sheet_h_px = le.target.naturalHeight;
+
+    // Size of one frame in pixels
+    let frame_width = sheet_w_px / sheet_cols;
+    let frame_height = sheet_h_px / sheet_rows;
+
+    // Size of current div (that shows the sprite sheet) in pixels
+    let div_w_px = e.target.clientWidth;
+    let div_h_px = e.target.clientHeight;
+
+    // Switch background image to the now loaded sprite sheet
+    e.target.style.backgroundRepeat = 'no-repeat';
+    e.target.style.backgroundImage = 'url(' + bgImg.src + ')';
+
+    // Scale the sprite sheet so one frame fits in the div
+    let scaled_bgr_w = (div_w_px / frame_width) * sheet_w_px;
+    let scaled_bgr_h = (div_h_px / frame_height) * sheet_h_px;
+    e.target.style.backgroundSize = scaled_bgr_w + 'px ' + scaled_bgr_h + 'px';
+
+    function show_frame(frame_idx) {
+      let frame_xi = frame_idx % sheet_cols;
+      let frame_yi = Math.floor(frame_idx / sheet_cols);
+
+      let frame_left = scaled_bgr_w * (frame_xi / sheet_cols);
+      let frame_top = scaled_bgr_h * (frame_yi / sheet_rows);
+
+      e.target.style.backgroundPosition = '-' + frame_left + 'px -' + frame_top + 'px';
+    }
+
+    // Show first frame at first
+    show_frame(0);
+
+    // Scrub sheet on mouse move
+    e.target.onmousemove = (e) => {
+      let frame_idx = Math.floor((e.offsetX / e.target.clientWidth) * (sheet_cols * sheet_rows));
+      show_frame(frame_idx);
+    }
+  };
+
+  // Start loading the sprite sheet
+  bgImg.src = item.thumb_sheet_url;
+}
+
+function removeThumbScrubber(e: MouseEvent, item: object)
+{
+  // Restore original background image (item.thumb_url)
+  e.target.onmousemove = null;
+  e.target.onload = null;
+  e.target.style.backgroundImage = 'url(' + item.thumb_url + ')';
+  e.target.style.backgroundPosition = '0 0';
+  e.target.style.backgroundSize = '100% 100%';
+}
+
+
+
 </script>
 
 <svelte:window on:popstate={popHistoryState}/>
@@ -546,13 +612,28 @@
             </h1>
             <div class="gap-8">
               {#each $all_my_videos as item}
-              <div class="bg-slate-600 w-72 rounded-md p-2 m-1 mx-6 inline-block cursor-pointer" on:click|preventDefault="{()=>onClickVideo(item.video_hash)}" >
+              <div class="bg-slate-600 w-80 h-20 rounded-md p-2 m-1 mx-6 overflow-clip inline-block cursor-pointer"
+                  on:click|preventDefault={ () => onClickVideo(item.video_hash) }
+                  on:keypress={(e) => { if (e.key === 'Enter') { onClickVideo(item.video_hash) }}}
+                  >
+
+                {#if item.thumb_url}
+                  <!-- hover mouse to scrub thumb sheet -->
+                  <div class="w-[7.111rem] h-[4rem] float-left mr-2 bg-gray-900 rounded-md overflow-hidden"
+                    style="background-image: url('{item.thumb_url}'); background-size: cover; background-position: 0 0;"
+                    on:focus={()=>{}}
+                    on:mouseover={(e) => installThumbScrubber(e, item)}
+                    on:mouseout={(e) => removeThumbScrubber(e, item)}
+                  >
+                  </div>
+                {/if}
+
                 <span class="text-amber-400 text-xs pr-2 border-r border-gray-400">{item.added_time}</span>
                 <span class="text-amber-500 font-mono text-xs pr-2">{item.video_hash}</span>
                 <VideoListPopup
                   onDel={() => { onClickDeleteVideo(item.video_hash, item.title) }}
                   onRename={() => { onClickRenameVideo(item.video_hash, item.title) }} />
-                <div><a href="/?vid={item.video_hash}" class="text-xs overflow-clip whitespace-nowrap">{item.title}</a></div>
+                <div><a href="/?vid={item.video_hash}" title="{item.title}" class="text-xs whitespace-nowrap">{item.title}</a></div>
               </div>
               {/each} 
             </div> 

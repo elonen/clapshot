@@ -8,11 +8,15 @@ use super::DetailedMsg;
 
 pub type ProgressSender = crossbeam_channel::Sender<(String, String, String)>;
 
+use super::{THUMB_SHEET_COLS, THUMB_SHEET_ROWS, THUMB_W, THUMB_H};
+const THUMB_COUNT: u32 = THUMB_SHEET_COLS * THUMB_SHEET_ROWS;
+
 
 #[derive(Debug, Clone)]
 pub struct CmprInput {
     pub src: PathBuf,
-    pub dst: PathBuf,
+    pub video_dst: Option<PathBuf>,
+    pub thumb_dir: Option<PathBuf>,
     pub video_bitrate: u32,
     pub video_hash: String,
     pub user_id: String,
@@ -21,11 +25,13 @@ pub struct CmprInput {
 #[derive(Debug, Clone)]
 pub struct CmprOutput {
     pub success: bool,
-    pub dst_file: String,
+    pub video_dst: Option<PathBuf>,
+    pub thumb_dir: Option<PathBuf>,
     pub video_hash: String,
     pub stdout: String,
     pub stderr: String,
     pub dmsg: DetailedMsg,
+    pub user_id: String,
 }
 
 fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> CmprOutput {
@@ -34,7 +40,8 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
 
     CmprOutput {
         success: false,
-        dst_file: args.dst.to_str().unwrap_or("<invalid path>").to_string(),
+        video_dst: args.video_dst.clone(),
+        thumb_dir: args.thumb_dir.clone(),
         video_hash: args.video_hash.clone(),
         stdout: "".into(),
         stderr: "".into(),
@@ -44,6 +51,7 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
             src_file: args.src.clone(),
             user_id: args.user_id.clone()
         },
+        user_id: args.user_id.clone()
     }
 }
 
@@ -52,8 +60,8 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
 /// # Arguments
 /// * `file_path` - Path to the file to be analyzed
 /// # Returns
-/// * Number of frames in the video, or -1 on error
-fn count_frames( src: &str ) -> i32
+/// * Number of frames in the video
+fn count_frames( src: &str ) -> Option<i32>
 {
     // Equiv to: ffprobe -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of csv=p=0 <INPUT-FILE>
     let cmd_res = Command::new("ffprobe")
@@ -63,14 +71,14 @@ fn count_frames( src: &str ) -> i32
         Ok(output) => {
             if output.status.success() {
                 match String::from_utf8_lossy(&output.stdout).trim().parse::<u32>() {
-                    Ok(n) => { return n as i32; },
+                    Ok(n) => { return Some(n as i32); },
                     Err(e) => { tracing::error!(details=%e, "Frame counting '{}' failed.", src); }
                 }
             } else { tracing::error!(details=%String::from_utf8_lossy(&output.stderr), "Frame counting '{}' failed; ffprobe exited with error.", src); }
         },
         Err(e) => { tracing::error!(details=%e, "Frame counting '{}' failed.", src); }
     };
-    -1
+    None
 }
 
 /// Run FFMpeg shell command and return the output (stdout, stderr)
@@ -80,34 +88,39 @@ fn count_frames( src: &str ) -> i32
 /// * `args` - what to compress and where to put the result
 /// * `progress` - channel to send progress updates to
 /// 
-fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
+fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutput
 {
-    let _span = tracing::info_span!("run_ffmpeg",
+    let _span = tracing::info_span!("run_ffmpeg_transcode",
         video = %args.video_hash,
         user = %args.user_id,
         thread = ?std::thread::current().id()).entered();
 
-    tracing::info!(src=%args.src.display(), dst=%args.dst.display(), bitrate=%args.video_bitrate, "Compressing video");
+    let video_dst = match args.video_dst.clone() {
+        Some(p) => p,
+        None => return err2cout("BUG: transcode called with no video destination", "", &args)
+    };
+
+    tracing::info!(src=%args.src.display(), dst=%video_dst.display(), bitrate=%args.video_bitrate, "Compressing video");
 
     let src_str = match args.src.to_str() {
         Some(s) => s,
         None => return err2cout("Invalid src path", "", &args) }.to_string();
 
-    let dst_str = match args.dst.to_str() {
+    let dst_str = match video_dst.to_str() {
         Some(s) => s,
         None => return err2cout("Invalid dst path", "", &args) }.to_string();
 
     // Open a named pipe for ffmpeg to write progress reports to.
     // If this fails, ignore it and just don't show progress.
     let ppipe_fname = {
-        let fname = args.dst.with_extension("progress").with_extension("pipe");
+        let fname = video_dst.with_extension("progress").with_extension("pipe");
         match fname.to_str() {
             None => { Err("Invalid dst path".to_string()) }
             Some(fname) => unix_named_pipe::create(&fname, None)
                 .map(|_| fname.to_string())
                 .map_err(|e| e.to_string())
         }.map_or_else(|e| { tracing::warn!(details=e, "Won't track FFMPEG progress; failed to create pipe file."); None}, |f| Some(f))
-    };
+    };  
     
     // Start encoder thread
     let ffmpeg_thread = {
@@ -115,10 +128,9 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
         let dst_str = dst_str.clone();
         let ppipe_fname = ppipe_fname.clone();        
         std::thread::spawn(move || {
-            let _span = tracing::info_span!("ffmpeg_thread",
+            let _span = tracing::info_span!("ffmpeg_transcode_thread",
                 thread = ?std::thread::current().id()).entered();
     
-            // ffmpeg -i INPUT.MOV  -progress - -nostats -vcodec libx265 -vf scale=1280:-8 -map 0 -acodec aac -ac 2 -strict experimental -b:v 2500000 -b:a 128000 OUTPUT.mp4
             let mut cmd = &mut Command::new("ffmpeg");
             cmd = cmd.args(&["-i", &src_str]);
             if let Some(pfn) = ppipe_fname {
@@ -181,7 +193,7 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                     let reader = &mut std::io::BufReader::new(&f);
 
                     let mut msg : Option<String> = None;
-                    let mut frame = -1;
+                    let mut frame = Option::<i32>::None;
                     let mut fps = -1f32;
 
                     while !progress_terminate.load(std::sync::atomic::Ordering::Relaxed)
@@ -212,7 +224,7 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                                         match key {
                                             "frame" => {
                                                 match val.parse::<i32>() {
-                                                    Ok(n) => { frame = n; },
+                                                    Ok(n) => { frame = Some(n); },
                                                     Err(e) => { tracing::warn!(details=%e, "Invalid frame# in FFMPEG progress log."); }
                                                 }},
                                             "fps" => {
@@ -225,11 +237,12 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
                                                     "end" => { msg = Some("Transcoding done.".to_string()); },
                                                     _ => {
                                                         let fps_str = if fps > 0f32 { format!(" (speed: {:.1} fps)", fps) } else { "".to_string() };
-                                                        if frame >= 0 && total_frames > 0 {
+                                                        match (frame, total_frames) {
+                                                            (Some(frame), Some(total_frames)) => {
                                                                 let ratio = frame as f32 / total_frames as f32;
                                                                 msg = Some(format!("Transcoding... {:.1}% done{fps_str}", (ratio * 100f32) as i32));
-                                                        } else {
-                                                            msg = Some("Transcoding...{fps_str}".to_string()); 
+                                                            },
+                                                            _ => { msg = Some(format!("Transcoding...{fps_str}")); }
                                                         }}}},
                                             _ => {}, // Ignore other keys
                                         }}}
@@ -261,7 +274,8 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
 
     CmprOutput {
         success: err_msg.is_none(),
-        dst_file: dst_str,
+        video_dst: Some(video_dst),
+        thumb_dir: None,
         video_hash: args.video_hash.clone(),
         stdout: stdout,
         stderr: stderr,
@@ -271,17 +285,196 @@ fn run_ffmpeg( args: CmprInput, progress: ProgressSender ) -> CmprOutput
             src_file: args.src.clone(),
             user_id: args.user_id.clone()
         },
+        user_id: args.user_id.clone(),
     }
 }
 
-/// Listen to incoming transcoding requests and spawn a thread (from a pool) to handle each one.
-/// Calls FFMpeg CLI to do the actual transcoding, and sends progress updates to the given channel.
+// Get total number of frames in video using ffprobe
+fn get_video_total_frames( file: &str ) -> anyhow::Result<i32>{
+    let mut cmd = std::process::Command::new("ffprobe");
+    cmd.arg("-v").arg("error")
+        .arg("-select_streams").arg("v:0")
+        .arg("-show_entries").arg("stream=nb_frames")
+        .arg("-of").arg("default=noprint_wrappers=1:nokey=1")
+        .arg(file);
+    let output = cmd.output().expect("Failed to execute ffprobe");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let total_frames = stdout.trim().parse::<i32>().unwrap_or(-1);
+    tracing::debug!(total_frames, "Total frames in video");
+    if total_frames < 0 {
+        tracing::warn!("Failed to get total frames from ffprobe");
+        anyhow::bail!("Failed to get total frames from ffprobe");
+    }
+    Ok(total_frames)
+}
+
+/// Extract exactly THUMB_COUNT frames (THUMB_W x THUMB_H, letterboxed) that cover the whole video
+/// and save them as WEBP files (thumb_NN.webp) in the given directory.
+/// Copy the first frame also as thumb.webp (for fast preview without seeking).
+///
+/// # Arguments
+/// * `args` - what to process and where to put the result
+///
+fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
+{
+    let _span = tracing::info_span!("run_ffmpeg_thumbnailer",
+        video = %args.video_hash,
+        user = %args.user_id,
+        thread = ?std::thread::current().id()).entered();
+
+    let thumb_dir = match args.thumb_dir.clone() {
+        Some(p) => p,
+        None => return err2cout("BUG: thumbnailer called with no thumb_dir", "", &args)
+    };
+
+    tracing::info!(src=%args.src.display(), dst=%thumb_dir.display(), "Thumbnailing video");
+
+    let src_str = match args.src.to_str() {
+        Some(s) => s,
+        None => return err2cout("Invalid src path", "", &args) }.to_string();
+
+    let thumb_dir_str = match thumb_dir.to_str() {
+        Some(s) => s,
+        None => return err2cout("Invalid dst path", "", &args) }.to_string();
+
+    // Create "poster" thumbnail (probably first frame, but ffmpeg can choose any)
+    let single_thumb_thread = {
+        let src_str = src_str.clone();
+        let thumb_dir_str = thumb_dir_str.clone();
+        std::thread::spawn(move || {
+            let _span = tracing::info_span!("ffmpeg_thumb_poster_thread",
+                thread = ?std::thread::current().id()).entered();
+
+            let img_reshape = format!("scale={THUMB_W}:{THUMB_H}:force_original_aspect_ratio=decrease,pad={THUMB_W}:{THUMB_H}:(ow-iw)/2:(oh-ih)/2");
+
+            let mut cmd = &mut Command::new("ffmpeg");
+            cmd = cmd.args(&[
+                "-i", &src_str,
+                "-nostats",
+                "-vcodec", "libwebp",
+                "-vf", format!("thumbnail,{img_reshape}",).as_str(),
+                "-frames:v", "1",
+                "-strict", "experimental",
+                "-c:v", "libwebp",
+                &format!("{}/thumb.webp", &thumb_dir_str)
+            ]);
+            tracing::info!("Creating thumbnail sheet");
+            tracing::debug!("Exec: {:?}", cmd);
+            match cmd.output() {
+                Ok(res) => {
+                    tracing::info!("ffmpeg finished");
+                    (if res.status.success() {None} else {Some("FFMPEG exited with error".to_string())},
+                        String::from_utf8_lossy(&res.stdout).to_string(),
+                        String::from_utf8_lossy(&res.stderr).to_string() )
+                },
+                Err(e) => {
+                    tracing::error!(details=%e, "ffmpeg exec failed");
+                    (Some(e.to_string()), "".into(), "".into())
+                }
+            }
+        }
+    )};
+
+    // Create thumbnail sheet (preview of the whole video)
+    let sheet_thread = {
+        let src_str = src_str.clone();
+        let thumb_dir_str = thumb_dir_str.clone();
+        std::thread::spawn(move || {
+            let _span = tracing::info_span!("ffmpeg_thumbsheet_thread",
+                thread = ?std::thread::current().id()).entered();
+
+                let img_reshape = format!("scale={THUMB_W}:{THUMB_H}:force_original_aspect_ratio=decrease,pad={THUMB_W}:{THUMB_H}:(ow-iw)/2:(oh-ih)/2");
+
+                let total_frames = match get_video_total_frames(&src_str) {
+                    Ok(d) => d,
+                    Err(e) => return (Some(e.to_string()), "".into(), "".into())
+                };
+        
+            // Make a "-vf" filter that selects exactly THUMB_COUNT frames from the video
+            let frame_select_filter = (0..THUMB_COUNT).map(|pos| {
+                    let frame = (pos as f64 * (total_frames as f64 / (THUMB_COUNT as f64))) as i32;
+                    format!("eq(n\\,{})", frame)
+                }).collect::<Vec<String>>().join("+");
+
+            let mut cmd = &mut Command::new("ffmpeg");
+            cmd = cmd.args(&[
+                "-i", &src_str,
+                "-nostats",
+                "-vf", &format!("select={frame_select_filter},{img_reshape},tile={THUMB_SHEET_COLS}x{THUMB_SHEET_ROWS}"),
+                "-strict", "experimental",
+                "-c:v", "libwebp",
+                "-vsync", "vfr",
+                "-start_number", "0",
+
+                &format!("{}/sheet-{THUMB_SHEET_COLS}x{THUMB_SHEET_ROWS}.webp", &thumb_dir_str)
+            ]);
+            tracing::info!("Creating thumbnail sheet");
+            tracing::debug!("Exec: {:?}", cmd);
+            match cmd.output() {
+                Ok(res) => {
+                    tracing::info!("ffmpeg finished");
+                    (if res.status.success() {None} else {Some("FFMPEG exited with error".to_string())},
+                        String::from_utf8_lossy(&res.stdout).to_string(),
+                        String::from_utf8_lossy(&res.stderr).to_string() )
+                },
+                Err(e) => {
+                    tracing::error!(details=%e, "ffmpeg exec failed");
+                    (Some(e.to_string()), "".into(), "".into())
+                }
+            }
+        }
+    )};
+
+    // Wait for processes to finish
+    let mut comb_err = None;
+    let mut comb_stdout = String::new();
+    let mut comb_stderr = String::new();
+    for (name, thread) in vec![("poster", single_thumb_thread), ("sheet", sheet_thread)].into_iter() {
+        let (err, stdout, stderr) = match thread.join() {
+            Ok(res) => {
+                tracing::info!("Thread '{name}' finished");
+                res
+            },
+            Err(e) => {
+                tracing::error!(details=?e, "FFMPEG thumbnailer '{name}' thread panicked.");
+                (Some(format!("Thread '{name}' panicked", name=name)), "".into(), format!("{:?}", e))
+            }
+        };
+        match (&comb_err, err) {
+            (None, Some(msg)) => { comb_err = Some(msg) },
+            (Some(prev_msg), Some(msg)) => { comb_err = Some(format!("{} ; {}", prev_msg, msg)) },
+            _ => ()
+        };
+        comb_stdout.push_str(format!("--- {name} ---\n{stdout}\n\n").as_str());
+        comb_stderr.push_str(format!("--- {name} ---\n{stderr}\n\n").as_str());
+    };
+
+    CmprOutput {
+        success: comb_err.is_none(),
+        video_dst: None,
+        thumb_dir: Some(thumb_dir),
+        video_hash: args.video_hash.clone(),
+        stdout: comb_stdout,
+        stderr: comb_stderr,
+        dmsg: DetailedMsg {
+            msg: if comb_err.is_some() { "Thumbnailing failed" } else { "Thumbnailing complete" }.to_string(),
+            details: format!("Error in FFMPEG: {:?}", comb_err),
+            src_file: args.src.clone(),
+            user_id: args.user_id.clone()
+        },
+        user_id: args.user_id.clone()
+    }
+}
+
+
+/// Listen to incoming transcoding/thumbnailing requests and spawn a thread (from a pool) to handle each one.
+/// Calls FFMpeg CLI to do the actual work, and sends progress updates to the given channel.
 /// 
 /// # Arguments
-/// * `inq` - Channel to receive incoming transcoding requests
-/// * `outq` - Channel to send transcoding results
+/// * `inq` - Channel to receive incoming requests
+/// * `outq` - Channel to send results
 /// * `progress` - Channel to send transcoding progress updates. Tuple: (video_hash, progress_msg)
-/// * `n_workers` - Number of worker threads to spawn for encoding. This should be at most the number of CPU cores.
+/// * `n_workers` - Number of worker threads to spawn for processing. This should be at most the number of CPU cores.
 pub fn run_forever(
     inq: Receiver<CmprInput>,
     outq: Sender<CmprOutput>,
@@ -299,11 +492,17 @@ pub fn run_forever(
                 let outq = outq.clone();
                 let prgr_sender = progress.clone();
                 pool.execute(move || {
-                    if let Err(e) = outq.send(
-                        run_ffmpeg(args.clone(), prgr_sender))
-                    {
-                        tracing::error!("Result send failed! Aborting. -- {:?}", e);
-                    }});
+                    if let Some(_) = args.video_dst {
+                        if let Err(e) = outq.send(
+                            run_ffmpeg_transcode(args.clone(), prgr_sender)) {
+                            tracing::error!("Transcode result send failed! Aborting. -- {:?}", e);
+                    }};
+                    if let Some(_) = args.thumb_dir {
+                        if let Err(e) = outq.send(
+                            run_ffmpeg_thumbnailer(args.clone())) {
+                            tracing::error!("Thumbnail result send failed! Aborting. -- {:?}", e);
+                    }};
+                });
             },
             Err(e) => {
                 tracing::info!(details=%e, "Input queue closed.");

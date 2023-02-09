@@ -37,6 +37,7 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<models::Vi
             orig_filename: Some(format!("test{}.mp4", i)),
             title: Some(format!("test{}.mp4", i)),
             recompression_done: None,
+            thumb_sheet_dims: None,
             total_frames: Some((i * 1000) as i32),
             duration: Some((i * 100) as f32),
             fps: Some(format!("{}", i * i)),

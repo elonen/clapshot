@@ -8,6 +8,7 @@ diesel::table! {
         added_by_username -> Nullable<Text>,
         added_time -> Timestamp,
         recompression_done -> Nullable<Timestamp>,
+        thumb_sheet_dims -> Nullable<Text>,  // "10x10"
         orig_filename -> Nullable<Text>,
         title -> Nullable<Text>,
         total_frames -> Nullable<Integer>,

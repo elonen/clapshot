@@ -53,7 +53,7 @@ pub enum SendTo<'a> {
 }
 
 #[derive (Clone, Debug)]
-pub enum UserMessageTopic { Ok(), Error(), Progress() }
+pub enum UserMessageTopic { Ok(), Error(), Progress(), VideoUpdated() }
 
 /// Message from other server modules to user(s)
 #[derive (Clone, Debug)]
@@ -379,6 +379,7 @@ async fn run_api_server_async(
                     UserMessageTopic::Ok() => "ok",
                     UserMessageTopic::Error() => "error",
                     UserMessageTopic::Progress() => "progress",
+                    UserMessageTopic::VideoUpdated() => "video_updated",
                 };
 
                 let msg = models::MessageInsert  {

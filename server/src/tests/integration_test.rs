@@ -16,6 +16,7 @@ mod integration_test
     use crossbeam_channel;
     use crossbeam_channel::{Receiver, RecvTimeoutError, unbounded, select};
 
+    use crate::database::schema::videos::thumb_sheet_dims;
     use crate::video_pipeline::{metadata_reader, IncomingFile};
     use crate::api_server::test_utils::{connect_client_ws, expect_cmd_data, open_video, write};
 
@@ -187,6 +188,7 @@ mod integration_test
             // Wait until transcoding is done
             let mut transcode_complete = false;
             let mut got_progress_report = false;
+            let mut sheet_dims = String::new();
 
             'waitloop: for _ in 0..(120*5) {
                 write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
@@ -199,8 +201,9 @@ mod integration_test
                     assert!(vids.len() == 1);
                     for v in vids {
                         assert_eq!(v["video_hash"].as_str().unwrap(), vh);
-                        if !v["recompression_done"].is_null() {
+                        if !v["recompression_done"].is_null() && !v["thumb_sheet_dims"].is_null() {
                             transcode_complete = true;
+                            sheet_dims = v["thumb_sheet_dims"].as_str().unwrap().to_string();
                             break 'waitloop;
                         }}}
                 thread::sleep(Duration::from_secs_f32(0.2));
@@ -213,6 +216,12 @@ mod integration_test
             assert!(vid_dir.join("video.mp4").is_symlink());
             assert!(vid_dir.join("stdout.txt").is_file());
             assert!(vid_dir.join("stderr.txt").is_file());
+
+            let thumb_dir = vid_dir.join("thumbs");
+            assert!(thumb_dir.join("thumb.webp").is_file());
+            assert!(thumb_dir.join(format!("sheet-{sheet_dims}.webp")).is_file());
+            assert!(thumb_dir.join("stdout.txt").is_file());
+            assert!(thumb_dir.join("stderr.txt").is_file());
         }
         Ok(())
     }

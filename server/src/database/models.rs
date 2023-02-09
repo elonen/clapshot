@@ -7,7 +7,7 @@ use chrono::TimeZone;
 use timeago;
 
 
-#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId)]
+#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, Clone)]
 #[diesel(table_name = videos)]
 pub struct Video {
     pub id: i32,
@@ -19,6 +19,7 @@ pub struct Video {
     pub added_time: chrono::NaiveDateTime,
 
     pub recompression_done: Option<String>,
+    pub thumb_sheet_dims: Option<String>,
     pub orig_filename: Option<String>,
     pub title: Option<String>,
     pub total_frames: Option<i32>,
@@ -34,6 +35,7 @@ pub struct VideoInsert {
     pub added_by_userid: Option<String>,
     pub added_by_username: Option<String>,
     pub recompression_done: Option<String>,
+    pub thumb_sheet_dims: Option<String>,
     pub orig_filename: Option<String>,
     pub title: Option<String>,
     pub total_frames: Option<i32>,

@@ -119,6 +119,21 @@ impl DB {
         Ok(())
     }
 
+    /// Set thumbnail sheet dimensions for a video.
+    /// 
+    /// # Arguments
+    /// * `vh` - Hash (unique identifier) of the video
+    /// * `width` - Width of the thumbnail sheet
+    /// * `height` - Height of the thumbnail sheet
+    pub fn set_video_thumb_sheet_dimensions(&self, vh: &str, width: u32, height: u32) -> EmptyDBResult
+    {
+        use schema::videos::dsl::*;
+        diesel::update(videos.filter(video_hash.eq(vh)))
+            .set(thumb_sheet_dims.eq(format!("{width}x{height}")))
+            .execute(&mut self.conn()?)?;
+        Ok(())
+    }
+
     /// Get a video from the database.
     /// 
     /// # Arguments
@@ -186,6 +201,17 @@ impl DB {
         use models::*;
         use schema::videos::dsl::*;
         to_db_res(videos.filter(added_by_userid.eq(user_id)).load::<Video>(&mut self.conn()?))
+    }
+
+    /// Get all videos that don't have thumbnails yet.
+    /// 
+    /// # Returns
+    /// * `Vec<models::Video>` - List of Video objects
+    pub fn get_all_videos_without_thumbnails(&self) -> DBResult<Vec<models::Video>>
+    {
+        use models::*;
+        use schema::videos::dsl::*;
+        to_db_res(videos.filter(thumb_sheet_dims.is_null()).load::<Video>(&mut self.conn()?))
     }
 
     /// Add a new comment on a video.

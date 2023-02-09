@@ -31,6 +31,12 @@ use crate::database::error::DBError;
 use cleanup_rejected::clean_up_rejected_file;
 use crate::database::{DB, models};
 
+pub const THUMB_SHEET_COLS: u32 = 10;
+pub const THUMB_SHEET_ROWS: u32 = 10;
+pub const THUMB_W: u32 = 160;
+pub const THUMB_H: u32 = 90;
+
+
 #[derive (Clone, Debug)]
 pub struct IncomingFile {
     pub file_path: PathBuf,
@@ -135,7 +141,7 @@ fn ingest_video(
     assert!(!dir_for_video.exists()); // Should have been deleted above
 
     // Move src file to orig/
-    tracing::debug!(dir=%dir_for_video.display(), "Creating video has dir.");
+    tracing::debug!(dir=%dir_for_video.display(), "Creating video hash dir.");
     std::fs::create_dir(&dir_for_video)?;
 
     let dir_for_orig = dir_for_video.join("orig");
@@ -155,6 +161,7 @@ fn ingest_video(
         added_by_userid: Some(md.user_id.clone()),
         added_by_username: Some(md.user_id.clone()),  // TODO: get username from somewhere
         recompression_done: None,
+        thumb_sheet_dims: None,
         orig_filename: Some(orig_filename.clone()),
         title: Some(orig_filename),
         total_frames: Some(md.total_frames as i32),
@@ -181,10 +188,11 @@ fn ingest_video(
 
     let transcode_req = match needs_transcoding(md, target_bitrate) {
         Some((reason, new_bitrate)) => {
-            let dst = dir_for_video.join(format!("transcoded_br{}_{}.mp4", new_bitrate, uuid::Uuid::new_v4()));
+            let video_dst = dir_for_video.join(format!("transcoded_br{}_{}.mp4", new_bitrate, uuid::Uuid::new_v4()));
             cmpr_tx.send(video_compressor::CmprInput {
-                src: src_moved,
-                dst,
+                src: src_moved.clone(),
+                video_dst: Some(video_dst),
+                thumb_dir: None,
                 video_bitrate: new_bitrate,
                 video_hash: vh.to_string(),
                 user_id: md.user_id.clone(),
@@ -196,6 +204,45 @@ fn ingest_video(
         }
     };
 
+    // Also create thumbnails unless there was an error before
+    if let Ok(_) = &transcode_req {
+
+        // Create thumbs dir if missing
+        let thumbs_dir = dir_for_video.join("thumbs");
+        if !thumbs_dir.exists() {
+            if let Err(e) = std::fs::create_dir(&thumbs_dir) {
+                tracing::error!(details=?e, "Failed to create thumbs dir");
+                if let Err(e) = user_msg_tx.send(UserMessage {
+                        topic: UserMessageTopic::Error(),
+                        msg: "Thumbnailing failed.".to_string(),
+                        details: Some(format!("Error creating thumbs dir: {}", e)),
+                        user_id: Some(md.user_id.clone()),
+                        video_hash: Some(vh.to_string())
+                    }) { tracing::error!(details=?e, "Failed to send user message") };
+            }
+        };
+
+        // Pass to thumbnailer
+        if let Err(e) = cmpr_tx.send(video_compressor::CmprInput {
+                src: src_moved,
+                video_dst: None,
+                thumb_dir: Some(thumbs_dir),
+                video_bitrate: 0,
+                video_hash: vh.to_string(),
+                user_id: md.user_id.clone(),
+            }) {
+                tracing::error!(details=?e, "Failed to send file to thumbnailing");
+                if let Err(e) = user_msg_tx.send(UserMessage {
+                        topic: UserMessageTopic::Error(),
+                        msg: "Thumbnailing failed.".to_string(),
+                        details: Some(format!("Error sending file to thumbnailing: {}", e)),
+                        user_id: Some(md.user_id.clone()),
+                        video_hash: Some(vh.to_string())
+                    }) { tracing::error!(details=?e, "Failed to send user message") };
+        };
+    };
+
+    // Format results to user readable message
     match transcode_req {
         Ok((do_transcode, reason)) => {
             tracing::info!(transcode=do_transcode, reason=reason, "Video added to DB. Transcode");
@@ -281,6 +328,54 @@ pub fn run_forever(
     thread::spawn(move || {
         video_compressor::run_forever(cmpr_in_rx, cmpr_out_tx, cmpr_prog_tx, n_workers);
     });
+
+    // Migration from older version: find a video that is missing thumbnail sheet
+    fn legacy_thumnail_next_video(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<video_compressor::CmprInput>) -> Option<String> {
+        let next = match db.get_all_videos_without_thumbnails() {
+            Ok(videos) => videos.first().cloned(),
+            Err(e) => {
+                tracing::error!(details=?e, "DB: Failed to get videos without thumbnails.");
+                return None;
+            }};
+
+        if let Some(v) = next {
+            tracing::info!(video_hash=%v.video_hash, "Found legacy video that needs thumbnailing.");
+
+            let video_file = if v.recompression_done.is_some() {
+                    Some(videos_dir.join(&v.video_hash).join("/video.mp4"))
+                } else {
+                    match v.orig_filename {
+                        Some(ref orig_filename) => Some(videos_dir.join(&v.video_hash).join("orig").join(orig_filename)),
+                        None => {
+                            tracing::error!(video_hash=%v.video_hash, "Legacy thumbnailing failed. Original filename missing and not recompressed.");
+                            None
+                        }}
+                };
+
+            match (&v.added_by_userid, video_file) {
+                (Some(user_id), Some(video_file)) => {
+                    let req = video_compressor::CmprInput {
+                        src: video_file,
+                        video_dst: None,
+                        thumb_dir: Some(videos_dir.join(&v.video_hash).join("thumbs")),
+                        video_bitrate: 0,
+                        video_hash: v.video_hash.clone(),
+                        user_id: user_id.clone(),
+                    };
+                    cmpr_in.send(req).unwrap_or_else(|e| {
+                            tracing::error!(details=?e, "Error sending legacy thumbnailing request to compressor.");
+                        });
+                    return Some(v.video_hash.clone());
+                },
+                _ => {
+                    tracing::error!(video_hash=%v.video_hash, "Legacy thumbnailing failed. User ID or orig filename missing.");
+                },
+            }
+        }
+        None
+    }
+    let mut legacy_video_now_thumnailing = legacy_thumnail_next_video(&db, &videos_dir, &mut cmpr_in_tx.clone());
+
 
     let _span = tracing::info_span!("PIPELINE").entered();
     loop {
@@ -389,53 +484,86 @@ pub fn run_forever(
                             let db = db.clone();
                             let vh = res.video_hash.clone();
 
-                            // Write out stdout/stderr to separate files
-                            for (name, data) in [("stdout", &res.stdout), ("stderr", &res.stderr)].iter() {
-                                let path = videos_dir.join(&vh).join(format!("{}.txt", name));
-                                tracing::debug!(video=%vh, file=?path, "Writing {} from ffmpeg", name);
-                                match std::fs::write(&path, data) {
-                                    Ok(_) => {},
-                                    Err(e) => {
-                                        tracing::error!(file=?path, details=%e, "Error writing {:?}", name);
-                            }}}
+                            // Thumbnails done?
+                            if let Some(thumb_dir) = res.thumb_dir {
+                                if let Err(e) = db.set_video_thumb_sheet_dimensions(&vh, THUMB_SHEET_COLS, THUMB_SHEET_ROWS) {
+                                    tracing::error!(details=%e, "Error storing thumbnail sheet dims in DB");
+                                } else {
+                                    // Legacy thumbnailer: find next video to thumbnail, if any
+                                    if Some(vh.clone()) == legacy_video_now_thumnailing {
+                                        legacy_video_now_thumnailing = legacy_thumnail_next_video(&db, &videos_dir, &mut cmpr_in_tx.clone());
+                                    }
+                                }
+                                // Write out stdout/stderr to separate files
+                                for (name, data) in [("stdout", &res.stdout), ("stderr", &res.stderr)].iter() {
+                                    let path = thumb_dir.join(format!("{}.txt", name));
+                                    tracing::debug!(video=%vh, file=?path, "Writing {} from thumbnailer", name);
+                                    match std::fs::write(&path, data) {
+                                        Ok(_) => {},
+                                        Err(e) => {
+                                            tracing::error!(file=?path, details=%e, "Error writing {:?}", name);
+                                }}}
 
-                            // Get filename from path
-                            fn get_filename(p: &str) -> anyhow::Result<String> {
-                                Ok(Path::new(p).file_name().ok_or(anyhow!("bad filename: {p}"))?.to_str().ok_or(anyhow!("bad encoding"))?.to_string())
+                                // Send VideoUpdated message to user
+                                user_msg_tx.send(UserMessage {
+                                        topic: UserMessageTopic::VideoUpdated(),
+                                        msg: "Video thumbnail generated".into(),
+                                        details: None,
+                                        user_id: Some(res.user_id),
+                                        video_hash: Some(vh.clone())
+                                    }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                             }
-                            
-                            // Symlink to transcoded file
-                            let linked_ok = (move || {
-                                let vh_dir = videos_dir.join(&vh);
-                                if !vh_dir.exists() {
-                                    if let Err(e) = std::fs::create_dir(&vh_dir) {
-                                        tracing::error!(details=%e, "Video hash dir {:?} was missing after transcoding, and creating it failed. Probably a bug.", vh_dir);
-                                        return false;
-                                    }}
-                                let dst_filename = match get_filename(&res.dst_file) {
-                                    Ok(f) => f,
-                                    Err(e) => { tracing::error!("{:?}", e); return false; }
-                                };
-                                let symlink_path = vh_dir.join("video.mp4");
-                                if let Err(e) = std::os::unix::fs::symlink(dst_filename, &symlink_path) {
-                                    tracing::error!(details=%e, "Failed to create symlink {:?} -> {:?}", symlink_path, res.dst_file);
-                                    return false;
-                                }
-                                if let Err(e) = db.set_video_recompressed(&vh) {
-                                    tracing::error!(details=%e, "Error marking video as recompressed in DB");
-                                    return false;
-                                }
-                                true
-                            })();
 
-                            // Send success message
-                            user_msg_tx.send(UserMessage {
-                                    topic: if linked_ok {UserMessageTopic::Ok()} else {UserMessageTopic::Error()},
-                                    msg: "Video transcoded.".to_string() + if linked_ok {""} else {" But linking or DB failed."},
-                                    details: None,
-                                    user_id: Some(res.dmsg.user_id),
-                                    video_hash: Some(res.video_hash.clone())
-                                }).unwrap_or_else(|e| { tracing::error!(details=%e, "Error sending user message"); });
+                            // Video done?
+                            if let Some(video_dst) = res.video_dst.clone() {
+                                // Write out stdout/stderr to separate files
+                                for (name, data) in [("stdout", &res.stdout), ("stderr", &res.stderr)].iter() {
+                                    let path = videos_dir.join(&vh).join(format!("{}.txt", name));
+                                    tracing::debug!(video=%vh, file=?path, "Writing {} from ffmpeg", name);
+                                    match std::fs::write(&path, data) {
+                                        Ok(_) => {},
+                                        Err(e) => {
+                                            tracing::error!(file=?path, details=%e, "Error writing {:?}", name);
+                                }}}
+
+                                // Get filename from path
+                                fn get_filename(p: &PathBuf) -> anyhow::Result<String> {
+                                    Ok(p.file_name().ok_or(anyhow!("bad filename: {}", p.to_string_lossy()))?.to_str().ok_or(anyhow!("bad encoding"))?.to_string())
+                                }
+
+                                // Symlink to transcoded file
+                                let linked_ok = (move || {
+                                    let vh_dir = videos_dir.join(&vh);
+                                    if !vh_dir.exists() {
+                                        if let Err(e) = std::fs::create_dir(&vh_dir) {
+                                            tracing::error!(details=%e, "Video hash dir {:?} was missing after transcoding, and creating it failed. Probably a bug.", vh_dir);
+                                            return false;
+                                        }}
+                                    let dst_filename = match get_filename(&video_dst) {
+                                        Ok(f) => f,
+                                        Err(e) => { tracing::error!("{:?}", e); return false; }
+                                    };
+                                    let symlink_path = vh_dir.join("video.mp4");
+                                    if let Err(e) = std::os::unix::fs::symlink(dst_filename, &symlink_path) {
+                                        tracing::error!(details=%e, "Failed to create symlink {:?} -> {:?}", symlink_path, res.video_dst);
+                                        return false;
+                                    }
+                                    if let Err(e) = db.set_video_recompressed(&vh) {
+                                        tracing::error!(details=%e, "Error marking video as recompressed in DB");
+                                        return false;
+                                    }
+                                    true
+                                })();
+
+                                // Send success message
+                                user_msg_tx.send(UserMessage {
+                                        topic: if linked_ok {UserMessageTopic::Ok()} else {UserMessageTopic::Error()},
+                                        msg: "Video transcoded.".to_string() + if linked_ok {""} else {" But linking or DB failed."},
+                                        details: None,
+                                        user_id: Some(res.dmsg.user_id),
+                                        video_hash: Some(res.video_hash.clone())
+                                    }).unwrap_or_else(|e| { tracing::error!(details=%e, "Error sending user message"); });
+                            }
                         }
                         else {
                             tracing::error!(video=res.video_hash, details=?res.dmsg, "Video compression failed");
