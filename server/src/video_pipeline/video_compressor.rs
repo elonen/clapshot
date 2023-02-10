@@ -55,32 +55,6 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
     }
 }
 
-/// Use ffprobe to find how many frames are in the video
-/// 
-/// # Arguments
-/// * `file_path` - Path to the file to be analyzed
-/// # Returns
-/// * Number of frames in the video
-fn count_frames( src: &str ) -> Option<i32>
-{
-    // Equiv to: ffprobe -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of csv=p=0 <INPUT-FILE>
-    let cmd_res = Command::new("ffprobe")
-        .args(&["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0"])
-        .arg(&src).output();
-    match cmd_res {
-        Ok(output) => {
-            if output.status.success() {
-                match String::from_utf8_lossy(&output.stdout).trim().parse::<u32>() {
-                    Ok(n) => { return Some(n as i32); },
-                    Err(e) => { tracing::error!(details=%e, "Frame counting '{}' failed.", src); }
-                }
-            } else { tracing::error!(details=%String::from_utf8_lossy(&output.stderr), "Frame counting '{}' failed; ffprobe exited with error.", src); }
-        },
-        Err(e) => { tracing::error!(details=%e, "Frame counting '{}' failed.", src); }
-    };
-    None
-}
-
 /// Run FFMpeg shell command and return the output (stdout, stderr)
 /// Send progress updates to the progress channel.
 /// 
@@ -102,14 +76,6 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
 
     tracing::info!(src=%args.src.display(), dst=%video_dst.display(), bitrate=%args.video_bitrate, "Compressing video");
 
-    let src_str = match args.src.to_str() {
-        Some(s) => s,
-        None => return err2cout("Invalid src path", "", &args) }.to_string();
-
-    let dst_str = match video_dst.to_str() {
-        Some(s) => s,
-        None => return err2cout("Invalid dst path", "", &args) }.to_string();
-
     // Open a named pipe for ffmpeg to write progress reports to.
     // If this fails, ignore it and just don't show progress.
     let ppipe_fname = {
@@ -124,15 +90,15 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
     
     // Start encoder thread
     let ffmpeg_thread = {
-        let src_str = src_str.clone();
-        let dst_str = dst_str.clone();
+        let src = args.src.clone();
+        let dst = video_dst.clone();
         let ppipe_fname = ppipe_fname.clone();        
         std::thread::spawn(move || {
             let _span = tracing::info_span!("ffmpeg_transcode_thread",
                 thread = ?std::thread::current().id()).entered();
     
             let mut cmd = &mut Command::new("ffmpeg");
-            cmd = cmd.args(&["-i", &src_str]);
+            cmd = cmd.arg("-i").arg(&src);
             if let Some(pfn) = ppipe_fname {
                 cmd = cmd.args(&["-progress", &pfn]);
             }
@@ -147,8 +113,8 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
                 "-strict", "experimental",
                 "-b:v", &format!("{}", args.video_bitrate),
                 "-b:a", &format!("{}", 128000),
-                &dst_str
-            ]);
+            ]).arg(&dst);
+
             tracing::info!("Calling ffmpeg");
             tracing::debug!("Exec: {:?}", cmd);
             match cmd.output() {
@@ -176,12 +142,12 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
             None => std::thread::spawn(move || {}),
             Some(pfn) => {
                 let vh = args.video_hash.clone();
-                let src_str = src_str.clone();
+                let src = args.src.clone();
                 std::thread::spawn(move || {
                     let _span = tracing::info_span!("progress_thread",
                         thread = ?std::thread::current().id()).entered();
     
-                    let total_frames = count_frames(&src_str);
+                    let total_frames = count_frames(&src);
 
                     let f = match unix_named_pipe::open_read(&pfn) {
                         Ok(f) => f,
@@ -289,24 +255,32 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
     }
 }
 
-// Get total number of frames in video using ffprobe
-fn get_video_total_frames( file: &str ) -> anyhow::Result<i32>{
-    let mut cmd = std::process::Command::new("ffprobe");
-    cmd.arg("-v").arg("error")
-        .arg("-select_streams").arg("v:0")
-        .arg("-show_entries").arg("stream=nb_frames")
-        .arg("-of").arg("default=noprint_wrappers=1:nokey=1")
-        .arg(file);
-    let output = cmd.output().expect("Failed to execute ffprobe");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let total_frames = stdout.trim().parse::<i32>().unwrap_or(-1);
-    tracing::debug!(total_frames, "Total frames in video");
-    if total_frames < 0 {
-        tracing::warn!("Failed to get total frames from ffprobe");
-        anyhow::bail!("Failed to get total frames from ffprobe");
-    }
-    Ok(total_frames)
+/// Use ffprobe to find how many frames are in the video
+///
+/// # Arguments
+/// * `file_path` - Path to the file to be analyzed
+/// # Returns
+/// * Number of frames in the video
+fn count_frames( src: &PathBuf ) -> Option<i32>
+{
+    // Equiv to: ffprobe -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of csv=p=0 <INPUT-FILE>
+    let cmd_res = Command::new("ffprobe")
+        .args(&["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0"])
+        .arg(&src).output();
+    match cmd_res {
+        Ok(output) => {
+            if output.status.success() {
+                match String::from_utf8_lossy(&output.stdout).trim().parse::<u32>() {
+                    Ok(n) => { return Some(n as i32); },
+                    Err(e) => { tracing::error!(details=%e, file=?src, "Frame counting failed: invalid u32 parse"); }
+                }
+            } else { tracing::error!(details=%String::from_utf8_lossy(&output.stderr), file=?src, "Frame counting failed; ffprobe exited with error."); }
+        },
+        Err(e) => { tracing::error!(details=%e, file=?src, "Ffprobe exec failed."); }
+    };
+    None
 }
+
 
 /// Extract exactly THUMB_COUNT frames (THUMB_W x THUMB_H, letterboxed) that cover the whole video
 /// and save them as WEBP files (thumb_NN.webp) in the given directory.
@@ -329,18 +303,16 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 
     tracing::info!(src=%args.src.display(), dst=%thumb_dir.display(), "Thumbnailing video");
 
-    let src_str = match args.src.to_str() {
-        Some(s) => s,
-        None => return err2cout("Invalid src path", "", &args) }.to_string();
-
-    let thumb_dir_str = match thumb_dir.to_str() {
-        Some(s) => s,
-        None => return err2cout("Invalid dst path", "", &args) }.to_string();
+    if !thumb_dir.exists() {
+        if let Err(e) = std::fs::create_dir_all(&thumb_dir) {
+            return err2cout("Failed to create thumbnail directory", &e.to_string(), &args);
+        }
+    }
 
     // Create "poster" thumbnail (probably first frame, but ffmpeg can choose any)
     let single_thumb_thread = {
-        let src_str = src_str.clone();
-        let thumb_dir_str = thumb_dir_str.clone();
+        let src = args.src.clone();
+        let thumb_dir = thumb_dir.clone();
         std::thread::spawn(move || {
             let _span = tracing::info_span!("ffmpeg_thumb_poster_thread",
                 thread = ?std::thread::current().id()).entered();
@@ -348,17 +320,15 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
             let img_reshape = format!("scale={THUMB_W}:{THUMB_H}:force_original_aspect_ratio=decrease,pad={THUMB_W}:{THUMB_H}:(ow-iw)/2:(oh-ih)/2");
 
             let mut cmd = &mut Command::new("ffmpeg");
-            cmd = cmd.args(&[
-                "-i", &src_str,
+            cmd = cmd.arg("-i").arg(&src).args(&[
                 "-nostats",
                 "-vcodec", "libwebp",
                 "-vf", format!("thumbnail,{img_reshape}",).as_str(),
                 "-frames:v", "1",
                 "-strict", "experimental",
                 "-c:v", "libwebp",
-                &format!("{}/thumb.webp", &thumb_dir_str)
-            ]);
-            tracing::info!("Creating thumbnail sheet");
+            ]).arg(thumb_dir.join("thumb.webp"));
+            tracing::info!("Creating poster thumbnail");
             tracing::debug!("Exec: {:?}", cmd);
             match cmd.output() {
                 Ok(res) => {
@@ -377,17 +347,17 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 
     // Create thumbnail sheet (preview of the whole video)
     let sheet_thread = {
-        let src_str = src_str.clone();
-        let thumb_dir_str = thumb_dir_str.clone();
+        let src = args.src.clone();
+        let thumb_dir = thumb_dir.clone();
         std::thread::spawn(move || {
             let _span = tracing::info_span!("ffmpeg_thumbsheet_thread",
                 thread = ?std::thread::current().id()).entered();
 
                 let img_reshape = format!("scale={THUMB_W}:{THUMB_H}:force_original_aspect_ratio=decrease,pad={THUMB_W}:{THUMB_H}:(ow-iw)/2:(oh-ih)/2");
 
-                let total_frames = match get_video_total_frames(&src_str) {
-                    Ok(d) => d,
-                    Err(e) => return (Some(e.to_string()), "".into(), "".into())
+                let total_frames = match count_frames(&src) {
+                    Some(d) => d,
+                    None => return (Some("ffprobe count_frames failed".to_string()), "".into(), "".into())
                 };
         
             // Make a "-vf" filter that selects exactly THUMB_COUNT frames from the video
@@ -397,17 +367,14 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
                 }).collect::<Vec<String>>().join("+");
 
             let mut cmd = &mut Command::new("ffmpeg");
-            cmd = cmd.args(&[
-                "-i", &src_str,
+            cmd = cmd.arg("-i").arg(&src).args(&[
                 "-nostats",
                 "-vf", &format!("select={frame_select_filter},{img_reshape},tile={THUMB_SHEET_COLS}x{THUMB_SHEET_ROWS}"),
                 "-strict", "experimental",
                 "-c:v", "libwebp",
                 "-vsync", "vfr",
                 "-start_number", "0",
-
-                &format!("{}/sheet-{THUMB_SHEET_COLS}x{THUMB_SHEET_ROWS}.webp", &thumb_dir_str)
-            ]);
+            ]).arg(thumb_dir.join(format!("sheet-{THUMB_SHEET_COLS}x{THUMB_SHEET_ROWS}.webp")));
             tracing::info!("Creating thumbnail sheet");
             tracing::debug!("Exec: {:?}", cmd);
             match cmd.output() {

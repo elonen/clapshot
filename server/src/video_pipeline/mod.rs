@@ -204,25 +204,9 @@ fn ingest_video(
         }
     };
 
-    // Also create thumbnails unless there was an error before
+    // Also create thumbnails unless there was a problem with the file
     if let Ok(_) = &transcode_req {
-
-        // Create thumbs dir if missing
         let thumbs_dir = dir_for_video.join("thumbs");
-        if !thumbs_dir.exists() {
-            if let Err(e) = std::fs::create_dir(&thumbs_dir) {
-                tracing::error!(details=?e, "Failed to create thumbs dir");
-                if let Err(e) = user_msg_tx.send(UserMessage {
-                        topic: UserMessageTopic::Error(),
-                        msg: "Thumbnailing failed.".to_string(),
-                        details: Some(format!("Error creating thumbs dir: {}", e)),
-                        user_id: Some(md.user_id.clone()),
-                        video_hash: Some(vh.to_string())
-                    }) { tracing::error!(details=?e, "Failed to send user message") };
-            }
-        };
-
-        // Pass to thumbnailer
         if let Err(e) = cmpr_tx.send(video_compressor::CmprInput {
                 src: src_moved,
                 video_dst: None,
@@ -342,7 +326,7 @@ pub fn run_forever(
             tracing::info!(video_hash=%v.video_hash, "Found legacy video that needs thumbnailing.");
 
             let video_file = if v.recompression_done.is_some() {
-                    Some(videos_dir.join(&v.video_hash).join("/video.mp4"))
+                    Some(videos_dir.join(&v.video_hash).join("video.mp4"))
                 } else {
                     match v.orig_filename {
                         Some(ref orig_filename) => Some(videos_dir.join(&v.video_hash).join("orig").join(orig_filename)),
@@ -566,10 +550,11 @@ pub fn run_forever(
                             }
                         }
                         else {
-                            tracing::error!(video=res.video_hash, details=?res.dmsg, "Video compression failed");
+                            let msg = format!("Video {} failed", if res.video_dst.is_some() {"transcoding"} else {"thumbnailing"});
+                            tracing::error!(video=res.video_hash, details=?res.dmsg, msg);
                             user_msg_tx.send(UserMessage {
                                     topic: UserMessageTopic::Error(),
-                                    msg: "Video transcoding failed.".into(),
+                                    msg: msg,
                                     details: Some(res.dmsg.details),
                                     user_id: Some(res.dmsg.user_id),
                                     video_hash: Some(res.video_hash)
