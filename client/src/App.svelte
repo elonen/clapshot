@@ -353,6 +353,9 @@
                 last_video_progress_msg_ts = Date.now();
               }
             }
+            else if ( data.event_name == 'video_updated' ) {
+              refresh_my_videos();
+            }
             else {
               $user_messages = $user_messages.filter((m) => m.id != data.id);
               if (data.created) { $user_messages.push(data); }
@@ -633,7 +636,7 @@ function removeThumbScrubber(e: MouseEvent, item: object)
                 <VideoListPopup
                   onDel={() => { onClickDeleteVideo(item.video_hash, item.title) }}
                   onRename={() => { onClickRenameVideo(item.video_hash, item.title) }} />
-                <div><a href="/?vid={item.video_hash}" title="{item.title}" class="text-xs whitespace-nowrap">{item.title}</a></div>
+                <div class="leading-none"><a href="/?vid={item.video_hash}" title="{item.title}" class="break-all text-xs">{item.title}</a></div>
               </div>
               {/each} 
             </div> 
