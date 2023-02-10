@@ -64,6 +64,15 @@ Authorization is also supposed to be handled on web server (at least currently).
 See for example https://github.com/elonen/ldap_authz_proxy on how to
 authorize users against Active Directory/LDAP using Nginx.
 
+## Database upgrades
+
+Some releases require database migrations. If you're upgrading from a previous version, **make a backup of your database** (`clapshot.sqlite`) and then either add line `migrate = true` to `/etc/clapshot-server.conf` (Debian package) or use `--migrate` option when running the server manually.
+
+Once the server is started with migrate enabled, it will run database migrations
+on startup. After that, you can remove the `migrate` option and restart the server.
+
+Running the server without migrations enabled will detect that the database is out of date, log an error and exit.
+
 ## Building
 
 The recommended way to build Clapshot is to use Docker and the provided Makefile:
