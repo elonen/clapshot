@@ -1,4 +1,10 @@
-clapshot-client (0.5.0-1) bullseye; urgency=low
+clapshot-server (0.5.1-1) bullseye; urgency=low
+
+  * New feature: thumbnails with scrub preview.
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 10 Feb 2023 16:24:00 +0000
+
+clapshot-server (0.5.0-1) bullseye; urgency=low
 
   * New feature: Support for HTTP uploading multiple videos at once.
   * New feature: Rename clips.
