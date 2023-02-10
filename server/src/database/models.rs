@@ -109,21 +109,32 @@ pub struct MessageInsert {
     pub details: String,
 }
 
+pub fn humanize_utc_timestamp(timestamp: &chrono::NaiveDateTime) -> String {
+    let added_time: chrono::DateTime<chrono::Utc> = chrono::Utc.from_utc_datetime(timestamp);
+    let time_ago_str = timeago::Formatter::new().convert_chrono(added_time, chrono::Local::now());
+    time_ago_str
+} 
+
 pub fn to_json<T: serde::Serialize>(t: &T) -> Result<serde_json::Value, serde_json::Error> {
     serde_json::to_value(&t)
 }
 
-impl Video { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
+impl Video {
+    pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
+        to_json(&self).map(|mut v| {
+            v["added_time"] = serde_json::Value::String(humanize_utc_timestamp(&self.added_time));
+            v
+        })
+    }
+}
+
 impl VideoInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
 impl Comment { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
 impl CommentInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
 
 impl Message { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
     to_json(&self).map(|mut v| {
-        // Turn timestamp into a human-readable timeago string
-        let created_utc: chrono::DateTime<chrono::Utc> = chrono::Utc.from_utc_datetime(&self.created);
-        let time_ago_str = timeago::Formatter::new().convert_chrono(created_utc, chrono::Local::now());
-        v["created"] = serde_json::json!(time_ago_str);
+        v["created"] = serde_json::Value::String(humanize_utc_timestamp(&self.created));
         v
     })
 }}
