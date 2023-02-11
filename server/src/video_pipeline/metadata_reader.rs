@@ -39,7 +39,11 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
     std::os::unix::fs::symlink(file, &link_path).map_err(|e| e.to_string())?;
 
     // Run mediainfo
-    let mediainfo_res = Command::new("mediainfo").arg("--Output=JSON").arg("--").arg(&link_path).output();
+    let cmd = &mut Command::new("mediainfo");
+    cmd.arg("--Output=JSON").arg("--").arg(&link_path);
+    tracing::info!("Calling mediainfo");
+    tracing::debug!("Exec: {:?}", cmd);
+    let mediainfo_res = cmd.output();
 
     // Remove temp symlink
     if let Err(e) = std::fs::remove_file(&link_path) {
