@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::{process::Command};
 use std::sync::atomic::Ordering;
 use threadpool::ThreadPool;
 use std::path::{PathBuf};
@@ -31,7 +31,22 @@ pub type MetadataResult = Result<Metadata, DetailedMsg>;
 /// * `file_path` - Path to the file to be analyzed
 fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
 {
-    match Command::new("mediainfo").arg("--Output=JSON").arg(file).output()
+    // Symlink to source file to a temporary file to avoid problems with
+    // special characters in the path
+    let tmp_file = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
+    let link_path = PathBuf::from(&tmp_file.path());
+    tmp_file.close().map_err(|e| e.to_string())?;
+    std::os::unix::fs::symlink(file, &link_path).map_err(|e| e.to_string())?;
+
+    // Run mediainfo
+    let mediainfo_res = Command::new("mediainfo").arg("--Output=JSON").arg("--").arg(&link_path).output();
+
+    // Remove temp symlink
+    if let Err(e) = std::fs::remove_file(&link_path) {
+        tracing::warn!("Failed to remove temporary file: {}", e);
+    }
+
+    match mediainfo_res
     {
         Ok(output) => {
             if output.status.success() {                

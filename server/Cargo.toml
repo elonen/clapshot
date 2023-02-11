@@ -83,6 +83,7 @@ thiserror = "1.0.38"
 anyhow = "1.0.69"
 tracing-appender = "0.2.2"
 timeago = "0.4.1"
+tempfile = "3.3.0"
 
 [dev-dependencies]
 assert_fs = "1.0.10"
