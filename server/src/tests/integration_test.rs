@@ -171,8 +171,9 @@ mod integration_test
         cs_main_test! {[ws, data_dir, incoming_dir, 500_000] 
             // Copy test file to incoming dir
             let mov_file = "NASA_Red_Lettuce_excerpt.mov";
+            let dangerous_name = "  -fake-arg name; \"and some more'.txt 你 .mov";
             data_dir.copy_from("src/tests/assets/", &[mov_file]).unwrap();
-            std::fs::rename(data_dir.join(mov_file), incoming_dir.join(mov_file)).unwrap();
+            std::fs::rename(data_dir.join(mov_file), incoming_dir.join(dangerous_name)).unwrap();
 
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
@@ -216,6 +217,7 @@ mod integration_test
             assert!(vid_dir.join("video.mp4").is_symlink());
             assert!(vid_dir.join("stdout.txt").is_file());
             assert!(vid_dir.join("stderr.txt").is_file());
+            assert!(vid_dir.join("orig").join(dangerous_name).is_file());
 
             let thumb_dir = vid_dir.join("thumbs");
             assert!(thumb_dir.join("thumb.webp").is_file());
