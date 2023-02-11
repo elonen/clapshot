@@ -1,6 +1,5 @@
 # Clapshot - self hosted video review tool
 
-[![Build Status](https://app.travis-ci.com/elonen/clapshot.svg?branch=master)](https://app.travis-ci.com/elonen/clapshot)
 [![Release](https://img.shields.io/github/v/release/elonen/clapshot?include_prereleases)]()
 
 ## Introduction
@@ -18,7 +17,7 @@ After a video is ingested succesfully, users can view the file, add comments, dr
 and reply to each other's comments. Videos are stored on disk as files, while metadata and comments
 go to an Sqlite 3.5+ database file.
 
-Version 0.4.0 has _collaborative review sessions_, where playback controls and drawings
+Clapshot supports _collaborative review sessions_, where playback controls and drawings
 are mirrored in real-time to all participants. It's meant to supplement remote video conferences
 such as Google Meets that don't play video well over screen sharing. Click the "head plus" icon
 in page header to start it.
@@ -31,9 +30,9 @@ in page header to start it.
 To try out Clapshot using Docker, either run
 ```bash
 docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data \
-  elonen/clapshot:0.5.0-demo
+  elonen/clapshot:0.5.1-demo
 ```
-...to download a demo image from Docker Hub, or check out the repo and run `make run-docker` to build it manually.
+...to download a demo image from Docker Hub, or clone the repo and run `make run-docker` to build it manually.
 
 Once the server is running, open your browser at http://127.0.0.1:8080
 
@@ -103,11 +102,15 @@ This is useful for development and debugging. Call `clapshot-server --help` to s
 
 ## Development status
 
-Clapshot is usable but not very polished or feature rich. It was started
-and is currently being maintained / developed for a specific project, so releases for
-the general public and generic use are not a priority. That said, feel free to try
-if it fits your use case and to contribute in development.
+Clapshot was started and is currently being maintained / developed for a specific project,
+so features/releases for generic use may not always be a priority.
 
-## License
+That said, feel free to try if it fits your use case and to contribute in development.
 
-Clapshot is licensed under GPL v3, Copyright 2022, 2023 by Jarno Elonen
+For pull requests that introduce significant new code or other materials, please add your
+name and contribution year to the copyright notices.
+
+## License and copyrights
+
+Clapshot is licensed under GPL v3
+Copyright 2022, 2023 by Jarno Elonen

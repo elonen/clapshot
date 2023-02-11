@@ -1,9 +1,0 @@
-arch: amd64
-os: linux
-dist: jammy
-language: minimal
-services: docker
-script: BUILDKIT_PROGRESS=plain make test
-branches:
-  only:
-    - master
