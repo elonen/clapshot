@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {fade, slide, scale} from "svelte/transition";
+  import {fade, slide} from "svelte/transition";
   import CommentCard from './lib/CommentCard.svelte'
   import NavBar from './lib/NavBar.svelte'
   import VideoPlayer from './lib/VideoPlayer.svelte';
@@ -641,6 +641,15 @@ function removeThumbScrubber(e: MouseEvent, item: object)
               {/each} 
             </div> 
 
+            {#if upload_url }
+            <div class="m-6">
+              <h1 class="text-2xl mt-12 text-slate-500">
+                Upload video
+              </h1>
+              <FileUpload post_url={upload_url}/>
+            </div>
+            {/if}
+
             {#if $user_messages.length>0}
               <h1 class="text-2xl m-6 mt-12 text-slate-500">
                   Latest messages
@@ -650,15 +659,6 @@ function removeThumbScrubber(e: MouseEvent, item: object)
                   <UserMessage {msg} />
                 {/each} 
               </div> 
-            {/if}
-
-            {#if upload_url }
-            <div class="m-6">
-              <h1 class="text-2xl mt-12 text-slate-500">
-                Upload video
-              </h1>
-              <FileUpload post_url={upload_url}/>
-            </div>
             {/if}
 
           </div>
