@@ -31,12 +31,16 @@ pub type MetadataResult = Result<Metadata, DetailedMsg>;
 /// * `file_path` - Path to the file to be analyzed
 fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
 {
-    // Symlink to source file to a temporary file to avoid problems with
-    // special characters in the path
-    let tmp_file = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
-    let link_path = PathBuf::from(&tmp_file.path());
-    tmp_file.close().map_err(|e| e.to_string())?;
-    std::os::unix::fs::symlink(file, &link_path).map_err(|e| e.to_string())?;
+    // Link to source file to a temporary file to avoid problems with
+    // special characters in the path with mediainfo
+    let uuid = uuid::Uuid::new_v4();
+    let file_dir = file.parent().ok_or("Failed to get parent directory")?;
+    let file_ext = file.extension().ok_or("Failed to get file extension")?
+        .to_str().ok_or("Failed to convert file extension to string")?;
+    let link_path = file_dir.join(format!("{}.{}", uuid, file_ext));
+
+    // (symlink wasn't reliable on Windows WSL, so we'll use hard link instead)
+    std::fs::hard_link(file, &link_path).map_err(|e| e.to_string())?;
 
     // Run mediainfo
     let cmd = &mut Command::new("mediainfo");
@@ -60,6 +64,8 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
                     serde_json::from_str(&json_res)
                 }.map_err(|e| format!("Error parsing mediainfo JSON: {:?}", e))
             } else {
+                tracing::error!("Mediainfo stdout: {}", String::from_utf8_lossy(&output.stdout));
+                tracing::error!("Mediainfo stderr: {}", String::from_utf8_lossy(&output.stderr));
                 Err( format!("Mediainfo exited with error: {}",
                     String::from_utf8_lossy(&output.stderr)))
             }
