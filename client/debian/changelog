@@ -1,10 +1,16 @@
-clapshot-client (0.5.1-1) bullseye; urgency=low
+clapshot-client (0.5.2) bullseye; urgency=low
+
+  * Feature: Replace HTTP upload button with a drop zone.
+
+ -- Jarno Elonen <elonen@iki.fi>  Sun, 12 Feb 2023 22:12:00 +0000
+
+clapshot-client (0.5.1) bullseye; urgency=low
 
   * New feature: thumbnails with scrub preview.
 
- -- Jarno Elonen <elonen@iki.fi>  Wed, 10 Feb 2023 16:24:00 +0000
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 10 Feb 2023 16:24:00 +0000
 
-clapshot-client (0.5.0-1) bullseye; urgency=low
+clapshot-client (0.5.0) bullseye; urgency=low
 
   * New feature: Support for HTTP uploading multiple videos at once.
   * New feature: Rename clips.
@@ -13,35 +19,35 @@ clapshot-client (0.5.0-1) bullseye; urgency=low
 
  -- Jarno Elonen <elonen@iki.fi>  Wed, 8 Feb 2023 22:59:00 +0000
 
-clapshot-client (0.4.1-1) bullseye; urgency=low
+clapshot-client (0.4.1) bullseye; urgency=low
 
   * New feature: show comment pins on timeline.
 
  -- Jarno Elonen <elonen@iki.fi>  Sun, 22 Jan 2023 19:47:00 +0000
 
-clapshot-client (0.4.0-1) bullseye; urgency=low
+clapshot-client (0.4.0) bullseye; urgency=low
 
   * New feature: collaborative review mode.
 
  -- Jarno Elonen <elonen@iki.fi>  Fri, 13 Jan 2023 23:22:00 +0000
 
-clapshot-client (0.3.1-1) bullseye; urgency=low
+clapshot-client (0.3.1) bullseye; urgency=low
 
   * Add video delete to GUI.
 
  -- Jarno Elonen <elonen@iki.fi>  Wed, 27 Nov 2022 21:48:00 +0000
 
-clapshot-client (0.3.0-1) bullseye; urgency=low
+clapshot-client (0.3.0) bullseye; urgency=low
 
   * Fixes for drawings and Rust server.
 
-clapshot-client (0.2.4-1) bullseye; urgency=low
+clapshot-client (0.2.4) bullseye; urgency=low
 
   * More robust UI layout.
 
  -- Jarno Elonen <elonen@iki.fi>  Wed, 5 Oct 2022 15:30:00 +0000
 
-clapshot-client (0.2.2-1) bullseye; urgency=low
+clapshot-client (0.2.2) bullseye; urgency=low
 
   * New (prerelease) upstream version
 
