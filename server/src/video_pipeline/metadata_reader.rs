@@ -35,11 +35,11 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
     // special characters in the path with mediainfo
     let uuid = uuid::Uuid::new_v4();
     let file_dir = file.parent().ok_or("Failed to get parent directory")?;
-    let file_ext = file.extension().ok_or("Failed to get file extension")?
-        .to_str().ok_or("Failed to convert file extension to string")?;
-    let link_path = file_dir.join(format!("{}.{}", uuid, file_ext));
+    let temp_dir = file_dir.join(uuid.to_string());
+    let link_path = temp_dir.join(format!("tempname"));
 
     // (symlink wasn't reliable on Windows WSL, so we'll use hard link instead)
+    std::fs::create_dir(&temp_dir).map_err(|e| e.to_string())?;
     std::fs::hard_link(file, &link_path).map_err(|e| e.to_string())?;
 
     // Run mediainfo
@@ -49,9 +49,13 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
     tracing::debug!("Exec: {:?}", cmd);
     let mediainfo_res = cmd.output();
 
-    // Remove temp symlink
+    // Remove temp hardlink
     if let Err(e) = std::fs::remove_file(&link_path) {
-        tracing::warn!("Failed to remove temporary file: {}", e);
+        tracing::error!("Failed to remove temporary link file: {}", e);
+    } else {
+        if let Err(e) = std::fs::remove_dir(&temp_dir) {
+            tracing::error!("Failed to remove temporary directory: {}", e);
+        }
     }
 
     match mediainfo_res
