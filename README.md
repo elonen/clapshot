@@ -1,5 +1,6 @@
 # Clapshot - self hosted video review tool
 
+[![Build and test](https://github.com/elonen/clapshot/actions/workflows/docker-test.yml/badge.svg)](https://github.com/elonen/clapshot/actions/workflows/docker-test.yml)
 [![Release](https://img.shields.io/github/v/release/elonen/clapshot?include_prereleases)]()
 
 ## Introduction
