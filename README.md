@@ -30,7 +30,7 @@ in page header to start it.
 To try out Clapshot using Docker, either run
 ```bash
 docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data \
-  elonen/clapshot:0.5.1-demo
+  elonen/clapshot:0.5.2-demo
 ```
 ...to download a demo image from Docker Hub, or clone the repo and run `make run-docker` to build it manually.
 
