@@ -73,6 +73,7 @@ pub fn run_forever(
                                     }
                                     Ok(owner) => {
                                         tracing::info!("Submitting for processing.");
+                                        submission_time.insert(path.clone(), std::time::Instant::now());
                                         if let Err(e) = incoming_sender.send(
                                                 super::IncomingFile {file_path: path.clone(), user_id: owner}) {
                                             tracing::error!(details=%e, "Failed to send incoming file to processing queue.");

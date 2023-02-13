@@ -39,6 +39,7 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
     let link_path = temp_dir.join(format!("tempname"));
 
     // (symlink wasn't reliable on Windows WSL, so we'll use hard link instead)
+    tracing::debug!("Creating temp hard link from {:?} to {:?}", file, link_path);
     std::fs::create_dir(&temp_dir).map_err(|e| e.to_string())?;
     std::fs::hard_link(file, &link_path).map_err(|e| e.to_string())?;
 
@@ -50,6 +51,7 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
     let mediainfo_res = cmd.output();
 
     // Remove temp hardlink
+    tracing::debug!("Removing temp hard link and directory ({:?})", link_path);
     if let Err(e) = std::fs::remove_file(&link_path) {
         tracing::error!("Failed to remove temporary link file: {}", e);
     } else {
