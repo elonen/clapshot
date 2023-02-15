@@ -79,15 +79,19 @@ mod integration_test
                 // Run server
                 let port = 10000 + (rand::random::<u16>() % 10000);
                 let url_base = format!("http://127.0.0.1:{}", port);
-                let ws_url = format!("{}/api/ws", url_base.replace("http", "ws"));
+                let ws_url = format!("{}/api/ws", &url_base.replace("http", "ws"));
                 let target_bitrate = $bitrate;
                 let th = {
                     let poll_interval = 0.1;
                     let data_dir = $data_dir.path().to_path_buf();
+                    let url_base = url_base.clone();
                     thread::spawn(move || {
                         crate::run_clapshot(data_dir, true, url_base, port, 4, target_bitrate, poll_interval, poll_interval*5.0).unwrap()
                     })};
                 thread::sleep(Duration::from_secs_f32(0.25));
+
+                let resp = reqwest::blocking::get(&format!("{}/api/health", &url_base)).unwrap();
+                assert_eq!(resp.status(), 200);
         
                 tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
                     // Connect client
@@ -99,7 +103,7 @@ mod integration_test
             }
         }
     }
-    
+
 
     #[test]
     #[traced_test]

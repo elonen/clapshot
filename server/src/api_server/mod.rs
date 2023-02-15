@@ -312,7 +312,7 @@ async fn run_api_server_async(
 
     tracing::info!(port=port, "Starting API server.");
 
-    let rt_hello = warp::path("hello").map(|| "Hello, World!");
+    let rt_health = warp::path("api").and(warp::path("health")).map(|| "I'm alive!");
 
     let upload_dir = server_state.upload_dir.clone();
     let rt_upload = warp::path("api").and(warp::path("upload"))
@@ -355,7 +355,7 @@ async fn run_api_server_async(
             })
         });
 
-    let routes = rt_hello.or(rt_api_ws).or(rt_upload).or(rt_videos);
+    let routes = rt_health.or(rt_api_ws).or(rt_upload).or(rt_videos);
 
     let routes = routes.with(warp::log("api_server"))
         .with(warp::cors()
