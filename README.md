@@ -92,6 +92,9 @@ an example Nginx config file (`/usr/share/doc/clapshot-server/examples/`) that
  3. serves uploaded video files from `videos/` directory, and
  4. contains examples on how to add HTTPS and authentication
 
+While the server uses mostly Websocket, there's a `/api/health` endpoint that can be used
+for monitoring. It returns 200 OK if the server is running.
+
 ## Database upgrades
 
 Some releases require database migrations. If you're upgrading from a previous version, **make a backup of your database** (`clapshot.sqlite`) and then either add line `migrate = true` to `/etc/clapshot-server.conf` (Debian package) or use `--migrate` option when running the server manually.
