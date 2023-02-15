@@ -67,12 +67,12 @@ See [/Dockerfile](Dockerfile),
 
 Authorization is also supposed to be handled on web server, at least for now.
 See for example https://github.com/elonen/ldap_authz_proxy on how to
-authorize users against Active Directory/LDAP using Nginx. I wrote it complement
-Nginx spnego authn, which uses Kerberos and thus doesn't have a concept of access groups.
-If you want to use Kerberos, you can also check out https://github.com/elonen/debian-nginx-spnego
-on how to build .deb packages for it.
+authorize users against Active Directory/LDAP groups using Nginx. I wrote it to complement
+Nginx spnego authn, which uses Kerberos and thus doesn't really have a concept of groups.
+If you want to use Kerberos, you may also want to check out https://github.com/elonen/debian-nginx-spnego
+for .deb packages.
 
-There's currently no demos for any of these more advanced auths (`vouch-proxy` example for Okta etc. would be especially welcome, if you want to contribute!), but I've done an Active Directory Kerberos+LDAP deployment, see .
+There are currently no demos for any of these more advanced auths (`vouch-proxy` example for Okta, Google etc. would be especially welcome, if you want to contribute!).
 
 ## Deployment in production
 
