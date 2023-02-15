@@ -1,3 +1,12 @@
+clapshot-client (0.5.3) bullseye; urgency=low
+
+  * Support for basic auth logout and custom user menu items.
+  * Docker demo with basic auth and 'htadmin'
+  * Add /api/health endpoint for health checks
+  * Bugfix: don't spam server log about WS disconnects
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 15 Feb 2023 22:30:00 +0000
+
 clapshot-client (0.5.2) bullseye; urgency=low
 
   * Feature: Replace HTTP upload button with a drop zone.
