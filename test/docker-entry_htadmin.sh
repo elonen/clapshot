@@ -6,15 +6,17 @@
 DIR="/mnt/clapshot-data/data"
 URL_BASE="127.0.0.1:8080/"
 
-# Serve client with Nginx
-rm -f /etc/nginx/sites-enabled/*
-cp /usr/share/doc/clapshot-client/examples/clapshot.nginx.conf  /etc/nginx/sites-enabled/clapshot
-
 # Use same URL base as index.html for API server (as Nginx proxies localhost:8095/api to /api)
-echo "{\"ws_url\": \"ws://${URL_BASE}api/ws\", \"upload_url\": \"http://${URL_BASE}api/upload\"}" > /etc/clapshot_client.conf
-
-# Force web user's name to 'docker' (the user we made matche local user's UID here)
-sed -i "s/[$]remote_user/docker/g" /etc/nginx/sites-enabled/clapshot
+cat > /etc/clapshot_client.conf << EOF
+{
+  "ws_url": "ws://${URL_BASE}api/ws",
+  "upload_url": "http://${URL_BASE}api/upload",
+    "user_menu_extra_items": [
+        { "label": "My Videos", "type": "url", "data": "/" }
+    ],
+  "user_menu_show_basic_auth_logout": true
+}
+EOF
 
 # Assume user accesses this at $URL_BASE
 sed -i "s/^url-base.*/url-base = http://${URL_BASE}/g" /etc/clapshot-server.conf
@@ -28,6 +30,7 @@ ln -s "$DIR/clapshot.log" /var/log/
 
 # Start nginx (in the background)
 nginx
+php-fpm7.4
 
 # Disable log buffering for better docker experience
 export ENV PYTHONDONTWRITEBYTECODE=1
@@ -52,8 +55,17 @@ echo <<- "EOF"
                   | |
                   |_|
 
----  Browse http://127.0.0.1:8080  ---
-==============================================
+---  Browse http://127.0.0.1:8080/         for Clapshot
+---  or     http://127.0.0.1/8080/htadmin  for user management
+---
+---  Default users:
+---   - admin:admin     (can edit other people's videos)
+---   - demo:demo
+---   - alice:alice123
+---
+---  User management admin:
+---   - htadmin:admin   (only for /htadmin)
+==============================================================
 EOF
 
 # Dig up start command from systemd script and run it as docker user instead of www-data

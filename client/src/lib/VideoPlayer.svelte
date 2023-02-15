@@ -117,7 +117,7 @@
         this._canvas = document.createElement('canvas');
         this._canvas.width = video_elem.videoWidth;
         this._canvas.height = video_elem.videoHeight;
-        this._canvas.classList.add("absolute", "max-h-full", "max-w-full", "z-[1000]");
+        this._canvas.classList.add("absolute", "max-h-full", "max-w-full", "z-[100]");
         this._canvas.style.cssText = 'outline: 5px solid red; outline-offset: -5px; cursor:crosshair; left: 50%; top: 50%; transform: translate(-50%, -50%);';
 
         // add mouse up listener to the canvas

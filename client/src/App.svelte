@@ -9,7 +9,7 @@
   import {Notifications, acts} from '@tadashi/svelte-notification'
   import VideoListPopup from './lib/VideoListPopup.svelte';
 
-  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id} from './stores.js';
+  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
 
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
@@ -99,10 +99,9 @@
   function closeVideo() {
     // Close current video, list all user's own videos.
     // This is called from onClearAll event and history.back()
+    console.log("closeVideo");
     ws_emit('leave_collab', {});
-    $collab_id = null;
-   
-    console.log("Clear all");
+    $collab_id = null;   
     $video_hash = null;
     $video_url = null;
     $video_fps = null;
@@ -151,7 +150,7 @@
   function popHistoryState(e) {
     console.log("popHistoryState: " + e.state);
     if (e.state && e.state !== '/')
-    ws_emit('open_video', {video_hash: e.state});
+      ws_emit('open_video', {video_hash: e.state});
     else
       closeVideo();
   }
@@ -191,7 +190,15 @@
   fetch(conf_file)
       .then(handleErrors)
       .then(response => response.json())
-      .then(json => { upload_url = json.upload_url; connect_websocket(json.ws_url); })
+      .then(json => {
+        upload_url = json.upload_url;
+        connect_websocket(json.ws_url);
+
+        $user_menu_items = json.user_menu_extra_items;
+        if (json.user_menu_show_basic_auth_logout) {
+          $user_menu_items = [...$user_menu_items, {label: "Logout", type: "logout-basic-auth"}];
+        }
+      })
       .catch(error => {
           console.log("Failed to read config. " + error)
           acts.add({mode: 'danger', message: "Failed to read config. " + error, lifetime: 50});
@@ -216,6 +223,14 @@
 
   function is_connected() {
     return ws_socket && ws_socket.readyState == ws_socket.OPEN;
+  }
+
+  function disconnect() {
+    closeVideo();
+    if (ws_socket) {
+      ws_socket.close();
+    }
+    ui_connected_state = false;
   }
 
 
@@ -543,7 +558,7 @@ function removeThumbScrubber(e: MouseEvent, item: object)
 <svelte:window on:popstate={popHistoryState}/>
 <main>
 <div class="flex flex-col w-screen h-screen {debug_layout?'border-2 border-yellow-300':''}">
-    <div class="flex-none w-full"><NavBar on:clear-all={onClearAll} /></div>
+    <div class="flex-none w-full"><NavBar on:clear-all={onClearAll} on:basic-auth-logout={disconnect} /></div>
     <div class="flex-grow w-full overflow-auto {debug_layout?'border-2 border-cyan-300':''}">
         <Notifications />
 

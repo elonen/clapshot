@@ -18,3 +18,5 @@ export let all_comments = writable([]);
 export let user_messages = writable([]);
 
 export let collab_id = writable(null);
+
+export let user_menu_items = writable([]);
