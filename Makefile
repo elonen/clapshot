@@ -13,7 +13,7 @@ clean-debian:
 
 debian-docker:
 	(cd client; make debian-docker)
-	(cd server; make debian-docker)
+	(cd server; make dist_deb/built.target)
 	mkdir -p dist_deb
 	cp client/dist_deb/* dist_deb/
 	cp server/dist_deb/* dist_deb/
@@ -41,6 +41,12 @@ run-docker: debian-docker
 
 build-docker-demo: debian-docker
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
-	$(eval PVER="$(shell jq -r '.version' client/package.json)")
+	$(eval PVER=$(shell jq -r '.version' client/package.json))
 	docker build -t clapshot:${PVER}-demo --build-arg UID=1002 --build-arg GID=1002 .
 	docker build -t clapshot:${PVER}-demo-htadmin --build-arg UID=1002 --build-arg GID=1002 . --build-arg auth_variation=htadmin
+	docker tag clapshot:${PVER}-demo clapshot:latest-demo
+	docker tag clapshot:${PVER}-demo-htadmin clapshot:latest-demo-htadmin
+	docker tag clapshot:${PVER}-demo elonen/clapshot:${PVER}-demo
+	docker tag clapshot:latest-demo elonen/clapshot:latest-demo
+	docker tag clapshot:${PVER}-demo-htadmin elonen/clapshot:${PVER}-demo-htadmin
+	docker tag clapshot:latest-demo-htadmin elonen/clapshot:latest-demo-htadmin

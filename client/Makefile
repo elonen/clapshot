@@ -46,7 +46,7 @@ debian-docker: docker-for-deb
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
 	rm -rf dist_deb
 	mkdir -p dist_deb
-	$(eval PVER="$(shell jq -r '.version' package.json)")
+	$(eval PVER=$(shell jq -r '.version' package.json))
 	test -n ${PVER}
 	$(eval PKGDIR=${PACKAGE}-${PVER})
 	$(eval CMD="mkdir -p /deb/ && cp -a /build /deb/${PKGDIR} && cd /deb/${PKGDIR} && make debian-local && rm -rf /deb/${PKGDIR} && chown -R ${UID}:${GID} /deb")
