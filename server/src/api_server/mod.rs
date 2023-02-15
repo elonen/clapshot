@@ -206,7 +206,7 @@ async fn handle_ws_session(
             Some(msg) = ws_rx.next() => {
                 match msg {
                     Err(e) => {
-                        tracing::error!(details=%e, "Error receiving message - closing session.");
+                        tracing::debug!(details=%e, "Error receiving message - closing session.");
                         break;
                     },
                     Ok(msg) => {
