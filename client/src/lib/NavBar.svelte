@@ -86,7 +86,7 @@ import logo from "../assets/clapshot-logo.svg";
       </span>
 
       <!-- floating user menu, hidden by default -->
-      {#if $user_menu_items.length > 0 }
+      {#if $user_menu_items != undefined && $user_menu_items.length > 0 }
         <div id="user-menu" class="absolute right-0 w-48 mt-2 origin-top-right z-[200] bg-white border border-gray-200 divide-y divide-gray-100 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none hidden">
           <div class="py-1">
             {#each $user_menu_items as item}

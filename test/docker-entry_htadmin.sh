@@ -7,6 +7,7 @@ DIR="/mnt/clapshot-data/data"
 URL_BASE="127.0.0.1:8080/"
 
 # Use same URL base as index.html for API server (as Nginx proxies localhost:8095/api to /api)
+# - Also enable basic auth logout button
 cat > /etc/clapshot_client.conf << EOF
 {
   "ws_url": "ws://${URL_BASE}api/ws",

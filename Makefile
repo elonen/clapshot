@@ -43,3 +43,4 @@ build-docker-demo: debian-docker
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
 	$(eval PVER="$(shell jq -r '.version' client/package.json)")
 	docker build -t clapshot:${PVER}-demo --build-arg UID=1002 --build-arg GID=1002 .
+	docker build -t clapshot:${PVER}-demo-htadmin --build-arg UID=1002 --build-arg GID=1002 . --build-arg auth_variation=htadmin

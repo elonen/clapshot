@@ -191,6 +191,13 @@
       .then(handleErrors)
       .then(response => response.json())
       .then(json => {
+        // Check that we have all the expected config lines
+        const expected = ["ws_url", "upload_url", "user_menu_extra_items", "user_menu_show_basic_auth_logout"];
+        for (let key of expected) {
+          if (!(key in json))
+            throw Error("Missing key '" + key + "' in client config file '" + conf_file + "'");
+        }
+
         upload_url = json.upload_url;
         connect_websocket(json.ws_url);
 
