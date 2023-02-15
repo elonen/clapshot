@@ -1,4 +1,4 @@
-.PHONY: deps clean test docker test run docs default
+.PHONY: deps clean test docker test run run-local run-docker docs default debian-local
 
 PACKAGE_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
 
@@ -14,9 +14,11 @@ default: ${SERVER_CMD}
 ${DEV_DATADIR}:
 	mkdir -p "$@"
 
-${SERVER_CMD}: $(shell find src/ -type f)
-	cargo build --release
+RUST_DEPS=$(shell find src/ migrations/ Cargo.toml diesel.toml -type f)
+DEB_DEPS=$(shell find debian/ README* LICENSE*  -type f)
 
+${SERVER_CMD}: ${RUST_DEPS}
+	cargo build --release
 
 clean:
 	cargo clean
@@ -34,15 +36,19 @@ docker: ${DEV_DATADIR}
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
 
 
-debian-local:
+debian-local: dist_deb/built.target
+
+dist_deb/built.target: ${SERVER_CMD} ${DEB_DEPS}
 	cargo install cargo-deb
 	cargo deb
+	mkdir -p dist_deb
+	cp target/debian/* dist_deb/
+	touch $@
 
-debian-docker: test-docker ${ENV}
-	rm -rf dist_deb
+debian-docker:  ${RUST_DEPS} ${DEB_DEPS} ${ENV} docker
 	mkdir -p dist_deb
 	$(eval PKGDIR=${PACKAGE}-${PVER})
-	$(eval CMD="mkdir -p /deb/ && cd /app && make debian-local && cp target/debian/* /deb/ && chown -R ${UID}:${GID} /deb")
+	$(eval CMD="cd /app && cp -r --preserve=mode,ownership,timestamps /deb ./dist_deb && ls -l ./dist_deb && make debian-local && cp dist_deb/* /deb/ && chown -R ${UID}:${GID} /deb")
 	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:latest  bash -c ${CMD}
 
 
@@ -50,7 +56,7 @@ test-local:
 	cargo test
 
 test-docker: docker
-	docker run --rm ${PACKAGE}:latest  cargo test --release
+	docker run --rm ${PACKAGE}:latest  cargo test
 
 test:
 	@echo "Please run either 'test-docker' or 'test-local'"

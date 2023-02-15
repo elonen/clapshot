@@ -1,6 +1,7 @@
 **/dist_deb
 **/target
-**/DEV_DATADIR
+**/DEV_DATADIR*
+Cargo.lock
 
 **/__pycache__
 **/.venv

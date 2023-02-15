@@ -76,18 +76,17 @@ RUN cargo install cargo-deb
 
 
 
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare  --recipe-path recipe.json
+#FROM chef AS planner
+#COPY Cargo.toml .
+#RUN cargo chef prepare  --recipe-path recipe.json
 
 
 
 FROM chef AS builder
 
 # Build deps (for Docker layering)
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
-RUN rm -f target/release/clapshot-server
+#COPY --from=planner /app/recipe.json recipe.json
+#RUN cargo chef cook --release --recipe-path recipe.json
 
 # Copy sources & build
 COPY . .
