@@ -73,7 +73,7 @@ bytes = "1.4.0"
 futures-util = { version = "0.3.26" }
 futures = "0.3.26"
 mime = "0.3.16"
-uuid = {version = "1.3.0", features=["v4"] }
+uuid = { version = "1.3.0", features=["v4"] }
 file-owner = "0.1.1"
 unix-named-pipe = "0.2.0"
 num_cpus = "1.15.0"
@@ -84,6 +84,7 @@ anyhow = "1.0.69"
 tracing-appender = "0.2.2"
 timeago = "0.4.1"
 tempfile = "3.3.0"
+cpython = { version="0.7.1", features=["python3-sys", "serde-convert"] }
 
 [dev-dependencies]
 assert_fs = "1.0.10"
