@@ -36,7 +36,6 @@ fn to_db_res<U>(res: QueryResult<U>) -> DBResult<U> {
     }
 }
 
-
 pub struct DB {
     pool: Pool,
     broken_for_test: AtomicBool,

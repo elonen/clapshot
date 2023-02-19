@@ -34,6 +34,7 @@ pub mod tests;
 mod file_upload;
 use file_upload::handle_multipart_upload;
 
+use crate::database::models::ToJson;
 use crate::database::{models, DB};
 use crate::video_pipeline::IncomingFile;
 

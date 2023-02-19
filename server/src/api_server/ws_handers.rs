@@ -22,6 +22,7 @@ use super::WsSessionArgs;
 
 use crate::api_server::server_state::ServerState;
 use crate::database::error::DBError;
+use crate::database::models::ToJson;
 use crate::database::{models, DB};
 use crate::database::schema::comments::drawing;
 
