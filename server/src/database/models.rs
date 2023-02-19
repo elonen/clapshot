@@ -19,13 +19,14 @@ pub struct Video {
     pub added_time: chrono::NaiveDateTime,
 
     pub recompression_done: Option<String>,
-    pub thumb_sheet_dims: Option<String>,
     pub orig_filename: Option<String>,
-    pub title: Option<String>,
     pub total_frames: Option<i32>,
     pub duration: Option<f32>,
     pub fps: Option<String>,
     pub raw_metadata_all: Option<String>,
+
+    pub title: Option<String>,
+    pub thumb_sheet_dims: Option<String>,   // e.g. "10x10"
 }
 
 #[derive(Serialize, Deserialize, Debug, Insertable)]
@@ -35,13 +36,13 @@ pub struct VideoInsert {
     pub added_by_userid: Option<String>,
     pub added_by_username: Option<String>,
     pub recompression_done: Option<String>,
-    pub thumb_sheet_dims: Option<String>,
     pub orig_filename: Option<String>,
-    pub title: Option<String>,
     pub total_frames: Option<i32>,
     pub duration: Option<f32>,
     pub fps: Option<String>,
     pub raw_metadata_all: Option<String>,
+    pub title: Option<String>,
+    pub thumb_sheet_dims: Option<String>,
 }
 
 // -------------------------------------------------------
@@ -109,6 +110,26 @@ pub struct MessageInsert {
     pub details: String,
 }
 
+// -------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId)]
+pub struct Prop {
+    pub id: i32,
+    pub obj: Option<String>,
+    pub key: String,
+    pub val: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Insertable)]
+#[diesel(table_name = props)]
+pub struct PropInsert {
+    pub obj: Option<String>,
+    pub key: String,
+    pub val: String,
+}
+
+// -------------------------------------------------------
+
 pub fn humanize_utc_timestamp(timestamp: &chrono::NaiveDateTime) -> String {
     let added_time: chrono::DateTime<chrono::Utc> = chrono::Utc.from_utc_datetime(timestamp);
     let time_ago_str = timeago::Formatter::new().convert_chrono(added_time, chrono::Local::now());
@@ -138,5 +159,7 @@ impl Message { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Er
         v
     })
 }}
-
 impl MessageInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
+
+impl Prop { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
+impl PropInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
