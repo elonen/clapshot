@@ -77,7 +77,7 @@
 {/if}
 
 
-<span on:click|stopPropagation={onButtonClick} on:keypress|stopPropagation={onKeyPress} class="text-gray-400 hover:text-white float-right">...</span>
+<span on:click|stopPropagation={onButtonClick} on:keypress|stopPropagation={onKeyPress} class="text-gray-400 hover:text-white right:0">...</span>
 <svelte:window on:click={onPageClick} />
 
 

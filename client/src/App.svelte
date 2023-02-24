@@ -564,7 +564,7 @@ function removeThumbScrubber(e: MouseEvent, item: object)
 
 <svelte:window on:popstate={popHistoryState}/>
 <main>
-<div class="flex flex-col w-screen h-screen {debug_layout?'border-2 border-yellow-300':''}">
+<div class="flex flex-col bg-[#101016] w-screen h-screen {debug_layout?'border-2 border-yellow-300':''}">
     <div class="flex-none w-full"><NavBar on:clear-all={onClearAll} on:basic-auth-logout={disconnect} /></div>
     <div class="flex-grow w-full overflow-auto {debug_layout?'border-2 border-cyan-300':''}">
         <Notifications />
@@ -627,7 +627,7 @@ function removeThumbScrubber(e: MouseEvent, item: object)
         {:else}
 
           <!-- ========== video listing ============= -->        
-          <div class="m-6 text">            
+          <div class="m-6 text">
             <h1 class="text-4xl m-6">
               {#if $all_my_videos.length>0}
                 All your videos
@@ -636,16 +636,21 @@ function removeThumbScrubber(e: MouseEvent, item: object)
               {/if}
             </h1>
             <div class="gap-8">
+
+
               {#each $all_my_videos as item}
-              <div class="bg-slate-600 w-80 h-20 rounded-md p-2 m-1 mx-6 overflow-clip inline-block cursor-pointer"
-                  on:click|preventDefault={ () => onClickVideo(item.video_hash) }
+              <div class="bg-slate-600 video-list-item w-40 h-30 relative rounded-md p-2 m-2 mx-2 overflow-clip inline-block cursor-pointer"
+                  tabindex="0"
+                  role="button"
+                  on:dblclick|preventDefault={ () => onClickVideo(item.video_hash) }
                   on:keypress={(e) => { if (e.key === 'Enter') { onClickVideo(item.video_hash) }}}
                   >
 
                 {#if item.thumb_url}
                   <!-- hover mouse to scrub thumb sheet -->
-                  <div class="w-[7.111rem] h-[4rem] float-left mr-2 bg-gray-900 rounded-md overflow-hidden"
+                  <div class="w-full aspect-video mx-auto rounded-md overflow-hidden"
                     style="background-image: url('{item.thumb_url}'); background-size: cover; background-position: 0 0;"
+                    on:blur={()=>{}}
                     on:focus={()=>{}}
                     on:mouseover={(e) => installThumbScrubber(e, item)}
                     on:mouseout={(e) => removeThumbScrubber(e, item)}
@@ -653,12 +658,20 @@ function removeThumbScrubber(e: MouseEvent, item: object)
                   </div>
                 {/if}
 
-                <span class="text-amber-400 text-xs pr-2 border-r border-gray-400">{item.added_time}</span>
-                <span class="text-amber-500 font-mono text-xs pr-2">{item.video_hash}</span>
-                <VideoListPopup
-                  onDel={() => { onClickDeleteVideo(item.video_hash, item.title) }}
-                  onRename={() => { onClickRenameVideo(item.video_hash, item.title) }} />
-                <div class="leading-none"><a href="/?vid={item.video_hash}" title="{item.title}" class="break-all text-xs">{item.title}</a></div>
+                <div>
+                  <div class="w-full flex whitespace-nowrap overflow-hidden text-xs my-1">
+                    <span class="text-amber-400 text-xs">{item.added_time}</span>
+                    <span class="mx-1 text-neutral-400"> | </span>
+                    <span class="text-amber-500 font-mono text-xs">{item.video_hash}</span>
+                    <span class="flex-1 text-right">
+                      <VideoListPopup
+                        onDel={() => { onClickDeleteVideo(item.video_hash, item.title) }}
+                        onRename={() => { onClickRenameVideo(item.video_hash, item.title) }} />
+                      </span>
+                  </div>
+                  <div class="w-full leading-none whitespace-nowrap overflow-hidden overflow-ellipsis text-xs"><span title="{item.title}">{item.title}</span></div>
+                </div>
+
               </div>
               {/each} 
             </div> 
@@ -699,6 +712,10 @@ function removeThumbScrubber(e: MouseEvent, item: object)
     } to { 
         transform: rotate(360deg); 
     }
+}
+
+.video-list-item {
+  box-shadow: inset 0px -12px 25px 5px rgba(0, 0, 0, 0.4);
 }
 
 /*
