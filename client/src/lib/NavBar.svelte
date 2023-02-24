@@ -2,6 +2,8 @@
 import { createEventDispatcher } from 'svelte';
 import Avatar from './Avatar.svelte';
 import { cur_username, cur_user_pic, video_title, video_hash, video_progress_msg, collab_id, user_menu_items } from "../stores.js";
+import { all_popup_hide_funcs } from '../stores.js';
+
 import logo from "../assets/clapshot-logo.svg";
 
   const dispatch = createEventDispatcher();
@@ -12,9 +14,21 @@ import logo from "../assets/clapshot-logo.svg";
   function onClickUser() {
     if (!user_menu_items) return;
     const user_menu = document.getElementById("user-menu");
-    user_menu.classList.toggle("hidden");
+    if (user_menu.classList.contains("hidden")) {
+      $all_popup_hide_funcs.forEach((func) => { func(); }); // hide all popups first
+      user_menu.classList.remove("hidden");
+    } else {
+      user_menu.classList.add("hidden");
+    }
   }
 
+  function hideMenu() {
+    const user_menu = document.getElementById("user-menu");
+    user_menu.classList.add("hidden");
+  }
+  $all_popup_hide_funcs.push(hideMenu);
+
+  
   function logoutBasicAuth(urlFor401, redirUrl) {
     // Try to log out of basic auth by making a request to /logout and expect 401.
     // This is a bit tricky, as HTTP basic auth wasn't really designed for logout.
@@ -78,9 +92,9 @@ import logo from "../assets/clapshot-logo.svg";
     <div class="flex-0" style="visibility: {$cur_username ? 'visible': 'hidden'}">
       <span class="flex w-auto items-center">
         <h6 class="flex-1 mx-4 text-gray-500 font-semibold">{$cur_username}</h6>
-        <button class="flex-0 ring-4 ring-slate-800 text-sm rounded-full" on:click|preventDefault={onClickUser}>
+        <button id="user-button" class="flex-0 ring-4 ring-slate-800 text-sm rounded-full" on:click|preventDefault={onClickUser}>
           {#if $cur_user_pic || $cur_username}
-          <div id="user-button" class="w-10 block"><Avatar userFullName={$cur_username} src={$cur_user_pic} /></div>
+          <div class="w-10 block"><Avatar userFullName={$cur_username} src={$cur_user_pic} /></div>
           {/if}
         </button>
       </span>
@@ -106,6 +120,7 @@ import logo from "../assets/clapshot-logo.svg";
 
   </div>
 </nav>
+
 
 <style>
   @import url("https://fonts.googleapis.com/css2?family=Roboto+Condensed&family=Yanone+Kaffeesatz&display=swap");

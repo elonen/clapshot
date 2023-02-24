@@ -6,8 +6,8 @@
   import CommentInput from './lib/CommentInput.svelte';
   import UserMessage from './lib/UserMessage.svelte';
   import FileUpload from './lib/FileUpload.svelte';
+  import VideoListVideoTile from "./lib/video_list/VideoListVideoTile.svelte";
   import {Notifications, acts} from '@tadashi/svelte-notification'
-  import VideoListPopup from './lib/VideoListPopup.svelte';
 
   import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
 
@@ -117,7 +117,8 @@
     closeVideo();
   }
 
-  function onClickVideo(new_video_hash) {
+  function onRequestOpenVideo(e) {
+    let new_video_hash = e.detail.video_hash;
     ws_emit('open_video', {video_hash: new_video_hash});
     history.pushState(new_video_hash, null, '/?vid='+new_video_hash);  // Point URL to video
   }
@@ -476,90 +477,45 @@
 
   }
 
-  function onClickDeleteVideo(video_hash: string, video_name: string) {
-    log_abbreviated("onClickDeleteVideo: " + video_hash + " / " + video_name);
-    if (confirm("Are you sure you want to delete '" + video_name + "'?")) {
-      ws_emit('del_video', {video_hash: video_hash});
-
+  function onRequestVideoDelete(e) {
+    log_abbreviated("onRequestVideoDelete: " + e.detail.video_hash + " / " + e.detail.video_name);
+    if (confirm("Are you sure you want to delete '" + e.detail.video_name + "'?")) {
+      ws_emit('del_video', {video_hash: e.detail.video_hash});
       // After 2 seconds, refresh the list of videos
       function refresh_my_videos() { ws_emit('list_my_videos', {}); }
       setTimeout(refresh_my_videos, 2000);
     }
   }
 
-  function onClickRenameVideo(video_hash: string, video_name: string) {
-    log_abbreviated("onClickRenameVideo: " + video_hash + " / " + video_name);
-    let new_name = prompt("Rename video to:", video_name);
+  function onRequestVideoRename(e) {
+    log_abbreviated("onRequestVideoRename: " + e.detail.video_hash + " / " + e.detail.video_name);
+    let new_name = prompt("Rename video to:", e.detail.video_name);
     if (new_name) {
-      ws_emit('rename_video', {video_hash: video_hash, new_name: new_name});
+      ws_emit('rename_video', {video_hash: e.detail.video_hash, new_name: new_name});
       ws_emit('list_my_videos', {});
     }
   }
 
-function installThumbScrubber(e: MouseEvent, item: object)
-{
-  let sheet_cols = item.thumb_sheet_cols;
-  let sheet_rows = item.thumb_sheet_rows;
-  let bgImg =  new Image();
-  
-  bgImg.onload = (le) => {
-    // Total size of sprite sheet in pixels
-    let sheet_w_px = le.target.naturalWidth;
-    let sheet_h_px = le.target.naturalHeight;
 
-    // Size of one frame in pixels
-    let frame_width = sheet_w_px / sheet_cols;
-    let frame_height = sheet_h_px / sheet_rows;
+  let hoveringOverBasket = null;
 
-    // Size of current div (that shows the sprite sheet) in pixels
-    let div_w_px = e.target.clientWidth;
-    let div_h_px = e.target.clientHeight;
+  function dropToBasket(event, basketIndex) {
+		event.preventDefault();
+    const json = event.dataTransfer.getData("text/plain");
+		const data = JSON.parse(json);
+		
+    console.log("dropToBasket: " + basketIndex + " / " + JSON.stringify(data));
 
-    // Switch background image to the now loaded sprite sheet
-    e.target.style.backgroundRepeat = 'no-repeat';
-    e.target.style.backgroundImage = 'url(' + bgImg.src + ')';
-
-    // Scale the sprite sheet so one frame fits in the div
-    let scaled_bgr_w = (div_w_px / frame_width) * sheet_w_px;
-    let scaled_bgr_h = (div_h_px / frame_height) * sheet_h_px;
-    e.target.style.backgroundSize = scaled_bgr_w + 'px ' + scaled_bgr_h + 'px';
-
-    function show_frame(frame_idx) {
-      let frame_xi = frame_idx % sheet_cols;
-      let frame_yi = Math.floor(frame_idx / sheet_cols);
-
-      let frame_left = scaled_bgr_w * (frame_xi / sheet_cols);
-      let frame_top = scaled_bgr_h * (frame_yi / sheet_rows);
-
-      e.target.style.backgroundPosition = '-' + frame_left + 'px -' + frame_top + 'px';
-    }
-
-    // Show first frame at first
-    show_frame(0);
-
-    // Scrub sheet on mouse move
-    e.target.onmousemove = (e) => {
-      let frame_idx = Math.floor((e.offsetX / e.target.clientWidth) * (sheet_cols * sheet_rows));
-      show_frame(frame_idx);
-    }
-  };
-
-  // Start loading the sprite sheet
-  bgImg.src = item.thumb_sheet_url;
-}
-
-function removeThumbScrubber(e: MouseEvent, item: object)
-{
-  // Restore original background image (item.thumb_url)
-  e.target.onmousemove = null;
-  e.target.onload = null;
-  e.target.style.backgroundImage = 'url(' + item.thumb_url + ')';
-  e.target.style.backgroundPosition = '0 0';
-  e.target.style.backgroundSize = '100% 100%';
-}
-
-
-
+		// Remove the item from one basket.
+		// Splice returns an array of the deleted elements, just one in this case.
+//	const [item] = baskets[data.basketIndex].items.splice(data.itemIndex, 1);
+		
+    // Add the item to the drop target basket.
+//		baskets[basketIndex].items.push(item);
+//		baskets = baskets;
+		
+		hoveringOverBasket = null;
+	}
 </script>
 
 <svelte:window on:popstate={popHistoryState}/>
@@ -637,44 +593,35 @@ function removeThumbScrubber(e: MouseEvent, item: object)
             </h1>
             <div class="gap-8">
 
-
+              <div class="video-folder"
+                class:hovering={hoveringOverBasket === "folder1"}
+                on:dragenter={() => hoveringOverBasket = "folder1"}
+                on:dragleave={() => hoveringOverBasket = null}
+                on:drop={e => dropToBasket(e, 1)}
+                on:dragover={()=>{return false}}
+              >
+              <h4>Folder 1</h4>
               {#each $all_my_videos as item}
-              <div class="bg-slate-600 video-list-item w-40 h-30 relative rounded-md p-2 m-2 mx-2 overflow-clip inline-block cursor-pointer"
-                  tabindex="0"
-                  role="button"
-                  on:dblclick|preventDefault={ () => onClickVideo(item.video_hash) }
-                  on:keypress={(e) => { if (e.key === 'Enter') { onClickVideo(item.video_hash) }}}
-                  >
-
-                {#if item.thumb_url}
-                  <!-- hover mouse to scrub thumb sheet -->
-                  <div class="w-full aspect-video mx-auto rounded-md overflow-hidden"
-                    style="background-image: url('{item.thumb_url}'); background-size: cover; background-position: 0 0;"
-                    on:blur={()=>{}}
-                    on:focus={()=>{}}
-                    on:mouseover={(e) => installThumbScrubber(e, item)}
-                    on:mouseout={(e) => removeThumbScrubber(e, item)}
-                  >
-                  </div>
-                {/if}
-
-                <div>
-                  <div class="w-full flex whitespace-nowrap overflow-hidden text-xs my-1">
-                    <span class="text-amber-400 text-xs">{item.added_time}</span>
-                    <span class="mx-1 text-neutral-400"> | </span>
-                    <span class="text-amber-500 font-mono text-xs">{item.video_hash}</span>
-                    <span class="flex-1 text-right">
-                      <VideoListPopup
-                        onDel={() => { onClickDeleteVideo(item.video_hash, item.title) }}
-                        onRename={() => { onClickRenameVideo(item.video_hash, item.title) }} />
-                      </span>
-                  </div>
-                  <div class="w-full leading-none whitespace-nowrap overflow-hidden overflow-ellipsis text-xs"><span title="{item.title}">{item.title}</span></div>
-                </div>
-
+                <VideoListVideoTile
+                  {item}
+                  on:open-video={onRequestOpenVideo}
+                  on:delete-video={onRequestVideoDelete}
+                  on:rename-video={onRequestVideoRename}
+                  />
+              {/each}
               </div>
-              {/each} 
-            </div> 
+
+              <div class="video-folder"
+              class:hovering={hoveringOverBasket === "folder2"}
+                on:dragenter={() => hoveringOverBasket = "folder2"}
+                on:dragleave={() => hoveringOverBasket = null}
+                on:drop={e => dropToBasket(e, 2)}
+                on:dragover={()=>{return false}}
+              >
+              <h4>Folder 2</h4>
+              </div>
+
+            </div>
 
             {#if upload_url }
             <div class="m-6">
@@ -714,10 +661,6 @@ function removeThumbScrubber(e: MouseEvent, item: object)
     }
 }
 
-.video-list-item {
-  box-shadow: inset 0px -12px 25px 5px rgba(0, 0, 0, 0.4);
-}
-
 /*
 ::-webkit-scrollbar {
     display: none;
@@ -727,6 +670,13 @@ body {
     scrollbar-width: none;
 }
 */
+
+.video-folder {
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 4px;
+  margin: 4px;
+}
 
 </style>
 

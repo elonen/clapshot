@@ -1,39 +1,31 @@
 <script lang="ts">
+    import { all_popup_hide_funcs } from '../../stores.js';
+
     export let onRename: Function = null;
-    export let onDel: Function = null;
+    export let onDelete: Function = null;
 
     let pos = { x: 0, y: 0 }
-    let menu = { w: 0, h: 0 }
-    let browser = { w:0, h: 0 }
     let showMenu = false;
 
-    function toggleVisibility(e) {
-        showMenu = true
-        if (showMenu) {
-            browser = { w: window.innerWidth, h: window.innerHeight };
-            pos = { x: e.clientX, y: e.clientY };
-            if (browser.h -  pos.y < menu.h)
-                pos.y = pos.y - menu.h
-            if (browser.w -  pos.x < menu.w)
-                pos.x = pos.x - menu.w
-        }
-    }
-    function getContextMenuDimension(node) {
-        let height = node.offsetHeight
-        let width = node.offsetWidth
-        menu = { h: height, w: width }
+    export function show(e) {
+        $all_popup_hide_funcs.forEach((func) => { func(); });
+        showMenu = true;
+        pos = { x: e.clientX, y: e.clientY };
+        pos.y -= 16; // Offset a bit to make it look better
     }
 
+    export function hide() {
+        showMenu = false
+    }
+    $all_popup_hide_funcs.push(hide);
+    
     function onButtonClick(e) {
-        toggleVisibility(e)
+        show(e)
     }
     function onKeyPress(e) {
         if (e.key === 'Enter') {
-            toggleVisibility(e)
+            show(e)
         }
-    }
-    function onPageClick(e) {
-        showMenu = false;
     }
 
     let menuItems = [
@@ -50,18 +42,19 @@
         {
             'name': 'trash',
             'handler': () => {
-                onDel();
+                onDelete();
                 showMenu = false;
             },
             'displayText': "Delete",
             'class': 'fa-solid fa-trash-can'
         },
-    ]
+    ];
+
 </script>
 
 
 {#if showMenu}
-<nav use:getContextMenuDimension style="position: absolute; top:{pos.y}px; left:{pos.x}px">
+<nav class="any-popup-menu" style="position: absolute; z-index: 30; top:{pos.y}px; left:{pos.x}px">
     <div class="navbar" id="navbar">
         <ul>
             {#each menuItems as item}
@@ -76,9 +69,7 @@
 </nav>
 {/if}
 
-
-<span on:click|stopPropagation={onButtonClick} on:keypress|stopPropagation={onKeyPress} class="text-gray-400 hover:text-white right:0">...</span>
-<svelte:window on:click={onPageClick} />
+<svelte:window on:click={hide} />
 
 
 <style>
