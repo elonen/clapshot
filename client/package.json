@@ -13,20 +13,20 @@
     "@fortawesome/fontawesome-free": "^6.2.0",
     "@picmo/popup-picker": "^5.7.2",
     "@picmo/renderer-twemoji": "^5.7.2",
-    "@sveltejs/vite-plugin-svelte": "^1.1.1",
+    "@sveltejs/vite-plugin-svelte": "^2.0.2",
     "@tadashi/svelte-notification": "^1.1.0",
     "@tsconfig/svelte": "^3.0.0",
     "autoprefixer": "^10.4.13",
     "picmo": "^5.7.2",
     "postcss": "^8.4.19",
     "simple-drawing-board": "^3.1.2",
-    "svelte": "^3.53.1",
-    "svelte-check": "^2.8.1",
+    "svelte": "^3.55.1",
+    "svelte-check": "^2.10.3",
     "svelte-file-dropzone": "^1.0.0",
     "svelte-preprocess": "^4.10.7",
     "tailwindcss": "^3.1.8",
-    "tslib": "^2.4.1",
-    "typescript": "^4.8.4",
-    "vite": "^3.2.3"
+    "tslib": "^2.5.0",
+    "typescript": "^4.9.3",
+    "vite": "^4.1.0"
   }
 }

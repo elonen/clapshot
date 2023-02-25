@@ -1,11 +1,11 @@
 <script lang="ts">
     import { createPopup } from '@picmo/popup-picker';
-    import { darkTheme, NativeRenderer } from 'picmo';
+    import { darkTheme } from 'picmo';
     import { TwemojiRenderer  } from '@picmo/renderer-twemoji';
     
     import { createEventDispatcher } from 'svelte';
-    import { fade, blur, fly, slide, scale } from "svelte/transition";
-    import { video_is_ready, cur_user_pic, cur_username } from '../stores.js';
+    import { fade } from "svelte/transition";
+    import { video_is_ready } from '../stores.js';
 
     const dispatch = createEventDispatcher();
 
@@ -45,7 +45,7 @@
 
   // Picmo emoji picker
   let emoji_picker: any = null;
-  function onEmojiPicker(e) 
+  function onEmojiPicker(e: any) 
   {
     if (!emoji_picker) {
             emoji_picker = createPopup({
@@ -56,7 +56,7 @@
             position: 'right-end',
             className: 'my-picmo-popup',
         });
-        emoji_picker.addEventListener('emoji:select', (selection) => {
+        emoji_picker.addEventListener('emoji:select', (selection: any) => {
             input_text = (input_text ? input_text : '') + selection.emoji;
         });
     }
@@ -81,7 +81,7 @@
     </div>
 {/if}
 
-<form on:submit|preventDefault={onClickSend} class="flex justify-left block rounded-lg shadow-lg shadow-lg bg-gray-800 text-left p-2 w-full" >
+<form on:submit|preventDefault={onClickSend} class="flex justify-left rounded-lg shadow-lg bg-gray-800 text-left p-2 w-full" >
 
     <input 
         bind:value={input_text} 

@@ -1,17 +1,16 @@
 <script lang="ts">
 
-  import {VideoFrame, FrameRates} from './VideoFrame.js';
-  import {Notifications, acts} from '@tadashi/svelte-notification'
+  import {VideoFrame} from './VideoFrame';
+  import {acts} from '@tadashi/svelte-notification'
   import {create as sdb_create} from "simple-drawing-board";
   import {onMount} from 'svelte';
-  import {fade, slide, scale} from "svelte/transition";
+  import {scale} from "svelte/transition";
 
-  import {all_comments, video_is_ready, video_fps, collab_id} from '../stores.js';
-  import Avatar from './Avatar.svelte';
+  import {all_comments, video_is_ready, video_fps, collab_id} from '../stores';
 
   import {createEventDispatcher} from 'svelte';
   import CommentTimelinePin from './CommentTimelinePin.svelte';
-  import { each } from 'svelte/internal';
+
   const dispatch = createEventDispatcher();
 
   export let src: any;
@@ -27,8 +26,8 @@
   let debug_layout: boolean = false; // Set to true to show CSS layout boxes
 
   let commentsWithTc = [];  // Will be populated by the store once video is ready (=frame rate is known)
-
-  function refreshCommentPins() {
+  
+  function refreshCommentPins(): void {
     // Make pins for all comments with timecode
     commentsWithTc = [];
     all_comments.subscribe(comments => {
@@ -37,113 +36,65 @@
     });
   }
 
-
-  function send_collab_report() {
+  function send_collab_report(): void {
     if ($collab_id) {
-      let drawing = paused ? getDrawing(true) : null;
+      let drawing = paused ? getScreenshot() : null;
       dispatch('collabReport', {paused: video_elem.paused, seek_time: video_elem.currentTime, drawing: drawing});
     }
   }
 
-  class Draw
+  let draw_color: string = "red";
+  let draw_board: any = null;
+  let draw_canvas: any = null;
+
+  function setPenColor(c: string): void {
+    draw_color = c;
+    draw_board.setLineColor(draw_color);
+    draw_canvas.style.outline = "5px solid " + draw_color;
+  }
+
+  function prepare_drawing(): void
   {
-    constructor() {
-      this._color = "red";
-      this._board = null;
-      this._canvas = null;
-    }
-
-    get color() { return this._color; }
-    set color(color: string) {
-      this._color = color;
-      draw.board.setLineColor(this._color);
-      draw.canvas.style.outline = "5px solid " + this._color;
-    }
-
-    get board() {
-      this.try_create_all();
-      return this._board;
-    }
-
-    get canvas() {
-      this.try_create_all();
-      return this._canvas;
-    }
-    
-    isEmpty(): bool 
+    if (!draw_board && video_elem.videoWidth>0)
     {
-      if (!this._board || !this._canvas) return true;
-      const blankCanvas = document.createElement('canvas');
-      blankCanvas.width = this._canvas.width;
-      blankCanvas.height = this._canvas.height;
-      return this._canvas.toDataURL() === blankCanvas.toDataURL()
-    }
+      $video_is_ready = true;
 
-    // Returns the drawing as a data URL, or an empty string if the drawing is empty.
-    // If including_empty is true, then the data URL is returned even if the
-    // drawing is empty -- this is useful for sending screenshot of current
-    // video frame even without the drawing, mainly used as a work-around
-    // for sharing exact frame with others since HTML video element seeking
-    // is currently (Jan 2023) not necessarily frame-precise. 
-    getDataUrl(including_empty: boolean = False): string
-    {
-      if (this.isEmpty() && !including_empty)
-        return "";
-      let comb_canvas = document.createElement('canvas');
-      comb_canvas.width  = video_elem.videoWidth;
-      comb_canvas.height = video_elem.videoHeight;
-      var ctx = comb_canvas.getContext('2d');
-      // ctx.drawImage(video_elem, 0, 0);   // Removed, as frame capture is now done when draw mode is entered
-      ctx.drawImage(this._canvas, 0, 0);
-      return comb_canvas.toDataURL("image/webp", 0.8);
-    }
+      vframe_calc = new VideoFrame({
+        video: video_elem,
+        frameRate: $video_fps,
+        callback: function(response: any) { console.log(response); } });
 
-    try_create_all() : void
-    {
-      if (!this._board && video_elem.videoWidth>0)
-      {
-        //console.log("Creating drawing board");
+      refreshCommentPins(); // Creates CommentTimelinePin components, now that we can calculate timecodes properly
 
-        $video_is_ready = true;
+      // Create the drawing board
+      draw_canvas = document.createElement('canvas');
+      draw_canvas.width = video_elem.videoWidth;
+      draw_canvas.height = video_elem.videoHeight;
+      draw_canvas.classList.add("absolute", "max-h-full", "max-w-full", "z-[100]");
+      draw_canvas.style.cssText = 'outline: 5px solid red; outline-offset: -5px; cursor:crosshair; left: 50%; top: 50%; transform: translate(-50%, -50%);';
 
-        vframe_calc = new VideoFrame({
-          video: video_elem,
-          frameRate: $video_fps,
-          callback: function(response) { console.log(response); } });
+      // add mouse up listener to the canvas
+      draw_canvas.addEventListener('mouseup', function(e: MouseEvent) {
+        if (e.button == 0 && draw_canvas.style.visibility == "visible") {
+          send_collab_report();
+        }
+      });
 
-        refreshCommentPins(); // Creates CommentTimelinePin components, now that we can calculate timecodes properly
+      video_canvas_container.appendChild(draw_canvas);
 
-        // Create the drawing board
-        this._canvas = document.createElement('canvas');
-        this._canvas.width = video_elem.videoWidth;
-        this._canvas.height = video_elem.videoHeight;
-        this._canvas.classList.add("absolute", "max-h-full", "max-w-full", "z-[100]");
-        this._canvas.style.cssText = 'outline: 5px solid red; outline-offset: -5px; cursor:crosshair; left: 50%; top: 50%; transform: translate(-50%, -50%);';
-
-        // add mouse up listener to the canvas
-        this._canvas.addEventListener('mouseup', function(e) {
-          if (e.button == 0 && draw.canvas.style.visibility == "visible") {
-            console.log("Mouse up");
-            send_collab_report();
-          }
-        });
-
-        video_canvas_container.appendChild(this._canvas);
-
-        this._board = sdb_create(this._canvas);
-        this._board.setLineSize(video_elem.videoWidth / 100);
-        this._board.setLineColor(this.color);
-        this._canvas.style.visibility = "hidden"; // hide the canvas until the user clicks the draw button
-      }
+      draw_board = sdb_create(draw_canvas);
+      draw_board.setLineSize(video_elem.videoWidth / 100);
+      draw_board.setLineColor(draw_color);
+      draw_canvas.style.visibility = "hidden"; // hide the canvas until the user clicks the draw button
     }
   }
-  let draw = new Draw();
+
 
 	onMount(async () => {
     // Force the video to load
     if (!video_elem.videoWidth) { video_elem.load(); }
-    draw.try_create_all();
-    all_comments.subscribe((v) => { refreshCommentPins(); });
+    prepare_drawing();
+    all_comments.subscribe((_v) => { refreshCommentPins(); });
 	});
 
 
@@ -180,8 +131,9 @@
     else {
       const minutes = Math.floor(seconds / 60);
       seconds = Math.floor(seconds % 60);
-      if (seconds < 10) seconds = '0' + seconds;
-      return `${minutes}:${seconds}`;
+      // Return zero padded
+      if (seconds < 10) return `${minutes}:0${seconds}`;
+      else return `${minutes}:${seconds}`;
     }
 	}
 
@@ -221,54 +173,37 @@
     }
   }
 
-  function onWindowKeyPress(e: any) {
-    var event = document.all ? window.event : e;
+  const INTERACTIVE_ELEMS = ['input', 'textarea', 'select', 'option', 'button'];
+  const INTERACTIVE_ROLES = ['textbox', 'combobox', 'listbox', 'menu', 'menubar', 'grid', 'dialog', 'alertdialog'];
+  const WINDOW_KEY_ACTIONS = {
+      ' ': togglePlay,
+      'ArrowLeft': () => step_video(-1),
+      'ArrowRight': () => step_video(1),
+      'ArrowUp': () => step_video(1),
+      'ArrowDown': () => step_video(-1),
+      'z': (e: KeyboardEvent) => { if (e.ctrlKey) onDrawUndo(); },
+      'y': (e: KeyboardEvent) => { if (e.ctrlKey) onDrawRedo(); },
+    };
+
+  function onWindowKeyPress(e: KeyboardEvent): void {
+    let target = e.target as HTMLElement;
 
     // Skip if the user is in a keyboard interactive element
-    if (e.target.isContentEditable)
+    if (target.isContentEditable)
       return;
-    switch (e.target.tagName.toLowerCase()) {
-      case "input":
-      case "textarea":
-      case "select":
-      case "button":
-        return;
+
+    if (INTERACTIVE_ELEMS.includes(target.tagName.toLowerCase()) ||
+        INTERACTIVE_ROLES.includes(target.getAttribute('role')))
+      return;
+
+    if (e.key in WINDOW_KEY_ACTIONS) {
+      WINDOW_KEY_ACTIONS[e.key](e);
+      e.preventDefault();
     }
-    //console.log(e);
-    switch(event.keyCode) {
-      case 32: // space
-        togglePlay();
-        break;
-      case 37: // left
-        step_video(-1);
-        break;
-      case 39: // right
-      step_video(1);
-        break;
-      case 38: // up
-        time += 1;
-        step_video(0);
-        break;
-      case 40: // down
-        time -= 1;
-        step_video(0);
-        break;
-      case 90: // z
-        if (e.ctrlKey) {
-          onDrawUndo();
-          break;
-        }
-      case 89: // y
-        if (e.ctrlKey) {
-          onDrawRedo();
-          break;
-        }
-    }
-    e.preventDefault();
   }
 
   function seekSideEffects() {
-    draw.board?.clear();
+    draw_board?.clear();
     onToggleDraw(false);
     dispatch('seeked', {});
   }
@@ -295,15 +230,15 @@
   // These are called from PARENT component on user interaction
   export function onToggleDraw(mode_on: boolean) {
     try {
-      draw.board.clear();
+      draw_board.clear();
       if (mode_on) {
-        draw.canvas.style.outline = "5px solid " + draw.color;
-        draw.canvas.style.cursor = "crosshair";
-        var ctx = draw.canvas.getContext('2d');
+        draw_canvas.style.outline = "5px solid " + draw_color;
+        draw_canvas.style.cursor = "crosshair";
+        var ctx = draw_canvas.getContext('2d');
         ctx.drawImage(video_elem, 0, 0);
-        draw.canvas.style.visibility = "visible";
+        draw_canvas.style.visibility = "visible";
       } else {
-        draw.canvas.style.visibility = "hidden";
+        draw_canvas.style.visibility = "hidden";
       }
     } catch(err) {
       acts.add({mode: 'error', message: `Video loading not done? Cannot enable drawing.`, lifetime: 3});
@@ -311,19 +246,27 @@
   }
 
   export function onColorSelect(color: string) {
-    draw.color = color;
+    setPenColor(color);
   }
   
   export function onDrawUndo() {
-    draw.board?.undo();
+    draw_board?.undo();
   }
 
   export function onDrawRedo() {
-    draw.board?.redo();
+    draw_board?.redo();
   }
 
-  export function getDrawing(including_empty: boolean = false) : string | null {
-    return draw.getDataUrl(including_empty);
+  // Capture current video frame + drawing as a data URL (base64 encoded image)
+  export function getScreenshot() : string
+  {
+      let comb = document.createElement('canvas');
+      comb.width  = video_elem.videoWidth;
+      comb.height = video_elem.videoHeight;
+      var ctx = comb.getContext('2d');
+      // ctx.drawImage(video_elem, 0, 0);   // Removed, as bgr frame capture is now done when draw mode is entered
+      ctx.drawImage(draw_canvas, 0, 0);
+      return comb.toDataURL("image/webp", 0.8);
   }
 
   export function collabPlay(seek_time: number) {
@@ -340,16 +283,16 @@
       time = seek_time;
       seekSideEffects();
     }
-    if (drawing && drawing != getDrawing(true))
+    if (drawing && getScreenshot() != drawing)
       setDrawing(drawing);
   }
 
   export async function setDrawing(drawing: string) {
     try {
-      await draw.board.fillImageByDataURL(drawing, { isOverlay: false })
-      draw.canvas.style.visibility = "visible";
-      draw.canvas.style.cursor = "";
-      draw.canvas.style.outline = "none";
+      await draw_board.fillImageByDataURL(drawing, { isOverlay: false })
+      draw_canvas.style.visibility = "visible";
+      draw_canvas.style.cursor = "";
+      draw_canvas.style.outline = "none";
     }
     catch(err) {
       acts.add({mode: 'error', message: `Failed to show image.`, lifetime: 3});
@@ -361,6 +304,13 @@
     if (!vframe_calc) { return 0; }
     let pos = vframe_calc.toMilliseconds(timecode)/1000.0;
     return pos / duration;
+  }
+
+  // Input element event handlers
+
+  function onPosEdited(e: Event, fmt: string) {
+    seekTo((e.target as HTMLInputElement).value, fmt);
+    send_collab_report();
   }
 
 </script>
@@ -378,7 +328,7 @@
         class="h-full w-full"
         style="opacity: {$video_is_ready ? 1.0 : 0}; transition-opacity: 1.0s;"
         bind:this={video_elem}
-        on:loadedmetadata={draw.try_create_all}
+        on:loadedmetadata={prepare_drawing}
         on:click={togglePlay}
         bind:currentTime={time}
         bind:duration
@@ -388,7 +338,7 @@
 
       <!--    TODO: maybe show actively controlling collaborator's avatar like this?
       <div class="absolute top-0 left-0 w-full h-full z-1">
-        <div class="flex-none w-6 h-6 block"><Avatar userFullName="Username Here"/></div>
+        <div class="flex-none w-6 h-6 block"><Avatar username="Username Here"/></div>
       </div>
     -->
 
@@ -406,12 +356,11 @@
       />
       {#each commentsWithTc as item}
         <CommentTimelinePin
-          id={item.id},
-          username={item.username},
-          comment={item.comment},
-          avatar_url={item.avatar_url},
-          x_loc={tcToDurationFract(item.timecode).toString()}
-          on:click={(e) => { dispatch('commentPinClicked', {id: item.id});}}
+          id={item.id}
+          username={item.username}
+          comment={item.comment}
+          x_loc={tcToDurationFract(item.timecode)}
+          on:click={(_e) => { dispatch('commentPinClicked', {id: item.id});}}
           />
       {/each}
     </div>
@@ -427,8 +376,8 @@
 
         <!-- Timecode -->
         <span class="flex-0 mx-4 text-sm font-mono">
-          <input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => {seekTo(e.target.value, 'SMPTE'); send_collab_report();}}/>
-          FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => {seekTo(e.target.value, 'frame'); send_collab_report();}}/>
+          <input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => onPosEdited(e, 'SMPTE')}/>
+          FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => onPosEdited(e, 'frame')}/>
         </span>
 
       </span>
@@ -443,7 +392,7 @@
       </span>
 
       <!-- Video duration -->
-			<span class="flex-0 text-lg mx-4 mx-8">{format_tc(duration)}</span>
+			<span class="flex-0 text-lg mx-4">{format_tc(duration)}</span>
 		</div>
 	</div>
   

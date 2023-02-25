@@ -2,14 +2,15 @@
   import {fade, slide} from "svelte/transition";
   import CommentCard from './lib/CommentCard.svelte'
   import NavBar from './lib/NavBar.svelte'
-  import VideoPlayer from './lib/VideoPlayer.svelte';
   import CommentInput from './lib/CommentInput.svelte';
   import UserMessage from './lib/UserMessage.svelte';
   import FileUpload from './lib/FileUpload.svelte';
   import VideoListVideoTile from "./lib/video_list/VideoListVideoTile.svelte";
   import {Notifications, acts} from '@tadashi/svelte-notification'
+  import VideoPlayer from './lib/VideoPlayer.svelte';
 
   import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
+    import type { ClapshotCommentJson } from "./lib/video_list/types";
 
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
@@ -24,12 +25,12 @@
   function log_abbreviated(str: string) {
       const max_len = 180;
       if (str.length > max_len)
-        str = str.substr(0, max_len) + "(...)";
+        str = str.slice(0, max_len) + "(...)";
       console.log(str);
   }
 
   // Messages from CommentInput component
-  function onCommentInputButton(e) {
+  function onCommentInputButton(e: any) {
     if (e.detail.action == "send")
     {
       if (e.detail.comment_text != "")
@@ -38,7 +39,7 @@
           video_hash: $video_hash,
           parent_id: null,            // TODO: parent id here
           comment: e.detail.comment_text,
-          drawing: video_player.getDrawing(),
+          drawing: video_player.getScreenshot(),
           timecode: e.detail.is_timed ? video_player.getCurTimecode() : "",
         });
       }
@@ -57,7 +58,7 @@
     }
   }
 
-  function onDisplayComment(e) {
+  function onDisplayComment(e: any) {
     video_player.seekTo(e.detail.timecode, 'SMPTE');
     // Close draw mode while showing (drawing from a saved) comment
     video_player.onToggleDraw(false);
@@ -65,18 +66,18 @@
     if (e.detail.drawing)    
       video_player.setDrawing(e.detail.drawing);
     if ($collab_id) {
-      console.log("Collab: onDisplayComment. collab_id: '" + $collab_id + "'");
+      log_abbreviated("Collab: onDisplayComment. collab_id: '" + $collab_id + "'");
       ws_emit('collab_report', {paused: true, seek_time: video_player.getCurTime(), drawing: e.detail.drawing});
     }
   }
 
-  function onDeleteComment(e) {
+  function onDeleteComment(e: any) {
     ws_emit('del_comment', {
       comment_id: e.detail.comment_id,
     });
   }
 
-  function onReplyComment(e) {    
+  function onReplyComment(e: any) {
     ws_emit('add_comment', {
         video_hash: $video_hash,
         parent_id: e.detail.parent_id,
@@ -84,17 +85,12 @@
       });
   }
 
-  function onEditComment(e) {
+  function onEditComment(e: any) {
     ws_emit('edit_comment', {
       comment_id: e.detail.comment_id,
       comment: e.detail.comment_text,
     });
   }
-
-  function onSeekToTimecode(e) {
-    video_player.seekTo(e.detail.timecode, 'SMPTE');
-  }
-
 
   function closeVideo() {
     // Close current video, list all user's own videos.
@@ -112,28 +108,27 @@
     ws_emit('list_my_messages', {});
   }
 
-  function onClearAll(e) {
+  function onClearAll(_e: any) {
     history.pushState('/', null, '/');  // Clear URL
     closeVideo();
   }
 
-  function onRequestOpenVideo(e) {
+  function onRequestOpenVideo(e: any) {
     let new_video_hash = e.detail.video_hash;
     ws_emit('open_video', {video_hash: new_video_hash});
     history.pushState(new_video_hash, null, '/?vid='+new_video_hash);  // Point URL to video
   }
 
-  function onVideoSeeked(e) {
-    //console.log("App: seeked()");
+  function onVideoSeeked(_e: any) {
     comment_input.forceDrawMode(false);  // Close draw mode when video frame is changed
   }
 
-  function onCollabReport(e) {
+  function onCollabReport(e: any) {
     if ($collab_id)
       ws_emit('collab_report', {paused: e.detail.paused, seek_time: e.detail.seek_time, drawing: e.detail.drawing});
   }
 
-  function onCommentPinClicked(e) {
+  function onCommentPinClicked(e: any) {
       // Find corresponding comment in the list, scroll to it and highlight
       let comment_id = e.detail.id;
     let comment = $all_comments.find(c => c.id == comment_id);
@@ -148,8 +143,7 @@
     }
   }
 
-  function popHistoryState(e) {
-    console.log("popHistoryState: " + e.state);
+  function popHistoryState(e: any) {
     if (e.state && e.state !== '/')
       ws_emit('open_video', {video_hash: e.state});
     else
@@ -284,7 +278,7 @@
     ws_socket = new WebSocket(ws_url);
 
     // Handle connection opening
-    ws_socket.addEventListener("open", function (event) {
+    ws_socket.addEventListener("open", function (_event) {
       reconnect_delay = 100;
       ui_connected_state = true;
 
@@ -298,10 +292,10 @@
       }
     });
 
-    function handle_with_errors(func) {
+    function handle_with_errors(func: { (): any; }): any {
       try {
         return func();
-      } catch (e) {
+      } catch (e: any) {
         // log message, fileName, lineNumber
         console.log("Exception in Websocket handler: ", e);
         console.log(e.stack);
@@ -318,7 +312,7 @@
     */
 
     // Reconnect if closed, with exponential+random backoff
-    ws_socket.addEventListener("close", function (event) {
+    ws_socket.addEventListener("close", function (_event) {
       reconnect_delay = Math.round(Math.min(reconnect_delay * 1.5, 5000));
       console.log("API reconnecting in " + reconnect_delay + " ms");
       setTimeout(() => { connect_websocket(ws_url); }, reconnect_delay);
@@ -365,7 +359,7 @@
             log_abbreviated("[SERVER] user_videos: " + JSON.stringify(data));
             $all_my_videos = data.videos;
             console.log("Got " + $all_my_videos.length + " videos");
-            console.log($all_my_videos);
+            //console.log($all_my_videos);
             break;
 
           case 'message':
@@ -406,11 +400,11 @@
           case 'new_comment':
             log_abbreviated("[SERVER] new_comment: " + JSON.stringify(data));
             {
-              function reorder_comments(old_order) {
+              function reorder_comments(old_order: any[]) {
                 // Helper to show comment threads in the right order and with correct indentation
                 let old_sorted = old_order.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
                 let new_order = [];
-                function find_insert_position_and_indent(parent_id)
+                function find_insert_position_and_indent(parent_id: number)
                 {
                   if (parent_id) {
                     for (let i=new_order.length-1; i>=0; i--) {
@@ -436,7 +430,6 @@
                     comment: data.comment,
                     username: data.username,
                     user_id: data.user_id,
-                    avatar_url: null,
                     drawing_data: data.drawing,
                     parent_id: data.parent_id,
                     edited: data.edited,
@@ -477,7 +470,7 @@
 
   }
 
-  function onRequestVideoDelete(e) {
+  function onRequestVideoDelete(e: any) {
     log_abbreviated("onRequestVideoDelete: " + e.detail.video_hash + " / " + e.detail.video_name);
     if (confirm("Are you sure you want to delete '" + e.detail.video_name + "'?")) {
       ws_emit('del_video', {video_hash: e.detail.video_hash});
@@ -487,7 +480,7 @@
     }
   }
 
-  function onRequestVideoRename(e) {
+  function onRequestVideoRename(e: any) {
     log_abbreviated("onRequestVideoRename: " + e.detail.video_hash + " / " + e.detail.video_name);
     let new_name = prompt("Rename video to:", e.detail.video_name);
     if (new_name) {
@@ -499,7 +492,7 @@
 
   let hoveringOverBasket = null;
 
-  function dropToBasket(event, basketIndex) {
+  function dropToBasket(event: DragEvent, basketIndex: string | number) {
 		event.preventDefault();
     const json = event.dataTransfer.getData("text/plain");
 		const data = JSON.parse(json);
@@ -520,6 +513,7 @@
 
 <svelte:window on:popstate={popHistoryState}/>
 <main>
+<span id="popup-container"></span>
 <div class="flex flex-col bg-[#101016] w-screen h-screen {debug_layout?'border-2 border-yellow-300':''}">
     <div class="flex-none w-full"><NavBar on:clear-all={onClearAll} on:basic-auth-logout={disconnect} /></div>
     <div class="flex-grow w-full overflow-auto {debug_layout?'border-2 border-cyan-300':''}">

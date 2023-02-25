@@ -1,61 +1,59 @@
 <script lang="ts">
-    import { all_popup_hide_funcs } from '../../stores.js';
+    import { onDestroy, onMount } from 'svelte';
 
+    export let x = 0;
+    export let y = 0;
     export let onRename: Function = null;
     export let onDelete: Function = null;
 
-    let pos = { x: 0, y: 0 }
-    let showMenu = false;
+    let menu_el = null;
+    let removed = false;
 
-    export function show(e) {
-        $all_popup_hide_funcs.forEach((func) => { func(); });
-        showMenu = true;
-        pos = { x: e.clientX, y: e.clientY };
-        pos.y -= 16; // Offset a bit to make it look better
-    }
+    // Make sure the menu doesn't go off the screen
+	$: (() => {
+		if (!menu_el) return;
+		const rect = menu_el.getBoundingClientRect();
+		x = Math.min(window.innerWidth - rect.width, x);
+		if (y > window.innerHeight - rect.height) y -= rect.height;
+    })();
 
     export function hide() {
-        showMenu = false
+        removed = true;
     }
-    $all_popup_hide_funcs.push(hide);
     
-    function onButtonClick(e) {
-        show(e)
-    }
-    function onKeyPress(e) {
-        if (e.key === 'Enter') {
-            show(e)
-        }
-    }
-
     let menuItems = [
         {
             'name': 'rename',
+            'displayText': "Rename",
+            'class': 'fa-solid fa-edit',
             'handler': () => {
-                showMenu = false;
                 // Delay onRename() to next cycle to allow the menu to close first
                 setTimeout(() => { onRename(); }, 0);
+                hide();
             },
-            'displayText': "Rename",
-            'class': 'fa-solid fa-edit'
         },
         {
             'name': 'trash',
-            'handler': () => {
-                onDelete();
-                showMenu = false;
-            },
             'displayText': "Delete",
-            'class': 'fa-solid fa-trash-can'
+            'class': 'fa-solid fa-trash-can',
+            'handler': () => {
+                setTimeout(() => { onDelete(); }, 0);
+                hide();
+            },
         },
     ];
 
+    onMount(() => {
+        menu_el.hide = hide;    // Export hide() to the DOM element
+    });
+    
 </script>
 
-
-{#if showMenu}
-<nav class="any-popup-menu" style="position: absolute; z-index: 30; top:{pos.y}px; left:{pos.x}px">
-    <div class="navbar" id="navbar">
+{#if !removed}
+<nav style="position: absolute; z-index: 30; top:{y}px; left:{x}px"
+    bind:this={menu_el}
+>
+    <div class="popupmenu">
         <ul>
             {#each menuItems as item}
                 {#if item.name == "hr"}
@@ -71,14 +69,13 @@
 
 <svelte:window on:click={hide} />
 
-
 <style>
     @import '@fortawesome/fontawesome-free/css/all.min.css';
     * {
         padding: 0;
         margin: 0;
     }
-    .navbar{
+    .popupmenu{
         display: inline-flex;
         border: 1px #999 solid;
         width: 170px;
@@ -86,8 +83,9 @@
         border-radius: 10px;
         overflow: hidden;
         flex-direction: column;
+        box-shadow: 0px 0px 8px 0px rgba(0,0,0,0.75);
     }
-    .navbar ul{
+    .popupmenu ul{
         margin: 6px;
     }
     ul li{
@@ -108,7 +106,7 @@
         color: #000;
         text-align: left;
         border-radius: 5px;
-        background-color: #eee;
+        background-color: #ddd;
     }
     ul li button i{
         padding: 0px 15px 0px 10px;

@@ -8,7 +8,6 @@ pnpm-debug.log*
 lerna-debug.log*
 
 dist_deb
-Dockerfile
 
 node_modules
 dist

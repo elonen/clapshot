@@ -1,5 +1,5 @@
 <script lang="ts">
-import { slide, fade } from "svelte/transition";
+import { slide } from "svelte/transition";
 
 export let msg: any = null;
 
@@ -30,14 +30,22 @@ let show_details: boolean = false;
     {#if msg.details }    
         <span class="text-xs text-gray-500 pl-2 border-l border-gray-400"></span>
         {#if show_details}
-            <i class="fa fa-chevron-up text-[#cca] cursor-pointer" on:click={()=>{show_details=false}}></i>
+            <i class="fa fa-chevron-up text-[#cca] cursor-pointer"
+                tabindex="0"
+                role="link"
+                on:keyup={e=> {if (e.key==='Enter') show_details=false; }}
+                on:click={()=>{show_details=false}}></i>
             <div
                 class="bg-[#cca] font-mono rounded-md mt-2 p-2 text-black text-xs block"
                 transition:slide="{{ duration: 200 }}">
                 {msg.details}
             </div>
         {:else}
-            <i class="fa fa-chevron-down text-[#cca] cursor-pointer" on:click={()=>{show_details=true}}></i>
+            <i class="fa fa-chevron-down text-[#cca] cursor-pointer"
+                tabindex="0"
+                role="link"
+                on:keyup={e=> {if (e.key==='Enter') show_details=true; }}
+                on:click={()=>{show_details=true}}></i>
         {/if}
     {/if}
 </div>

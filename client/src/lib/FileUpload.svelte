@@ -7,7 +7,7 @@
         accepted: [],
         rejected: []
     };
-    function dropzoneHandleFilesSelect(e) {
+    function dropzoneHandleFilesSelect(e: any) {
         drag_active = false;
         files.rejected = [];    // Clear old rejected files
         const { acceptedFiles, fileRejections } = e.detail;
@@ -27,7 +27,7 @@
             if (el) { el.scrollIntoView({behavior: "smooth", block: "end", inline: "nearest"}); }
         }, 100);
     }
-    function removeFileName(file) {
+    function removeFileName(file: any) {
         files.accepted = files.accepted.filter(f => f !== file);
     }
 
@@ -69,7 +69,7 @@
         }, 3000);
     }
 
-    function progressHandler(event)
+    function progressHandler(event: ProgressEvent<XMLHttpRequestEventTarget>)
     {
         uploading_now = true;
         // loaded_total = "Uploaded " + event.loaded + " bytes of " + event.total;
@@ -78,18 +78,18 @@
         status_txt = Math.round(percent) + "% uploaded... please wait";
     }
 
-    function completeHandler(event) {
-        status_txt = event.target.responseText;
+    function completeHandler(event: ProgressEvent<XMLHttpRequestEventTarget>) {
+
+        status_txt = (event.target as any).responseText;
         afterUpload();
     }
 
-    function errorHandler(event) {
-        console.log("Upload Failed");
+    function errorHandler(_event: ProgressEvent<XMLHttpRequestEventTarget>) {
         status_txt = "Upload Failed";
         afterUpload();
     }
 
-    function abortHandler(event) {
+    function abortHandler(_event: ProgressEvent<XMLHttpRequestEventTarget>) {
         status_txt = "Upload Aborted";
         afterUpload();
     }

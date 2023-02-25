@@ -20,4 +20,3 @@ export let user_messages = writable([]);
 export let collab_id = writable(null);
 
 export let user_menu_items = writable([]);
-export let all_popup_hide_funcs = writable([]);
