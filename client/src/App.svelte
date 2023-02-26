@@ -10,7 +10,12 @@
   import VideoPlayer from './lib/VideoPlayer.svelte';
 
   import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
-    import type { ClapshotCommentJson } from "./lib/video_list/types";
+    import type { ClapshotVideoJson } from "./lib/video_list/types";
+    import VideoListFolder from "./lib/video_list/VideoListFolder.svelte";
+    import { get } from "svelte/store";
+  //import type { ClapshotCommentJson } from "./lib/video_list/types";
+
+  let videoTiles: VideoListVideoTile[] = []; 
 
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
@@ -113,11 +118,16 @@
     closeVideo();
   }
 
-  function onRequestOpenVideo(e: any) {
+  function onRequestVideoOpen(e: any) {
     let new_video_hash = e.detail.video_hash;
     ws_emit('open_video', {video_hash: new_video_hash});
     history.pushState(new_video_hash, null, '/?vid='+new_video_hash);  // Point URL to video
   }
+
+  function onRequestFolderOpen(e: any) {
+    alert("TODO: open folder " + e.detail.folder_id);
+  }
+
 
   function onVideoSeeked(_e: any) {
     comment_input.forceDrawMode(false);  // Close draw mode when video frame is changed
@@ -171,6 +181,41 @@
 
   let upload_url: string = "";
 
+
+  // --- video drag and drop ---
+
+  let lastDroppedVideoFolder: string = null;
+  interface VideoDragDispatch {
+    detail: {
+      video_hash: string,
+      event: DragEvent,
+    }
+  }
+
+  // When a video tile is dragged, ask all other video tiles if they want to join the drag
+  function onVideoTileDragStart(e: VideoDragDispatch)
+  {
+    videoTiles.forEach((tile: VideoListVideoTile, _i, _arr) => {
+      let vh = tile.tryJoinVideoDrag();
+      if (vh) {
+        // Add video hash to drag event's dataTransfer "clapshotvideo" string, separated by comma.
+        let dt = e.detail.event.dataTransfer.getData("clapshotvideo") || "";
+        let dt_arr = dt.split(",");
+        dt_arr.push(vh);
+        dt_arr = dt_arr.filter((v, i, a) => a.indexOf(v) === i); // Remove duplicates
+        dt = dt_arr.join(",");
+        e.detail.event.dataTransfer.setData("clapshotvideo", dt);
+      }
+    });
+  }
+
+  function onVideoTileDragEnd(e: VideoDragDispatch) {
+    videoTiles.forEach((tile: VideoListVideoTile, _i, _arr) => {
+      tile.videoDragEnded();
+    });
+  }
+  
+  
   // -------------------------------------------------------------
   // Websocket messaging
   // -------------------------------------------------------------
@@ -470,7 +515,7 @@
 
   }
 
-  function onRequestVideoDelete(e: any) {
+  function onRequestVideoDelete(e: {detail: {video_hash: any; video_name: any;}}) {
     log_abbreviated("onRequestVideoDelete: " + e.detail.video_hash + " / " + e.detail.video_name);
     if (confirm("Are you sure you want to delete '" + e.detail.video_name + "'?")) {
       ws_emit('del_video', {video_hash: e.detail.video_hash});
@@ -480,7 +525,7 @@
     }
   }
 
-  function onRequestVideoRename(e: any) {
+  function onRequestVideoRename(e: {detail: {video_hash: any; video_name: any;}}) {
     log_abbreviated("onRequestVideoRename: " + e.detail.video_hash + " / " + e.detail.video_name);
     let new_name = prompt("Rename video to:", e.detail.video_name);
     if (new_name) {
@@ -489,26 +534,32 @@
     }
   }
 
+  function onRequestVideoMove(e: {detail: {video_hash: any; target_folder: any;}}) {
+    log_abbreviated("NOT IMPLEMENTED! onRequestVideoMove: " + e.detail.video_hash + " / " + e.detail.target_folder);
+  }
 
-  let hoveringOverBasket = null;
+  function onRequestFolderDelete(e: {detail: {folder_id: any; folder_name: any;}}) {
+    log_abbreviated("onRequestFolderDelete: " + e.detail.folder_id + " / " + e.detail.folder_name);
+    if (confirm("Are you sure you want to delete '" + e.detail.folder_id + " AND ALL CONTENS'?")) {
+      ws_emit('del_folder', {video_hash: e.detail.folder_id});
+      // After 2 seconds, refresh the list of videos
+      function refresh_my_videos() { ws_emit('list_my_videos', {}); }
+      setTimeout(refresh_my_videos, 2000);
+    }
+  }
 
-  function dropToBasket(event: DragEvent, basketIndex: string | number) {
-		event.preventDefault();
-    const json = event.dataTransfer.getData("text/plain");
-		const data = JSON.parse(json);
-		
-    console.log("dropToBasket: " + basketIndex + " / " + JSON.stringify(data));
+  function onRequestFolderRename(e: {detail: {folder_id: any; folder_name: any;}}) {
+    log_abbreviated("onRequestFolderRename: " + e.detail.folder_id + " / " + e.detail.folder_name);
+    let new_name = prompt("Rename folder to:", e.detail.folder_name);
+    if (new_name) {
+      ws_emit('rename_folder', {folder_id: e.detail.folder_id, new_name: new_name});
+      ws_emit('list_my_videos', {});
+    }
+  }
 
-		// Remove the item from one basket.
-		// Splice returns an array of the deleted elements, just one in this case.
-//	const [item] = baskets[data.basketIndex].items.splice(data.itemIndex, 1);
-		
-    // Add the item to the drop target basket.
-//		baskets[basketIndex].items.push(item);
-//		baskets = baskets;
-		
-		hoveringOverBasket = null;
+  function onVideosDroppedToFolder(e: {detail: {folder_id: any; drag_data: string;}}) {
 	}
+
 </script>
 
 <svelte:window on:popstate={popHistoryState}/>
@@ -585,37 +636,37 @@
                 You have no videos.
               {/if}
             </h1>
-            <div class="gap-8">
 
-              <div class="video-folder"
-                class:hovering={hoveringOverBasket === "folder1"}
-                on:dragenter={() => hoveringOverBasket = "folder1"}
-                on:dragleave={() => hoveringOverBasket = null}
-                on:drop={e => dropToBasket(e, 1)}
-                on:dragover={()=>{return false}}
-              >
-              <h4>Folder 1</h4>
-              {#each $all_my_videos as item}
-                <VideoListVideoTile
-                  {item}
-                  on:open-video={onRequestOpenVideo}
-                  on:delete-video={onRequestVideoDelete}
-                  on:rename-video={onRequestVideoRename}
-                  />
-              {/each}
-              </div>
+          </div>
+          <div class="flex flex-wrap m-4">
 
-              <div class="video-folder"
-              class:hovering={hoveringOverBasket === "folder2"}
-                on:dragenter={() => hoveringOverBasket = "folder2"}
-                on:dragleave={() => hoveringOverBasket = null}
-                on:drop={e => dropToBasket(e, 2)}
-                on:dragover={()=>{return false}}
-              >
-              <h4>Folder 2</h4>
-              </div>
+            {#each $all_my_videos as item, i}
+              <VideoListVideoTile
+                {item}
+                bind:this={videoTiles[i]}
+                on:open-video={onRequestVideoOpen}
+                on:delete-video={onRequestVideoDelete}
+                on:rename-video={onRequestVideoRename}
+                on:move-video={onRequestVideoMove}
+                on:drag-start={onVideoTileDragStart}
+                on:drag-end={onVideoTileDragEnd}
+                />
+            {/each}
+            
+            <VideoListFolder
+              id="1"
+              name="Folder 1"
+              contents={$all_my_videos}
+              on:drop={onVideosDroppedToFolder}
+              on:open-folder={onRequestFolderOpen}
+              on:delete-folder={onRequestFolderDelete}
+              on:rename-folder={onRequestFolderRename}
+            />
 
-            </div>
+            <VideoListFolder id="2" name="Trashcan" />
+          
+          </div>
+          <div>
 
             {#if upload_url }
             <div class="m-6">
@@ -664,13 +715,6 @@ body {
     scrollbar-width: none;
 }
 */
-
-.video-folder {
-  border: 1px solid #444;
-  border-radius: 4px;
-  padding: 4px;
-  margin: 4px;
-}
 
 </style>
 

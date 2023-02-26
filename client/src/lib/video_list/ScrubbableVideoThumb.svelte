@@ -13,6 +13,8 @@
     export let thumb_sheet_cols: number;
     export let thumb_sheet_rows: number;
 
+    export let extra_styles: string = "";
+
     function installThumbScrubber(e: MouseEvent)
     {
         let thumb_el = e.target as HTMLElement;
@@ -77,7 +79,7 @@
 </script>
 
 <div class="w-full aspect-video mx-auto rounded-md overflow-hidden"
-  style="background-image: url('{thumb_poster_url}'); background-size: cover; background-position: 0 0;"
+  style="background-image: url('{thumb_poster_url}'); background-size: cover; background-position: 0 0; {extra_styles}"
   on:blur={()=>{}}
   on:focus={()=>{}}
   on:mouseover={installThumbScrubber}
