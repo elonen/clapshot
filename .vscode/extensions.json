@@ -1,0 +1,4 @@
+{
+    "recommendations": [ "dbaeumer.vscode-eslint", "svelte.svelte-vscode", "dbaeumer.vscode-eslint", "ardenivanov.svelte-intellisense",
+        "bradlc.vscode-tailwindcss", "rust-lang.rust-analyzer", "csstools.postcss", "ms-vscode-remote.remote-containers" ]
+}
