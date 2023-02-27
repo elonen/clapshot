@@ -664,19 +664,17 @@
             />
 
             <VideoListFolder id="2" name="Trashcan" />
+
+            <div class="video-list-tile-sqr"
+                style="background: none; padding: 0; border: 0.2em dashed #485568; border-radius: 1em;">
+              <FileUpload post_url={upload_url}>
+                <button class="w-full h-full p-2 text-4xl"><i class="fas fa-circle-plus"></i></button>
+              </FileUpload>
+            </div>
           
           </div>
+
           <div>
-
-            {#if upload_url }
-            <div class="m-6">
-              <h1 class="text-2xl mt-12 text-slate-500">
-                Upload video
-              </h1>
-              <FileUpload post_url={upload_url}/>
-            </div>
-            {/if}
-
             {#if $user_messages.length>0}
               <h1 class="text-2xl m-6 mt-12 text-slate-500">
                   Latest messages
@@ -687,7 +685,6 @@
                 {/each} 
               </div> 
             {/if}
-
           </div>
 
         {/if}
