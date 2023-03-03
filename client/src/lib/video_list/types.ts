@@ -36,3 +36,51 @@ export interface ClapshotCommentJson
     timecode: string | null;
     drawing: string | null;
 }
+
+// -----
+
+export class VideoListPopupMenuItem {
+    label: string;
+    icon_class: string|null;
+    key_shortcut: string|null;
+    action: string;
+}
+
+// -----
+
+export class VideoListDefItem {
+    id: string;
+}
+
+export class VideoListVideoDef extends VideoListDefItem {
+    video: ClapshotVideoJson;
+
+    constructor(data: ClapshotVideoJson) {
+        super();
+        this.id = "VIDEO:" + data.video_hash;
+        this.video = data;
+    }
+}
+
+export class FolderDef {
+    folder_id: any;
+    name: string;
+    contents: VideoListDefItem[];
+}
+
+export class VideoListFolderDef extends VideoListDefItem {
+    folder: FolderDef;
+
+    constructor(id: any, name: string, contents: VideoListDefItem[]) {
+        super();
+        this.id = "FOLDER:" + id;
+        this.folder = { folder_id: id, name, contents } as FolderDef;
+    }
+}
+
+export function videoOrFolder(item: VideoListDefItem): {video: ClapshotVideoJson, folder: FolderDef} {
+    return {
+        video: ((item as VideoListVideoDef).video) ? (item as VideoListVideoDef).video : null,
+        folder: ((item as VideoListFolderDef).folder) ? (item as VideoListFolderDef).folder : null
+    };
+}

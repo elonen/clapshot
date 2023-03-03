@@ -1,13 +1,14 @@
 <script lang="ts">
-    import { onDestroy, onMount } from 'svelte';
+    import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+    import type { VideoListPopupMenuItem } from './types';
 
     export let x = 0;
     export let y = 0;
-    export let onRename: Function = null;
-    export let onDelete: Function = null;
+    export let menu_lines: VideoListPopupMenuItem[] = [];
 
     let menu_el = null;
     let removed = false;
+    const dispatch = createEventDispatcher();
 
     // Make sure the menu doesn't go off the screen
 	$: (() => {
@@ -19,8 +20,10 @@
 
     export function hide() {
         removed = true;
+        dispatch("hide");
     }
-    
+
+    /*
     let menuItems = [
         {
             'name': 'rename',
@@ -42,6 +45,12 @@
             },
         },
     ];
+    */
+
+    function onClickItem(item: VideoListPopupMenuItem) {
+        dispatch("action", {action: item.action});
+        hide();
+    }
 
     onMount(() => {
         menu_el.hide = hide;    // Export hide() to the DOM element
@@ -55,11 +64,14 @@
 >
     <div class="popupmenu">
         <ul>
-            {#each menuItems as item}
-                {#if item.name == "hr"}
+            {#each menu_lines as it}
+                {#if it.label == "hr"}
                     <hr>
                 {:else}
-                    <li><button on:click|stopPropagation={item.handler}><i class={item.class}></i>{item.displayText}</button></li>
+                    <li><button on:click|stopPropagation={()=>{onClickItem(it)}}>
+                        {#if it.icon_class}<i class={it.icon_class}></i>{/if}
+                        {it.label}
+                    </button></li>
                 {/if}
             {/each}
         </ul>

@@ -5,14 +5,18 @@
   import CommentInput from './lib/CommentInput.svelte';
   import UserMessage from './lib/UserMessage.svelte';
   import FileUpload from './lib/FileUpload.svelte';
-  import VideoListVideoTile from "./lib/video_list/VideoListVideoTile.svelte";
+  import type VideoListVideoTile from "./lib/video_list/VideoListVideoTile.svelte";
   import {Notifications, acts} from '@tadashi/svelte-notification'
   import VideoPlayer from './lib/VideoPlayer.svelte';
 
   import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
-    import type { ClapshotVideoJson } from "./lib/video_list/types";
-    import VideoListFolder from "./lib/video_list/VideoListFolder.svelte";
-    import { get } from "svelte/store";
+
+  import {VideoListDefItem, VideoListVideoDef, VideoListFolderDef, videoOrFolder} from "./lib/video_list/types";
+  import VideoList from "./lib/video_list/VideoList.svelte";
+
+  import type { ClapshotVideoJson } from "./lib/video_list/types";
+  import VideoListFolder from "./lib/video_list/VideoListFolder.svelte";
+  import { get } from "svelte/store";
   //import type { ClapshotCommentJson } from "./lib/video_list/types";
 
   let videoTiles: VideoListVideoTile[] = []; 
@@ -27,11 +31,16 @@
   let collab_dialog_ack = false;  // true if user has clicked "OK" on the collab dialog
   let last_collab_controlling_user = null;    // last user to control the video in a collab session
 
-  function log_abbreviated(str: string) {
+  function log_abbreviated(...strs: any[]) {
       const max_len = 180;
-      if (str.length > max_len)
-        str = str.slice(0, max_len) + "(...)";
-      console.log(str);
+      let abbreviated: string[] = [];
+      for (let i = 0; i < strs.length; i++) {
+        let str = (typeof strs[i] == "string" || typeof strs[i] == "number" || typeof strs[i] == "boolean")
+          ? String(strs[i])
+          : JSON.stringify(strs[i]);
+        abbreviated[i] = (str.length > max_len) ? (str.slice(0, max_len) + "(...)") : str;
+      }
+      console.log(...abbreviated);
   }
 
   // Messages from CommentInput component
@@ -118,12 +127,6 @@
     closeVideo();
   }
 
-  function onRequestVideoOpen(e: any) {
-    let new_video_hash = e.detail.video_hash;
-    ws_emit('open_video', {video_hash: new_video_hash});
-    history.pushState(new_video_hash, null, '/?vid='+new_video_hash);  // Point URL to video
-  }
-
   function onRequestFolderOpen(e: any) {
     alert("TODO: open folder " + e.detail.folder_id);
   }
@@ -168,6 +171,7 @@
       acts.add({mode: 'warn', message: "Unknown URL parameter: '" + key + "'", lifetime: 5});
     }
   });
+
   $video_hash = urlParams.get('vid');
   const prev_collab_id = $collab_id;
   $collab_id = urlParams.get('collab');
@@ -180,40 +184,6 @@
   }
 
   let upload_url: string = "";
-
-
-  // --- video drag and drop ---
-
-  let lastDroppedVideoFolder: string = null;
-  interface VideoDragDispatch {
-    detail: {
-      video_hash: string,
-      event: DragEvent,
-    }
-  }
-
-  // When a video tile is dragged, ask all other video tiles if they want to join the drag
-  function onVideoTileDragStart(e: VideoDragDispatch)
-  {
-    videoTiles.forEach((tile: VideoListVideoTile, _i, _arr) => {
-      let vh = tile.tryJoinVideoDrag();
-      if (vh) {
-        // Add video hash to drag event's dataTransfer "clapshotvideo" string, separated by comma.
-        let dt = e.detail.event.dataTransfer.getData("clapshotvideo") || "";
-        let dt_arr = dt.split(",");
-        dt_arr.push(vh);
-        dt_arr = dt_arr.filter((v, i, a) => a.indexOf(v) === i); // Remove duplicates
-        dt = dt_arr.join(",");
-        e.detail.event.dataTransfer.setData("clapshotvideo", dt);
-      }
-    });
-  }
-
-  function onVideoTileDragEnd(e: VideoDragDispatch) {
-    videoTiles.forEach((tile: VideoListVideoTile, _i, _arr) => {
-      tile.videoDragEnded();
-    });
-  }
   
   
   // -------------------------------------------------------------
@@ -515,50 +485,86 @@
 
   }
 
-  function onRequestVideoDelete(e: {detail: {video_hash: any; video_name: any;}}) {
-    log_abbreviated("onRequestVideoDelete: " + e.detail.video_hash + " / " + e.detail.video_name);
-    if (confirm("Are you sure you want to delete '" + e.detail.video_name + "'?")) {
-      ws_emit('del_video', {video_hash: e.detail.video_hash});
-      // After 2 seconds, refresh the list of videos
-      function refresh_my_videos() { ws_emit('list_my_videos', {}); }
-      setTimeout(refresh_my_videos, 2000);
-    }
+  function onRequestVideoDelete(video_hash: string, video_name: string) {
+    log_abbreviated("onRequestVideoDelete: " + video_hash + " / " + video_name);
+    ws_emit('del_video', {video_hash});
+    ws_emit('list_my_videos', {});
   }
 
-  function onRequestVideoRename(e: {detail: {video_hash: any; video_name: any;}}) {
-    log_abbreviated("onRequestVideoRename: " + e.detail.video_hash + " / " + e.detail.video_name);
-    let new_name = prompt("Rename video to:", e.detail.video_name);
+  function onRequestVideoRename(video_hash: string, video_name: string) {
+    log_abbreviated("onRequestVideoRename: " + video_hash + " / " + video_name);
+    let new_name = prompt("Rename video to:", video_name);
     if (new_name) {
-      ws_emit('rename_video', {video_hash: e.detail.video_hash, new_name: new_name});
+      ws_emit('rename_video', {video_hash, new_name});
       ws_emit('list_my_videos', {});
     }
   }
 
-  function onRequestVideoMove(e: {detail: {video_hash: any; target_folder: any;}}) {
-    log_abbreviated("NOT IMPLEMENTED! onRequestVideoMove: " + e.detail.video_hash + " / " + e.detail.target_folder);
+  function onRequestFolderDelete(folder_id: string) {
+    alert("NOT IMPLEMENTED: delete folder: " + folder_id);
   }
 
-  function onRequestFolderDelete(e: {detail: {folder_id: any; folder_name: any;}}) {
-    log_abbreviated("onRequestFolderDelete: " + e.detail.folder_id + " / " + e.detail.folder_name);
-    if (confirm("Are you sure you want to delete '" + e.detail.folder_id + " AND ALL CONTENS'?")) {
-      ws_emit('del_folder', {video_hash: e.detail.folder_id});
-      // After 2 seconds, refresh the list of videos
-      function refresh_my_videos() { ws_emit('list_my_videos', {}); }
-      setTimeout(refresh_my_videos, 2000);
+  function onRequestFolderRename(folder_id: string, folder_name: string) {
+    alert("NOT IMPLEMENTED: rename folder: " + folder_id + " / " + folder_name);
+  }
+
+  function onMoveItemsToFolder(_e: {detail: {folder_id: any; items: any[]}}) {
+    console.log("NOT IMPLEMENTED! onMoveItemsToFolder: " + _e.detail.folder_id, "items:", _e.detail.items);
+  }
+
+  function TEMP_getVideoListItems(items: any[]): VideoListDefItem[] {
+    let res: VideoListDefItem[] = items.map((it) => new VideoListVideoDef(it));
+    let copy = [...res];
+    let fld1 = new VideoListFolderDef("test1", "Test Folder 1", copy);
+    let fld2 = new VideoListFolderDef("test2", "Test Folder 2", []);
+    res.push(fld1);
+    res.push(fld2);
+    return res;
+  }
+
+  function TEMP_reorderItems(e: any) {
+    console.log("TEMP_reorderItems:", e.detail.items);
+  }
+
+  function openVideoListItem(e: { detail: { video: any; folder: any }}): void {
+    if (e.detail.video) {
+      let new_video_hash = e.detail.video.video_hash;
+      ws_emit('open_video', {video_hash: new_video_hash});
+      history.pushState(new_video_hash, null, '/?vid='+new_video_hash);  // Point URL to video
+    } else if (e.detail.folder) {
+      alert("Folder open: " + e.detail.folder.folder_id);
     }
   }
 
-  function onRequestFolderRename(e: {detail: {folder_id: any; folder_name: any;}}) {
-    log_abbreviated("onRequestFolderRename: " + e.detail.folder_id + " / " + e.detail.folder_name);
-    let new_name = prompt("Rename folder to:", e.detail.folder_name);
-    if (new_name) {
-      ws_emit('rename_folder', {folder_id: e.detail.folder_id, new_name: new_name});
-      ws_emit('list_my_videos', {});
+  function onVideoListPopupAction(e: { detail: { action: string, items: VideoListDefItem[] }}) {
+    let {action, items} = e.detail;
+    switch (action) {
+      case 'delete':
+        let subject = items.length == 1 ? "this item" : items.length + " items";
+        if (confirm("Are you sure you want to DELETE " + subject + "?")) {
+          items.forEach((it) => {
+            let {video, folder} = videoOrFolder(it);
+            if (video)
+              onRequestVideoDelete(video.video_hash, video.title);
+            else if (folder)
+              onRequestFolderDelete(folder.folder_id);
+        })}
+        break;
+      case 'rename':
+        if (items.length == 1) {
+          let {video, folder} = videoOrFolder(items[0]);
+          if (video)
+            onRequestVideoRename(video.video_hash, video.title);
+          else if (folder)
+            onRequestFolderRename(folder.folder_id, folder.name);
+        } else {
+          alert("Can only rename one item at a time.");
+        }
+        break;
+      default:
+        alert("NOT IMPLEMENTED (TODO: push this action blindly to server?): " + action);
     }
   }
-
-  function onVideosDroppedToFolder(e: {detail: {folder_id: any; drag_data: string;}}) {
-	}
 
 </script>
 
@@ -638,40 +644,27 @@
             </h1>
 
           </div>
-          <div class="flex flex-wrap m-4">
+          
+          <div class="m-4">
+            <VideoList items={TEMP_getVideoListItems($all_my_videos)} 
+              on:open-item={openVideoListItem}
+              on:reorder-items={TEMP_reorderItems}
+              on:move-to-folder={onMoveItemsToFolder}
+              on:popup-action={onVideoListPopupAction}
+              />
 
-            {#each $all_my_videos as item, i}
-              <VideoListVideoTile
-                {item}
-                bind:this={videoTiles[i]}
-                on:open-video={onRequestVideoOpen}
-                on:delete-video={onRequestVideoDelete}
-                on:rename-video={onRequestVideoRename}
-                on:move-video={onRequestVideoMove}
-                on:drag-start={onVideoTileDragStart}
-                on:drag-end={onVideoTileDragEnd}
-                />
-            {/each}
-            
-            <VideoListFolder
-              id="1"
-              name="Folder 1"
-              contents={$all_my_videos}
-              on:drop={onVideosDroppedToFolder}
-              on:open-folder={onRequestFolderOpen}
-              on:delete-folder={onRequestFolderDelete}
-              on:rename-folder={onRequestFolderRename}
-            />
-
-            <VideoListFolder id="2" name="Trashcan" />
-
-            <div class="video-list-tile-sqr"
-                style="background: none; padding: 0; border: 0.2em dashed #485568; border-radius: 1em;">
+            <div class="w-full my-4 h-24 border-4 border-dashed border-gray-700">
               <FileUpload post_url={upload_url}>
-                <button class="w-full h-full p-2 text-4xl"><i class="fas fa-circle-plus"></i></button>
+                <div class="flex flex-col justify-center items-center h-full">
+                  <div class="text-2xl text-gray-700">
+                    <i class="fas fa-upload"></i>
+                  </div>
+                  <div class="text-xl text-gray-700">
+                    Drop video files here to upload
+                  </div>
+                </div>
               </FileUpload>
             </div>
-          
           </div>
 
           <div>
@@ -702,16 +695,6 @@
         transform: rotate(360deg); 
     }
 }
-
-/*
-::-webkit-scrollbar {
-    display: none;
-}
-body {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-}
-*/
 
 </style>
 

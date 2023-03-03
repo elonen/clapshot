@@ -74,6 +74,9 @@
         drag_active = false;
         files.accepted = e.detail.acceptedFiles;
         files.rejected = e.detail.fileRejections;
+        if (files.rejected.length > 0 && files.accepted.length==0) {
+            alert("Drop rejected. Only video files are allowed.");
+        }
         upload();
     }
 
