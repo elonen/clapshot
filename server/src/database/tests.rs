@@ -1,5 +1,5 @@
 use tracing_test::traced_test;
-use crate::database::*;
+use crate::{database::{*, models::ToJson}, python::PythonHandle};
 
 
 
@@ -20,7 +20,7 @@ use crate::database::*;
 /// <Comment(id='6' video=HASH0 parent=1 user_id='user.num2' comment='Comment 5' has-drawing=True ...)>
 /// <Comment(id='7' video=HASH0 parent=1 user_id='user.num1' comment='Comment 6' has-drawing=True ...)>
 /// ```
-pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<models::Video>, Vec<models::Comment>)
+pub fn make_test_db() -> (std::sync::Arc<DB>, PythonHandle, assert_fs::TempDir, Vec<models::Video>, Vec<models::Comment>)
 {
     let data_dir = assert_fs::TempDir::new().unwrap();
 
@@ -86,7 +86,9 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<models::Vi
     };
     db.add_comment(&c).unwrap();
 
-    (std::sync::Arc::new(db), data_dir, videos, comments)
+    let db = std::sync::Arc::new(db);
+    let py = PythonHandle::new(db.clone()).unwrap();
+    (db, py, data_dir, videos, comments)
 }
 
 
@@ -94,7 +96,7 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<models::Vi
 #[traced_test]
 fn test_fixture_state() -> anyhow::Result<()>
 {
-    let (db, _data_dir, vid, com) = make_test_db();
+    let (db, _py, _data_dir, vid, com) = make_test_db();
 
     // First 5 comments have no parent, last 2 have parent_id=1
     for i in 0..5 { assert!(com[i].parent_id.is_none()); }
@@ -137,7 +139,7 @@ fn test_fixture_state() -> anyhow::Result<()>
 #[test]
 #[traced_test]
 fn test_comment_delete() -> anyhow::Result<()> {
-    let (db, _data_dir, _vid, com) = make_test_db();
+    let (db, _py, _data_dir, _vid, com) = make_test_db();
 
     assert_eq!(db.get_video_comments(&com[1].video_hash)?.len(), 2, "Video should have 2 comments before deletion");
 
@@ -173,7 +175,7 @@ fn test_comment_delete() -> anyhow::Result<()> {
 #[test]
 #[traced_test]
 fn test_rename_video() -> anyhow::Result<()> {
-    let (db, _data_dir, _vid, _com) = make_test_db();
+    let (db, _py, _data_dir, _vid, _com) = make_test_db();
 
     // Rename video #1
     let new_name = "New name";
@@ -194,7 +196,7 @@ fn test_rename_video() -> anyhow::Result<()> {
 #[test]
 #[traced_test]
 fn test_user_messages() -> anyhow::Result<()> {
-    let (db, _data_dir, _vid, _com) = make_test_db();
+    let (db, _py, _data_dir, _vid, _com) = make_test_db();
 
     // Add a message to user #1
     let msgs = [
@@ -232,7 +234,7 @@ fn test_user_messages() -> anyhow::Result<()> {
         let new_msg = db.add_message(&msgs[i])?;
         assert_eq!(new_msg.user_id, msgs[i].user_id);
         assert_eq!(new_msg.message, msgs[i].message);
-        assert_eq!(db.get_message(new_msg.id)?.to_json()?, new_msg.to_json()?);
+        assert_eq!(db.get_message(new_msg.id)?.to_json(None)?, new_msg.to_json(None)?);
         assert!(!db.get_message(new_msg.id)?.seen);
         new_msgs.push(new_msg);
     }

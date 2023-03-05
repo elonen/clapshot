@@ -18,7 +18,8 @@ Usage:
 Required:
  --url-base=URL       Base URL of the API server, e.g. https://example.com/clapshot/.
                       This depends on your proxy server configuration.
- --data-dir=PATH      Directory for database, /incoming, /videos and /rejected
+ --data-dir=PATH      Directory for database, /incoming, /videos, /rejected and /python.
+                      Must be writable by the user running the server.
 
 Options:
  -p PORT --port=PORT    Port to listen on [default: 8095]

@@ -82,7 +82,7 @@ macro_rules! send_user_ok(
 pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
     let videos = ses.server.db.get_all_user_videos(&ses.user_id)?;
     let videos = videos.into_iter().map(|v| {
-            let mut fields = v.to_json()?;
+            let mut fields = v.to_json(None)?;
             if let Some(sheet_dims) = v.thumb_sheet_dims {
                 let (sheet_w, sheet_h) = sheet_dims.split_once('x').ok_or(anyhow!("Invalid sheet dims"))?;
                 fields["thumb_sheet_cols"] = json!(sheet_w.parse::<u32>()?);
@@ -113,7 +113,7 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_
         Err(e) => { bail!(e); }
         Ok(v) => {
             ses.video_session_guard = Some(ses.server.link_session_to_video(video_hash, ses.sender.clone()));
-            let mut fields = v.to_json()?;
+            let mut fields = v.to_json(None)?;
 
             // Use transcoded or orig video?
             let (file, uri) = match v.recompression_done {
@@ -342,7 +342,7 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
 pub async fn msg_list_my_messages(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
     let msgs = ses.server.db.get_user_messages(&ses.user_id)?;
     for m in msgs {
-        ses.emit_cmd("message", &m.to_json()?, super::SendTo::CurSession())?;
+        ses.emit_cmd("message", &m.to_json(None)?, super::SendTo::CurSession())?;
         if !m.seen {
             ses.server.db.set_message_seen(m.id, true)?;
         }

@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use super::schema::*;
 use chrono;
 use chrono::naive::serde::{ts_seconds, ts_seconds_option};
-use chrono::TimeZone;
 use timeago;
 
 
@@ -128,14 +127,27 @@ pub struct PropInsert {
     pub val: String,
 }
 
+
 // -------------------------------------------------------
-pub trait ToJson {
-    fn to_json(&self) -> Result<serde_json::Value, serde_json::Error>
-        where Self: Serialize + Sized
-    {
-        serde_json::to_value(&self)
+// JSON serialization helpers
+// -------------------------------------------------------
+
+pub type ToJsonResult = Result<serde_json::Value, serde_json::Error>;
+pub type ToJsonPostproc<T> = fn(serde_json::Value, &T) -> ToJsonResult;
+
+fn to_json_default_impl<T: Serialize + Sized>(obj: &T, pproc: Option<ToJsonPostproc<T>>) -> ToJsonResult {
+    match (serde_json::to_value(&obj)?, pproc) {
+        (v, Some(pproc)) => pproc(v, obj),
+        (v, None) => Ok(v),
     }
 }
+
+pub trait ToJson {
+    fn to_json(&self, pproc: Option<ToJsonPostproc<Self>>) -> ToJsonResult
+        where Self: Serialize + Sized {
+        to_json_default_impl(self, pproc)
+    }
+}   
 
 impl ToJson for VideoInsert {}
 impl ToJson for Comment {}
@@ -145,25 +157,33 @@ impl ToJson for Prop {}
 impl ToJson for PropInsert {}
 
 
-
+/// Convert a UTC timestamp to a human-readable string in the local timezone.
 pub fn humanize_utc_timestamp(timestamp: &chrono::NaiveDateTime) -> String {
-    let added_time: chrono::DateTime<chrono::Utc> = chrono::Utc.from_utc_datetime(timestamp);
-    let time_ago_str = timeago::Formatter::new().convert_chrono(added_time, chrono::Local::now());
-    time_ago_str
+    use chrono::{Local, DateTime};
+    let tz = Local::now().offset().clone();
+    let local_dt = DateTime::<Local>::from_utc(*timestamp, tz);
+    let hours_ago = Local::now().signed_duration_since(local_dt).num_hours();
+    if hours_ago < 24 {
+        timeago::Formatter::new().convert_chrono(local_dt, Local::now())
+    } else {
+        local_dt.format("%Y-%m-%d").to_string() // %H:%M
+    }
 }
 
 impl ToJson for Video {
-    fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
-        serde_json::to_value(&self).map(|mut v| {
+    fn to_json(&self, pproc: Option<ToJsonPostproc<Video>>) -> ToJsonResult {
+        to_json_default_impl(self, pproc).map(|mut v| {
             v["added_time"] = serde_json::Value::String(humanize_utc_timestamp(&self.added_time));
             v
         })
     }
 }
 
-impl Message { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
-    serde_json::to_value(&self).map(|mut v| {
-        v["created"] = serde_json::Value::String(humanize_utc_timestamp(&self.created));
-        v
-    })
-}}
+impl ToJson for Message {
+    fn to_json(&self, pproc: Option<ToJsonPostproc<Message>>) -> ToJsonResult {
+        to_json_default_impl(self, pproc).map(|mut v| {
+            v["created"] = serde_json::Value::String(humanize_utc_timestamp(&self.created));
+            v
+        })
+    }
+}

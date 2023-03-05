@@ -93,7 +93,7 @@ pub(crate) async fn connect_client_ws(ws_url: &str, user_id: &str) -> WsClient {
 macro_rules! api_test {
     ([$ws:ident, $state:ident] $($body:tt)*) => {
         {
-            let (db, data_dir, videos, comments) = make_test_db();
+            let (db, py, data_dir, videos, comments) = make_test_db();
 
             let port = 10000 + (rand::random::<u16>() % 10000);
             let (user_msg_tx, user_msg_rx) = crossbeam_channel::unbounded();
@@ -104,7 +104,9 @@ macro_rules! api_test {
             let videos_dir = data_dir.join("videos");
             let upload_dir = data_dir.join("upload");
     
-            let server_state = ServerState::new( db.clone(),
+            let server_state = ServerState::new(
+                db.clone(),
+                py.clone(),
                 &videos_dir.clone(),
                 &upload_dir.clone(),
                 &url_base.clone(),

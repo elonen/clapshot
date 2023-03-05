@@ -36,6 +36,7 @@ use file_upload::handle_multipart_upload;
 
 use crate::database::models::ToJson;
 use crate::database::{models, DB};
+use crate::python::PythonHandle;
 use crate::video_pipeline::IncomingFile;
 
 type Res<T> = anyhow::Result<T>;
@@ -105,7 +106,7 @@ impl WsSessionArgs<'_> {
     }
     
     pub fn push_notify_message(&self, msg: &models::MessageInsert, persist: bool) -> Res<()> {
-        let send_res = self.emit_cmd("message", &msg.to_json()?, SendTo::UserId(&msg.user_id));
+        let send_res = self.emit_cmd("message", &msg.to_json(None)?, SendTo::UserId(&msg.user_id));
         if let Ok(sent_count) = send_res {
             if persist {
                 self.server.db.add_message(&models::MessageInsert {
@@ -137,7 +138,7 @@ impl WsSessionArgs<'_> {
                 }
             }
         }
-        let mut fields = c.to_json()?;
+        let mut fields = c.to_json(None)?;
         fields["comment_id"] = fields["id"].take();  // swap id with comment_id, because the client expects comment_id        
         self.emit_cmd("new_comment", &fields , send_to).map(|_| ())
     }
@@ -394,7 +395,7 @@ async fn run_api_server_async(
 
                 // Message to all watchers of a video
                 if let Some(vh) = m.video_hash {
-                    if let Ok(data) = &msg.to_json() {
+                    if let Ok(data) = &msg.to_json(None) {
                         let msg = Message::text(serde_json::json!({
                             "cmd": "message", "data": data }).to_string());
                         if let Err(_) = server_state.send_to_all_video_sessions(&vh, &msg) {
@@ -407,7 +408,7 @@ async fn run_api_server_async(
                 // Save it to the database, marking it as seen if sending it to the user succeeds
                 if let Some(user_id) = m.user_id {
                     let mut user_was_online = false;
-                    if let Ok(data) = msg.to_json() {
+                    if let Ok(data) = msg.to_json(None) {
                         let msg = Message::text(serde_json::json!({
                             "cmd": "message", "data": data }).to_string());
                         match server_state.send_to_all_user_sessions(&user_id, &msg) {
@@ -437,6 +438,7 @@ async fn run_api_server_async(
 #[tokio::main]
 pub async fn run_forever(
     db: Arc<DB>,
+    py: PythonHandle,
     videos_dir: PathBuf,
     upload_dir: PathBuf,
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
@@ -447,7 +449,9 @@ pub async fn run_forever(
 {
     assert!(!url_base.ends_with('/')); // Should have been stripped by caller
     let _span = tracing::info_span!("API").entered();
-    let state = ServerState::new( db,
+    let state = ServerState::new(
+        db,
+        py,
         &videos_dir,
         &upload_dir,
         &url_base,

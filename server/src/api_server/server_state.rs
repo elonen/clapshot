@@ -8,12 +8,14 @@ use anyhow::anyhow;
 
 use super::{WsMsgSender, SenderList, SenderListMap, StringToStringMap, Res};
 use crate::database::DB;
+use crate::python::PythonHandle;
 
 /// Lists of all active connections and other server state vars
 #[derive (Clone)]
 pub struct ServerState {
     pub terminate_flag: Arc<AtomicBool>,
     pub db: Arc<DB>,
+    pub py: PythonHandle,
     pub videos_dir: PathBuf,
     pub upload_dir: PathBuf,
     pub url_base: String,
@@ -25,9 +27,10 @@ pub struct ServerState {
 
 impl ServerState {
 
-    pub fn new(db: Arc<DB>, videos_dir: &Path, upload_dir: &Path, url_base: &str, terminate_flag: Arc<AtomicBool>) -> ServerState {
+    pub fn new(db: Arc<DB>, py: PythonHandle, videos_dir: &Path, upload_dir: &Path, url_base: &str, terminate_flag: Arc<AtomicBool>) -> ServerState {
         ServerState {
             db,
+            py,
             videos_dir: videos_dir.to_path_buf(),
             upload_dir: upload_dir.to_path_buf(),
             terminate_flag,

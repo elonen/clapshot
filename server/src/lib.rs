@@ -64,6 +64,19 @@ pub fn run_clapshot(
         }
     }
 
+    // Import python plugins
+    const PY_MAIN: &str = "main.py";
+    let py = python::PythonHandle::new(db.clone())
+        .map_err(|e| anyhow::anyhow!("Error initializing python: {:?}", e))?;
+    let py_dir = data_dir.join("python");
+    let py_file = py_dir.join(PY_MAIN);
+    if !py_dir.exists() {
+        std::fs::create_dir_all(&py_dir)?;
+        std::fs::write(&py_file, python::DEFAULT_PYTHON)?;
+    }
+    py.run(&std::fs::read_to_string(&py_file)?)
+        .map_err(|e| anyhow::anyhow!("Error running {:?}: {:?}", py_file, e))?;
+
     // Run API server
     let tf = Arc::clone(&terminate_flag);
     let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
@@ -74,6 +87,7 @@ pub fn run_clapshot(
         thread::spawn(move || {
             api_server::run_forever(
                     db,
+                    py,
                     data_dir.join("videos"),
                     data_dir.join("upload"),
                     user_msg_rx, 
