@@ -1,0 +1,111 @@
+syntax = "proto3";
+package clapshot.organizer;
+
+// This defines the gRPC API for Clapshot Organizer services.
+//
+// An **organizer plugin** is responsible for organizing
+// Clapshot videos into UI folders and enforcing access
+// control according to your particular business logic,
+// perhaps by looking up projects and ACL groups from
+// some LDAP or project management SQL database.
+//
+// Clapshot server works as a _gPRC client_, while your
+// custom organizer service works as a _gRPC server_.
+//
+// This means that Clapshot server will connect the organizer
+// on startup, and start calling these functions on certain
+// events -- when the client requests a list of videos,
+// uploads a new one etc.
+//
+// The organizer service must live as long as the Clapshot
+// server and have a stable connection, which is why it is
+// recommended to have the server actually launch the
+// organizer service as a subprocess and use Unix sockets
+// for communication.
+
+service Organizer {
+    rpc server_started (ServerInfo) returns (Empty);
+    rpc define_actions (NamedActions) returns (Empty);
+}
+
+// ---------------------------------------------------------
+ 
+message ServerInfo {
+    string data_dir = 1;
+    string server_url = 2;
+    DatabaseInfo db = 3;
+    SemanticVersionNumber version = 4;
+}
+
+message DatabaseInfo {
+    enum DatabaseType {
+        SQLITE = 0;
+    }    
+    DatabaseType type = 1;
+    string endpoint = 2;
+}
+
+message SemanticVersionNumber {
+    uint64 major = 1;
+    uint64 minor = 2;
+    uint64 patch = 3;
+}
+
+// ---------------------------------------------------------
+
+enum DialogType {
+    TEXT_INPUT = 0;
+    OK_CANCEL = 1;
+}
+
+message Dialog {
+    DialogType type = 1;
+    string title = 2;
+    string desc = 3;
+    map<string, string> args = 4; // Dialog-specific arguments
+}
+
+message ActionUIProps {
+    string label = 1;           // e.g. "Rename"
+    string key_shortcut = 2;    // e.g. "F2", "Delete"
+    string icon_css_class = 3;  // e.g. "fa fa-edit"
+}
+
+message AnyValueMap {
+    map<string, AnyValue> values = 1;
+}
+
+message AnyValue {
+    oneof val {
+        string t_str = 2;
+        int64 t_int = 3;
+        double t_flt = 4;
+        bool t_bool = 5;
+        AnyValueMap t_map = 6;
+    }
+}
+
+message ActionDef {
+
+    message ExecIf {
+        string condition = 1; // e.g. "$DLG.ok"
+    }
+
+    message ApiCall {
+        string cmd = 1; // e.g. "organizer"
+        map<string, AnyValue> data = 2; // e.g. "{subcmd: 'rename', folder: '$ITEM.id', new_name: '$DLG.text'}"
+    }
+
+    ApiCall api_call = 1;
+    Dialog dlg = 2;
+    ExecIf exec_if = 3;
+    ActionUIProps ui_props = 4;
+}
+
+message NamedActions {
+    map<string, ActionDef> actions = 1;
+}
+
+// ---------------------------------------------------------
+
+message Empty {}

@@ -301,6 +301,7 @@ fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String)
 
 /// Handle HTTP requests, read authentication headers and dispatch to WebSocket handler.
 async fn run_api_server_async(
+    bind_addr: std::net::IpAddr,
     server_state: ServerState,
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
     upload_results_tx: crossbeam_channel::Sender<IncomingFile>,
@@ -363,8 +364,9 @@ async fn run_api_server_async(
         .allow_methods(vec!["GET", "POST"])
         .allow_headers(vec!["x-file-name"]));
 
+
     let (_addr, server) = warp::serve(routes)
-        .bind_with_graceful_shutdown(([127, 0, 0, 1], port), async move {
+        .bind_with_graceful_shutdown((bind_addr, port), async move {
             while !server_state_cln1.terminate_flag.load(Relaxed) {
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
@@ -429,7 +431,7 @@ async fn run_api_server_async(
     };
 
     tokio::join!(server, msg_relay);
-    tracing::info!("Exiting.");
+    tracing::debug!("Exiting.");
 }
 
 
@@ -441,15 +443,25 @@ pub async fn run_forever(
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
     upload_res_tx: crossbeam_channel::Sender<IncomingFile>,
     terminate_flag: Arc<AtomicBool>,
+    bind_addr: String,
     url_base: String,
     port: u16)
 {
     assert!(!url_base.ends_with('/')); // Should have been stripped by caller
+
+    let bind_addr = match bind_addr.parse::<std::net::IpAddr>() {
+        Ok(ip) => ip,
+        Err(e) => {
+            tracing::error!(details=%e, "Failed to parse bind address: '{}'", bind_addr);
+            return;
+        }
+    };
+
     let _span = tracing::info_span!("API").entered();
     let state = ServerState::new( db,
         &videos_dir,
         &upload_dir,
         &url_base,
         terminate_flag );
-    run_api_server_async(state, user_msg_rx, upload_res_tx, port).await
+    run_api_server_async(bind_addr, state, user_msg_rx, upload_res_tx, port).await
 }

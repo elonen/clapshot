@@ -1,12 +1,13 @@
 .PHONY: deps clean test docker test run run-local run-docker docs default debian-local
 
 PACKAGE_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
+PLUGIN_BIN=../organizer-plugin/simple_rust/target/debug/clapshot-organizer_rust-simple
 
 UID=$(shell id -u)
 GID=$(shell id -g)
 
 PACKAGE=clapshot_server
-SERVER_CMD=target/release/clapshot-server
+SERVER_CMD=target/debug/clapshot-server
 DEV_DATADIR=DEV_DATADIR
 
 default: ${SERVER_CMD}
@@ -18,7 +19,7 @@ RUST_DEPS=$(shell find src/ migrations/ Cargo.toml diesel.toml -type f)
 DEB_DEPS=$(shell find debian/ README* LICENSE*  -type f)
 
 ${SERVER_CMD}: ${RUST_DEPS}
-	cargo build --release
+	cargo build
 
 clean:
 	cargo clean
@@ -68,7 +69,8 @@ docs:
 	@echo "Documentation generated. See docs/_build/"
 
 run-local: ${SERVER_CMD} ${DEV_DATADIR}
-	${SERVER_CMD} --url-base http://127.0.0.1:8095/ --port 8095 --data-dir ${DEV_DATADIR} --migrate --debug
+	(cd ../organizer-plugin; make)
+	${SERVER_CMD} --url-base http://127.0.0.1:8095/ --port 8095 --org-cmd "${PLUGIN_BIN}" --data-dir ${DEV_DATADIR} --migrate --debug
 
 run-docker: docker
 	docker run --rm -it -p 127.0.0.1:8095:8095 --mount type=bind,source="$$(pwd)"/${DEV_DATADIR},target=/app/${DEV_DATADIR}  ${PACKAGE}:latest

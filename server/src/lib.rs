@@ -1,13 +1,22 @@
+use crate::grpc::{connect::{OrganizerURI}, caller::OrganizerCaller};
+
 pub mod video_pipeline;
 pub mod api_server;
 pub mod database;
 pub mod tests;
+pub mod grpc;
+
+pub const PKG_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+pub const PKG_NAME: &'static str = env!("CARGO_PKG_NAME");
+
 
 pub fn run_clapshot(
     data_dir: std::path::PathBuf,
     migrate: bool,
     url_base: String,
+    bind_addr: String,
     port: u16,
+    organizer_uri: Option<OrganizerURI>,
     n_workers: usize,
     target_bitrate: u32,
     poll_interval: f32,
@@ -23,7 +32,6 @@ pub fn run_clapshot(
     
     use crossbeam_channel::unbounded;   // Work queue
 
-    
     // Setup SIGINT / SIGTERM handling
     let terminate_flag = Arc::new(AtomicBool::new(false));
     for sig in TERM_SIGNALS {
@@ -31,7 +39,7 @@ pub fn run_clapshot(
         flag::register(*sig, Arc::clone(&terminate_flag))?;
     }
 
-    // Create directories
+    // Create subdirectories
     for d in &["videos", "incoming", "videos"] {
         std::fs::create_dir_all(&data_dir.join(d))?;
     }
@@ -63,6 +71,10 @@ pub fn run_clapshot(
         }
     }
 
+    if let Some(ouri) = organizer_uri {
+        OrganizerCaller::new(ouri).server_started(&data_dir, &url_base, &db_file)?;
+    }
+
     // Run API server
     let tf = Arc::clone(&terminate_flag);
     let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
@@ -78,6 +90,7 @@ pub fn run_clapshot(
                     user_msg_rx, 
                     upload_tx, 
                     tf.clone(), 
+                    bind_addr.to_string(),
                     url_base.to_string(),
                     port) 
             })};
@@ -98,7 +111,7 @@ pub fn run_clapshot(
         }
     }
 
-    tracing::warn!("Got kill signal. Cleaning up.");
+    tracing::info!("Got kill signal. Cleaning up.");
     vpp_thread.join().unwrap();
     api_thread.join().unwrap();
     Ok(())

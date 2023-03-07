@@ -86,7 +86,7 @@ mod integration_test
                     let data_dir = $data_dir.path().to_path_buf();
                     let url_base = url_base.clone();
                     thread::spawn(move || {
-                        crate::run_clapshot(data_dir, true, url_base, port, 4, target_bitrate, poll_interval, poll_interval*5.0).unwrap()
+                        crate::run_clapshot(data_dir, true, url_base, "127.0.0.1".into(), port, None, 4, target_bitrate, poll_interval, poll_interval*5.0).unwrap()
                     })};
                 thread::sleep(Duration::from_secs_f32(0.25));
 
