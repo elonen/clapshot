@@ -23,6 +23,7 @@ sed -i "s/[$]remote_user/docker/g" /etc/nginx/sites-enabled/clapshot
 
 # Assume user accesses this at $URL_BASE
 sed -i "s/^url-base.*/url-base = http://${URL_BASE}/g" /etc/clapshot-server.conf
+echo "migrate = true" >> /etc/clapshot-server.conf
 
 
 # Make server data dir and log accessible to docker user
