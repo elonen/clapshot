@@ -1,4 +1,3 @@
-Cargo.lock
 target
 DEV_DATADIR*
 dist_deb
