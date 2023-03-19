@@ -3,7 +3,7 @@ use serde::Deserialize;
 use tracing::{error};
 use std::{path::{PathBuf}};
 use anyhow::{bail};
-use clapshot_server::{PKG_NAME, PKG_VERSION, run_clapshot, grpc::connect::prepare_organizer};
+use clapshot_server::{PKG_NAME, PKG_VERSION, run_clapshot, grpc::{grpc_client::prepare_organizer, grpc_server::parse_server_bind}};
 
 mod log;
 
@@ -39,18 +39,32 @@ Options:
  -b --bitrate <vbr>   Target (max) bitrate for transcoding, in Mbps [default: 2.5]
  --migrate            Migrate database to latest version. Make a backup first.
 
- --org-cmd <cmd>      Shell command to start Organizer plugin.
-                      The command should block until SIGTERM, and log to
-                      stdout/stderr without timestamps. Unless --org-uri is a HTTP(S) URI,
-                      the command gets a Unix socket path as an argument.
-
- --org-uri <uri>      Endpoint to connect Organizer plugin (gRPC server).
-                      E.g. `/path/to/plugin.sock` or `http://[::1]:50051`
-                      If `--org-cmd` is given, this defaults to a temp .sock in datadir.
-
  -d --debug           Enable debug logging
  -h --help            Show this screen
  -v --version         Show version and exit
+
+Organizer:
+
+Plugin system for organizing videos and users. Clapshot server can connect to
+a custom Organizer through gRPC, which then connects back to the server,
+establishing bidirectional gRPC. Recommended way to run an Organizer
+is to use --org-cmd, which allows integrated logging and shutdown.
+Unix sockets are used by default, and you don't usually need to
+specify --org-in-uri or --org-out-tcp.
+
+ --org-cmd <cmd>       Shell command to start Organizer plugin.
+                       The command should block until SIGTERM, and log to
+                       stdout/stderr without timestamps. Unless --org-uri is a HTTP(S) URI,
+                       the command will get a Unix socket path as an argument when
+                       Clapshot server calls it.
+
+ --org-in-uri <uri>    Custom endpoint for srv->org connections.
+                       E.g. `/path/to/plugin.sock` or `http://[::1]:50051`
+                       If `--org-cmd` is given, this defaults to a temp .sock in datadir.
+
+ --org-out-tcp <addr>  Listen in TCP address port for org->srv connections.
+                       Default is to use a Unix socket in datadir. E.g. `[::1]:50052`
+
 "#;
 
 #[derive(Debug, Deserialize)]
@@ -64,7 +78,8 @@ struct Args {
     flag_bitrate: f32,
     flag_migrate: bool,
     flag_org_cmd: Option<String>,
-    flag_org_uri: Option<String>,
+    flag_org_in_uri: Option<String>,
+    flag_org_out_tcp: Option<String>,
     flag_url_base: String,
     flag_data_dir: PathBuf,
     flag_debug: bool,
@@ -96,8 +111,10 @@ fn main() -> anyhow::Result<()>
         &args.flag_log.clone().unwrap_or_default(),
         args.flag_json);
 
+    let grpc_server_bind = parse_server_bind(&args.flag_org_out_tcp, &args.flag_data_dir)?;
+
     let (org_uri, _org_hdl) = prepare_organizer(
-        &args.flag_org_uri,
+        &args.flag_org_in_uri,
         &args.flag_org_cmd,
         &args.flag_data_dir)?;
 
@@ -109,6 +126,7 @@ fn main() -> anyhow::Result<()>
         args.flag_host,
         args.flag_port,
         org_uri,
+        grpc_server_bind,
         if args.flag_workers == 0 { num_cpus::get() } else { args.flag_workers },
         target_bitrate,
         args.flag_poll,

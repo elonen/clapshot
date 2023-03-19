@@ -1,7 +1,7 @@
 use std::{path::{Path, PathBuf}};
 use crate::grpc::{unix_socket, subprocess::spawn_shell};
 
-use self::proto::organizer_client::OrganizerClient;
+use self::proto::organizer_inbound_client::OrganizerInboundClient;
 use anyhow::{Context, bail};
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri, Channel};
@@ -13,7 +13,7 @@ use super::subprocess::ProcHandle;
 pub (crate) mod proto {
     tonic::include_proto!("clapshot.organizer");
 }
-pub type OrganizerConnection = OrganizerClient<Channel>;
+pub type OrganizerConnection = OrganizerInboundClient<Channel>;
 
 #[derive(Debug, Clone)]
 pub enum OrganizerURI {
@@ -30,6 +30,7 @@ pub async fn connect(uri: OrganizerURI) -> anyhow::Result<OrganizerConnection>
         {
             unix_socket::wait_for(&path, 5.0).await?;
             Endpoint::try_from("file://dummy")?
+                .connect_timeout(std::time::Duration::from_secs(8))
                 .connect_with_connector(service_fn(move |_: Uri| {
                     UnixStream::connect(path.clone()) })).await
                 .context("UnixStream::connect failed")?
@@ -41,14 +42,17 @@ pub async fn connect(uri: OrganizerURI) -> anyhow::Result<OrganizerConnection>
                 .connect().await.context("HTTP Channel::connect failed")?
         },
     };
-    Ok(OrganizerClient::new(channel))
+    Ok(OrganizerInboundClient::new(channel))
 }
 
 /// Parse Organizer plugin arguments and spawn it if necessary
-pub fn prepare_organizer(uri: &Option<String>, cmd: &Option<String>, data_dir: &Path)
+pub fn prepare_organizer(
+        org_uri: &Option<String>,
+        cmd: &Option<String>,
+        data_dir: &Path)
     -> anyhow::Result<(Option<OrganizerURI>, Option<ProcHandle>)>
 {
-    let mut org_uri = match uri {
+    let mut org_uri = match org_uri {
         None => None,
         Some(s) => Some(match s.split_once("://") {
             Some(("http", _)) | Some(("https", _)) => OrganizerURI::Http(s.clone()),
@@ -63,11 +67,12 @@ pub fn prepare_organizer(uri: &Option<String>, cmd: &Option<String>, data_dir: &
             if org_uri.is_none() {
                 let unix_sock = data_dir
                     .canonicalize().context("Expanding data dir")?
-                    .join("clapshot-organizer.sock");
+                    .join("grpc-srv-to-org.sock");
                 org_uri = Some(OrganizerURI::UnixSocket(unix_sock));
             };
             Some(spawn_organizer(&cmd.as_str(), org_uri.clone().unwrap())?)
         } else { None };
+
     Ok((org_uri, org_hdl))
 }
 

@@ -2,12 +2,10 @@ use std::path::PathBuf;
 use anyhow::Context;
 use serde::Deserialize;
 use docopt::Docopt;
+use simple_organizer::{NAME, VERSION};
 use tokio::sync::mpsc;
 use tracing::info;
 mod log;
-
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const NAME: &'static str = env!("CARGO_PKG_NAME");
 
 const USAGE: &'static str = r#"
 {NAME} {VERSION}
@@ -57,7 +55,7 @@ async fn main() -> anyhow::Result<()>
     
     log::setup_logging(args.flag_json, args.flag_debug)?;
 
-    tracing::info!("Starting {} v{}", NAME, VERSION);
+    tracing::info!("Organizer plugin '{}' v{} starting up...", NAME, VERSION);
     run_grpc_server(
         if args.flag_tcp {
             BindAddr::Tcp(args.arg_bind)
@@ -76,10 +74,10 @@ enum BindAddr {
 
 async fn run_grpc_server(bind: BindAddr) -> anyhow::Result<()>
 {
-    tracing::info!("gRPC server ({} v{}) binding to '{:?}'",NAME, VERSION, bind);
+    tracing::info!("srv->org gRPC server: Binding to '{:?}'", bind);
 
     use tonic::{transport::Server};
-    use proto::organizer_server::OrganizerServer;   
+    use proto::organizer_inbound_server::OrganizerInboundServer;
     use simple_organizer::{proto, SimpleOrganizer};
 
     let refl = tonic_reflection::server::Builder::configure()
@@ -88,7 +86,7 @@ async fn run_grpc_server(bind: BindAddr) -> anyhow::Result<()>
 
     let srv = Server::builder()
         .add_service(refl)
-        .add_service(OrganizerServer::new(SimpleOrganizer::default()));
+        .add_service(OrganizerInboundServer::new(SimpleOrganizer::default()));
 
     let (shutdown_send, mut shutdown_recv) = mpsc::unbounded_channel();
     ctrlc::set_handler(move || { shutdown_send.send(()).unwrap(); })
@@ -102,10 +100,8 @@ async fn run_grpc_server(bind: BindAddr) -> anyhow::Result<()>
         },
         BindAddr::Unix(path) => {
             if path.try_exists()? {
-                info!("Deleting previous socket file ({:?})...", &path);
                 std::fs::remove_file(&path).context("Failed to delete previous socket.")?;
             }
-            info!("Listening now.");
             srv.serve_with_incoming_shutdown(
                     tokio_stream::wrappers::UnixListenerStream::new(
                         tokio::net::UnixListener::bind(&path)?),

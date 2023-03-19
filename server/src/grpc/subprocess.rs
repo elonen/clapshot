@@ -25,7 +25,7 @@ pub (crate) fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> an
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
-    info!("Spawing subprocess with shell command: {:?}", cmd);
+    info!("Spawing (shell cmd): {:?}", cmd);
     let mut child = cmd.spawn()?;
 
     fn log_stream(span: tracing::Span, stream: Box<dyn std::io::Read>, level: tracing::Level, name: &str)

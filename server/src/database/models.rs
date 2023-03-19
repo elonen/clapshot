@@ -18,7 +18,7 @@ pub struct Video {
     #[serde(with = "ts_seconds")]
     pub added_time: chrono::NaiveDateTime,
 
-    pub recompression_done: Option<String>,
+    pub recompression_done: Option<chrono::NaiveDateTime>,
     pub thumb_sheet_dims: Option<String>,
     pub orig_filename: Option<String>,
     pub title: Option<String>,
@@ -34,7 +34,7 @@ pub struct VideoInsert {
     pub video_hash: String,
     pub added_by_userid: Option<String>,
     pub added_by_username: Option<String>,
-    pub recompression_done: Option<String>,
+    pub recompression_done: Option<chrono::NaiveDateTime>,
     pub thumb_sheet_dims: Option<String>,
     pub orig_filename: Option<String>,
     pub title: Option<String>,

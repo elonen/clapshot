@@ -1,6 +1,6 @@
 use std::path::Path;
 use anyhow::{bail, Context};
-use tracing::info;
+use tracing::debug;
 
 pub (crate) fn delete_old<T>(path: T) -> Result<(), anyhow::Error>
     where T: AsRef<Path> + std::fmt::Debug
@@ -9,7 +9,7 @@ pub (crate) fn delete_old<T>(path: T) -> Result<(), anyhow::Error>
     Ok(if p.exists() {
         use std::os::unix::fs::FileTypeExt;
         if p.metadata().context("Getting socket metadata")?.file_type().is_socket() {
-            info!("Deleting old socket file before spawning organizer");
+            debug!("Deleting old socket file before spawning organizer");
             std::fs::remove_file(p).context("Deleting organizer socket file")?;
         } else {
             bail!("Organizer socket path exists but it's not a socket. Refusing to delete.");
@@ -21,7 +21,7 @@ pub (crate) async fn wait_for(path: &Path, max_secs: f32) -> anyhow::Result<()> 
     let mut secs = max_secs;
     while !path.exists() {
         if secs == max_secs {
-            info!("Waiting for unix socket to appear: {:?}", path);
+            debug!("Waiting for Unix socket to appear: {:?}", path);
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
         secs -= 0.1;

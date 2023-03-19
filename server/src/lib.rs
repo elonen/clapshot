@@ -1,4 +1,4 @@
-use crate::grpc::{connect::{OrganizerURI}, caller::OrganizerCaller};
+use crate::{grpc::{grpc_client::{OrganizerURI}, caller::OrganizerCaller}, api_server::server_state::ServerState};
 
 pub mod video_pipeline;
 pub mod api_server;
@@ -14,9 +14,10 @@ pub fn run_clapshot(
     data_dir: std::path::PathBuf,
     migrate: bool,
     url_base: String,
-    bind_addr: String,
+    bind_api: String,
     port: u16,
     organizer_uri: Option<OrganizerURI>,
+    grpc_server_bind: grpc::grpc_server::BindAddr,
     n_workers: usize,
     target_bitrate: u32,
     poll_interval: f32,
@@ -71,29 +72,44 @@ pub fn run_clapshot(
         }
     }
 
-    if let Some(ouri) = organizer_uri {
-        OrganizerCaller::new(ouri).server_started(&data_dir, &url_base, &db_file)?;
-    }
-
     // Run API server
-    let tf = Arc::clone(&terminate_flag);
     let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
     let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
     let api_thread = { 
         let db = db.clone();
         let data_dir = data_dir.clone();
+
+        let server = ServerState::new( db,
+            &data_dir.join("videos"),
+            &data_dir.join("upload"),
+            &url_base,
+            organizer_uri.clone(),
+            terminate_flag.clone());
+
+        let grpc_srv = if (&organizer_uri).is_some() { Some(grpc_server_bind.clone()) } else { None };
+        let ub = url_base.clone();
         thread::spawn(move || {
             api_server::run_forever(
-                    db,
-                    data_dir.join("videos"),
-                    data_dir.join("upload"),
                     user_msg_rx, 
+                    grpc_srv,
                     upload_tx, 
-                    tf.clone(), 
-                    bind_addr.to_string(),
-                    url_base.to_string(),
+                    bind_api.to_string(),
+                    ub,
+                    server,
                     port) 
-            })};
+            })
+        };
+
+    match organizer_uri.clone() {
+        Some(ouri) => {
+            tracing::info!("Connecting gRPC srv->org...");
+            OrganizerCaller::new(ouri).handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind)?;
+            tracing::info!("Bidirectional gRPC established.");
+        }
+        None => {
+            tracing::info!("No organizer URI provided, skipping gRPC.");
+        }
+    };
 
     // Run video processing pipeline
     let tf = Arc::clone(&terminate_flag);
