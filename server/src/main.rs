@@ -106,7 +106,9 @@ fn main() -> anyhow::Result<()>
 
     let url_base = args.flag_url_base.strip_suffix("/").unwrap_or("").to_string(); // strip trailing slash, if any
 
+    let time_offset = time::UtcOffset::current_local_offset().expect("should get local offset");
     let _log_guard = log::setup_logging(
+        time_offset,
         args.flag_debug,
         &args.flag_log.clone().unwrap_or_default(),
         args.flag_json);
