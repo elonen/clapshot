@@ -1,22 +1,22 @@
 <script lang="ts">
     import {createEventDispatcher} from 'svelte';
-    const dispatch = createEventDispatcher();
-
-    import Avatar from './Avatar.svelte';
     import {hexColorForUsername} from './Avatar.svelte';
+
+    const dispatch = createEventDispatcher();
 
     export let id: string = ""; // The id of the comment
     export let username: string = "";
     export let comment: string = "";
-    export let avatar_url: string = "";
-    export let x_loc: string = "";
-
+    export let x_loc: number = 0; // The x location of the pin, as a fraction of the width of the timeline
 </script>
 
 <div class="pin" style="left: {x_loc*100}%">
     <div class="line shadow-sm shadow-gray-600" style="background-color: {hexColorForUsername(username)}"></div>
     <div class="sphere shadow-sm shadow-gray-800" style="background-color: {hexColorForUsername(username)}"
         title="{username}: {comment}"
+        tabindex="0"
+        role="link"
+        on:keyup={e=>{e.key==='Enter' && dispatch('click', {id})}}
         on:click={() => dispatch('click', {id})}></div>
 </div>
 <style>

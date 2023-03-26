@@ -1,21 +1,28 @@
 <script lang="ts">
-import { createEventDispatcher } from 'svelte';
-import Avatar from './Avatar.svelte';
-import { cur_username, cur_user_pic, video_title, video_hash, video_progress_msg, collab_id, user_menu_items } from "../stores.js";
-import logo from "../assets/clapshot-logo.svg";
+
+  import { createEventDispatcher } from 'svelte';
+  import { cur_username, cur_user_pic, video_title, video_hash, video_progress_msg, collab_id, user_menu_items } from "../stores";
+  import Avatar from './Avatar.svelte';
+
+  import logo from "../assets/clapshot-logo.svg";
 
   const dispatch = createEventDispatcher();
-  function onClickBanner() {
+
+  function onClickBanner(): void {
     dispatch("clear-all", {});
   }
 
-  function onClickUser() {
-    if (!user_menu_items) return;
-    const user_menu = document.getElementById("user-menu");
-    user_menu.classList.toggle("hidden");
+  function onClickUser(): void {
+    if (!$user_menu_items) return;
+    let user_menu = document.getElementById("user-menu");
+    if (user_menu.classList.contains("hidden")) {
+      user_menu.classList.remove("hidden");
+    } else {
+      user_menu.classList.add("hidden");
+    }
   }
-
-  function logoutBasicAuth(urlFor401, redirUrl) {
+  
+  function logoutBasicAuth(urlFor401: RequestInfo, redirUrl: string) {
     // Try to log out of basic auth by making a request to /logout and expect 401.
     // This is a bit tricky, as HTTP basic auth wasn't really designed for logout.
     console.log("Making logout request to " + urlFor401 + " and redirecting to " + redirUrl + "...");
@@ -37,7 +44,6 @@ import logo from "../assets/clapshot-logo.svg";
   }
 
   const random_session_id = Math.random().toString(36).substring(2, 15);
-
 </script>
 
 <nav class="px-5 py-2.5 rounded dark:bg-gray-900">
@@ -78,9 +84,9 @@ import logo from "../assets/clapshot-logo.svg";
     <div class="flex-0" style="visibility: {$cur_username ? 'visible': 'hidden'}">
       <span class="flex w-auto items-center">
         <h6 class="flex-1 mx-4 text-gray-500 font-semibold">{$cur_username}</h6>
-        <button class="flex-0 ring-4 ring-slate-800 text-sm rounded-full" on:click|preventDefault={onClickUser}>
+        <button id="user-button" class="flex-0 ring-4 ring-slate-800 text-sm rounded-full" on:click|preventDefault={onClickUser}>
           {#if $cur_user_pic || $cur_username}
-          <div id="user-button" class="w-10 block"><Avatar userFullName={$cur_username} src={$cur_user_pic} /></div>
+          <div class="w-10 block"><Avatar username={$cur_username} /></div>
           {/if}
         </button>
       </span>
@@ -103,7 +109,7 @@ import logo from "../assets/clapshot-logo.svg";
           </div>
         </div>
       {/if}
-
+    </div>
   </div>
 </nav>
 

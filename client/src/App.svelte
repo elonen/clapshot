@@ -2,14 +2,24 @@
   import {fade, slide} from "svelte/transition";
   import CommentCard from './lib/CommentCard.svelte'
   import NavBar from './lib/NavBar.svelte'
-  import VideoPlayer from './lib/VideoPlayer.svelte';
   import CommentInput from './lib/CommentInput.svelte';
   import UserMessage from './lib/UserMessage.svelte';
   import FileUpload from './lib/FileUpload.svelte';
+  import type VideoListVideoTile from "./lib/video_list/VideoListVideoTile.svelte";
   import {Notifications, acts} from '@tadashi/svelte-notification'
-  import VideoListPopup from './lib/VideoListPopup.svelte';
+  import VideoPlayer from './lib/VideoPlayer.svelte';
 
   import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
+
+  import {VideoListDefItem, VideoListVideoDef, VideoListFolderDef, videoOrFolder} from "./lib/video_list/types";
+  import VideoList from "./lib/video_list/VideoList.svelte";
+
+  import type { ClapshotVideoJson } from "./lib/video_list/types";
+  import VideoListFolder from "./lib/video_list/VideoListFolder.svelte";
+  import { get } from "svelte/store";
+  //import type { ClapshotCommentJson } from "./lib/video_list/types";
+
+  let videoTiles: VideoListVideoTile[] = []; 
 
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
@@ -21,15 +31,20 @@
   let collab_dialog_ack = false;  // true if user has clicked "OK" on the collab dialog
   let last_collab_controlling_user = null;    // last user to control the video in a collab session
 
-  function log_abbreviated(str: string) {
+  function log_abbreviated(...strs: any[]) {
       const max_len = 180;
-      if (str.length > max_len)
-        str = str.substr(0, max_len) + "(...)";
-      console.log(str);
+      let abbreviated: string[] = [];
+      for (let i = 0; i < strs.length; i++) {
+        let str = (typeof strs[i] == "string" || typeof strs[i] == "number" || typeof strs[i] == "boolean")
+          ? String(strs[i])
+          : JSON.stringify(strs[i]);
+        abbreviated[i] = (str.length > max_len) ? (str.slice(0, max_len) + "(...)") : str;
+      }
+      console.log(...abbreviated);
   }
 
   // Messages from CommentInput component
-  function onCommentInputButton(e) {
+  function onCommentInputButton(e: any) {
     if (e.detail.action == "send")
     {
       if (e.detail.comment_text != "")
@@ -38,7 +53,7 @@
           video_hash: $video_hash,
           parent_id: null,            // TODO: parent id here
           comment: e.detail.comment_text,
-          drawing: video_player.getDrawing(),
+          drawing: video_player.getScreenshot(),
           timecode: e.detail.is_timed ? video_player.getCurTimecode() : "",
         });
       }
@@ -57,7 +72,7 @@
     }
   }
 
-  function onDisplayComment(e) {
+  function onDisplayComment(e: any) {
     video_player.seekTo(e.detail.timecode, 'SMPTE');
     // Close draw mode while showing (drawing from a saved) comment
     video_player.onToggleDraw(false);
@@ -65,18 +80,18 @@
     if (e.detail.drawing)    
       video_player.setDrawing(e.detail.drawing);
     if ($collab_id) {
-      console.log("Collab: onDisplayComment. collab_id: '" + $collab_id + "'");
+      log_abbreviated("Collab: onDisplayComment. collab_id: '" + $collab_id + "'");
       ws_emit('collab_report', {paused: true, seek_time: video_player.getCurTime(), drawing: e.detail.drawing});
     }
   }
 
-  function onDeleteComment(e) {
+  function onDeleteComment(e: any) {
     ws_emit('del_comment', {
       comment_id: e.detail.comment_id,
     });
   }
 
-  function onReplyComment(e) {    
+  function onReplyComment(e: any) {
     ws_emit('add_comment', {
         video_hash: $video_hash,
         parent_id: e.detail.parent_id,
@@ -84,17 +99,12 @@
       });
   }
 
-  function onEditComment(e) {
+  function onEditComment(e: any) {
     ws_emit('edit_comment', {
       comment_id: e.detail.comment_id,
       comment: e.detail.comment_text,
     });
   }
-
-  function onSeekToTimecode(e) {
-    video_player.seekTo(e.detail.timecode, 'SMPTE');
-  }
-
 
   function closeVideo() {
     // Close current video, list all user's own videos.
@@ -112,27 +122,26 @@
     ws_emit('list_my_messages', {});
   }
 
-  function onClearAll(e) {
+  function onClearAll(_e: any) {
     history.pushState('/', null, '/');  // Clear URL
     closeVideo();
   }
 
-  function onClickVideo(new_video_hash) {
-    ws_emit('open_video', {video_hash: new_video_hash});
-    history.pushState(new_video_hash, null, '/?vid='+new_video_hash);  // Point URL to video
+  function onRequestFolderOpen(e: any) {
+    alert("TODO: open folder " + e.detail.folder_id);
   }
 
-  function onVideoSeeked(e) {
-    //console.log("App: seeked()");
+
+  function onVideoSeeked(_e: any) {
     comment_input.forceDrawMode(false);  // Close draw mode when video frame is changed
   }
 
-  function onCollabReport(e) {
+  function onCollabReport(e: any) {
     if ($collab_id)
       ws_emit('collab_report', {paused: e.detail.paused, seek_time: e.detail.seek_time, drawing: e.detail.drawing});
   }
 
-  function onCommentPinClicked(e) {
+  function onCommentPinClicked(e: any) {
       // Find corresponding comment in the list, scroll to it and highlight
       let comment_id = e.detail.id;
     let comment = $all_comments.find(c => c.id == comment_id);
@@ -147,8 +156,7 @@
     }
   }
 
-  function popHistoryState(e) {
-    console.log("popHistoryState: " + e.state);
+  function popHistoryState(e: any) {
     if (e.state && e.state !== '/')
       ws_emit('open_video', {video_hash: e.state});
     else
@@ -163,6 +171,7 @@
       acts.add({mode: 'warn', message: "Unknown URL parameter: '" + key + "'", lifetime: 5});
     }
   });
+
   $video_hash = urlParams.get('vid');
   const prev_collab_id = $collab_id;
   $collab_id = urlParams.get('collab');
@@ -175,7 +184,8 @@
   }
 
   let upload_url: string = "";
-
+  
+  
   // -------------------------------------------------------------
   // Websocket messaging
   // -------------------------------------------------------------
@@ -283,7 +293,7 @@
     ws_socket = new WebSocket(ws_url);
 
     // Handle connection opening
-    ws_socket.addEventListener("open", function (event) {
+    ws_socket.addEventListener("open", function (_event) {
       reconnect_delay = 100;
       ui_connected_state = true;
 
@@ -297,10 +307,10 @@
       }
     });
 
-    function handle_with_errors(func) {
+    function handle_with_errors(func: { (): any; }): any {
       try {
         return func();
-      } catch (e) {
+      } catch (e: any) {
         // log message, fileName, lineNumber
         console.log("Exception in Websocket handler: ", e);
         console.log(e.stack);
@@ -317,7 +327,7 @@
     */
 
     // Reconnect if closed, with exponential+random backoff
-    ws_socket.addEventListener("close", function (event) {
+    ws_socket.addEventListener("close", function (_event) {
       reconnect_delay = Math.round(Math.min(reconnect_delay * 1.5, 5000));
       console.log("API reconnecting in " + reconnect_delay + " ms");
       setTimeout(() => { connect_websocket(ws_url); }, reconnect_delay);
@@ -364,7 +374,7 @@
             log_abbreviated("[SERVER] user_videos: " + JSON.stringify(data));
             $all_my_videos = data.videos;
             console.log("Got " + $all_my_videos.length + " videos");
-            console.log($all_my_videos);
+            //console.log($all_my_videos);
             break;
 
           case 'message':
@@ -405,11 +415,11 @@
           case 'new_comment':
             log_abbreviated("[SERVER] new_comment: " + JSON.stringify(data));
             {
-              function reorder_comments(old_order) {
+              function reorder_comments(old_order: any[]) {
                 // Helper to show comment threads in the right order and with correct indentation
                 let old_sorted = old_order.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
                 let new_order = [];
-                function find_insert_position_and_indent(parent_id)
+                function find_insert_position_and_indent(parent_id: number)
                 {
                   if (parent_id) {
                     for (let i=new_order.length-1; i>=0; i--) {
@@ -435,7 +445,6 @@
                     comment: data.comment,
                     username: data.username,
                     user_id: data.user_id,
-                    avatar_url: null,
                     drawing_data: data.drawing,
                     parent_id: data.parent_id,
                     edited: data.edited,
@@ -476,95 +485,93 @@
 
   }
 
-  function onClickDeleteVideo(video_hash: string, video_name: string) {
-    log_abbreviated("onClickDeleteVideo: " + video_hash + " / " + video_name);
-    if (confirm("Are you sure you want to delete '" + video_name + "'?")) {
-      ws_emit('del_video', {video_hash: video_hash});
-
-      // After 2 seconds, refresh the list of videos
-      function refresh_my_videos() { ws_emit('list_my_videos', {}); }
-      setTimeout(refresh_my_videos, 2000);
-    }
+  function onRequestVideoDelete(video_hash: string, video_name: string) {
+    log_abbreviated("onRequestVideoDelete: " + video_hash + " / " + video_name);
+    ws_emit('del_video', {video_hash});
+    ws_emit('list_my_videos', {});
   }
 
-  function onClickRenameVideo(video_hash: string, video_name: string) {
-    log_abbreviated("onClickRenameVideo: " + video_hash + " / " + video_name);
+  function onRequestVideoRename(video_hash: string, video_name: string) {
+    log_abbreviated("onRequestVideoRename: " + video_hash + " / " + video_name);
     let new_name = prompt("Rename video to:", video_name);
     if (new_name) {
-      ws_emit('rename_video', {video_hash: video_hash, new_name: new_name});
+      ws_emit('rename_video', {video_hash, new_name});
       ws_emit('list_my_videos', {});
     }
   }
 
-function installThumbScrubber(e: MouseEvent, item: object)
-{
-  let sheet_cols = item.thumb_sheet_cols;
-  let sheet_rows = item.thumb_sheet_rows;
-  let bgImg =  new Image();
-  
-  bgImg.onload = (le) => {
-    // Total size of sprite sheet in pixels
-    let sheet_w_px = le.target.naturalWidth;
-    let sheet_h_px = le.target.naturalHeight;
+  function onRequestFolderDelete(folder_id: string) {
+    alert("NOT IMPLEMENTED: delete folder: " + folder_id);
+  }
 
-    // Size of one frame in pixels
-    let frame_width = sheet_w_px / sheet_cols;
-    let frame_height = sheet_h_px / sheet_rows;
+  function onRequestFolderRename(folder_id: string, folder_name: string) {
+    alert("NOT IMPLEMENTED: rename folder: " + folder_id + " / " + folder_name);
+  }
 
-    // Size of current div (that shows the sprite sheet) in pixels
-    let div_w_px = e.target.clientWidth;
-    let div_h_px = e.target.clientHeight;
+  function onMoveItemsToFolder(_e: {detail: {folder_id: any; items: any[]}}) {
+    console.log("NOT IMPLEMENTED! onMoveItemsToFolder: " + _e.detail.folder_id, "items:", _e.detail.items);
+  }
 
-    // Switch background image to the now loaded sprite sheet
-    e.target.style.backgroundRepeat = 'no-repeat';
-    e.target.style.backgroundImage = 'url(' + bgImg.src + ')';
+  function TEMP_getVideoListItems(items: any[]): VideoListDefItem[] {
+    let res: VideoListDefItem[] = items.map((it) => new VideoListVideoDef(it));
+    let copy = [...res];
+    let fld1 = new VideoListFolderDef("test1", "Test Folder 1", copy);
+    let fld2 = new VideoListFolderDef("test2", "Test Folder 2", []);
+    res.push(fld1);
+    res.push(fld2);
+    return res;
+  }
 
-    // Scale the sprite sheet so one frame fits in the div
-    let scaled_bgr_w = (div_w_px / frame_width) * sheet_w_px;
-    let scaled_bgr_h = (div_h_px / frame_height) * sheet_h_px;
-    e.target.style.backgroundSize = scaled_bgr_w + 'px ' + scaled_bgr_h + 'px';
+  function TEMP_reorderItems(e: any) {
+    console.log("TEMP_reorderItems:", e.detail.items);
+  }
 
-    function show_frame(frame_idx) {
-      let frame_xi = frame_idx % sheet_cols;
-      let frame_yi = Math.floor(frame_idx / sheet_cols);
-
-      let frame_left = scaled_bgr_w * (frame_xi / sheet_cols);
-      let frame_top = scaled_bgr_h * (frame_yi / sheet_rows);
-
-      e.target.style.backgroundPosition = '-' + frame_left + 'px -' + frame_top + 'px';
+  function openVideoListItem(e: { detail: { video: any; folder: any }}): void {
+    if (e.detail.video) {
+      let new_video_hash = e.detail.video.video_hash;
+      ws_emit('open_video', {video_hash: new_video_hash});
+      history.pushState(new_video_hash, null, '/?vid='+new_video_hash);  // Point URL to video
+    } else if (e.detail.folder) {
+      alert("Folder open: " + e.detail.folder.folder_id);
     }
+  }
 
-    // Show first frame at first
-    show_frame(0);
-
-    // Scrub sheet on mouse move
-    e.target.onmousemove = (e) => {
-      let frame_idx = Math.floor((e.offsetX / e.target.clientWidth) * (sheet_cols * sheet_rows));
-      show_frame(frame_idx);
+  function onVideoListPopupAction(e: { detail: { action: string, items: VideoListDefItem[] }}) {
+    let {action, items} = e.detail;
+    switch (action) {
+      case 'delete':
+        let subject = items.length == 1 ? "this item" : items.length + " items";
+        if (confirm("Are you sure you want to DELETE " + subject + "?")) {
+          items.forEach((it) => {
+            let {video, folder} = videoOrFolder(it);
+            if (video)
+              onRequestVideoDelete(video.video_hash, video.title);
+            else if (folder)
+              onRequestFolderDelete(folder.folder_id);
+        })}
+        break;
+      case 'rename':
+        if (items.length == 1) {
+          let {video, folder} = videoOrFolder(items[0]);
+          if (video)
+            onRequestVideoRename(video.video_hash, video.title);
+          else if (folder)
+            onRequestFolderRename(folder.folder_id, folder.name);
+        } else {
+          alert("Can only rename one item at a time.");
+        }
+        break;
+      default:
+        alert("NOT IMPLEMENTED (TODO: push this action blindly to server?): " + action);
     }
-  };
-
-  // Start loading the sprite sheet
-  bgImg.src = item.thumb_sheet_url;
-}
-
-function removeThumbScrubber(e: MouseEvent, item: object)
-{
-  // Restore original background image (item.thumb_url)
-  e.target.onmousemove = null;
-  e.target.onload = null;
-  e.target.style.backgroundImage = 'url(' + item.thumb_url + ')';
-  e.target.style.backgroundPosition = '0 0';
-  e.target.style.backgroundSize = '100% 100%';
-}
-
-
+  }
 
 </script>
 
 <svelte:window on:popstate={popHistoryState}/>
 <main>
-<div class="flex flex-col w-screen h-screen {debug_layout?'border-2 border-yellow-300':''}">
+<span id="popup-container"></span>
+<div class="flex flex-col bg-[#101016] w-screen h-screen {debug_layout?'border-2 border-yellow-300':''}">
     <div class="flex-none w-full"><NavBar on:clear-all={onClearAll} on:basic-auth-logout={disconnect} /></div>
     <div class="flex-grow w-full overflow-auto {debug_layout?'border-2 border-cyan-300':''}">
         <Notifications />
@@ -627,7 +634,7 @@ function removeThumbScrubber(e: MouseEvent, item: object)
         {:else}
 
           <!-- ========== video listing ============= -->        
-          <div class="m-6 text">            
+          <div class="m-6 text">
             <h1 class="text-4xl m-6">
               {#if $all_my_videos.length>0}
                 All your videos
@@ -635,43 +642,32 @@ function removeThumbScrubber(e: MouseEvent, item: object)
                 You have no videos.
               {/if}
             </h1>
-            <div class="gap-8">
-              {#each $all_my_videos as item}
-              <div class="bg-slate-600 w-80 h-20 rounded-md p-2 m-1 mx-6 overflow-clip inline-block cursor-pointer"
-                  on:click|preventDefault={ () => onClickVideo(item.video_hash) }
-                  on:keypress={(e) => { if (e.key === 'Enter') { onClickVideo(item.video_hash) }}}
-                  >
 
-                {#if item.thumb_url}
-                  <!-- hover mouse to scrub thumb sheet -->
-                  <div class="w-[7.111rem] h-[4rem] float-left mr-2 bg-gray-900 rounded-md overflow-hidden"
-                    style="background-image: url('{item.thumb_url}'); background-size: cover; background-position: 0 0;"
-                    on:focus={()=>{}}
-                    on:mouseover={(e) => installThumbScrubber(e, item)}
-                    on:mouseout={(e) => removeThumbScrubber(e, item)}
-                  >
+          </div>
+          
+          <div class="m-4">
+            <VideoList items={TEMP_getVideoListItems($all_my_videos)} 
+              on:open-item={openVideoListItem}
+              on:reorder-items={TEMP_reorderItems}
+              on:move-to-folder={onMoveItemsToFolder}
+              on:popup-action={onVideoListPopupAction}
+              />
+
+            <div class="w-full my-4 h-24 border-4 border-dashed border-gray-700">
+              <FileUpload post_url={upload_url}>
+                <div class="flex flex-col justify-center items-center h-full">
+                  <div class="text-2xl text-gray-700">
+                    <i class="fas fa-upload"></i>
                   </div>
-                {/if}
-
-                <span class="text-amber-400 text-xs pr-2 border-r border-gray-400">{item.added_time}</span>
-                <span class="text-amber-500 font-mono text-xs pr-2">{item.video_hash}</span>
-                <VideoListPopup
-                  onDel={() => { onClickDeleteVideo(item.video_hash, item.title) }}
-                  onRename={() => { onClickRenameVideo(item.video_hash, item.title) }} />
-                <div class="leading-none"><a href="/?vid={item.video_hash}" title="{item.title}" class="break-all text-xs">{item.title}</a></div>
-              </div>
-              {/each} 
-            </div> 
-
-            {#if upload_url }
-            <div class="m-6">
-              <h1 class="text-2xl mt-12 text-slate-500">
-                Upload video
-              </h1>
-              <FileUpload post_url={upload_url}/>
+                  <div class="text-xl text-gray-700">
+                    Drop video files here to upload
+                  </div>
+                </div>
+              </FileUpload>
             </div>
-            {/if}
+          </div>
 
+          <div>
             {#if $user_messages.length>0}
               <h1 class="text-2xl m-6 mt-12 text-slate-500">
                   Latest messages
@@ -682,7 +678,6 @@ function removeThumbScrubber(e: MouseEvent, item: object)
                 {/each} 
               </div> 
             {/if}
-
           </div>
 
         {/if}
@@ -700,16 +695,6 @@ function removeThumbScrubber(e: MouseEvent, item: object)
         transform: rotate(360deg); 
     }
 }
-
-/*
-::-webkit-scrollbar {
-    display: none;
-}
-body {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-}
-*/
 
 </style>
 
