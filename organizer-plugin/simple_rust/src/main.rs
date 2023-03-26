@@ -3,6 +3,7 @@ use anyhow::Context;
 use serde::Deserialize;
 use docopt::Docopt;
 use simple_organizer::{NAME, VERSION};
+use clapshot_server::grpc::proto;
 use tokio::sync::mpsc;
 use tracing::info;
 mod log;
@@ -78,7 +79,7 @@ async fn run_grpc_server(bind: BindAddr) -> anyhow::Result<()>
 
     use tonic::{transport::Server};
     use proto::organizer_inbound_server::OrganizerInboundServer;
-    use simple_organizer::{proto, SimpleOrganizer};
+    use simple_organizer::SimpleOrganizer;
 
     let refl = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)

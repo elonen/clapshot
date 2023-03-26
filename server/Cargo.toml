@@ -91,9 +91,10 @@ tonic-reflection = "0.6.0"
 tower = "0.4.13"
 libc = "0.2.140"
 semver = "1.0.17"
-prost-types = "0.11.8"
 parking_lot = "0.12.1"
 time = "0.3.20"
+pbjson = "0.5.1"
+pbjson-types = "0.5.1"
 
 [dev-dependencies]
 assert_fs = "1.0.10"
@@ -107,3 +108,4 @@ tokio-tungstenite = "0.18.0"
 
 [build-dependencies]
 tonic-build = "0.8.4"
+pbjson-build = "0.5.1"

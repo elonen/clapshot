@@ -38,6 +38,20 @@ use crate::{send_user_error, send_user_ok};
 /// Send user a list of all videos they have.
 pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let videos = server.db.get_all_user_videos(&ses.user_id)?;
+
+    /*
+    let page_item = crate::grpc::folder_listing_for_videos(&videos);
+    let page = vec![page_item];
+
+    let json_pages = serde_json::to_value(page)?;
+
+    server.emit_cmd("show_page", &json!({
+        "username": ses.user_name.clone(),
+        "user_id": ses.user_id.clone(),
+        "page_items": videos }),
+    super::SendTo::UserSession(&ses.sid))?;
+    */
+
     let videos = videos.into_iter().map(|v| {
             let mut fields = v.to_json()?;
             if let Some(sheet_dims) = v.thumb_sheet_dims {
@@ -55,6 +69,7 @@ pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession,
             "user_id": ses.user_id.clone(),
             "videos": videos }),
         super::SendTo::UserSession(&ses.sid))?;
+
     Ok(())
 }
 

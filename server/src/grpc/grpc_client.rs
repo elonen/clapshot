@@ -1,7 +1,7 @@
 use std::{path::{Path, PathBuf}};
 use crate::grpc::{unix_socket, subprocess::spawn_shell};
 
-use self::proto::organizer_inbound_client::OrganizerInboundClient;
+use super::proto::organizer_inbound_client::OrganizerInboundClient;
 use anyhow::{Context, bail};
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri, Channel};
@@ -10,9 +10,6 @@ use tracing::{info_span};
 
 use super::subprocess::ProcHandle;
 
-pub (crate) mod proto {
-    tonic::include_proto!("clapshot.organizer");
-}
 pub type OrganizerConnection = OrganizerInboundClient<Channel>;
 
 #[derive(Debug, Clone)]

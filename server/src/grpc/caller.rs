@@ -1,6 +1,7 @@
 use std::path::Path;
-use crate::grpc::grpc_client::{connect, OrganizerConnection, proto};
+use crate::grpc::grpc_client::{connect, OrganizerConnection};
 use super::{grpc_client::OrganizerURI, grpc_server::BindAddr};
+use super::proto;
 
 pub struct OrganizerCaller {
     uri: OrganizerURI,

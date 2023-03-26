@@ -3,14 +3,12 @@ use std::{path::Path, time::Duration, sync::atomic::Ordering::Relaxed};
 use anyhow::Context;
 use async_std::path::PathBuf;
 use tonic::{Request, Response, Status};
-use proto::organizer_outbound_server::OrganizerOutbound;
 use crate::{api_server::{server_state::ServerState}};
 use crate::database::models;
 
-pub mod proto {
-    tonic::include_proto!("clapshot.organizer");
-    pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("organizer_descriptor");
-}
+use super::proto;
+use super::proto::organizer_outbound_server::OrganizerOutbound;
+
 
 pub struct OrganizerOutboundImpl {
     server: ServerState,

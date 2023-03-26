@@ -1,20 +1,26 @@
 use std::sync::Arc;
-use proto::{server_info::grpc_endpoint, organizer_outbound_client::OrganizerOutboundClient};
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use tonic::transport::{Endpoint, Uri, Channel};
 use tokio::net::UnixStream;
 use tower::service_fn;
 
+use clapshot_server::grpc::proto::organizer_outbound_client::OrganizerOutboundClient;
+use clapshot_server::grpc::proto::server_info::grpc_endpoint;
+use clapshot_server::grpc::proto;
+
+//use proto::{server_info::grpc_endpoint, organizer_outbound_client::OrganizerOutboundClient};
+
 
 pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const NAME: &'static str = env!("CARGO_PKG_NAME");
 
-
+/*
 pub mod proto {
     tonic::include_proto!("clapshot.organizer");
     pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("organizer_descriptor");
 }
+*/
 
 
 #[derive(Debug, Default)]
