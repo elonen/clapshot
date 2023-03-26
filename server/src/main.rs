@@ -27,7 +27,7 @@ Required:
 Options:
 
  -p --port <port>     Port to listen on [default: 8095]
- -H --host <host>     Host to listen on [default: ::1]
+ -H --host <host>     Host to listen on [default: 127.0.0.1]
 
  -P --poll <sec>      Polling interval for incoming folder [default: 3.0]
 

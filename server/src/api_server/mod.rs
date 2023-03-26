@@ -3,6 +3,7 @@
 //#![allow(unused_imports)]
 
 use async_std::task::block_on;
+use tracing::debug;
 use warp::Filter;
 use std::collections::HashMap;
 use std::sync::{Arc};
@@ -319,6 +320,7 @@ async fn run_api_server_async(
         .allow_headers(vec!["x-file-name"]));
 
 
+    debug!("Binding to {}:{}", bind_addr, port);
     let (_addr, server) = warp::serve(routes)
         .bind_with_graceful_shutdown((bind_addr, port), async move {
             while !server_state_cln1.terminate_flag.load(Relaxed) {
@@ -385,7 +387,12 @@ async fn run_api_server_async(
         server_state.terminate_flag.store(true, Relaxed);
     };
 
+    // Start API server + message relay and wait for them to exit
+    tokio::join!(server, msg_relay);
+
+    // Wait for gRPC server to exit
     if let Some(g) = grpc_server {
+        debug!("Waiting for gRPC server to exit...");
         match tokio::try_join!(g) {
             Ok((Ok(_),)) => tracing::debug!("gRPC server for org->srv exited OK."),
             Ok((Err(e),)) => tracing::error!(details=%e, "gRPC server for org->srv exited with error."),
@@ -393,7 +400,6 @@ async fn run_api_server_async(
         };
     }
 
-    tokio::join!(server, msg_relay);
     tracing::debug!("Exiting.");
 }
 
