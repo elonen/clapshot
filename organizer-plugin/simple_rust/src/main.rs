@@ -3,7 +3,7 @@ use anyhow::Context;
 use serde::Deserialize;
 use docopt::Docopt;
 use simple_organizer::{NAME, VERSION};
-use clapshot_server::grpc::proto;
+use lib_clapshot_grpc::proto;
 use tokio::sync::mpsc;
 use tracing::info;
 mod log;

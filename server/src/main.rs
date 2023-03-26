@@ -3,7 +3,7 @@ use serde::Deserialize;
 use tracing::{error};
 use std::{path::{PathBuf}};
 use anyhow::{bail};
-use clapshot_server::{PKG_NAME, PKG_VERSION, run_clapshot, grpc::{grpc_client::prepare_organizer, grpc_server::parse_server_bind}};
+use clapshot_server::{PKG_NAME, PKG_VERSION, run_clapshot, grpc::{grpc_client::prepare_organizer, grpc_server::make_grpc_server_bind}};
 
 mod log;
 
@@ -113,7 +113,7 @@ fn main() -> anyhow::Result<()>
         &args.flag_log.clone().unwrap_or_default(),
         args.flag_json);
 
-    let grpc_server_bind = parse_server_bind(&args.flag_org_out_tcp, &args.flag_data_dir)?;
+    let grpc_server_bind = make_grpc_server_bind(&args.flag_org_out_tcp, &args.flag_data_dir)?;
 
     let (org_uri, _org_hdl) = prepare_organizer(
         &args.flag_org_in_uri,

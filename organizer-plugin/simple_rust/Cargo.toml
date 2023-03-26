@@ -19,7 +19,7 @@ path = "src/lib.rs"
 [dependencies]
 tokio = { version = "1.25.0", features = ["full"] }
 
-clapshot-server = { path = "../../server" }
+lib-clapshot-grpc = { path = "../../protobuf/libs/rust/lib-clapshot-grpc" }
 
 tonic = "0.8.3"
 tonic-reflection = "0.6.0"

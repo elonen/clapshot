@@ -46,6 +46,8 @@ path = "src/lib.rs"
 
 
 [dependencies]
+lib-clapshot-grpc = { path = "../protobuf/libs/rust/lib-clapshot-grpc" }
+
 crossbeam-channel = "0.5.7"
 docopt = "1.1.1"
 log = "0.4.17"

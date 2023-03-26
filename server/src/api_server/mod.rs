@@ -3,6 +3,7 @@
 //#![allow(unused_imports)]
 
 use async_std::task::block_on;
+use lib_clapshot_grpc::GrpcBindAddr;
 use tracing::debug;
 use warp::Filter;
 use std::collections::HashMap;
@@ -230,7 +231,7 @@ async fn run_api_server_async(
     server_state: ServerState,
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
     upload_results_tx: crossbeam_channel::Sender<IncomingFile>,
-    grpc_server_bind: Option<grpc_server::BindAddr>,
+    grpc_server_bind: Option<GrpcBindAddr>,
     port: u16)
 {
     let session_counter = Arc::new(RwLock::new(0u64));
@@ -247,7 +248,7 @@ async fn run_api_server_async(
             let server = server_state.clone();
             let b = bind.clone();
             let hdl = tokio::spawn(async move {
-                grpc_server::run_grpc_server(b, server).await
+                grpc_server::run_org_to_srv_grpc_server(b, server).await
             });
             let server = server_state.clone();
             let mut wait_time = Duration::from_millis(10);
@@ -407,7 +408,7 @@ async fn run_api_server_async(
 #[tokio::main]
 pub async fn run_forever(
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
-    grpc_server_bind: Option<grpc_server::BindAddr>,
+    grpc_server_bind: Option<GrpcBindAddr>,
     upload_res_tx: crossbeam_channel::Sender<IncomingFile>,
     bind_addr: String,
     url_base: String,

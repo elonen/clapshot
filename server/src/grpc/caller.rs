@@ -1,6 +1,8 @@
 use std::path::Path;
+use lib_clapshot_grpc::GrpcBindAddr;
+
 use crate::grpc::grpc_client::{connect, OrganizerConnection};
-use super::{grpc_client::OrganizerURI, grpc_server::BindAddr};
+use super::{grpc_client::OrganizerURI};
 use super::proto;
 
 pub struct OrganizerCaller {
@@ -12,10 +14,10 @@ impl OrganizerCaller {
         OrganizerCaller { uri }
     }
     
-    pub fn handshake_organizer(&self, data_dir: &Path, server_url: &str, db_file: &Path, backchannel: &BindAddr)
+    pub fn handshake_organizer(&self, data_dir: &Path, server_url: &str, db_file: &Path, backchannel: &GrpcBindAddr)
         -> anyhow::Result<()>
     {
-        async fn call_it(conn: &mut OrganizerConnection, backchannel: &BindAddr, data_dir: &Path, server_url: &str, db_file: &Path) -> anyhow::Result<()> {
+        async fn call_it(conn: &mut OrganizerConnection, backchannel: &GrpcBindAddr, data_dir: &Path, server_url: &str, db_file: &Path) -> anyhow::Result<()> {
             let v = semver::Version::parse(crate::PKG_VERSION)?;
             let req = proto::ServerInfo {
                 storage: Some(proto::server_info::Storage {
@@ -26,13 +28,13 @@ impl OrganizerCaller {
                 backchannel: Some(proto::server_info::GrpcEndpoint {
                     endpoint: Some(
                         match backchannel {
-                            BindAddr::Tcp(addr) => 
+                            GrpcBindAddr::Tcp(addr) => 
                                 proto::server_info::grpc_endpoint::Endpoint::Tcp(
                                     proto::server_info::grpc_endpoint::Tcp {
                                         host: addr.ip().to_string(),
                                         port: addr.port() as u32,
                                     }),
-                            BindAddr::Unix(path) =>
+                            GrpcBindAddr::Unix(path) =>
                                 proto::server_info::grpc_endpoint::Endpoint::Unix(
                                     proto::server_info::grpc_endpoint::Unix {
                                         path: path.to_string_lossy().into(),

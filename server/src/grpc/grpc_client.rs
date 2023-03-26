@@ -1,14 +1,14 @@
 use std::{path::{Path, PathBuf}};
-use crate::grpc::{unix_socket, subprocess::spawn_shell};
 
-use super::proto::organizer_inbound_client::OrganizerInboundClient;
+use lib_clapshot_grpc::{unix_socket, subprocess::spawn_shell, subprocess::ProcHandle};
+use lib_clapshot_grpc::proto::organizer_inbound_client::OrganizerInboundClient;
+
 use anyhow::{Context, bail};
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri, Channel};
 use tower::service_fn;
 use tracing::{info_span};
 
-use super::subprocess::ProcHandle;
 
 pub type OrganizerConnection = OrganizerInboundClient<Channel>;
 

@@ -1,3 +1,5 @@
+use lib_clapshot_grpc::GrpcBindAddr;
+
 use crate::{grpc::{grpc_client::{OrganizerURI}, caller::OrganizerCaller}, api_server::server_state::ServerState};
 
 pub mod video_pipeline;
@@ -17,7 +19,7 @@ pub fn run_clapshot(
     bind_api: String,
     port: u16,
     organizer_uri: Option<OrganizerURI>,
-    grpc_server_bind: grpc::grpc_server::BindAddr,
+    grpc_server_bind: GrpcBindAddr,
     n_workers: usize,
     target_bitrate: u32,
     poll_interval: f32,

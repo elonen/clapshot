@@ -14,7 +14,7 @@ pub struct ProcHandle {
 /// and log its stdout and stderr.
 /// 
 /// Returns a handle that will kill the subprocess when dropped.
-pub (crate) fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Result<ProcHandle>
+pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Result<ProcHandle>
 {
     let sp = span.clone();
     let _entered = sp.enter();

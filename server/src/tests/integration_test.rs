@@ -19,7 +19,8 @@ mod integration_test
     use crate::database::schema::videos::thumb_sheet_dims;
     use crate::video_pipeline::{metadata_reader, IncomingFile};
     use crate::api_server::test_utils::{connect_client_ws, expect_cmd_data, open_video, write};
-
+    use lib_clapshot_grpc::GrpcBindAddr;
+    
     use tracing;
     use tracing::{error, info, warn, instrument};
     use tracing_test::traced_test;
@@ -81,7 +82,7 @@ mod integration_test
                 let url_base = format!("http://127.0.0.1:{}", port);
                 let ws_url = format!("{}/api/ws", &url_base.replace("http", "ws"));
                 let target_bitrate = $bitrate;
-                let grpc_server_bind = crate::grpc::grpc_server::BindAddr::Unix($data_dir.path().join("grpc-org-to-srv-TEST.sock").into());
+                let grpc_server_bind = GrpcBindAddr::Unix($data_dir.path().join("grpc-org-to-srv-TEST.sock").into());
                 let th = {
                     let poll_interval = 0.1;
                     let data_dir = $data_dir.path().to_path_buf();

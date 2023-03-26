@@ -1,29 +1,49 @@
-use std::{sync::atomic::Ordering::Relaxed, path::Path};
+use std::{path::Path, time::Duration, sync::atomic::Ordering::Relaxed};
+
 use anyhow::Context;
+use async_std::path::PathBuf;
 use tonic::{Request, Response, Status};
 use crate::{api_server::{server_state::ServerState}};
 use crate::database::models;
 
-use lib_clapshot_grpc::{proto, RpcResult, GrpcBindAddr, run_grpc_server};
+use super::proto;
+use super::proto::organizer_outbound_server::OrganizerOutbound;
+
 
 pub struct OrganizerOutboundImpl {
     server: ServerState,
 }
 
-pub fn make_grpc_server_bind(tcp: &Option<String>, data_dir: &Path) -> anyhow::Result<GrpcBindAddr>
-{
-    match tcp {
-        None => Ok(GrpcBindAddr::Unix(data_dir
-            .canonicalize().context("Expanding data dir")?
-            .join("grpc-org-to-srv.sock").into())),
-        Some(s) => Ok(GrpcBindAddr::Tcp(s.parse().context("Parsing TCP listen address")?)),
+type RpcResult<T> = Result<Response<T>, Status>;
+
+
+#[derive(Debug, Clone)]
+pub enum BindAddr {
+    Tcp(std::net::SocketAddr),
+    Unix(PathBuf),
+}
+impl BindAddr {
+    pub fn to_uri(&self) -> String {
+        match self {
+            BindAddr::Tcp(s) => format!("http://{}", s),
+            BindAddr::Unix(p) => p.to_string_lossy().into(),
+        }
     }
 }
 
+pub fn parse_server_bind(tcp: &Option<String>, data_dir: &Path) -> anyhow::Result<BindAddr>
+{
+    match tcp {
+        None => Ok(BindAddr::Unix(data_dir
+            .canonicalize().context("Expanding data dir")?
+            .join("grpc-org-to-srv.sock").into())),
+        Some(s) => Ok(BindAddr::Tcp(s.parse().context("Parsing TCP listen address")?)),
+    }
+}
 // Implement the RCP methods
 
 #[tonic::async_trait]
-impl proto::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
+impl OrganizerOutbound for OrganizerOutboundImpl
 {
     async fn handshake(&self, _req: tonic::Request<proto::OrganizerInfo>) -> RpcResult<proto::Empty>
     {
@@ -128,12 +148,42 @@ impl proto::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundIm
 }
 
 
-pub async fn run_org_to_srv_grpc_server(bind: GrpcBindAddr, server: ServerState) -> anyhow::Result<()>
+pub async fn run_grpc_server(bind: BindAddr, server: ServerState) -> anyhow::Result<()>
 {
     let span = tracing::info_span!("gRPC server for org->srv");
-    let terminate_flag = server.terminate_flag.clone();
-    let service = proto::organizer_outbound_server::OrganizerOutboundServer::new(OrganizerOutboundImpl {
-        server,
-    });
-    run_grpc_server(bind, service, span, terminate_flag).await
+
+    span.in_scope(|| { tracing::info!("Binding to '{}'", bind.to_uri()) });
+    
+    let refl = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
+        .build()?;
+
+    let tf = server.terminate_flag.clone();
+    let srv = tonic::transport::Server::builder()
+        .add_service(refl)
+        .add_service(proto::organizer_outbound_server::OrganizerOutboundServer::new(OrganizerOutboundImpl {
+            server,
+        }));
+
+    let wait_for_shutdown = async move {
+        while !tf.load(Relaxed) { tokio::time::sleep(Duration::from_millis(10)).await; }
+    };
+
+    match bind {
+        BindAddr::Tcp(addr) => {
+                srv.serve_with_shutdown(addr, wait_for_shutdown).await?;
+        },
+        BindAddr::Unix(path) => {
+            if path.exists().await {
+                std::fs::remove_file(&path).context("Failed to delete previous socket.")?;
+            }
+            srv.serve_with_incoming_shutdown(
+                    tokio_stream::wrappers::UnixListenerStream::new(
+                        tokio::net::UnixListener::bind(&path)?),
+                    wait_for_shutdown
+                ).await?;
+        }
+    }
+    span.in_scope(|| { tracing::info!("Exiting gracefully.") });
+    Ok(())
 }
