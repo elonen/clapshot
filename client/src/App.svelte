@@ -9,6 +9,8 @@
   import {Notifications, acts} from '@tadashi/svelte-notification'
   import VideoPlayer from './lib/VideoPlayer.svelte';
 
+  import * as Proto3 from '../../protobuf/libs/typescript';
+
   import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
 
   import {VideoListDefItem, VideoListVideoDef, VideoListFolderDef, videoOrFolder} from "./lib/video_list/types";
@@ -18,6 +20,12 @@
   import VideoListFolder from "./lib/video_list/VideoListFolder.svelte";
   import { get } from "svelte/store";
   //import type { ClapshotCommentJson } from "./lib/video_list/types";
+
+const TEMP_TEST: Proto3.SemanticVersionNumber = Proto3.SemanticVersionNumber.fromJSON({
+  major: 1,
+  minor: 0,
+  patch: 0,
+});
 
   let videoTiles: VideoListVideoTile[] = []; 
 
@@ -477,7 +485,7 @@
             break;
 
           default:
-            log_abbreviated("[SERVER] UNKNOWN CMD '"+data.cmd+"': " + JSON.stringify(data));
+            console.log("[SERVER] UNKNOWN CMD '"+data.cmd+"'", data);
             break;
         }
       });
