@@ -5,21 +5,22 @@
 use async_std::task::block_on;
 use warp::Filter;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicBool};
+use std::sync::{Arc};
+use std::time::Duration;
+use tokio::time::sleep;
+use parking_lot::RwLock;
 use futures_util::stream::StreamExt;
 use futures_util::SinkExt;
 use warp::ws::{Message};
 use warp::http::HeaderMap;
 use std::sync::atomic::Ordering::Relaxed;
 
-use base64::{Engine as _, engine::general_purpose as Base64GP};
-
-use std::path::{PathBuf};
 use anyhow::{anyhow, bail};
 
-mod server_state;
+pub mod server_state;
 use server_state::ServerState;
+
+pub mod user_session;
 
 mod ws_handers;
 use ws_handers::msg_dispatch;
@@ -30,26 +31,26 @@ pub mod test_utils;
 
 #[cfg(test)]
 pub mod tests;
-
 mod file_upload;
 use file_upload::handle_multipart_upload;
-
-use crate::database::{models, DB};
+use crate::database::{models};
+use crate::grpc::grpc_server;
 use crate::video_pipeline::IncomingFile;
+use self::user_session::UserSession;
 
 type Res<T> = anyhow::Result<T>;
 type WsMsgSender = tokio::sync::mpsc::UnboundedSender<Message>;
 type SenderList = Vec<WsMsgSender>;
 type SenderListMap = Arc<RwLock<HashMap<String, SenderList>>>;
 type StringToStringMap = Arc<RwLock<HashMap<String, String>>>;
-
+type SessionMap = Arc<RwLock<HashMap<String, UserSession>>>;
 
 pub enum SendTo<'a> {
-    CurSession(),
-    CurCollab(),
+    UserSession(&'a str),
     UserId(&'a str),
     VideoHash(&'a str),
     MsgSender(&'a WsMsgSender),
+    Collab(&'a str),
 }
 
 #[derive (Clone, Debug)]
@@ -65,85 +66,6 @@ pub struct UserMessage {
     pub video_hash: Option<String>
 }
 
-pub struct WsSessionArgs<'a> {
-    sid: &'a str,
-    sender: &'a WsMsgSender,
-    server: ServerState,
-    user_id: &'a str,
-    user_name: &'a str,
-    cur_video_hash: Option<String>,
-    cur_collab_id: Option<String>,
-    video_session_guard: Option<Box<tokio::sync::Mutex<dyn Send>>>,
-    collab_session_guard: Option<Box<tokio::sync::Mutex<dyn Send>>>,
-}
-
-impl WsSessionArgs<'_> {
-
-    /// Send a command to client websocket(s).
-    /// 
-    /// If send_to is a string, it is interpreted either as a video hash or user id. Returns the
-    /// number of sessions the message was sent to.
-    /// 
-    /// - If it turns out to be a video hash, the message is sent to all websocket
-    ///     that are watching it.
-    /// - If it's a user id, the message is sent to all websocket connections that user has open.
-    /// - If it's a MsgSender, the message is sent to that connection only.
-    /// - If it's a SendTo::CurSession, the message is sent to the current session only.
-    /// - If it's a SendTo::CurCollab, the message is sent to all users in the current collab session.
-    pub fn emit_cmd(&self, cmd: &str, data: &serde_json::Value, send_to: SendTo) -> Res<u32>
-    {
-        let msg = serde_json::json!({ "cmd": cmd, "data": data });
-        let msg = Message::text(msg.to_string());
-        match send_to {
-            SendTo::CurSession() => { self.sender.send(msg)?; Ok(1u32) },
-            SendTo::CurCollab() => { self.server.send_to_all_collab_users(&self.cur_collab_id, &msg) },
-            SendTo::UserId(user_id) => { self.server.send_to_all_user_sessions(user_id, &msg) },
-            SendTo::VideoHash(video_hash) => { self.server.send_to_all_video_sessions(video_hash, &msg) },
-            SendTo::MsgSender(sender) => { sender.send(msg)?; Ok(1u32) },
-        }
-    }
-    
-    pub fn push_notify_message(&self, msg: &models::MessageInsert, persist: bool) -> Res<()> {
-        let send_res = self.emit_cmd("message", &msg.to_json()?, SendTo::UserId(&msg.user_id));
-        if let Ok(sent_count) = send_res {
-            if persist {
-                self.server.db.add_message(&models::MessageInsert {
-                    seen: msg.seen || sent_count > 0,
-                    ..msg.clone()
-                })?;
-            }
-        };
-        send_res.map(|_| ())
-    }
-
-    pub async fn emit_new_comment(&self, mut c: models::Comment, send_to: SendTo<'_>) -> Res<()> {
-        if let Some(drawing) = &mut c.drawing {
-            if drawing != "" {
-                // If drawing is present, read it from disk and encode it into a data URI.
-                if !drawing.starts_with("data:") {
-                    let path = self.server.videos_dir.join(&c.video_hash).join("drawings").join(&drawing);
-                    if path.exists() {
-                        let data = tokio::fs::read(path).await?;
-                        *drawing = format!("data:image/webp;base64,{}", Base64GP::STANDARD_NO_PAD.encode(&data));
-                    } else {
-                        tracing::warn!("Drawing file not found for comment: {}", c.id);
-                        c.comment += " [DRAWING NOT FOUND]";
-                    }
-                } else {
-                    // If drawing is already a data URI, just use it as is.
-                    // This shouldn't happen anymore, but it's here just in case.
-                    tracing::warn!("Comment '{}' has data URI drawing stored in DB. Should be on disk.", c.id);
-                }
-            }
-        }
-        let mut fields = c.to_json()?;
-        fields["comment_id"] = fields["id"].take();  // swap id with comment_id, because the client expects comment_id        
-        self.emit_cmd("new_comment", &fields , send_to).map(|_| ())
-    }
-
-}
-
-
 fn abbrv(msg: &str) -> String {
     if msg.len() > 200 { msg[..200].to_string() + " (...)" } else { msg.to_string() }
 }
@@ -156,28 +78,27 @@ async fn handle_ws_session(
         sid: String,
         user_id: String,
         username: String,
-        server_state: ServerState)
+        server: ServerState)
 {
     let (msgq_tx, mut msgq_rx) = tokio::sync::mpsc::unbounded_channel();
-    let mut ses = WsSessionArgs {
-        sid: &sid,
-        sender: &msgq_tx,
-        server: server_state,
-        user_id: &user_id,
-        user_name: &username,
+    let mut ses = UserSession {
+        sid: sid.clone(),
+        sender: msgq_tx,
+        user_id: user_id.clone(),
+        user_name: username.clone(),
         cur_video_hash: None,
         cur_collab_id: None,
         video_session_guard: None,
         collab_session_guard: None,
     };
 
-    let _user_session_guard = ses.server.register_user_session(&user_id, msgq_tx.clone());
+    let _user_session_guard = Some(server.register_user_session(&sid, &user_id, ses.clone()));
     let (mut ws_tx, mut ws_rx) = ws.split();
 
     // Let the client know user's id and name
-    if let Err(e) = ses.emit_cmd("welcome", 
+    if let Err(e) = server.emit_cmd("welcome", 
             &serde_json::json!({ "user_id": user_id, "username": username }), 
-            SendTo::CurSession()) {
+            SendTo::MsgSender(&ses.sender)) {
         tracing::error!(details=%e, "Error sending welcome message. Closing session.");
         return;
     }
@@ -187,8 +108,8 @@ async fn handle_ws_session(
         tokio::select!
         {
             // Termination flag set? Exit.
-            _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
-                if ses.server.terminate_flag.load(Relaxed) {
+            _ = sleep(Duration::from_millis(100)) => {
+                if server.terminate_flag.load(Relaxed) {
                     tracing::info!("Termination flag set. Closing session.");
                     break;
              }},
@@ -232,7 +153,7 @@ async fn handle_ws_session(
                                 Err(e) => {
                                     tracing::warn!(details=%e, "Error parsing JSON message. Closing session.");
                                     #[cfg(not(test))] {
-                                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                                        sleep(Duration::from_secs(5)).await;
                                     }
                                     let answ = format!("Invalid message, bye -- {}", e);
                                     ws_tx.send(Message::text(format!(r#"{{"cmd":"error", "data":{{"message": "{}"}}}}"#, answ))).await.ok();
@@ -240,8 +161,10 @@ async fn handle_ws_session(
                                 }
                             };
                             tracing::debug!(cmd=%cmd, "Msg from client.");
-
-                            if let Err(e) = msg_dispatch(&cmd, &data, &mut ses).await {
+                            match msg_dispatch(&cmd, &data, &mut ses, &server).await {
+                                Ok(true) => {},
+                                Ok(false) => { break; }
+                                Err(e) => {
                                     if let Some(e) = e.downcast_ref::<tokio::sync::mpsc::error::SendError<Message>>() {
                                         tracing::error!("[{}] Error sending message. Closing session. -- {}", sid, e);
                                         break;
@@ -250,8 +173,9 @@ async fn handle_ws_session(
                                         tracing::warn!("[{}] {}: {}", sid, answ, e);
                                         if ws_tx.send(Message::text(format!(r#"{{"cmd":"error", "data":{{"message": "{}"}}}}"#, answ))).await.is_err() { break; };
                                     }
-                                };
+                                }
 
+                            };
                         } else if msg.is_close() {
                             tracing::info!("Got websocket close message.");
                             break
@@ -301,16 +225,47 @@ fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String)
 
 /// Handle HTTP requests, read authentication headers and dispatch to WebSocket handler.
 async fn run_api_server_async(
+    bind_addr: std::net::IpAddr,
     server_state: ServerState,
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
     upload_results_tx: crossbeam_channel::Sender<IncomingFile>,
+    grpc_server_bind: Option<grpc_server::BindAddr>,
     port: u16)
 {
     let session_counter = Arc::new(RwLock::new(0u64));
     let server_state_cln1 = server_state.clone();
     let server_state_cln2 = server_state.clone();
 
-    tracing::info!(port=port, "Starting API server.");
+    // Start gRPC server.
+    // At this point, we have already connected to the Organizer in the
+    // other direction, so we know that the Organizer is up and running,
+    // and are waiting for it to connect to back to us for bidirectional gRPC.
+    let grpc_server = match grpc_server_bind {
+        Some(bind) => {
+            tracing::info!("Starting gRPC server for org->srv.");
+            let server = server_state.clone();
+            let b = bind.clone();
+            let hdl = tokio::spawn(async move {
+                grpc_server::run_grpc_server(b, server).await
+            });
+            let server = server_state.clone();
+            let mut wait_time = Duration::from_millis(10);
+            sleep(wait_time).await;
+            while !server.organizer_has_connected.load(Relaxed) {
+                sleep(wait_time).await;
+                if wait_time > Duration::from_secs(1) {
+                    tracing::info!("Waiting for org->srv connection...");
+                }
+                wait_time = std::cmp::min(wait_time * 2, Duration::from_secs(4));
+                if server.terminate_flag.load(Relaxed) { return; }
+            }
+            tracing::debug!("org->srv connected");
+            Some(hdl)
+        },
+        None => None,
+    };
+
+    tracing::info!(port=port, "Starting frontend API server.");
 
     let rt_health = warp::path("api").and(warp::path("health")).map(|| "I'm alive!");
 
@@ -338,7 +293,7 @@ async fn run_api_server_async(
 
             // Increment session counter
             let sid = {
-                let mut counter = session_counter.write().unwrap();
+                let mut counter = session_counter.write();
                 *counter += 1;
                 (*counter).to_string()
             };
@@ -363,17 +318,18 @@ async fn run_api_server_async(
         .allow_methods(vec!["GET", "POST"])
         .allow_headers(vec!["x-file-name"]));
 
+
     let (_addr, server) = warp::serve(routes)
-        .bind_with_graceful_shutdown(([127, 0, 0, 1], port), async move {
+        .bind_with_graceful_shutdown((bind_addr, port), async move {
             while !server_state_cln1.terminate_flag.load(Relaxed) {
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                sleep(Duration::from_millis(100)).await;
             }
         });
 
     let server_state = server_state_cln2;
     let msg_relay = async move {
         while !server_state.terminate_flag.load(Relaxed) {
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(100)).await;
             while let Ok(m) = user_msg_rx.try_recv() {
                 let topic_str = match m.topic{
                     UserMessageTopic::Ok() => "ok",
@@ -426,30 +382,42 @@ async fn run_api_server_async(
                 };
             }
         };
+        server_state.terminate_flag.store(true, Relaxed);
     };
 
+    if let Some(g) = grpc_server {
+        match tokio::try_join!(g) {
+            Ok((Ok(_),)) => tracing::debug!("gRPC server for org->srv exited OK."),
+            Ok((Err(e),)) => tracing::error!(details=%e, "gRPC server for org->srv exited with error."),
+            Err(e) => tracing::error!(details=%e, "gRPC server for org->srv panicked."),
+        };
+    }
+
     tokio::join!(server, msg_relay);
-    tracing::info!("Exiting.");
+    tracing::debug!("Exiting.");
 }
 
 
 #[tokio::main]
 pub async fn run_forever(
-    db: Arc<DB>,
-    videos_dir: PathBuf,
-    upload_dir: PathBuf,
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
+    grpc_server_bind: Option<grpc_server::BindAddr>,
     upload_res_tx: crossbeam_channel::Sender<IncomingFile>,
-    terminate_flag: Arc<AtomicBool>,
+    bind_addr: String,
     url_base: String,
+    state: ServerState,
     port: u16)
 {
     assert!(!url_base.ends_with('/')); // Should have been stripped by caller
+
+    let bind_addr = match bind_addr.parse::<std::net::IpAddr>() {
+        Ok(ip) => ip,
+        Err(_) => {
+            tracing::error!("Failed to parse bind address: '{}'", bind_addr);
+            return;
+        }
+    };
+
     let _span = tracing::info_span!("API").entered();
-    let state = ServerState::new( db,
-        &videos_dir,
-        &upload_dir,
-        &url_base,
-        terminate_flag );
-    run_api_server_async(state, user_msg_rx, upload_res_tx, port).await
+    run_api_server_async(bind_addr, state, user_msg_rx, upload_res_tx, grpc_server_bind, port).await;
 }

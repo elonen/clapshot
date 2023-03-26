@@ -81,12 +81,13 @@ mod integration_test
                 let url_base = format!("http://127.0.0.1:{}", port);
                 let ws_url = format!("{}/api/ws", &url_base.replace("http", "ws"));
                 let target_bitrate = $bitrate;
+                let grpc_server_bind = crate::grpc::grpc_server::BindAddr::Unix($data_dir.path().join("grpc-org-to-srv-TEST.sock").into());
                 let th = {
                     let poll_interval = 0.1;
                     let data_dir = $data_dir.path().to_path_buf();
                     let url_base = url_base.clone();
                     thread::spawn(move || {
-                        crate::run_clapshot(data_dir, true, url_base, port, 4, target_bitrate, poll_interval, poll_interval*5.0).unwrap()
+                        crate::run_clapshot(data_dir, true, url_base, "127.0.0.1".into(), port, None, grpc_server_bind, 4, target_bitrate, poll_interval, poll_interval*5.0).unwrap()
                     })};
                 thread::sleep(Duration::from_secs_f32(0.25));
 

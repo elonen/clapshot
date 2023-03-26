@@ -1,0 +1,432 @@
+syntax = "proto3";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+package clapshot.organizer;
+
+// This defines the gRPC API for Clapshot Organizer services.
+//
+// An **organizer plugin** is responsible for organizing
+// Clapshot videos into UI folders and enforcing access
+// control according to your particular business logic,
+// perhaps by looking up projects and ACL groups from
+// some LDAP or project management SQL database.
+//
+// Clapshot server will connect the organizer
+// on startup, and sends the handshake message. Organizer
+// connects back to the server and send its own
+// handshake message.
+//
+// The organizer service must live as long as the Clapshot
+// server and have a stable connection, which is why it is
+// recommended to have the server actually launch the
+// organizer service as a subprocess and use Unix sockets
+// for communication.
+
+
+// Calls that Organizer makes to Clapshot server
+service OrganizerOutbound {
+    rpc handshake (OrganizerInfo) returns (Empty);
+
+    rpc client_define_actions (ClientDefineActionsRequest) returns (Empty);
+    rpc client_show_page(ClientShowPageRequest) returns (Empty);
+    rpc client_show_user_message (ClientShowUserMessageRequest) returns (Empty);
+    rpc client_open_video (ClientOpenVideoRequest) returns (Empty);
+    rpc client_set_cookies (ClientSetCookiesRequest) returns (Empty);
+    rpc client_open_external_url (ClientOpenExternalURLRequest) returns (Empty);
+
+    rpc delete_video (DeleteVideoRequest) returns (Empty);
+    rpc modify_video (ModifyVideoRequest) returns (Empty);
+}
+
+// Calls that Clapshot server makes to Organizer
+service OrganizerInbound {
+    rpc handshake (ServerInfo) returns (Empty);
+    rpc navigate_page (NavigatePageRequest) returns (ClientShowPageRequest);
+    rpc authz_user_action (AuthzUserActionRequest) returns (AuthzResult);
+}
+
+// ---------------------------------------------------------
+ 
+message ServerInfo {
+    message Database {  
+        enum DatabaseType {
+            SQLITE = 0;
+        }
+        DatabaseType type = 1;
+        string endpoint = 2;
+    }
+    
+    message Storage {
+        message LocalFilesystem {
+            string base_dir = 1;
+        }
+        oneof storage {
+            LocalFilesystem local_fs = 1;
+        }
+    }
+
+    message GrpcEndpoint {
+        message Unix {
+            string path = 1;
+        }
+        message TCP {
+            string host = 1;
+            uint32 port = 2;
+        }
+        oneof endpoint {
+            Unix unix = 1;
+            TCP tcp = 2;
+        }
+    }
+    
+    SemanticVersionNumber version = 1;
+    Storage storage = 3;
+    string url_base = 4;
+    Database db = 5;
+    GrpcEndpoint backchannel = 6;
+}
+
+message OrganizerInfo {
+}
+
+message SemanticVersionNumber {
+    uint64 major = 1;
+    uint64 minor = 2;
+    uint64 patch = 3;
+}
+
+// ---------------------------------------------------------
+
+message Cookies {
+    map<string, string> cookies = 1;
+}
+
+message UserSessionData {
+    string sid = 1;
+    UserInfo user = 2;
+    Cookies cookies = 3;
+}
+
+// ---------------------------------------------------------
+// Server -> Organizer commands
+// ---------------------------------------------------------
+
+message NavigatePageRequest {
+    UserSessionData ses = 1;
+    string path = 2; // e.g. "/home"
+}
+
+message AuthzUserActionRequest {
+
+    message VideoOp {
+        enum Op {
+            UPLOAD = 0;
+            VIEW = 1;
+            RENAME = 2;
+            DELETE = 3;
+        }
+        Video video = 1;
+        Op op = 2;
+    }
+
+    message CommentOp {
+        enum Op {
+            ADD = 0;
+            EDIT = 1;
+            DELETE = 2;
+        }
+        Comment comment = 1;
+        Op op = 2;
+    }
+
+    UserSessionData ses = 1;    
+    oneof op {
+        VideoOp video_op = 100;
+        CommentOp comment_op = 110;
+    }
+}
+
+message AuthzResult {
+    bool is_authorized = 1;
+    optional string message = 2;         // e.g. "You are not authorized to view this video"
+    optional string details = 3;         // e.g. "You are not a member of the project"
+}
+
+// ---------------------------------------------------------
+// Organizer -> Server commands
+// ---------------------------------------------------------
+
+message ClientShowPageRequest {
+    repeated PageItem items = 1;
+    string sid = 2;
+    string path = 3;    // e.g. "proj2/accepted/", used on client for breadcrumbs / hash navigation
+}
+
+message ClientShowUserMessageRequest {    
+    UserMessage msg = 1;
+    oneof recipient {
+        string sid = 100;               // send to client with this session ID
+        string user_temp = 101;         // send to all session with this username
+        string user_persist = 102;      // send to all sessions with this username, and store in DB
+        string video_hash = 103;        // send to all clients watching this video
+        string collab_session = 104;    // send to all clients in this collaboration session
+    }
+}
+
+message ClientDefineActionsRequest {
+    map<string, ActionDef> actions = 1; // e.g. "rename" -> {label: "Rename", icon: "edit"}
+    string sid = 2;
+}
+
+message ClientOpenVideoRequest {
+    string video_hash = 1;
+    string sid = 2;
+}
+
+message ClientSetCookiesRequest {
+    Cookies replace = 1;
+    repeated string delete = 2;
+    string sid = 3;
+}
+
+message ClientOpenExternalURLRequest {
+    string url = 1;
+    string sid = 2;
+}
+
+message DeleteVideoRequest {
+    string video_hash = 1;
+}
+
+message ModifyVideoRequest {
+    string video_hash = 1;
+    Video new_data = 2;
+}
+
+
+// ---------------------------------------------------------
+
+message ApiCall {
+    enum Subsystem {
+        SERVER = 0;
+        ORGANIZER = 1;
+    }
+    Subsystem sys = 1;
+    string cmd = 2; // e.g. "rename"
+    map<string, google.protobuf.Value> data = 3; // e.g. "{folder: '$ITEM.id', new_name: '$DLG.text'}"
+}
+
+
+// ---------------------------------------------------------
+// Video metadata
+// ---------------------------------------------------------
+
+message VideoDuration {
+    double duration = 1;
+    int64 total_frames = 2;
+    string fps = 3; // e.g. "29.97"
+}
+
+message VideoProcessingMetadata {
+    optional google.protobuf.Timestamp recompression_done = 2;
+    string orig_filename = 102;
+    optional string ffprobe_metadata_all = 103;
+}
+
+message VideoPreviewData {
+    optional string thumb_sheet_dims = 2; // e.g. in frames, not pixels, e.g. "10x10"
+}
+
+message Video {
+    string video_hash = 1;
+    optional string title = 2;
+    optional UserInfo added_by = 3;
+    optional VideoDuration duration = 4;
+    optional google.protobuf.Timestamp added_time = 5;
+    optional VideoPreviewData preview_data = 6;
+    optional VideoProcessingMetadata processing_metadata = 7;
+}
+
+// ---------------------------------------------------------
+// Comments
+// ---------------------------------------------------------
+
+message Comment {
+    string id = 1;
+    Video video = 2;
+    UserInfo user = 3;
+    string comment = 4;
+    optional string timecode = 5;    // e.g. "00:00:00.000"
+    optional Comment parent = 6; // denormalized, null if top-level
+    optional google.protobuf.Timestamp created = 100;
+    optional google.protobuf.Timestamp edited = 101;
+}
+
+// ---------------------------------------------------------
+// User messages (notifications)
+// ---------------------------------------------------------
+
+message UserMessage {
+    enum Type {
+        OK = 0;
+        ERROR = 1;
+        PROGRESS = 2;
+    }
+    message Refs {
+        optional string video_hash = 1;
+        optional int32 comment_id = 2;
+    }
+    
+    Type type = 2;
+    Refs refs = 3;  // Objects referenced by this message
+    string message = 4;
+    optional string details = 5;
+}
+
+// ---------------------------------------------------------
+// Organizer page items
+// ---------------------------------------------------------
+
+message PageItem {
+
+    message Span {
+
+        message Text {
+            enum Type {
+                PLAIN = 0;
+                HTML = 1;
+            }
+            enum Style {
+                NORMAL = 0;
+                BOLD = 1;
+                ITALIC = 2;
+                UNDERLINE = 3;
+                STRIKETHROUGH = 4;
+            }
+            string text = 1;
+            Type type = 2;
+            Style style = 3;
+            optional Color color = 4;
+        }
+
+        message Link {
+            enum Style {
+                LINK = 0;
+                BUTTON = 1;
+            }
+            ActionDef action = 1;
+            Style style = 2;
+        }
+
+        message Heading {
+            Text text = 2;
+        }
+
+        message SpanItem {
+            oneof item {
+                Text text = 1;
+                Link link = 2;
+                Heading heading = 3;
+            }
+        }
+
+        repeated SpanItem items = 1;
+    }
+
+    message Paragraph {
+        repeated Span spans = 1;
+    }
+
+    message Table {
+        message Row {
+            repeated Span cells = 1;
+        }
+        repeated Row rows = 1;
+    }
+
+    message FolderListing {
+        message Folder {
+            string id = 1;
+            string title = 2;
+            repeated Item preview_items = 4;
+        }
+        message Item {
+            message Visualization {
+                optional Color base_color = 1;
+                optional Icon icon = 2;
+            }
+            oneof item {
+                Folder folder = 1;
+                Video video = 2;
+            }
+            optional Visualization vis = 100;
+            optional ApiCall open_action = 110;     // Omit to disable "open" action
+            repeated string popup_actions = 120;    // References to actions defined in ClientDefineActionsRequest
+        }
+        repeated Item items = 1;
+    }
+
+    oneof item {
+        Paragraph paragraph = 1;
+        Table table = 2;
+        FolderListing folder_listing = 3;
+    }
+}
+
+// ---------------------------------------------------------
+// UI actions and popups
+// ---------------------------------------------------------
+
+enum DialogType {
+    TEXT_INPUT = 0;
+    OK_CANCEL = 1;
+}
+
+message Dialog {
+    DialogType type = 1;
+    string title = 2;
+    optional string desc = 3;
+    map<string, string> args = 4; // Dialog-specific arguments
+}
+
+message ActionUIProps {
+    optional string label = 1;           // e.g. "Rename"
+    optional Icon icon = 2;
+    optional string key_shortcut = 3;    // e.g. "F2", "Insert", "Delete"
+}
+
+message ActionDef {
+    ApiCall api_call = 1;
+    optional Dialog dlg = 2;
+    ActionUIProps ui_props = 3;
+}
+
+// ---------------------------------------------------------
+
+message UserInfo {
+    string username = 1;
+    optional string displayname = 2;
+}
+
+message Color {
+    uint32 r = 1;   // 0-255
+    uint32 g = 2;
+    uint32 b = 3;
+}
+
+message Icon {
+    message FaClass {
+        string classes = 1;             // e.g. "fa fa-folder"
+        optional Color color = 2;
+    }
+    message ImgUrl {
+        string url = 1;
+    }
+    oneof src {
+        FaClass fa_class = 1;
+        ImgUrl img_url = 2;
+    }
+    optional float size = 3;
+}
+
+message Empty {}

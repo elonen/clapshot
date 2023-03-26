@@ -1,0 +1,37 @@
+[package]
+name = "clapshot-organizer-simple-rust"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+
+[[bin]]
+name = "clapshot-organizer_rust-simple"
+path = "src/main.rs"
+
+[lib]
+name = "simple_organizer"
+path = "src/lib.rs"
+
+
+[dependencies]
+tokio = { version = "1.25.0", features = ["full"] }
+
+clapshot-server = { path = "../../server" }
+
+tonic = "0.8.3"
+tonic-reflection = "0.6.0"
+tower = "0.4.13"
+
+tracing = "0.1.37"
+tracing-subscriber = {version = "0.3.16", features = ["env-filter", "json"] }
+tracing-appender = "0.2.2"
+
+anyhow = "1.0.69"
+docopt = "1.1.1"
+tokio-stream = "0.1.12"
+serde = "1.0.154"
+ctrlc = "3.2.5"
+semver = "1.0.17"

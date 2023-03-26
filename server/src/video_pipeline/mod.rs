@@ -584,5 +584,5 @@ pub fn run_forever(
         }
     }
 
-    tracing::info!("Exiting.");
+    tracing::debug!("Exiting.");
 }

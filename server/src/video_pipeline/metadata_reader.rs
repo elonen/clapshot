@@ -174,7 +174,7 @@ pub fn run_forever(inq: Receiver<IncomingFile>, outq: Sender<MetadataResult>, n_
         }
     }
 
-    tracing::info!("Exiting.");
+    tracing::debug!("Exiting.");
 }
 
 
