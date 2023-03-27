@@ -1,5 +1,4 @@
 <script lang="ts">
-    import {slide} from "svelte/transition";
     import Dropzone from "svelte-file-dropzone";
 
     let drag_active: boolean = false;

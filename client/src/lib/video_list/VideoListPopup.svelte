@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+    import { createEventDispatcher, onMount } from 'svelte';
     import type { VideoListPopupMenuItem } from './types';
 
     export let x = 0;

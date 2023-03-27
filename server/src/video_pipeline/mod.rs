@@ -314,7 +314,7 @@ pub fn run_forever(
     });
 
     // Migration from older version: find a video that is missing thumbnail sheet
-    fn legacy_thumnail_next_video(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<video_compressor::CmprInput>) -> Option<String> {
+    fn legacy_thumbnail_next_video(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<video_compressor::CmprInput>) -> Option<String> {
         let next = match db.get_all_videos_without_thumbnails() {
             Ok(videos) => videos.first().cloned(),
             Err(e) => {
@@ -358,7 +358,7 @@ pub fn run_forever(
         }
         None
     }
-    let mut legacy_video_now_thumnailing = legacy_thumnail_next_video(&db, &videos_dir, &mut cmpr_in_tx.clone());
+    let mut legacy_video_now_thumnailing = legacy_thumbnail_next_video(&db, &videos_dir, &mut cmpr_in_tx.clone());
 
 
     let _span = tracing::info_span!("PIPELINE").entered();
@@ -473,9 +473,9 @@ pub fn run_forever(
                                 if let Err(e) = db.set_video_thumb_sheet_dimensions(&vh, THUMB_SHEET_COLS, THUMB_SHEET_ROWS) {
                                     tracing::error!(details=%e, "Error storing thumbnail sheet dims in DB");
                                 } else {
-                                    // Legacy thumbnailer: find next video to thumbnail, if any
+                                    // Thumbnailer for old videos: find next video to thumbnail, if any
                                     if Some(vh.clone()) == legacy_video_now_thumnailing {
-                                        legacy_video_now_thumnailing = legacy_thumnail_next_video(&db, &videos_dir, &mut cmpr_in_tx.clone());
+                                        legacy_video_now_thumnailing = legacy_thumbnail_next_video(&db, &videos_dir, &mut cmpr_in_tx.clone());
                                     }
                                 }
                                 // Write out stdout/stderr to separate files

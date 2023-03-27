@@ -5,29 +5,16 @@
   import CommentInput from './lib/CommentInput.svelte';
   import UserMessage from './lib/UserMessage.svelte';
   import FileUpload from './lib/FileUpload.svelte';
-  import type VideoListVideoTile from "./lib/video_list/VideoListVideoTile.svelte";
   import {Notifications, acts} from '@tadashi/svelte-notification'
   import VideoPlayer from './lib/VideoPlayer.svelte';
 
   import * as Proto3 from '../../protobuf/libs/typescript';
 
-  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
+  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, cur_page_items, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
 
-  import {VideoListDefItem, VideoListVideoDef, VideoListFolderDef, videoOrFolder} from "./lib/video_list/types";
+  import type {VideoListDefItem} from "./lib/video_list/types";
   import VideoList from "./lib/video_list/VideoList.svelte";
-
-  import type { ClapshotVideoJson } from "./lib/video_list/types";
-  import VideoListFolder from "./lib/video_list/VideoListFolder.svelte";
-  import { get } from "svelte/store";
-  //import type { ClapshotCommentJson } from "./lib/video_list/types";
-
-const TEMP_TEST: Proto3.SemanticVersionNumber = Proto3.SemanticVersionNumber.fromJSON({
-  major: 1,
-  minor: 0,
-  patch: 0,
-});
-
-  let videoTiles: VideoListVideoTile[] = []; 
+  
 
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
@@ -134,11 +121,6 @@ const TEMP_TEST: Proto3.SemanticVersionNumber = Proto3.SemanticVersionNumber.fro
     history.pushState('/', null, '/');  // Clear URL
     closeVideo();
   }
-
-  function onRequestFolderOpen(e: any) {
-    alert("TODO: open folder " + e.detail.folder_id);
-  }
-
 
   function onVideoSeeked(_e: any) {
     comment_input.forceDrawMode(false);  // Close draw mode when video frame is changed
@@ -378,11 +360,10 @@ const TEMP_TEST: Proto3.SemanticVersionNumber = Proto3.SemanticVersionNumber.fro
             acts.add({mode: 'danger', message: data.msg, lifetime: 5});
             break;
 
-          case 'user_videos':
-            log_abbreviated("[SERVER] user_videos: " + JSON.stringify(data));
-            $all_my_videos = data.videos;
-            console.log("Got " + $all_my_videos.length + " videos");
-            //console.log($all_my_videos);
+          case 'show_page':
+            log_abbreviated("[SERVER] show_page: " + JSON.stringify(data));
+            $cur_page_items = data.page_items.map(
+                (pi: any) => Proto3.PageItem.fromJSON(pi));
             break;
 
           case 'message':
@@ -520,27 +501,18 @@ const TEMP_TEST: Proto3.SemanticVersionNumber = Proto3.SemanticVersionNumber.fro
     console.log("NOT IMPLEMENTED! onMoveItemsToFolder: " + _e.detail.folder_id, "items:", _e.detail.items);
   }
 
-  function TEMP_getVideoListItems(items: any[]): VideoListDefItem[] {
-    let res: VideoListDefItem[] = items.map((it) => new VideoListVideoDef(it));
-    let copy = [...res];
-    let fld1 = new VideoListFolderDef("test1", "Test Folder 1", copy);
-    let fld2 = new VideoListFolderDef("test2", "Test Folder 2", []);
-    res.push(fld1);
-    res.push(fld2);
-    return res;
-  }
-
   function TEMP_reorderItems(e: any) {
     console.log("TEMP_reorderItems:", e.detail.items);
   }
 
-  function openVideoListItem(e: { detail: { video: any; folder: any }}): void {
-    if (e.detail.video) {
-      let new_video_hash = e.detail.video.video_hash;
-      ws_emit('open_video', {video_hash: new_video_hash});
-      history.pushState(new_video_hash, null, '/?vid='+new_video_hash);  // Point URL to video
-    } else if (e.detail.folder) {
-      alert("Folder open: " + e.detail.folder.folder_id);
+  function openVideoListItem(e: { detail: VideoListDefItem}): void {
+    console.log("openVideoListItem:", e.detail);
+    let { video, folder } = e.detail.obj;
+    if (video) {
+      ws_emit('open_video', {video_hash: video.videoHash});
+      history.pushState(video.videoHash, null, '/?vid='+video.videoHash);  // Point URL to video
+    } else if (folder) {
+      alert("Folder open: " + folder.id);
     }
   }
 
@@ -551,20 +523,20 @@ const TEMP_TEST: Proto3.SemanticVersionNumber = Proto3.SemanticVersionNumber.fro
         let subject = items.length == 1 ? "this item" : items.length + " items";
         if (confirm("Are you sure you want to DELETE " + subject + "?")) {
           items.forEach((it) => {
-            let {video, folder} = videoOrFolder(it);
+            let {video, folder} = it.obj;
             if (video)
-              onRequestVideoDelete(video.video_hash, video.title);
+              onRequestVideoDelete(video.videoHash, video.title);
             else if (folder)
-              onRequestFolderDelete(folder.folder_id);
+              onRequestFolderDelete(folder.id);
         })}
         break;
       case 'rename':
         if (items.length == 1) {
-          let {video, folder} = videoOrFolder(items[0]);
+          let {video, folder} = items[0].obj;
           if (video)
-            onRequestVideoRename(video.video_hash, video.title);
+            onRequestVideoRename(video.videoHash, video.title);
           else if (folder)
-            onRequestFolderRename(folder.folder_id, folder.name);
+            onRequestFolderRename(folder.id, folder.title);
         } else {
           alert("Can only rename one item at a time.");
         }
@@ -641,38 +613,40 @@ const TEMP_TEST: Proto3.SemanticVersionNumber = Proto3.SemanticVersionNumber.fro
 
         {:else}
 
-          <!-- ========== video listing ============= -->        
-          <div class="m-6 text">
-            <h1 class="text-4xl m-6">
-              {#if $all_my_videos.length>0}
-                All your videos
-              {:else}
-                You have no videos.
+          <!-- ========== page components ============= -->
+          <div class="organizer_page">
+            {#each $cur_page_items as item}
+              {#if item.html }
+                <div>
+                    {@html item.html}
+                </div>
+              {:else if item.folderListing}
+                <div class="my-6">
+                  <VideoList items={item.folderListing.items.map((it)=>({
+                      id: (it.video?.videoHash || it.folder?.id),
+                      obj: it }))}
+                    on:open-item={openVideoListItem}
+                    on:reorder-items={TEMP_reorderItems}
+                    on:move-to-folder={onMoveItemsToFolder}
+                    on:popup-action={onVideoListPopupAction}
+                    />
+                </div>
               {/if}
-            </h1>
-
+            {/each}
           </div>
           
-          <div class="m-4">
-            <VideoList items={TEMP_getVideoListItems($all_my_videos)} 
-              on:open-item={openVideoListItem}
-              on:reorder-items={TEMP_reorderItems}
-              on:move-to-folder={onMoveItemsToFolder}
-              on:popup-action={onVideoListPopupAction}
-              />
-
-            <div class="w-full my-4 h-24 border-4 border-dashed border-gray-700">
-              <FileUpload post_url={upload_url}>
-                <div class="flex flex-col justify-center items-center h-full">
-                  <div class="text-2xl text-gray-700">
-                    <i class="fas fa-upload"></i>
-                  </div>
-                  <div class="text-xl text-gray-700">
-                    Drop video files here to upload
-                  </div>
+          <!-- ========== upload widget ============= -->
+          <div class="m-6 h-24 border-4 border-dashed border-gray-700">
+            <FileUpload post_url={upload_url}>
+              <div class="flex flex-col justify-center items-center h-full">
+                <div class="text-2xl text-gray-700">
+                  <i class="fas fa-upload"></i>
                 </div>
-              </FileUpload>
-            </div>
+                <div class="text-xl text-gray-700">
+                  Drop video files here to upload
+                </div>
+              </div>
+            </FileUpload>
           </div>
 
           <div>
@@ -702,6 +676,15 @@ const TEMP_TEST: Proto3.SemanticVersionNumber = Proto3.SemanticVersionNumber.fro
     } to { 
         transform: rotate(360deg); 
     }
+}
+
+/* Make all headings in organizer page bigger */
+:global(div.organizer_page){
+  margin: 2em;
+}
+
+:global(.organizer_page h2){
+  font-size: 200%;
 }
 
 </style>

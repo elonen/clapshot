@@ -221,6 +221,16 @@ message ApiCall {
 // Video metadata
 // ---------------------------------------------------------
 
+message Video {
+    string video_hash = 1;
+    optional string title = 2;
+    optional UserInfo added_by = 3;
+    optional VideoDuration duration = 4;
+    optional google.protobuf.Timestamp added_time = 5;
+    optional VideoPreviewData preview_data = 6;
+    optional VideoProcessingMetadata processing_metadata = 7;
+}
+
 message VideoDuration {
     double duration = 1;
     int64 total_frames = 2;
@@ -234,17 +244,13 @@ message VideoProcessingMetadata {
 }
 
 message VideoPreviewData {
-    optional string thumb_sheet_dims = 2; // e.g. in frames, not pixels, e.g. "10x10"
-}
-
-message Video {
-    string video_hash = 1;
-    optional string title = 2;
-    optional UserInfo added_by = 3;
-    optional VideoDuration duration = 4;
-    optional google.protobuf.Timestamp added_time = 5;
-    optional VideoPreviewData preview_data = 6;
-    optional VideoProcessingMetadata processing_metadata = 7;
+    message ThumbSheet {
+        string url = 1;     // Sprite sheet of thumbnails
+        uint32 rows = 2;
+        uint32 cols = 3;
+    }
+    optional string thumb_url = 1;
+    optional ThumbSheet thumb_sheet = 2;
 }
 
 // ---------------------------------------------------------
@@ -289,61 +295,6 @@ message UserMessage {
 
 message PageItem {
 
-    message Span {
-
-        message Text {
-            enum Type {
-                PLAIN = 0;
-                HTML = 1;
-            }
-            enum Style {
-                NORMAL = 0;
-                BOLD = 1;
-                ITALIC = 2;
-                UNDERLINE = 3;
-                STRIKETHROUGH = 4;
-            }
-            string text = 1;
-            Type type = 2;
-            Style style = 3;
-            optional Color color = 4;
-        }
-
-        message Link {
-            enum Style {
-                LINK = 0;
-                BUTTON = 1;
-            }
-            ActionDef action = 1;
-            Style style = 2;
-        }
-
-        message Heading {
-            Text text = 2;
-        }
-
-        message SpanItem {
-            oneof item {
-                Text text = 1;
-                Link link = 2;
-                Heading heading = 3;
-            }
-        }
-
-        repeated SpanItem items = 1;
-    }
-
-    message Paragraph {
-        repeated Span spans = 1;
-    }
-
-    message Table {
-        message Row {
-            repeated Span cells = 1;
-        }
-        repeated Row rows = 1;
-    }
-
     message FolderListing {
         message Folder {
             string id = 1;
@@ -367,9 +318,8 @@ message PageItem {
     }
 
     oneof item {
-        Paragraph paragraph = 1;
-        Table table = 2;
-        FolderListing folder_listing = 3;
+        string html = 1;
+        FolderListing folder_listing = 2;
     }
 }
 

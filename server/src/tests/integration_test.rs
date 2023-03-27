@@ -195,7 +195,8 @@ mod integration_test
             // Wait until transcoding is done
             let mut transcode_complete = false;
             let mut got_progress_report = false;
-            let mut sheet_dims = String::new();
+            let mut ts_cols = String::new();
+            let mut ts_rows = String::new();
 
             'waitloop: for _ in 0..(120*5) {
                 write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
@@ -203,16 +204,21 @@ mod integration_test
                 if cmd == "message" && data["event_name"].as_str().unwrap() == "progress" {
                     got_progress_report = true;
                 }
-                if cmd == "user_videos" {
-                    let vids = data["videos"].as_array().unwrap();
-                    assert!(vids.len() == 1);
-                    for v in vids {
-                        assert_eq!(v["video_hash"].as_str().unwrap(), vh);
-                        if !v["recompression_done"].is_null() && !v["thumb_sheet_dims"].is_null() {
-                            transcode_complete = true;
-                            sheet_dims = v["thumb_sheet_dims"].as_str().unwrap().to_string();
-                            break 'waitloop;
-                        }}}
+                if cmd == "show_page" {
+                    let pitems = data["page_items"].as_array().unwrap();
+                    assert!(pitems.len() == 1+1);
+                    let v = &pitems[1]["folderListing"]["items"][0]["video"];
+                    assert_eq!(v["videoHash"].as_str().unwrap(), vh);
+
+                    if !v["processingMetadata"]["recompressionDone"].is_null() && !v["previewData"].is_null() {
+                        transcode_complete = true;
+                        let thumb_sheet = &v["previewData"]["thumbSheet"];
+                        assert!(!thumb_sheet.is_null());
+                        ts_cols = thumb_sheet["cols"].as_u64().unwrap().to_string();
+                        ts_rows = thumb_sheet["rows"].as_u64().unwrap().to_string();
+                        break 'waitloop;
+                    }
+                }
                 thread::sleep(Duration::from_secs_f32(0.2));
             }
 
@@ -227,7 +233,7 @@ mod integration_test
 
             let thumb_dir = vid_dir.join("thumbs");
             assert!(thumb_dir.join("thumb.webp").is_file());
-            assert!(thumb_dir.join(format!("sheet-{sheet_dims}.webp")).is_file());
+            assert!(thumb_dir.join(format!("sheet-{ts_cols}x{ts_rows}.webp")).is_file());
             assert!(thumb_dir.join("stdout.txt").is_file());
             assert!(thumb_dir.join("stderr.txt").is_file());
         }

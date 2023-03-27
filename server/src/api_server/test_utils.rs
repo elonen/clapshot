@@ -36,7 +36,11 @@ pub(crate) async fn read(ws: &mut WsClient) -> Option<String> {
             _ => None,
     };
     let res_str = res.as_ref().map(|s| s.as_str()).unwrap_or("<none>");
-    println!("<--- [Client got]: {res_str}");
+    if let Some(Some(res_json)) = res.as_ref().map(|s| serde_json::from_str::<serde_json::Value>(s).ok()) {
+        println!("<--- [Client got]: {:#}", res_json);
+    } else {
+        println!("<--- [Client got]: {:#}", res_str);
+    }
     res
 }
 
@@ -63,7 +67,7 @@ pub(crate) async fn expect_no_msg(ws: &mut WsClient) {
 }
 
 pub(crate) async fn write(ws: &mut WsClient, msg: &str) {
-    println!("---> [Client sending]: {}", msg);
+    println!("---> [Client sending]: {:#}", msg);
     ws.send(Message::text(msg)).await.expect("Failed to send WS message");
 }
 

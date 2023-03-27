@@ -60,10 +60,10 @@ async fn test_api_list_user_videos()
     api_test! {[ws, ts] 
         write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
         let (cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(cmd, "user_videos");
+        assert_eq!(cmd, "show_page");
         assert_eq!(data["user_id"], "user.num1");
-        assert_eq!(data["username"], "User Num1");
-        assert_eq!(data["videos"].as_array().unwrap().len(), 3);
+        assert_eq!(data["page_items"].as_array().unwrap().len(), 2);
+        assert_eq!(data["page_items"][1]["folderListing"]["items"].as_array().unwrap().len(), 3);
 
         // Break the database, make sure we get an error
         ts.db.break_db();

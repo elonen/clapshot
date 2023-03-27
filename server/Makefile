@@ -15,7 +15,7 @@ default: ${SERVER_CMD}
 ${DEV_DATADIR}:
 	mkdir -p "$@"
 
-RUST_DEPS=$(shell find src/ migrations/ Cargo.toml diesel.toml -type f)
+RUST_DEPS=$(shell find src/ migrations/ Cargo.toml diesel.toml -type f) $(shell find ../protobuf/proto -type f)
 DEB_DEPS=$(shell find debian/ README* LICENSE*  -type f)
 
 ${SERVER_CMD}: ${RUST_DEPS}

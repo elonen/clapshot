@@ -123,13 +123,13 @@ impl DB {
     /// 
     /// # Arguments
     /// * `vh` - Hash (unique identifier) of the video
-    /// * `width` - Width of the thumbnail sheet
-    /// * `height` - Height of the thumbnail sheet
-    pub fn set_video_thumb_sheet_dimensions(&self, vh: &str, width: u32, height: u32) -> EmptyDBResult
+    /// * `cols` - Width of the thumbnail sheet
+    /// * `rows` - Height of the thumbnail sheet
+    pub fn set_video_thumb_sheet_dimensions(&self, vh: &str, cols: u32, rows: u32) -> EmptyDBResult
     {
         use schema::videos::dsl::*;
         diesel::update(videos.filter(video_hash.eq(vh)))
-            .set(thumb_sheet_dims.eq(format!("{width}x{height}")))
+            .set(thumb_sheet_dims.eq(format!("{cols}x{rows}")))
             .execute(&mut self.conn()?)?;
         Ok(())
     }

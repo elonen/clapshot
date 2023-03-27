@@ -30,6 +30,7 @@ use crate::database::{models, DB};
 use crate::database::schema::comments::drawing;
 use crate::{send_user_error, send_user_ok};
 
+use lib_clapshot_grpc::proto;
 
 // ---------------------------------------------------------------------
 // Command handlers
@@ -39,36 +40,22 @@ use crate::{send_user_error, send_user_ok};
 pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let videos = server.db.get_all_user_videos(&ses.user_id)?;
 
-    let page_item = crate::grpc::folder_listing_for_videos(&videos);
-    let page = vec![page_item];
+    let h_txt = if videos.is_empty() {
+        "<h2>You have no videos yet.</h2>"
+    } else {
+        "<h2>All your videos</h2>"
+    };
+    let heading = proto::PageItem{ item: Some(proto::page_item::Item::Html(h_txt.into()))};
+    let listing = crate::grpc::folder_listing_for_videos(&videos, &server.url_base);
+    let page = vec![heading, listing];
 
-    let json_pages = serde_json::to_value(page)?;
-
-    server.emit_cmd("show_page", &json!({
-        "username": ses.user_name.clone(),
-        "user_id": ses.user_id.clone(),
-        "page_items": json_pages }),
-    super::SendTo::UserSession(&ses.sid))?;
-
-/*
-    let videos = videos.into_iter().map(|v| {
-            let mut fields = v.to_json()?;
-            if let Some(sheet_dims) = v.thumb_sheet_dims {
-                let (sheet_w, sheet_h) = sheet_dims.split_once('x').ok_or(anyhow!("Invalid sheet dims"))?;
-                fields["thumb_sheet_cols"] = json!(sheet_w.parse::<u32>()?);
-                fields["thumb_sheet_rows"] = json!(sheet_h.parse::<u32>()?);
-                fields["thumb_url"] = json!(format!("{}/videos/{}/thumbs/thumb.webp", server.url_base, &v.video_hash));
-                fields["thumb_sheet_url"] = json!(format!("{}/videos/{}/thumbs/sheet-{}.webp", server.url_base, &v.video_hash, sheet_dims));
-            };
-            Ok(fields)
-        }).collect::<Res<Vec<serde_json::Value>>>()?;
-
-    server.emit_cmd("user_videos", &json!({
+    server.emit_cmd(
+        "show_page", 
+        &json!({
             "username": ses.user_name.clone(),
             "user_id": ses.user_id.clone(),
-            "videos": videos }),
+            "page_items": serde_json::to_value(page)? }),
         super::SendTo::UserSession(&ses.sid))?;
-*/
     Ok(())
 }
 
