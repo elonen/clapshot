@@ -36,7 +36,7 @@ RUN set -eux; \
         ; \
     rm -rf /var/lib/apt/lists/*;
 
-
+# ----------------------------------
 
 FROM rust-bookworm-slim AS chef
 
@@ -55,6 +55,7 @@ RUN apt-get -qy install sqlite3 >/dev/null
 # Rust build deps
 RUN apt-get -qy install libssl-dev >/dev/null
 RUN apt-get -qy install libsqlite3-dev >/dev/null
+RUN apt-get -qy install protobuf-compiler >/dev/null
 
 # Create regular user
 ARG USER=docker
@@ -65,22 +66,22 @@ RUN test -n "${USER}" && test -n "${UID}" && test -n "${GID}"
 
 RUN groupadd -f ${USER} --gid=${GID}
 RUN useradd -m ${USER} --uid=${UID} --gid=${GID} || true
-RUN mkdir -p /app
+RUN mkdir -p /app/server
 RUN chown -R ${UID}:${GID} /app
 
 USER ${UID}:${GID}
-WORKDIR /app
+WORKDIR /app/server
 
 RUN cargo install cargo-chef
 RUN cargo install cargo-deb
 
-
+# ----------------------------------
 
 #FROM chef AS planner
 #COPY Cargo.toml .
 #RUN cargo chef prepare  --recipe-path recipe.json
 
-
+# ----------------------------------
 
 FROM chef AS builder
 
@@ -89,10 +90,10 @@ FROM chef AS builder
 #RUN cargo chef cook --release --recipe-path recipe.json
 
 # Copy sources & build
-COPY . .
+COPY --chown=${UID}:${GID} server /app/server
+COPY --chown=${UID}:${GID} organizer-plugin /app/organizer-plugin
+COPY --chown=${UID}:${GID} protobuf /app/protobuf
 RUN make
-RUN ls -l /
-RUN ls -l /app
 
 EXPOSE 8095
 CMD ["make", "run-local"]

@@ -15,13 +15,14 @@ clean:
 npm-deps:
 	npm install vite
 	npm install
+	cd ../protobuf/libs/typescript && make
 
 docker: clean 
-	DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} .
+	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} -f Dockerfile.client .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
 
 docker-for-deb: clean 
-	DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg TARGET=deb  .
+	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg TARGET=deb  -f Dockerfile.client .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:deb
 
 
@@ -31,7 +32,7 @@ build-local: npm-deps
 build-docker: docker-for-deb
 	mkdir -p dist
 	chmod a+rwx dist
-	docker run --rm --mount type=bind,source="$$(pwd)"/dist,target=/build/dist  ${PACKAGE}:deb  make build-local
+	docker run --rm --mount type=bind,source="$$(pwd)"/dist,target=/build/client/dist  ${PACKAGE}:deb  make build-local
 	@echo "==== Build in Docker done. Results are in ./dist/ ===="
 
 build:
@@ -49,9 +50,8 @@ debian-docker: docker-for-deb
 	$(eval PVER=$(shell jq -r '.version' package.json))
 	test -n ${PVER}
 	$(eval PKGDIR=${PACKAGE}-${PVER})
-	$(eval CMD="mkdir -p /deb/ && cp -a /build /deb/${PKGDIR} && cd /deb/${PKGDIR} && make debian-local && rm -rf /deb/${PKGDIR} && chown -R ${UID}:${GID} /deb")
+	$(eval CMD="mkdir -p /deb/ && cp -a /build /deb/${PKGDIR} && cd /deb/${PKGDIR}/client && make debian-local && mv /deb/${PKGDIR}/*.deb /deb/ && rm -rf /deb/${PKGDIR} && chown -R ${UID}:${GID} /deb")
 	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:deb  bash -c ${CMD}
-
 
 
 dev-local: npm-deps

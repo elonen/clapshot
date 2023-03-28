@@ -33,7 +33,7 @@ docker: ${DEV_DATADIR}
 	@echo "Otherwise you wouldn't be able to access it without root privileges."
 	@echo "-------------------------------------------------------------------------------"
 
-	DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID} .
+	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID}  -f Dockerfile.server .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
 
 
@@ -49,7 +49,7 @@ dist_deb/built.target: ${SERVER_CMD} ${DEB_DEPS}
 debian-docker:  ${RUST_DEPS} ${DEB_DEPS} ${ENV} docker
 	mkdir -p dist_deb
 	$(eval PKGDIR=${PACKAGE}-${PVER})
-	$(eval CMD="cd /app && cp -r --preserve=mode,ownership,timestamps /deb ./dist_deb && ls -l ./dist_deb && make debian-local && cp dist_deb/* /deb/ && chown -R ${UID}:${GID} /deb")
+	$(eval CMD="cd /app/server && cp -r --preserve=mode,ownership,timestamps /deb ./dist_deb && ls -l ./dist_deb && make debian-local && cp dist_deb/* /deb/ && chown -R ${UID}:${GID} /deb")
 	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:latest  bash -c ${CMD}
 
 
@@ -73,7 +73,7 @@ run-local: ${SERVER_CMD} ${DEV_DATADIR}
 	${SERVER_CMD} --url-base http://127.0.0.1:8095/ --port 8095 --data-dir ${DEV_DATADIR} --migrate --debug  --org-cmd "${PLUGIN_BIN}"
 
 run-docker: docker
-	docker run --rm -it -p 127.0.0.1:8095:8095 --mount type=bind,source="$$(pwd)"/${DEV_DATADIR},target=/app/${DEV_DATADIR}  ${PACKAGE}:latest
+	docker run --rm -it -p 127.0.0.1:8095:8095 --mount type=bind,source="$$(pwd)"/${DEV_DATADIR},target=/app/server/${DEV_DATADIR}  ${PACKAGE}:latest
 
 run:
 	@echo "Please run either 'run-docker' or 'run-local'"
