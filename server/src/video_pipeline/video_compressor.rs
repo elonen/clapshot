@@ -99,7 +99,7 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
     
             let mut cmd = &mut Command::new("nice");
             cmd = cmd.arg("-n").arg("10").arg("--")
-                .arg("ffmpeg").arg("-i").arg(&src);
+                .arg("ffmpeg").arg("-y").arg("-i").arg(&src);
 
             if let Some(pfn) = ppipe_fname {
                 cmd = cmd.args(&["-progress", &pfn]);
@@ -323,7 +323,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 
             let mut cmd = &mut Command::new("nice");
             cmd = cmd.arg("-n").arg("10").arg("--")
-                .arg("ffmpeg").arg("-i").arg(&src).args(&[
+                .arg("ffmpeg").arg("-y").arg("-i").arg(&src).args(&[
                 "-nostats",
                 "-vcodec", "libwebp",
                 "-vf", format!("thumbnail,{img_reshape}",).as_str(),
@@ -372,7 +372,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 
             let mut cmd = &mut Command::new("nice");
             cmd = cmd.arg("-n").arg("10").arg("--")
-                .arg("ffmpeg").arg("-i").arg(&src).args(&[
+                .arg("ffmpeg").arg("-y").arg("-i").arg(&src).args(&[
                 "-nostats",
                 "-vf", &format!("select={frame_select_filter},{img_reshape},tile={THUMB_SHEET_COLS}x{THUMB_SHEET_ROWS}"),
                 "-strict", "experimental",
