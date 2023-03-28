@@ -2,7 +2,7 @@ pub mod grpc_client;
 pub mod caller;
 pub mod grpc_server;
 
-use std::num::NonZeroU64;
+use std::{num::NonZeroU64, collections::HashMap};
 
 use lib_clapshot_grpc::proto;
 
@@ -81,8 +81,12 @@ pub (crate) fn db_video_to_proto3(v: &crate::database::models::Video, url_base: 
 pub (crate) fn folder_listing_for_videos(videos: &[crate::database::models::Video], url_base: &str) -> proto::PageItem {
     let videos: Vec<proto::page_item::folder_listing::Item> = videos.iter().map(|v| {
             proto::page_item::folder_listing::Item {
-                item: Some(proto::page_item::folder_listing::item::Item::Video(
-                    db_video_to_proto3(v, url_base))),
+                item: Some(proto::page_item::folder_listing::item::Item::Video(db_video_to_proto3(v, url_base))),
+                open_action: Some(proto::ApiCall {
+                    sys: proto::api_call::Subsystem::Server.into(),
+                    cmd: "open_video".into(),
+                    data: HashMap::from([("video_hash".into(), v.video_hash.clone().into())]),
+                }),
                 ..Default::default()
             }
         }).collect();

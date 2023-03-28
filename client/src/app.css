@@ -37,6 +37,16 @@
   z-index: 1010;
 }
 
+.videolist_item_pump_anim {
+  animation-name: zoom_inout;
+  animation-duration: 0.2s;
+  animation-iteration-count: 2;
+  animation-direction: alternate;
+}
+@keyframes zoom_inout {
+  0% { transform: scale(1); }
+  100% { transform: scale(0.8); }
+}
 
 /* Comment card highlight animation */
 .highlighted_comment {
@@ -44,13 +54,7 @@
   animation-duration: 1s;
 }
 @keyframes glow {
-  0% {
-    box-shadow: 0px 0px 0px 0px rgba(255, 162, 0, 0);
-  }
-  50% {
-    box-shadow: 0px 0px 15px 10px rgb(255, 162, 0);
-  }
-  100% {
-    box-shadow: 0px 0px 0px 0px rgba(255, 162, 0, 0);
-  }
+  0% { box-shadow: 0px 0px 0px 0px rgba(255, 162, 0, 0); }
+  50% { box-shadow: 0px 0px 15px 10px rgb(255, 162, 0); }
+  100% { box-shadow: 0px 0px 0px 0px rgba(255, 162, 0, 0); }
 }

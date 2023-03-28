@@ -399,6 +399,8 @@
             $all_comments = [];
             if ($collab_id)
               ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
+            else
+              history.pushState($video_hash, null, '/?vid='+$video_hash);  // Point URL to video
             break;
             
           case 'new_comment':
@@ -505,15 +507,8 @@
     console.log("TEMP_reorderItems:", e.detail.items);
   }
 
-  function openVideoListItem(e: { detail: VideoListDefItem}): void {
-    console.log("openVideoListItem:", e.detail);
-    let { video, folder } = e.detail.obj;
-    if (video) {
-      ws_emit('open_video', {video_hash: video.videoHash});
-      history.pushState(video.videoHash, null, '/?vid='+video.videoHash);  // Point URL to video
-    } else if (folder) {
-      alert("Folder open: " + folder.id);
-    }
+  function openVideoListItem(e: { detail: Proto3.ApiCall}): void {
+    sendApiCall(e.detail);
   }
 
   function onVideoListPopupAction(e: { detail: { action: string, items: VideoListDefItem[] }}) {
@@ -546,6 +541,22 @@
     }
   }
 
+
+  function sendApiCall(ac: Proto3.ApiCall) {
+    log_abbreviated("makeApiCall: ", ac);
+    switch (ac.sys) {
+      case Proto3.ApiCall_Subsystem.SERVER:
+        ws_emit(ac.cmd, ac.data);
+        break;
+      case Proto3.ApiCall_Subsystem.ORGANIZER:
+        ws_emit("organizer", {cmd: ac.cmd, data: ac.data});
+        break;
+      default:
+        console.log("openVideoListItem: UNKNOWN SUBSYSTEM in API call: ", ac);
+        acts.add({mode: 'warn', message: "Unknown API call '" + ac.cmd + "'. See log.", lifetime: 5});
+        break;
+    }
+  }
 </script>
 
 <svelte:window on:popstate={popHistoryState}/>

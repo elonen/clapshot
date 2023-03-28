@@ -60,6 +60,19 @@ function handleFinalize(e: CustomEvent<DndEvent>) {
     dispatch("reorder-items", {items});
 }
 
+function dispatchOpenItem(id: string) {
+    let it = items.find(item => item.id === id);
+    if (it && it.obj.openAction) {
+        let el = document.getElementById("videolist_item__" + id);
+        if (!el) { alert("UI BUG: item not found"); } else {
+            el.classList.add("videolist_item_pump_anim");
+            setTimeout(() => { el.classList.remove("videolist_item_pump_anim"); }, 1000);
+        }
+        dispatch("open-item", it.obj.openAction);
+    } else {
+        alert("UI BUG: item not found or missing openAction");
+    }
+}
 
 function handleMouseOrKeyDown(id: string, e: any) {
     if (dragging) {
@@ -69,8 +82,8 @@ function handleMouseOrKeyDown(id: string, e: any) {
     // Open item by keyboard
     if (e.key) {
         if (e.key == "Enter") {
+            dispatchOpenItem(id);
             $selected_tiles = [];
-            dispatch("open-item", items.find(item => item.id === id));
             return;
         }
     }
@@ -158,10 +171,11 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem)
     >
         {#each items as item(item.id)}
             <div
+                id="videolist_item__{item.id}"
                 class="video-list-tile-sqr"
                 class:selectedTile={Object.keys($selected_tiles).includes(item.id)}
                 on:click|stopPropagation
-                on:dblclick={(_e) => {$selected_tiles = []; dispatch("open-item", item)}}
+                on:dblclick={(_e) => {$selected_tiles = []; dispatchOpenItem(item.id)}}
                 on:mousedown={(e) => handleMouseOrKeyDown(item.id, e)}
                 on:mouseup={(e) => handleMouseUp(e, item)}
                 on:keydown={(e) => handleMouseOrKeyDown(item.id, e)}
