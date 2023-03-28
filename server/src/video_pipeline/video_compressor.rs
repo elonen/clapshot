@@ -97,8 +97,10 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
             let _span = tracing::info_span!("ffmpeg_transcode_thread",
                 thread = ?std::thread::current().id()).entered();
     
-            let mut cmd = &mut Command::new("ffmpeg");
-            cmd = cmd.arg("-i").arg(&src);
+            let mut cmd = &mut Command::new("nice");
+            cmd = cmd.arg("-n").arg("10").arg("--")
+                .arg("ffmpeg").arg("-i").arg(&src);
+
             if let Some(pfn) = ppipe_fname {
                 cmd = cmd.args(&["-progress", &pfn]);
             }
@@ -319,8 +321,9 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 
             let img_reshape = format!("scale={THUMB_W}:{THUMB_H}:force_original_aspect_ratio=decrease,pad={THUMB_W}:{THUMB_H}:(ow-iw)/2:(oh-ih)/2");
 
-            let mut cmd = &mut Command::new("ffmpeg");
-            cmd = cmd.arg("-i").arg(&src).args(&[
+            let mut cmd = &mut Command::new("nice");
+            cmd = cmd.arg("-n").arg("10").arg("--")
+                .arg("ffmpeg").arg("-i").arg(&src).args(&[
                 "-nostats",
                 "-vcodec", "libwebp",
                 "-vf", format!("thumbnail,{img_reshape}",).as_str(),
@@ -366,8 +369,10 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
                     format!("eq(n\\,{})", frame)
                 }).collect::<Vec<String>>().join("+");
 
-            let mut cmd = &mut Command::new("ffmpeg");
-            cmd = cmd.arg("-i").arg(&src).args(&[
+
+            let mut cmd = &mut Command::new("nice");
+            cmd = cmd.arg("-n").arg("10").arg("--")
+                .arg("ffmpeg").arg("-i").arg(&src).args(&[
                 "-nostats",
                 "-vf", &format!("select={frame_select_filter},{img_reshape},tile={THUMB_SHEET_COLS}x{THUMB_SHEET_ROWS}"),
                 "-strict", "experimental",
@@ -375,6 +380,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
                 "-vsync", "vfr",
                 "-start_number", "0",
             ]).arg(thumb_dir.join(format!("sheet-{THUMB_SHEET_COLS}x{THUMB_SHEET_ROWS}.webp")));
+
             tracing::info!("Creating thumbnail sheet");
             tracing::debug!("Exec: {:?}", cmd);
             match cmd.output() {
