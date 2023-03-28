@@ -1,3 +1,10 @@
+clapshot-server (0.5.4) bullseye; urgency=low
+
+  * Run ffmpeg on nice 10
+  * Use local time zone for log entries
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 28 Mar 2023 13:13:00 +0200
+
 clapshot-server (0.5.3) bullseye; urgency=low
 
   * Support for basic auth logout and custom user menu items.
