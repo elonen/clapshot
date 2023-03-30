@@ -50,7 +50,7 @@ pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession,
     let page = vec![heading, listing];
 
     server.emit_cmd(
-        "show_page", 
+        "show_page",
         &json!({
             "username": ses.user_name.clone(),
             "user_id": ses.user_id.clone(),

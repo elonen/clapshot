@@ -76,6 +76,54 @@ pub (crate) fn db_video_to_proto3(v: &crate::database::models::Video, url_base: 
     }
 }
 
+pub (crate) fn make_video_popup_actions() -> proto::ClientDefineActionsRequest {
+
+    let rename_video = make_rename_action("video", proto::ApiCall {
+        sys: proto::api_call::Subsystem::Server.into(),
+        cmd: "rename_video".into(),
+        data: HashMap::from([("video_hash".into(), "{{item.videoHash}}".into()), ("new_name".into(), "{{dlg.text}}".into())]),
+    });
+
+    proto::ClientDefineActionsRequest {
+        actions: HashMap::from([
+            ("popup_rename_video".into(), rename_video),
+        ]),
+        sid: "".into()
+    }
+}
+
+fn make_rename_action(item_name: &str, api_call: proto::ApiCall) -> proto::ActionDef {
+    proto::ActionDef  {
+    
+        // Define how the popup looks
+        ui_props: Some(proto::ActionUiProps {
+            label: Some("Rename".into()),
+            icon: Some(proto::Icon {
+                src: Some(proto::icon::Src::FaClass(proto::icon::FaClass {
+                    classes: "fa fa-edit".into(), color: None, })),
+                ..Default::default()
+            }),
+            key_shortcut: Some("F2".into()),
+            natural_desc: Some("Rename selected video".into()),
+            ..Default::default()
+        }),
+
+        // Show a dialog when the action is clicked
+        dlg: Some(proto::Dialog {
+            r#type: proto::DialogType::TextInput.into(),
+            title: "Rename video".into(),
+            desc: Some("Enter new name for video".into()),
+            args: HashMap::from([("text".into(), "{{item.title}}".into())]),
+        }),
+
+        // only make the calle if user entered a different name
+        exec_if: Some("{{not-eq dlg.text item.title}}".into()),
+
+        // then call the server to rename it
+        api_call: Some(api_call),
+    }
+}
+
 
 /// Convert a list of database Videos to a protobuf3 PageItem (FolderListing)
 pub (crate) fn folder_listing_for_videos(videos: &[crate::database::models::Video], url_base: &str) -> proto::PageItem {

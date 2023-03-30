@@ -212,8 +212,8 @@ message ApiCall {
         ORGANIZER = 1;
     }
     Subsystem sys = 1;
-    string cmd = 2; // e.g. "rename"
-    map<string, google.protobuf.Value> data = 3; // e.g. "{folder: '$ITEM.id', new_name: '$DLG.text'}"
+    string cmd = 2;                                 // e.g. "rename_folder"
+    map<string, google.protobuf.Value> data = 3;    // e.g. "{folder: '{{item.id}}', new_name: '{{dlg.txt}}'}"
 }
 
 
@@ -334,21 +334,24 @@ enum DialogType {
 
 message Dialog {
     DialogType type = 1;
-    string title = 2;
-    optional string desc = 3;
-    map<string, string> args = 4; // Dialog-specific arguments
+    string title = 2;               // E.g. "Rename {{item.title}}"
+    optional string desc = 3;       // E.g. "Enter new name for {{item.title}}:"
+    map<string, string> args = 4;   // Dialog-specific arguments
 }
 
 message ActionUIProps {
     optional string label = 1;           // e.g. "Rename"
     optional Icon icon = 2;
     optional string key_shortcut = 3;    // e.g. "F2", "Insert", "Delete"
+    optional string natural_desc = 4;    // e.g. For tooltips and AI. Example: "Rename the selected item"
+    optional Color text_color = 5;
 }
 
 message ActionDef {
-    ApiCall api_call = 1;
-    optional Dialog dlg = 2;
-    ActionUIProps ui_props = 3;
+    optional ActionUIProps ui_props = 1; // Only used for actions that are used as popups
+    optional Dialog dlg = 2;            // Dialog to show before evaling exec_if and api_call
+    optional string exec_if = 3;        // "true" or "false" after Handlebars eval. Example: "{{dlg.ok}}". Supports ember-truth-helpers.
+    ApiCall api_call = 4;               // Data map items can be Handlebars templates (e.g. "{{item.id}}")
 }
 
 // ---------------------------------------------------------
