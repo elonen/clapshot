@@ -273,14 +273,52 @@
   let reconnect_delay = 100;  // for exponential backoff
 
 
+  function connect_websocket(ws_url: string) {
+    const auth_url = ws_url.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/api\/.*$/, "/api/health");
+
+    function schedule_reconnect() {
+        reconnect_delay = Math.round(Math.min(reconnect_delay * 1.5, 5000));
+        console.log("API reconnecting in " + reconnect_delay + " ms");
+        setTimeout(() => { connect_websocket(ws_url); }, reconnect_delay);
+        setTimeout(() => { if (!is_connected()) ui_connected_state = false; }, 3000);
+    }
+
+    try {
+        return fetch(auth_url)
+          .then(response => {
+            if (response.ok) {
+                console.log("Authentication check OK. Connecting to WS API");
+                return connect_websocket_after_auth_check(ws_url);
+            } else if (response.status === 401 || response.status === 403) {
+                console.log("Auth failed. Status: " + response.status);
+                if (reconnect_delay > 1500) {
+                  // Force full reload to show login page
+                  window.location.reload();
+                }
+            } else {
+                throw new Error(`HTTP auth check ERROR: ${response.status}`);
+            }
+            schedule_reconnect();
+          })
+          .catch(error => {
+            console.error('HTTP auth check failed:', error);
+            schedule_reconnect();
+          });
+      } catch (error) {
+        schedule_reconnect();
+      }
+  }
+
+
   // Called after we get the API URL from the server.
-  function connect_websocket(ws_url: string)
+  function connect_websocket_after_auth_check(ws_url: string)
   {
     if (!ws_url)
       throw Error("API URL not specified in config file");
 
     console.log("...CONNECTING to WS API: " + ws_url);
     ws_socket = new WebSocket(ws_url);
+
 
     // Handle connection opening
     ws_socket.addEventListener("open", function (event) {
@@ -318,6 +356,8 @@
 
     // Reconnect if closed, with exponential+random backoff
     ws_socket.addEventListener("close", function (event) {
+      console.log("Websock kocket closed:", event);
+
       reconnect_delay = Math.round(Math.min(reconnect_delay * 1.5, 5000));
       console.log("API reconnecting in " + reconnect_delay + " ms");
       setTimeout(() => { connect_websocket(ws_url); }, reconnect_delay);
