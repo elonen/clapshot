@@ -1,3 +1,9 @@
+clapshot-client (0.5.5) bullseye; urgency=low
+
+  * Make client reload on auth error to help (re)show login screen
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 30 Mar 2023 13:35:00 +0200
+
 clapshot-client (0.5.4) bullseye; urgency=low
 
   * No changes, just follow server version
