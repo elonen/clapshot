@@ -16,8 +16,12 @@ pub fn datetime_to_proto3(dt: &chrono::NaiveDateTime) -> pbjson_types::Timestamp
 }
 
 /// Convert database Video to protobuf3
-pub (crate) fn db_video_to_proto3(v: &crate::database::models::Video, url_base: &str) -> proto::Video {
-
+/// 
+pub (crate) fn db_video_to_proto3(
+    v: &crate::database::models::Video,
+    url_base: &str
+) -> proto::Video 
+{
     let duration = match (v.duration, v.total_frames, &v.fps) {
         (Some(dur), Some(total_frames), Some(fps)) => Some(proto::VideoDuration {
             duration: dur as f64,
@@ -76,19 +80,67 @@ pub (crate) fn db_video_to_proto3(v: &crate::database::models::Video, url_base: 
     }
 }
 
-pub (crate) fn make_video_popup_actions() -> proto::ClientDefineActionsRequest {
+
+/// Convert database Comment to protobuf3
+/// 
+/// Parent is denormalized only one level up
+pub(crate) fn db_comment_to_proto3(
+    comment: &crate::database::models::Comment,
+) -> proto::Comment
+{
+    let user = proto::UserInfo {
+        username: comment.user_id.clone(),
+        displayname: Some(comment.username.clone()),
+    };
+
+    let created_timestamp = Some(datetime_to_proto3(&comment.created));
+    let edited_timestamp = comment.edited.map(|edited| datetime_to_proto3(&edited));
+
+    proto::Comment {
+        id: comment.id.to_string(),
+        video_hash: comment.video_hash.clone(),
+        user: Some(user),
+        comment: comment.comment.clone(),
+        timecode: comment.timecode.clone(),
+        parent_id: comment.parent_id.map(|id| id.to_string()),
+        created: created_timestamp,
+        edited: edited_timestamp,
+    }
+}
+
+
+
+pub (crate) fn make_video_popup_actions(sid: String) -> proto::ClientDefineActionsRequest {
 
     let rename_video = make_rename_action("video", proto::ApiCall {
         sys: proto::api_call::Subsystem::Server.into(),
         cmd: "rename_video".into(),
         data: HashMap::from([("video_hash".into(), "{{item.videoHash}}".into()), ("new_name".into(), "{{dlg.text}}".into())]),
     });
+    let trash_video = make_trash_action("video", proto::ApiCall {
+        sys: proto::api_call::Subsystem::Server.into(),
+        cmd: "trash_video".into(),
+        data: HashMap::from([("video_hash".into(), "{{item.videoHash}}".into())]),
+    });
+    let rename_folder = make_rename_action("folder", proto::ApiCall {
+        sys: proto::api_call::Subsystem::Server.into(),
+        cmd: "rename_folder".into(),
+        data: HashMap::from([("folder_hash".into(), "{{item.folderHash}}".into()), ("new_name".into(), "{{dlg.text}}".into())]),
+    });
+    let trash_folder = make_trash_action("folder", proto::ApiCall {
+        sys: proto::api_call::Subsystem::Server.into(),
+        cmd: "trash_folder".into(),
+        data: HashMap::from([("folder_hash".into(), "{{item.folderHash}}".into())]),
+    });
 
     proto::ClientDefineActionsRequest {
         actions: HashMap::from([
             ("popup_rename_video".into(), rename_video),
+            ("popup_trash_video".into(), trash_video),
+            ("popup_rename_folder".into(), rename_folder),
+            ("popup_trash_folder".into(), trash_folder),
         ]),
-        sid: "".into()
+        sid
     }
 }
 
@@ -104,25 +156,58 @@ fn make_rename_action(item_name: &str, api_call: proto::ApiCall) -> proto::Actio
                 ..Default::default()
             }),
             key_shortcut: Some("F2".into()),
-            natural_desc: Some("Rename selected video".into()),
+            natural_desc: Some(format!("Rename selected {item_name}")),
             ..Default::default()
         }),
 
         // Show a dialog when the action is clicked
         dlg: Some(proto::Dialog {
             r#type: proto::DialogType::TextInput.into(),
-            title: "Rename video".into(),
-            desc: Some("Enter new name for video".into()),
+            title: "Rename".into(),
+            desc: Some("Enter new title".into()),
             args: HashMap::from([("text".into(), "{{item.title}}".into())]),
         }),
 
-        // only make the calle if user entered a different name
+        // only make the call if user entered a different name
         exec_if: Some("{{not-eq dlg.text item.title}}".into()),
 
         // then call the server to rename it
         api_call: Some(api_call),
     }
 }
+
+fn make_trash_action(item_name: &str, api_call: proto::ApiCall) -> proto::ActionDef {
+    proto::ActionDef  {
+    
+        // Define how the popup looks
+        ui_props: Some(proto::ActionUiProps {
+            label: Some("Trash".into()),
+            icon: Some(proto::Icon {
+                src: Some(proto::icon::Src::FaClass(proto::icon::FaClass {
+                    classes: "fa fa-trash".into(), color: None, })),
+                ..Default::default()
+            }),
+            key_shortcut: Some("Delete".into()),
+            natural_desc: Some(format!("Trash selected {item_name}(s)")),
+            ..Default::default()
+        }),
+
+        // Show a dialog when the action is clicked
+        dlg: Some(proto::Dialog {
+            r#type: proto::DialogType::TextInput.into(),
+            title: format!("Trash {item_name}"),
+            desc: Some("Are you sure?".into()),
+            ..Default::default()
+        }),
+
+        // only make the call if user clicked OK
+        exec_if: Some("{{dlg.ok}}".into()),
+
+        // then call the server to trash it
+        api_call: Some(api_call),
+    }
+}
+
 
 
 /// Convert a list of database Videos to a protobuf3 PageItem (FolderListing)

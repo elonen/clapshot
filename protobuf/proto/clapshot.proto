@@ -41,6 +41,7 @@ service OrganizerOutbound {
 // Calls that Clapshot server makes to Organizer
 service OrganizerInbound {
     rpc handshake (ServerInfo) returns (Empty);
+    rpc on_start_user_session (OnStartUserSessionRequest) returns (OnStartUserSessionResult);
     rpc navigate_page (NavigatePageRequest) returns (ClientShowPageRequest);
     rpc authz_user_action (AuthzUserActionRequest) returns (AuthzResult);
 }
@@ -111,6 +112,14 @@ message UserSessionData {
 // Server -> Organizer commands
 // ---------------------------------------------------------
 
+message OnStartUserSessionRequest {
+    UserSessionData ses = 1;
+}
+
+message OnStartUserSessionResult {
+    bool dont_send_default_actions = 10;     // If true, server will not send default action definitions (e.g. "rename_video")
+}
+
 message NavigatePageRequest {
     UserSessionData ses = 1;
     string path = 2; // e.g. "/home"
@@ -118,12 +127,23 @@ message NavigatePageRequest {
 
 message AuthzUserActionRequest {
 
+    message OtherOp {
+        enum Op {
+            LOGIN = 0;
+            VIEW_HOME = 1;
+            UPLOAD_VIDEO = 2;
+            JOIN_COLLAB_SESSION = 10;
+        }
+        Op op = 1;
+        optional string subject = 2;
+    }
+
     message VideoOp {
         enum Op {
-            UPLOAD = 0;
-            VIEW = 1;
-            RENAME = 2;
-            DELETE = 3;
+            VIEW = 0;
+            RENAME = 1;
+            DELETE = 2;
+            COMMENT = 3;
         }
         Video video = 1;
         Op op = 2;
@@ -131,9 +151,8 @@ message AuthzUserActionRequest {
 
     message CommentOp {
         enum Op {
-            ADD = 0;
-            EDIT = 1;
-            DELETE = 2;
+            EDIT = 0;
+            DELETE = 1;
         }
         Comment comment = 1;
         Op op = 2;
@@ -141,13 +160,14 @@ message AuthzUserActionRequest {
 
     UserSessionData ses = 1;    
     oneof op {
-        VideoOp video_op = 100;
-        CommentOp comment_op = 110;
+        OtherOp other_op = 8;
+        VideoOp video_op = 9;
+        CommentOp comment_op = 10;
     }
 }
 
 message AuthzResult {
-    bool is_authorized = 1;
+    optional bool is_authorized = 1;     // If not set, leave authorization decision to server
     optional string message = 2;         // e.g. "You are not authorized to view this video"
     optional string details = 3;         // e.g. "You are not a member of the project"
 }
@@ -259,11 +279,11 @@ message VideoPreviewData {
 
 message Comment {
     string id = 1;
-    Video video = 2;
+    string video_hash = 2;
     UserInfo user = 3;
     string comment = 4;
     optional string timecode = 5;    // e.g. "00:00:00.000"
-    optional Comment parent = 6; // denormalized, null if top-level
+    optional string parent_id = 6;   // parent comment, null if top-level
     optional google.protobuf.Timestamp created = 100;
     optional google.protobuf.Timestamp edited = 101;
 }

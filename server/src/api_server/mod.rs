@@ -4,6 +4,8 @@
 
 use async_std::task::block_on;
 use lib_clapshot_grpc::GrpcBindAddr;
+use lib_clapshot_grpc::proto;
+use lib_clapshot_grpc::proto::OnStartUserSessionResult;
 use tracing::debug;
 use warp::Filter;
 use std::collections::HashMap;
@@ -35,8 +37,11 @@ pub mod test_utils;
 pub mod tests;
 mod file_upload;
 use file_upload::handle_multipart_upload;
+use crate::api_server::user_session::AuthzTopic;
 use crate::database::{models};
-use crate::grpc::grpc_server;
+use crate::grpc::grpc_client::OrganizerConnection;
+use crate::grpc::grpc_client::OrganizerURI;
+use crate::grpc::{grpc_server, make_video_popup_actions};
 use crate::video_pipeline::IncomingFile;
 use self::user_session::UserSession;
 
@@ -92,6 +97,15 @@ async fn handle_ws_session(
         cur_collab_id: None,
         video_session_guard: None,
         collab_session_guard: None,
+        organizer: None,
+        org_session: proto::UserSessionData {
+            sid: sid.clone(),
+            user: Some(proto::UserInfo {
+                username: user_id.clone(),
+                displayname: Some(username.clone()),
+            }),
+            cookies: Some(proto::Cookies { cookies: HashMap::new() }),
+        }
     };
 
     let _user_session_guard = Some(server.register_user_session(&sid, &user_id, ses.clone()));
@@ -103,6 +117,49 @@ async fn handle_ws_session(
             SendTo::MsgSender(&ses.sender)) {
         tracing::error!(details=%e, "Error sending welcome message. Closing session.");
         return;
+    }
+
+    async fn connect_organizer(uri: OrganizerURI, ses: &proto::UserSessionData) -> Res<(OrganizerConnection, OnStartUserSessionResult)> {
+        let mut c = crate::grpc::grpc_client::connect(uri).await?;
+        let start_ses_req = proto::OnStartUserSessionRequest { ses: Some(ses.clone()) };
+        let res = c.on_start_user_session(start_ses_req).await?.into_inner();
+        Ok((c, res))
+    }
+
+    // Tell organizer about this new user session
+    let org_start_ses_res = if let Some(uri) = server.organizer_uri.clone() {
+        match connect_organizer(uri, &ses.org_session).await {
+            Ok((c, res)) => {
+                ses.organizer = Some(tokio::sync::Mutex::new(c).into());
+                let op = AuthzTopic::Other(None, proto::authz_user_action_request::other_op::Op::Login);
+                if ses.org_authz("login", true, &server, op).await == Some(false) {
+                    tracing::info!("User '{}' not authorized to login. Closing session.", ses.user_id);   
+                    server.emit_cmd("error", 
+                        &serde_json::json!({ "msg": "Login permission denied." }), 
+                        SendTo::MsgSender(&ses.sender)).ok();
+                    return;
+                }
+                Some(res)
+            },
+            Err(e) => {
+                tracing::error!(details=%e, "Error connecting to Organizer. Closing session.");
+                server.emit_cmd("error", 
+                    &serde_json::json!({ "msg": "Error connecting to Organizer. Closing session." }), 
+                    SendTo::MsgSender(&ses.sender)).ok();
+                return;
+            }
+        }
+    } else { None };
+
+    // Send default actions to client if organizer doesn't want to override them
+    if org_start_ses_res.map_or(true, |res| !res.dont_send_default_actions) {
+        debug!("Sending default action definitions (organizer didn't want to override them).");
+        if let Err(e) = server.emit_cmd("define_actions", 
+                &serde_json::json!({ "actions": make_video_popup_actions(sid.clone()) }), 
+                SendTo::MsgSender(&ses.sender)) {
+            tracing::error!(details=%e, "Error sending define_actions to client. Closing session.");
+            return;
+        }
     }
 
     loop
@@ -163,7 +220,7 @@ async fn handle_ws_session(
                                 }
                             };
                             tracing::debug!(cmd=%cmd, "Msg from client.");
-                            match msg_dispatch(&cmd, &data, &mut ses, &server).await {
+                            match msg_dispatch(&cmd, &data, &mut ses, &server, ).await {
                                 Ok(true) => {},
                                 Ok(false) => { break; }
                                 Err(e) => {

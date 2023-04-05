@@ -60,9 +60,17 @@ impl proto::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
     {
        tracing::info!("Got a request: {:?}", req);
         Ok(Response::new(proto::AuthzResult {
-            is_authorized: true,
+            is_authorized: None,
             message: Some("NOT IMPLEMENTED".into()),
             details: Some("NOT IMPLEMENTED".into()),
+        }))
+    }
+
+    async fn on_start_user_session(&self, req: Request<proto::OnStartUserSessionRequest>) -> RpcResult<proto::OnStartUserSessionResult>
+    {
+        tracing::debug!("on_start_user_session: {:?}", req);
+        Ok(Response::new(proto::OnStartUserSessionResult {
+            dont_send_default_actions: false,
         }))
     }
 }

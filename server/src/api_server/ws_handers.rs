@@ -19,7 +19,7 @@ use data_url::{DataUrl, mime};
 use sha2::{Sha256, Digest};
 use hex;
 
-use super::user_session;
+use super::user_session::{self, AuthzTopic};
 
 use super::UserSession;
 
@@ -28,6 +28,7 @@ use crate::api_server::user_session::Topic;
 use crate::database::error::DBError;
 use crate::database::{models, DB};
 use crate::database::schema::comments::drawing;
+use crate::grpc::db_comment_to_proto3;
 use crate::{send_user_error, send_user_ok};
 
 use lib_clapshot_grpc::proto;
@@ -38,6 +39,9 @@ use lib_clapshot_grpc::proto;
 
 /// Send user a list of all videos they have.
 pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    ses.org_authz_with_default("list videos", true, server,
+        true, AuthzTopic::Other(None, proto::authz_user_action_request::other_op::Op::ViewHome)).await?;
+
     let videos = server.db.get_all_user_videos(&ses.user_id)?;
 
     let h_txt = if videos.is_empty() {
@@ -70,6 +74,9 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, ser
         }
         Err(e) => { bail!(e); }
         Ok(v) => {
+            ses.org_authz_with_default("open video", true, server,
+                true, AuthzTopic::Video(&v, proto::authz_user_action_request::video_op::Op::View)).await?;
+    
             ses.video_session_guard = Some(server.link_session_to_video(video_hash, ses.sender.clone()));
             let mut fields = v.to_json()?;
 
@@ -97,55 +104,59 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, ser
     Ok(())
 }
 
+
 pub async fn msg_del_video(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let video_hash = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
     match server.db.get_video(video_hash) {
         Ok(v) => {
-            if Some(ses.user_id.to_string()) != v.added_by_userid && ses.user_id != "admin" {
-                send_user_error!(ses, server, Topic::Video(video_hash), "Video not owned by you. Cannot delete.");
-            } else {
-                server.db.del_video_and_comments(video_hash)?;
-                let mut details = format!("Added by {:?} ({:?}) on {}. Filename was {:?}.",
-                    v.added_by_username, v.added_by_userid, v.added_time, v.orig_filename);
+            let default_perm = Some(ses.user_id.to_string()) == (&v).added_by_userid || ses.user_id == "admin";
+            ses.org_authz_with_default("delete video", true, server,
+                default_perm, AuthzTopic::Video(&v, proto::authz_user_action_request::video_op::Op::Delete)).await?;
 
-                fn backup_video_db_row(server: &ServerState, v: &models::Video) -> Res<()> {
-                    let backup_file = server.videos_dir.join(v.video_hash.clone()).join("db_backup.json");
-                    if backup_file.exists() {
-                        std::fs::remove_file(&backup_file)?;
-                    }
-                    let json_str = serde_json::to_string_pretty(&v)?;
-                    std::fs::write(&backup_file, json_str)?;
-                    Ok(())
-                }
+            server.db.del_video_and_comments(video_hash)?;
+            let mut details = format!("Added by '{}' ({}) on {}. Filename was {}.",
+                v.added_by_username.clone().unwrap_or_default(), 
+                v.added_by_userid.clone().unwrap_or_default(),
+                v.added_time,
+                v.orig_filename.clone().unwrap_or_default());
 
-                fn move_video_to_trash(server: &ServerState, video_hash: &str) -> Res<()>
-                {
-                    let video_dir = server.videos_dir.join(video_hash);
-                    let trash_dir = server.videos_dir.join("trash");
-                    if !trash_dir.exists() {
-                        std::fs::create_dir(&trash_dir)?;
-                    }
-                    let hash_and_datetime = format!("{}_{}", video_hash, chrono::Utc::now().format("%Y%m%d-%H%M%S"));
-                    let video_trash_dir = trash_dir.join(hash_and_datetime);
-                    std::fs::rename(&video_dir, &video_trash_dir)?;
-                    Ok(())
+            fn backup_video_db_row(server: &ServerState, v: &models::Video) -> Res<()> {
+                let backup_file = server.videos_dir.join(v.video_hash.clone()).join("db_backup.json");
+                if backup_file.exists() {
+                    std::fs::remove_file(&backup_file)?;
                 }
-
-                let mut cleanup_errors = false;
-                if let Err(e) = backup_video_db_row(server, &v) {
-                    details.push_str(&format!(" WARNING: DB row backup failed: {:?}.", e));
-                    cleanup_errors = true;
-
-                }
-                if let Err(e) = move_video_to_trash(server, video_hash) {
-                    details.push_str(&format!(" WARNING: Move to trash failed: {:?}.", e));
-                    cleanup_errors = true;
-                }
-                
-                send_user_ok!(ses, &server, Topic::Video(video_hash),
-                    if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
-                    details, true);
+                let json_str = serde_json::to_string_pretty(&v)?;
+                std::fs::write(&backup_file, json_str)?;
+                Ok(())
             }
+
+            fn move_video_to_trash(server: &ServerState, video_hash: &str) -> Res<()>
+            {
+                let video_dir = server.videos_dir.join(video_hash);
+                let trash_dir = server.videos_dir.join("trash");
+                if !trash_dir.exists() {
+                    std::fs::create_dir(&trash_dir)?;
+                }
+                let hash_and_datetime = format!("{}_{}", video_hash, chrono::Utc::now().format("%Y%m%d-%H%M%S"));
+                let video_trash_dir = trash_dir.join(hash_and_datetime);
+                std::fs::rename(&video_dir, &video_trash_dir)?;
+                Ok(())
+            }
+
+            let mut cleanup_errors = false;
+            if let Err(e) = backup_video_db_row(server, &v) {
+                details.push_str(&format!(" WARNING: DB row backup failed: {:?}.", e));
+                cleanup_errors = true;
+
+            }
+            if let Err(e) = move_video_to_trash(server, video_hash) {
+                details.push_str(&format!(" WARNING: Move to trash failed: {:?}.", e));
+                cleanup_errors = true;
+            }
+            
+            send_user_ok!(ses, &server, Topic::Video(video_hash),
+                if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
+                details, true);
         }
         Err(DBError::NotFound()) => {
             send_user_error!(ses, server, Topic::Video(video_hash), "No such video. Cannot delete.");
@@ -161,22 +172,22 @@ pub async fn msg_rename_video(data: &serde_json::Value, ses: &mut UserSession, s
 
     match server.db.get_video(video_hash) {
         Ok(v) => {
-            if Some(ses.user_id.to_string()) != v.added_by_userid && ses.user_id != "admin" {
-                send_user_error!(ses, server, Topic::Video(video_hash), "Video not owned by you. Cannot rename.");
-            } else {
-                let new_name = new_name.trim();
-                if new_name.is_empty() || !new_name.chars().any(|c| c.is_alphanumeric()) {
-                    send_user_error!(ses, server, Topic::Video(video_hash), "Invalid video name (must have letters/numbers)");
-                    return Ok(());
-                }
-                if new_name.len() > 160 {
-                    send_user_error!(ses, server, Topic::Video(video_hash), "Video name too long (max 160)");
-                    return Ok(());
-                }
-                server.db.rename_video(video_hash, new_name)?;
-                send_user_ok!(ses, server, Topic::Video(video_hash), "Video renamed.", 
-                    format!("New name: '{}'", new_name), true);
+            let default_perm = Some(ses.user_id.to_string()) == (&v).added_by_userid || ses.user_id == "admin";
+            ses.org_authz_with_default("rename video", true, server,
+                default_perm, AuthzTopic::Video(&v, proto::authz_user_action_request::video_op::Op::Rename)).await?;
+
+            let new_name = new_name.trim();
+            if new_name.is_empty() || !new_name.chars().any(|c| c.is_alphanumeric()) {
+                send_user_error!(ses, server, Topic::Video(video_hash), "Invalid video name (must have letters/numbers)");
+                return Ok(());
             }
+            if new_name.len() > 160 {
+                send_user_error!(ses, server, Topic::Video(video_hash), "Video name too long (max 160)");
+                return Ok(());
+            }
+            server.db.rename_video(video_hash, new_name)?;
+            send_user_ok!(ses, server, Topic::Video(video_hash), "Video renamed.", 
+                format!("New name: '{}'", new_name), true);
         }
         Err(DBError::NotFound()) => {
             send_user_error!(ses, server, Topic::Video(video_hash), "No such video. Cannot rename.");
@@ -189,9 +200,17 @@ pub async fn msg_rename_video(data: &serde_json::Value, ses: &mut UserSession, s
 pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let vh = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
 
-    if let Err(DBError::NotFound())  = server.db.get_video(&vh) {
-        send_user_error!(ses, server, Topic::Video(&vh), "No such video. Cannot comment.");
-        return Ok(());
+    match server.db.get_video(vh) {
+        Ok(v) => {
+            let default_perm = Some(ses.user_id.to_string()) == (&v).added_by_userid || ses.user_id == "admin";
+            ses.org_authz_with_default("comment video", true, server,
+                default_perm, AuthzTopic::Video(&v, proto::authz_user_action_request::video_op::Op::Comment)).await?;
+        },
+        Err(DBError::NotFound()) => {
+            send_user_error!(ses, server, Topic::Video(vh), "No such video. Cannot comment.");
+            return Ok(());
+        }
+        Err(e) => { bail!(e); }
     }
 
     // Parse drawing data if present and write to file
@@ -247,17 +266,18 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, se
     Ok(())
 }
 
+
 pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let comment_id = data["comment_id"].as_i64().ok_or(anyhow!("comment_id missing"))? as i32;
     let new_text = data["comment"].as_str().ok_or(anyhow!("comment missing"))?.to_string();
 
     match server.db.get_comment(comment_id) {
         Ok(old) => {
-            let vh = old.video_hash;
-            if ses.user_id != old.user_id && ses.user_id != "admin" {
-                send_user_error!(ses, server, Topic::Video(&vh), "Failed to edit comment.", "You can only edit your own comments", true);
-                return Ok(());
-            }
+            let default_perm = ses.user_id == old.user_id || ses.user_id == "admin";
+            ses.org_authz_with_default("edit comment", true, server,
+                default_perm, AuthzTopic::Comment(&old, proto::authz_user_action_request::comment_op::Op::Edit)).await?;
+
+            let vh = &old.video_hash;
             server.db.edit_comment(comment_id, &new_text)?;
             server.emit_cmd("del_comment", &json!({ "comment_id": comment_id }), super::SendTo::VideoHash(&vh))?;
             let c = server.db.get_comment(comment_id)?;
@@ -271,11 +291,16 @@ pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut UserSession, s
     Ok(())
 }
 
+
 pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let comment_id = data["comment_id"].as_i64().ok_or(anyhow!("comment_id missing"))? as i32;
 
     match server.db.get_comment(comment_id) {
         Ok(cmt) => {
+            let default_perm = ses.user_id == cmt.user_id || ses.user_id == "admin";
+            ses.org_authz_with_default("delete comment", true, server,
+                default_perm, AuthzTopic::Comment(&cmt, proto::authz_user_action_request::comment_op::Op::Delete)).await?;
+
             let vh = cmt.video_hash;
             if ses.user_id != cmt.user_id && ses.user_id != "admin" {
                 send_user_error!(ses, server, Topic::Video(&vh), "Failed to delete comment.", "You can only delete your own comments", true);
@@ -328,6 +353,9 @@ pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut UserSession, se
         }
         Err(e) => { bail!(e); }
         Ok(v) => {
+            ses.org_authz_with_default("join collab", true, server,
+                true, AuthzTopic::Other(Some(collab_id.clone()), proto::authz_user_action_request::other_op::Op::JoinCollabSession)).await?;            
+
             match server.link_session_to_collab(collab_id, video_hash, ses.sender.clone()) {
                 Ok(csg) => {
                     ses.collab_session_guard = Some(csg);
@@ -398,9 +426,13 @@ pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut UserSes
             Ok(())
         }
     };
+
     if let Err(e) = res {
-        tracing::warn!("[{}] '{cmd}' failed: {}", ses.sid, e);
-        send_user_error!(ses, server, Topic::None, format!("{cmd} failed: {e}"));
+        // Ignore authz errors, they are already logged
+        if let None = e.downcast_ref::<user_session::AuthzError>() {
+            tracing::warn!("[{}] '{cmd}' failed: {}", ses.sid, e);
+            send_user_error!(ses, server, Topic::None, format!("{cmd} failed: {e}"));
+        }
     }
     Ok(true)
 }

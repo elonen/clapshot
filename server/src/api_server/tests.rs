@@ -306,7 +306,7 @@ async fn test_api_del_comment()
         write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"comment_id":{}}}}}"#, ts.comments[3].id)).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(data["event_name"], "error");
-        assert!(data["details"].as_str().unwrap().contains("your"));
+        assert!(data["message"].as_str().unwrap().contains("ermission"));
 
         // Fail to delete comment[0] that has replies
         write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"comment_id":{}}}}}"#, ts.comments[0].id)).await;

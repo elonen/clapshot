@@ -76,20 +76,22 @@ pub(crate) async fn connect_client_ws(ws_url: &str, user_id: &str) -> WsClient {
     use tokio_tungstenite::connect_async;
     
     let request = http::Request::builder()
-    .uri(ws_url.clone())
-    .header("Host", "127.0.0.1")
-    .header("HTTP_X_REMOTE_USER_ID", user_id)
-    .header("HTTP_X_REMOTE_USER_NAME", "User Num1")
-    .header("Connection", "Upgrade")
-    .header("Upgrade", "websocket")
-    .header("Sec-WebSocket-Version", "13")
-    .header("Sec-WebSocket-Key", "1234567890")    
-    .body(()).unwrap();
+        .uri(ws_url.clone())
+        .header("Host", "127.0.0.1")
+        .header("HTTP_X_REMOTE_USER_ID", user_id)
+        .header("HTTP_X_REMOTE_USER_NAME", "User Num1")
+        .header("Connection", "Upgrade")
+        .header("Upgrade", "websocket")
+        .header("Sec-WebSocket-Version", "13")
+        .header("Sec-WebSocket-Key", "1234567890")    
+        .body(()).unwrap();
 
     let (mut ws, _) = connect_async(request).await.unwrap();
 
     tracing::info!("TEST: Client connected. Waiting for 'welcome'...");
     assert!( expect_msg(&mut ws).await.to_lowercase().contains("welcome"));
+    tracing::info!("TEST: Client got 'welcome'. Waiting for 'define_actions'...");
+    assert!( expect_msg(&mut ws).await.to_lowercase().contains("define_actions"));
 
     ws
 }

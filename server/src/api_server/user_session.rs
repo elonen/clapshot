@@ -1,8 +1,10 @@
 use std::sync::Arc;
-use crate::database::models;
+use crate::{database::models::{self, Video, Comment}, grpc::{grpc_client::OrganizerConnection, db_video_to_proto3, db_comment_to_proto3}};
 
 use super::{WsMsgSender, server_state::ServerState, SendTo};
 use base64::{Engine as _, engine::general_purpose as Base64GP};
+use lib_clapshot_grpc::proto;
+use tracing::{debug, error};
 
 type Res<T> = anyhow::Result<T>;
 
@@ -52,6 +54,18 @@ macro_rules! send_user_ok(
     ($ses:expr, $server:expr, $topic:expr, $msg:expr) => { send_user_ok!($ses, $server, $topic, $msg, String::new(), false); };
 );
 
+#[derive (Debug, Clone)]
+pub enum AuthzTopic<'a> {
+    Video(&'a Video, proto::authz_user_action_request::video_op::Op),
+    Comment(&'a Comment, proto::authz_user_action_request::comment_op::Op),
+    Other(Option<&'a str>, proto::authz_user_action_request::other_op::Op)
+}
+
+#[derive (thiserror::Error, Debug)]
+pub enum AuthzError {
+    #[error("Permission denied")]
+    Denied,
+}
 
 
 pub type OpaqueGuard = Arc<tokio::sync::Mutex<dyn Send>>;
@@ -62,10 +76,14 @@ pub struct UserSession {
     pub sender: WsMsgSender,
     pub user_id: String,
     pub user_name: String,
+
     pub cur_video_hash: Option<String>,
     pub cur_collab_id: Option<String>,
     pub video_session_guard: Option<OpaqueGuard>,
     pub collab_session_guard: Option<OpaqueGuard>,
+
+    pub organizer: Option<Arc<tokio::sync::Mutex<OrganizerConnection>>>,
+    pub org_session: proto::UserSessionData,
 }
 
 impl UserSession {
@@ -95,4 +113,102 @@ impl UserSession {
         server.emit_cmd("new_comment", &fields , send_to).map(|_| ())
     }
 
+
+    fn try_send_error<'a>(&self, server: &ServerState, msg: String, details: Option<String>, op: &AuthzTopic<'a>) -> anyhow::Result<()> {
+        let topic = match op {
+            AuthzTopic::Video(v, _op) => Topic::Video(&v.video_hash),
+            AuthzTopic::Comment(c, _op) => Topic::Comment(c.id),
+            AuthzTopic::Other(_t, _op) => Topic::None,
+        };
+        if let Some(details) = details {
+            send_user_error!(self, server, topic, msg, details, true);
+        } else {
+            send_user_error!(self, server, topic, msg);
+        }
+        Ok(())
+    }
+
+    /// Check from Organizer if the user is allowed to perform given action.
+    /// 
+    /// Some(true) = allowed
+    /// Some(false) = denied
+    /// None = default, as determined by the server - no Organizer or it doesn't support authz
+    /// 
+    /// If Organizer is not connected, returns None.
+    /// If check fails and Organizer is connected, logs an error and denies the action.
+    /// If the user is not allowed, an error message is sent to the user if `msg_on_deny` is true.
+    pub async fn org_authz<'a>(
+        &self, 
+        desc: &str,
+        msg_on_deny: bool,
+        server: &ServerState,
+        op: AuthzTopic<'a>,
+    ) -> Option<bool> {
+        let org = match &self.organizer {
+            Some(org) => org,
+            None => { return None; }
+        };
+        tracing::debug!(op=?op, user=self.user_id, desc, "Checking authz from Organizer");
+        let pop = match op {
+            AuthzTopic::Video(v, op) => proto::authz_user_action_request::Op::VideoOp(
+                proto::authz_user_action_request::VideoOp { 
+                    op: op.into(),
+                    video: Some(db_video_to_proto3(v, &server.url_base)) }),
+            AuthzTopic::Comment(c, op) => proto::authz_user_action_request::Op::CommentOp(
+                proto::authz_user_action_request::CommentOp {
+                    op: op.into(), 
+                    comment: Some(db_comment_to_proto3(c)) }),
+            AuthzTopic::Other(subj, op) => proto::authz_user_action_request::Op::OtherOp(
+                proto::authz_user_action_request::OtherOp {
+                    op: op.into(),
+                    subject: subj.map(|s| s.into()) }),
+        };
+        let req = proto::AuthzUserActionRequest { ses: Some(self.org_session.clone()), op: Some(pop) };
+        match org.lock().await.authz_user_action(req).await {
+            Err(e) => {
+                error!(desc, user=self.user_id, err=?e, "Error while authorizing user action");
+                self.try_send_error(&server, format!("Internal error in authz: {}", desc), None, &op).ok();
+                Some(false)
+            },
+            Ok(res) => {
+                match res.get_ref().is_authorized {
+                    Some(false) => {
+                        let msg = res.get_ref().message.clone().map(|s| s).unwrap_or_else(|| "Permission denied".to_string());
+                        let details = res.get_ref().details.clone();
+                        if msg_on_deny { self.try_send_error(&server, msg, details, &op).ok(); }
+                        debug!(desc, user=self.user_id, "Organizer said: Permission denied");
+                        Some(false)
+                    },
+                    Some(true) => {
+                        debug!(desc, user=self.user_id, "Organizer said: Authorized OK");
+                        Some(true) 
+                    },
+                    None => {
+                        debug!(desc, user=self.user_id, "Organizer said: I don't authz, use defaults");
+                        None
+                    }
+                }
+            }
+        }
+    }
+
+    pub async fn org_authz_with_default<'a>(
+        &self, 
+        desc: &str,
+        msg_on_deny: bool,
+        server: &ServerState,
+        default: bool,
+        op: AuthzTopic<'a>,
+    ) -> Result<(), AuthzError> {
+        if let Some(res) = self.org_authz(desc, msg_on_deny, server, op.clone()).await {
+            if res { Ok(()) } else { Err(AuthzError::Denied) }
+        } else {
+            if default { Ok(()) } else {
+                if msg_on_deny {
+                    self.try_send_error(&server, format!("Permission denied: {}", desc), Some(format!("{:?}", &op)), &op).ok();
+                };
+                Err(AuthzError::Denied)
+            }
+        }
+    }
 }
