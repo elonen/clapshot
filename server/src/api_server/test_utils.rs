@@ -74,7 +74,7 @@ pub(crate) async fn write(ws: &mut WsClient, msg: &str) {
 pub(crate) async fn connect_client_ws(ws_url: &str, user_id: &str) -> WsClient {
     use tokio_tungstenite::tungstenite::http;
     use tokio_tungstenite::connect_async;
-    
+
     let request = http::Request::builder()
         .uri(ws_url.clone())
         .header("Host", "127.0.0.1")
@@ -83,7 +83,7 @@ pub(crate) async fn connect_client_ws(ws_url: &str, user_id: &str) -> WsClient {
         .header("Connection", "Upgrade")
         .header("Upgrade", "websocket")
         .header("Sec-WebSocket-Version", "13")
-        .header("Sec-WebSocket-Key", "1234567890")    
+        .header("Sec-WebSocket-Key", "1234567890")
         .body(()).unwrap();
 
     let (mut ws, _) = connect_async(request).await.unwrap();
@@ -109,7 +109,7 @@ macro_rules! api_test {
             let ws_url = url_base.replace("http", "ws") + "/api/ws";
             let videos_dir = data_dir.join("videos");
             let upload_dir = data_dir.join("upload");
-    
+
             let server_state = ServerState::new( db.clone(),
                 &videos_dir.clone(),
                 &upload_dir.clone(),
@@ -120,7 +120,7 @@ macro_rules! api_test {
             let bind_addr: std::net::IpAddr = "127.0.0.1".parse().unwrap();
             let $state = ApiTestState { db, user_msg_tx, upload_res_rx, videos_dir, upload_dir, terminate_flag, videos, comments, url_base, port, ws_url };
             let api = async move { run_api_server_async(bind_addr, server_state, user_msg_rx, upload_res_tx, None, port).await; Ok(()) };
-            
+
             let tst = tokio::spawn(async move {
                 tracing::info!("TEST: Client connecting to {}", $state.ws_url);
                 #[allow(unused_mut)]
@@ -137,11 +137,11 @@ macro_rules! api_test {
 }
 
 /// Send an "open video" message to the server
-/// 
+///
 /// # Arguments
 /// * `ws` - WebSocket connection to the server
 /// * `vh` - ID of the video to open
-/// 
+///
 /// # Returns
 /// * `("open_video", data)` - The command and data fields of the server response
 pub(crate) async fn open_video(ws: &mut WsClient, vh: &str) -> (String, serde_json::Value)
@@ -151,7 +151,7 @@ pub(crate) async fn open_video(ws: &mut WsClient, vh: &str) -> (String, serde_js
     assert_eq!(cmd, "open_video");
     while let Some((cmt_cmd, cmt_data)) = read_cmd_data(ws).await {
         assert_eq!(cmt_cmd, "new_comment");
-        assert_eq!(cmt_data["video_hash"], vh);
+        assert_eq!(cmt_data["videoHash"], vh);
     }
     (cmd.to_string(), data)
 }

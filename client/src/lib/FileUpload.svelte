@@ -1,5 +1,5 @@
 <script lang="ts">
-    import Dropzone from "svelte-file-dropzone";
+    import Dropzone from "svelte-file-dropzone/Dropzone.svelte";
 
     let drag_active: boolean = false;
     let files = {

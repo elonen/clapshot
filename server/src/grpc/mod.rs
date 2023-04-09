@@ -81,11 +81,12 @@ pub (crate) fn db_video_to_proto3(
 }
 
 
+
 /// Convert database Comment to protobuf3
 ///
 /// Parent is denormalized only one level up
 pub(crate) fn db_comment_to_proto3(
-    comment: &crate::database::models::Comment,
+    comment: &crate::database::models::Comment
 ) -> proto::Comment
 {
     let user = proto::UserInfo {
@@ -105,6 +106,7 @@ pub(crate) fn db_comment_to_proto3(
         parent_id: comment.parent_id.map(|id| id.to_string()),
         created: created_timestamp,
         edited: edited_timestamp,
+        drawing: comment.drawing.clone(),
     }
 }
 

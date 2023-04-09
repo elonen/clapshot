@@ -4,7 +4,7 @@ use crate::database::*;
 
 
 /// Create a temporary database and populate it for testing.
-/// 
+///
 /// Contents are roughly as follows:
 /// ```text
 /// <Video(id=1 video_hash=HASH0 orig_filename=test0.mp4 added_by_userid=user.num1 ...)>
@@ -60,7 +60,7 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<models::Vi
             drawing: Some(format!("drawing_{}.webp", i)),
         };
         let id = db.add_comment(&c).unwrap();
-        let c = db.get_comment(id).unwrap();
+        let c = db.get_comment(&id).unwrap();
         let dp = data_dir.join("videos").join(vh).join("drawings");
         std::fs::create_dir_all(&dp).unwrap();
         std::fs::write(dp.join(&c.drawing.clone().unwrap()), "IMAGE_DATA").unwrap();
@@ -123,8 +123,8 @@ fn test_fixture_state() -> anyhow::Result<()>
         });
     }
     for c in com.iter() {
-        assert_eq!(db.get_comment(c.id)?.id, c.id);
-        assert_eq!(db.get_comment(c.id)?.comment, c.comment);
+        assert_eq!(db.get_comment(&c.id.to_string())?.id, c.id);
+        assert_eq!(db.get_comment(&c.id.to_string())?.comment, c.comment);
     }
 
     // Check that we can get videos by user
@@ -142,12 +142,12 @@ fn test_comment_delete() -> anyhow::Result<()> {
     assert_eq!(db.get_video_comments(&com[1].video_hash)?.len(), 2, "Video should have 2 comments before deletion");
 
     // Delete comment #2 and check that it was deleted, and nothing else
-    db.del_comment(com[1].id)?;
+    db.del_comment(&com[1].id.to_string())?;
     for c in com.iter() {
         if c.id == com[1].id {
-            assert!(matches!(db.get_comment(c.id).unwrap_err() , DBError::NotFound()), "Comment should be deleted");
+            assert!(matches!(db.get_comment(&c.id.to_string()).unwrap_err() , DBError::NotFound()), "Comment should be deleted");
         } else {
-            assert_eq!(db.get_comment(c.id)?.id, c.id, "Deletion removed wrong comment(s)");
+            assert_eq!(db.get_comment(&c.id.to_string())?.id, c.id, "Deletion removed wrong comment(s)");
         }
     }
 
@@ -155,7 +155,7 @@ fn test_comment_delete() -> anyhow::Result<()> {
     assert_eq!(db.get_video_comments(&com[1].video_hash)?.len(), 1, "Video should have 1 comment left");
 
     // Delete last, add a new one and check for ID reuse
-    db.del_comment(com[6].id)?;
+    db.del_comment(&com[6].id.to_string())?;
     let c = models::CommentInsert {
         video_hash: com[1].video_hash.clone(),
         parent_id: None,
@@ -166,7 +166,7 @@ fn test_comment_delete() -> anyhow::Result<()> {
         drawing: None,
     };
     let new_id = db.add_comment(&c)?;
-    assert_ne!(new_id, com[6].id, "Comment ID was re-used after deletion. This would mix up comment threads in the UI.");
+    assert_ne!(new_id, com[6].id.to_string(), "Comment ID was re-used after deletion. This would mix up comment threads in the UI.");
     Ok(())
 }
 

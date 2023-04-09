@@ -311,8 +311,9 @@ message Comment {
     string video_hash = 2;
     UserInfo user = 3;
     string comment = 4;
-    optional string timecode = 5;    // e.g. "00:00:00.000"
-    optional string parent_id = 6;   // parent comment, null if top-level
+    optional string timecode = 5;       // e.g. "00:00:00.000"
+    optional string parent_id = 6;      // parent comment, null if top-level
+    optional string drawing = 12;       // data-uri of an image
     optional google.protobuf.Timestamp created = 100;
     optional google.protobuf.Timestamp edited = 101;
 }

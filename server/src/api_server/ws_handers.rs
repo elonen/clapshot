@@ -76,7 +76,7 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, ser
         Ok(v) => {
             ses.org_authz_with_default("open video", true, server,
                 true, AuthzTopic::Video(&v, proto::authz_user_action_request::video_op::Op::View)).await?;
-    
+
             ses.video_session_guard = Some(server.link_session_to_video(video_hash, ses.sender.clone()));
             let mut fields = v.to_json()?;
 
@@ -115,7 +115,7 @@ pub async fn msg_del_video(data: &serde_json::Value, ses: &mut UserSession, serv
 
             server.db.del_video_and_comments(video_hash)?;
             let mut details = format!("Added by '{}' ({}) on {}. Filename was {}.",
-                v.added_by_username.clone().unwrap_or_default(), 
+                v.added_by_username.clone().unwrap_or_default(),
                 v.added_by_userid.clone().unwrap_or_default(),
                 v.added_time,
                 v.orig_filename.clone().unwrap_or_default());
@@ -153,7 +153,7 @@ pub async fn msg_del_video(data: &serde_json::Value, ses: &mut UserSession, serv
                 details.push_str(&format!(" WARNING: Move to trash failed: {:?}.", e));
                 cleanup_errors = true;
             }
-            
+
             send_user_ok!(ses, &server, Topic::Video(video_hash),
                 if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
                 details, true);
@@ -186,7 +186,7 @@ pub async fn msg_rename_video(data: &serde_json::Value, ses: &mut UserSession, s
                 return Ok(());
             }
             server.db.rename_video(video_hash, new_name)?;
-            send_user_ok!(ses, server, Topic::Video(video_hash), "Video renamed.", 
+            send_user_ok!(ses, server, Topic::Video(video_hash), "Video renamed.",
                 format!("New name: '{}'", new_name), true);
         }
         Err(DBError::NotFound()) => {
@@ -220,7 +220,7 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, se
 
             // Convert data URI to bytes
             let img_uri = DataUrl::process(&d).map_err(|e| anyhow!("Invalid drawing data URI"))?;
-            
+
             if img_uri.mime_type().type_ != "image" || img_uri.mime_type().subtype != "webp" {
                 bail!("Invalid mimetype in drawing: {:?}", img_uri.mime_type())
             }
@@ -242,7 +242,7 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, se
                 .map_err(|e| anyhow!("Failed to create drawings dir: {:?}", e))?;
             async_std::fs::write(drawing_path, img_data.0).await.map_err(
                 |e| anyhow!("Failed to write drawing file: {:?}", e))?;
-            
+
             // Replace data URI with filename
             drwn = Some(fname);
         }
@@ -259,7 +259,7 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, se
     };
     let new_id = server.db.add_comment(&c)
         .map_err(|e| anyhow!("Failed to add comment: {:?}", e))?;
-    let c = server.db.get_comment(new_id)?;
+    let c = server.db.get_comment(&new_id)?;
 
     // Send to all clients watching this video
     ses.emit_new_comment(server, c, super::SendTo::VideoHash(&vh)).await?;
@@ -268,19 +268,19 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, se
 
 
 pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
-    let comment_id = data["comment_id"].as_i64().ok_or(anyhow!("comment_id missing"))? as i32;
+    let id = data["id"].as_str().ok_or(anyhow!("id missing"))?;
     let new_text = data["comment"].as_str().ok_or(anyhow!("comment missing"))?.to_string();
 
-    match server.db.get_comment(comment_id) {
+    match server.db.get_comment(id) {
         Ok(old) => {
             let default_perm = ses.user_id == old.user_id || ses.user_id == "admin";
             ses.org_authz_with_default("edit comment", true, server,
                 default_perm, AuthzTopic::Comment(&old, proto::authz_user_action_request::comment_op::Op::Edit)).await?;
 
             let vh = &old.video_hash;
-            server.db.edit_comment(comment_id, &new_text)?;
-            server.emit_cmd("del_comment", &json!({ "comment_id": comment_id }), super::SendTo::VideoHash(&vh))?;
-            let c = server.db.get_comment(comment_id)?;
+            server.db.edit_comment(id, &new_text)?;
+            server.emit_cmd("del_comment", &json!({ "id": id }), super::SendTo::VideoHash(&vh))?;
+            let c = server.db.get_comment(id)?;
             ses.emit_new_comment(server, c, super::SendTo::VideoHash(&vh)).await?;
         }
         Err(DBError::NotFound()) => {
@@ -293,9 +293,8 @@ pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut UserSession, s
 
 
 pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
-    let comment_id = data["comment_id"].as_i64().ok_or(anyhow!("comment_id missing"))? as i32;
-
-    match server.db.get_comment(comment_id) {
+    let id = data["id"].as_str().ok_or(anyhow!("id missing"))?;
+    match server.db.get_comment(id) {
         Ok(cmt) => {
             let default_perm = ses.user_id == cmt.user_id || ses.user_id == "admin";
             ses.org_authz_with_default("delete comment", true, server,
@@ -307,12 +306,12 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
                 return Ok(());
             }
             let all_comm = server.db.get_video_comments(&vh)?;
-            if all_comm.iter().any(|c| c.parent_id == Some(comment_id)) {
+            if all_comm.iter().any(|c| c.parent_id.map(|i| i.to_string()) == Some(id.to_string())) {
                 send_user_error!(ses, server, Topic::Video(&vh), "Failed to delete comment.", "Comment has replies. Cannot delete.", true);
                 return Ok(());
             }
-            server.db.del_comment(comment_id)?;
-            server.emit_cmd("del_comment", &json!({ "comment_id": comment_id }), super::SendTo::VideoHash(&vh))?;
+            server.db.del_comment(id)?;
+            server.emit_cmd("del_comment", &json!({ "id": id }), super::SendTo::VideoHash(&vh))?;
         }
         Err(DBError::NotFound()) => {
             send_user_error!(ses, server, Topic::None, "Failed to delete comment.", "No such comment. Cannot delete.", true);
@@ -354,7 +353,7 @@ pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut UserSession, se
         Err(e) => { bail!(e); }
         Ok(v) => {
             ses.org_authz_with_default("join collab", true, server,
-                true, AuthzTopic::Other(Some(collab_id.clone()), proto::authz_user_action_request::other_op::Op::JoinCollabSession)).await?;            
+                true, AuthzTopic::Other(Some(collab_id.clone()), proto::authz_user_action_request::other_op::Op::JoinCollabSession)).await?;
 
             match server.link_session_to_collab(collab_id, video_hash, ses.sender.clone()) {
                 Ok(csg) => {

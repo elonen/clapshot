@@ -14,7 +14,7 @@
 
   import type {VideoListDefItem} from "./lib/video_list/types";
   import VideoList from "./lib/video_list/VideoList.svelte";
-  
+
 
   let video_player: VideoPlayer;
   let comment_input: CommentInput;
@@ -24,7 +24,7 @@
   let last_video_progress_msg_ts = Date.now();  // used to hide video_progress_msg after a few seconds
 
   let collab_dialog_ack = false;  // true if user has clicked "OK" on the collab dialog
-  let last_collab_controlling_user = null;    // last user to control the video in a collab session
+  let last_collab_controlling_user: string | null = null;    // last user to control the video in a collab session
 
   function log_abbreviated(...strs: any[]) {
       const max_len = 180;
@@ -72,7 +72,7 @@
     // Close draw mode while showing (drawing from a saved) comment
     video_player.onToggleDraw(false);
     comment_input.forceDrawMode(false);
-    if (e.detail.drawing)    
+    if (e.detail.drawing)
       video_player.setDrawing(e.detail.drawing);
     if ($collab_id) {
       log_abbreviated("Collab: onDisplayComment. collab_id: '" + $collab_id + "'");
@@ -106,7 +106,7 @@
     // This is called from onClearAll event and history.back()
     console.log("closeVideo");
     ws_emit('leave_collab', {});
-    $collab_id = null;   
+    $collab_id = null;
     $video_hash = null;
     $video_url = null;
     $video_fps = null;
@@ -118,7 +118,7 @@
   }
 
   function onClearAll(_e: any) {
-    history.pushState('/', null, '/');  // Clear URL
+    history.pushState('/', '', '/');  // Clear URL
     closeVideo();
   }
 
@@ -140,8 +140,8 @@
       let comment_card = document.getElementById("comment_card_" + comment_id);
       if (comment_card) {
         comment_card.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"});
-        setTimeout(() => { comment_card.classList.add("highlighted_comment"); }, 500);
-        setTimeout(() => { comment_card.classList.remove("highlighted_comment"); }, 3000);
+        setTimeout(() => { comment_card?.classList.add("highlighted_comment"); }, 500);
+        setTimeout(() => { comment_card?.classList.remove("highlighted_comment"); }, 3000);
       }
     }
   }
@@ -174,8 +174,8 @@
   }
 
   let upload_url: string = "";
-  
-  
+
+
   // -------------------------------------------------------------
   // Websocket messaging
   // -------------------------------------------------------------
@@ -225,7 +225,7 @@
   }
 
 
-  
+
   let ws_socket: WebSocket;
 
   function is_connected() {
@@ -244,7 +244,7 @@
   let send_queue: any[] = [];
 
   // Send message to server. If not connected, queue it.
-  function ws_emit(event_name: string, data: any) 
+  function ws_emit(event_name: string, data: any)
   {
     let raw_msg = JSON.stringify({cmd: event_name, data: data});
     if (is_connected()) {
@@ -256,7 +256,7 @@
       send_queue.push(raw_msg);
     }
   }
-  
+
   // Infinite loop that sends messages from the queue.
   // This only ever sends anything if ws_emit() queues messages due to temporary disconnection.
   function send_queue_loop()
@@ -366,17 +366,17 @@
     ws_socket.addEventListener("message", function (event)
     {
       const msg_json = JSON.parse(event.data);
-      handle_with_errors(() => 
+      handle_with_errors(() =>
       {
         const cmd = msg_json.cmd;
         const data = msg_json.data;
 
         log_abbreviated("[RAW SERVER] cmd: '" + cmd + "', data size = " + JSON.stringify(data).length);
 
-        if (Date.now() - last_video_progress_msg_ts > 5000) {          
+        if (Date.now() - last_video_progress_msg_ts > 5000) {
           $video_progress_msg = null; // timeout progress message after a while
         }
-        
+
         switch (cmd)
         {
           case 'welcome':
@@ -437,7 +437,7 @@
             else
               history.pushState($video_hash, null, '/?vid='+$video_hash);  // Point URL to video
             break;
-            
+
           case 'new_comment':
             log_abbreviated("[SERVER] new_comment: " + JSON.stringify(data));
             {
@@ -601,7 +601,7 @@
             </h1>
             <div class="fa-2x block">
               <i class="fas fa-spinner connecting-spinner"></i>
-            </div>            
+            </div>
 
           </div>
 
@@ -615,7 +615,7 @@
                 <VideoPlayer
                   bind:this={video_player} src={$video_url}
                   on:seeked={onVideoSeeked}
-                  on:collabReport={onCollabReport} 
+                  on:collabReport={onCollabReport}
                   on:commentPinClicked={onCommentPinClicked}
                   />
               </div>
@@ -670,7 +670,7 @@
               {/if}
             {/each}
           </div>
-          
+
           <!-- ========== upload widget ============= -->
           <div class="m-6 h-24 border-4 border-dashed border-gray-700">
             <FileUpload post_url={upload_url}>
@@ -693,8 +693,8 @@
               <div class="gap-4 max-h-56 overflow-y-auto border-l px-2 border-gray-900">
                 {#each $user_messages as msg}
                   <UserMessage {msg} />
-                {/each} 
-              </div> 
+                {/each}
+              </div>
             {/if}
           </div>
 
@@ -706,11 +706,11 @@
 <style>
 /* Animate "waiting for server" spinner */
 .connecting-spinner { animation: rotation 3s infinite steps(8); }
-@keyframes rotation { 
-    from { 
-        transform: rotate(0deg); 
-    } to { 
-        transform: rotate(360deg); 
+@keyframes rotation {
+    from {
+        transform: rotate(0deg);
+    } to {
+        transform: rotate(360deg);
     }
 }
 

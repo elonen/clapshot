@@ -108,9 +108,8 @@ impl UserSession {
                 }
             }
         }
-        let mut fields = c.to_json()?;
-        fields["comment_id"] = fields["id"].take();  // swap id with comment_id, because the client expects comment_id
-        server.emit_cmd("new_comment", &fields , send_to).map(|_| ())
+        let proto_cmt = db_comment_to_proto3(&c);
+        server.emit_cmd("new_comment", &serde_json::to_value(proto_cmt)?, send_to).map(|_| ())
     }
 
 

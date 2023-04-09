@@ -22,7 +22,7 @@ use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_cmd_data, e
 #[traced_test]
 async fn test_echo()
 {
-    api_test! {[ws, _ts] 
+    api_test! {[ws, _ts]
         write(&mut ws, r#"{"cmd":"echo","data":"hello"}"#).await;
         assert_eq!(expect_msg(&mut ws).await, "Echo: hello");
     }
@@ -32,7 +32,7 @@ async fn test_echo()
 #[traced_test]
 async fn test_api_push_msg()
 {
-    api_test! {[ws, ts] 
+    api_test! {[ws, ts]
         let mut umsg = UserMessage {
             msg: "test_msg".into(),
             user_id: Some("user.num1".into()),
@@ -57,7 +57,7 @@ async fn test_api_push_msg()
 #[traced_test]
 async fn test_api_list_user_videos()
 {
-    api_test! {[ws, ts] 
+    api_test! {[ws, ts]
         write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
         let (cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(cmd, "show_page");
@@ -128,7 +128,7 @@ async fn test_api_del_video()
 #[traced_test]
 async fn test_api_open_video()
 {
-    api_test! {[ws, ts] 
+    api_test! {[ws, ts]
         for vid in &ts.videos {
             let (_cmd, data) = open_video(&mut ws, &vid.video_hash).await;
             assert_eq!(data["video_hash"], vid.video_hash);
@@ -155,7 +155,7 @@ async fn test_api_open_video()
 #[traced_test]
 async fn test_api_open_bad_video()
 {
-    api_test! {[ws, ts] 
+    api_test! {[ws, ts]
         write(&mut ws, r#"{"cmd":"open_video","data":{"video_hash":"non-existent"}}"#).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(data["event_name"], "error");
@@ -166,7 +166,7 @@ async fn test_api_open_bad_video()
 #[traced_test]
 async fn test_api_rename_video()
 {
-    api_test! {[ws, ts] 
+    api_test! {[ws, ts]
         let vid = &ts.videos[0];
         let (_cmd, _data) = open_video(&mut ws, &vid.video_hash).await;
 
@@ -196,7 +196,7 @@ async fn test_api_rename_video()
 #[traced_test]
 async fn test_api_add_plain_comment()
 {
-    api_test! {[ws, ts] 
+    api_test! {[ws, ts]
         let vid = &ts.videos[0];
         write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_hash":"{}","comment":"Test comment"}}}}"#, vid.video_hash)).await;
 
@@ -214,7 +214,7 @@ async fn test_api_add_plain_comment()
         assert_eq!(data["comment"], "Test comment 2");
 
         // Stored in database, the the image must be path to a file, not the actual image data as data URI
-        assert!(!ts.db.get_comment(data["comment_id"].as_i64().unwrap() as i32).unwrap().drawing.unwrap().contains("data:image"));
+        assert!(!ts.db.get_comment(data["id"].as_str().unwrap()).unwrap().drawing.unwrap().contains("data:image"));
         assert!(data["drawing"].as_str().unwrap().starts_with("data:image/webp"));
 
         // Add a comment to a nonexisting video
@@ -235,39 +235,39 @@ async fn test_api_add_plain_comment()
 #[traced_test]
 async fn test_api_edit_comment()
 {
-    api_test! {[ws, ts] 
+    api_test! {[ws, ts]
         let vid = &ts.videos[0];
         let com = &ts.comments[0];
         open_video(&mut ws, &vid.video_hash).await;
 
         // Edit comment
-        write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"comment_id":{},"comment":"Edited comment"}}}}"#, com.id)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"id":"{}","comment":"Edited comment"}}}}"#, com.id.to_string())).await;
         let (cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(cmd, "del_comment");
-        assert_eq!(data["comment_id"], com.id);
+        assert_eq!(data["id"], com.id.to_string());
         let (cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(cmd, "new_comment");
-        assert_eq!(data["comment_id"], com.id);
+        assert_eq!(data["id"], com.id.to_string());
         assert_eq!(data["comment"], "Edited comment");
-        assert_eq!(data["video_hash"], vid.video_hash);
+        assert_eq!(data["videoHash"], vid.video_hash);
 
         assert!(data["drawing"].as_str().unwrap().starts_with("data:image/webp"));
         let drw_data = String::from_utf8( data_url::DataUrl::process(data["drawing"].as_str().unwrap()).unwrap().decode_to_vec().unwrap().0 ).unwrap();
         assert_eq!(drw_data, "IMAGE_DATA");
 
         // Edit nonexisting comment
-        write(&mut ws, r#"{"cmd":"edit_comment","data":{"comment_id":1234566999,"comment":"Edited comment 2"}}"#).await;
+        write(&mut ws, r#"{"cmd":"edit_comment","data":{"id":"1234566999","comment":"Edited comment 2"}}"#).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(data["event_name"], "error");
 
         // Try to edit someone else's comment
-        write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"comment_id":{},"comment":"Edited comment 3"}}}}"#, ts.comments[1].id)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"id":"{}","comment":"Edited comment 3"}}}}"#, ts.comments[1].id.to_string())).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(data["event_name"], "error");
 
         // Break the database
         ts.db.break_db();
-        write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"comment_id":{},"comment":"Edited comment 4"}}}}"#, com.id)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"id":"{}","comment":"Edited comment 4"}}}}"#, com.id.to_string())).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(data["event_name"], "error");
     }
@@ -286,39 +286,39 @@ async fn test_api_del_comment()
     //       comment[6] (user 1)
     //     comment[3] (user 2)
 
-    api_test! {[ws, ts] 
+    api_test! {[ws, ts]
         let vid = &ts.videos[0];
         let com = &ts.comments[6];
         open_video(&mut ws, &vid.video_hash).await;
 
         // Delete comment[6] (user 1)
-        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"comment_id":{}}}}}"#, com.id)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, com.id.to_string())).await;
         let (cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(cmd, "del_comment");
-        assert_eq!(data["comment_id"], com.id);
+        assert_eq!(data["id"], com.id.to_string());
 
         // Fail to delete nonexisting comment
-        write(&mut ws, r#"{"cmd":"del_comment","data":{"comment_id":1234566999}}"#).await;
+        write(&mut ws, r#"{"cmd":"del_comment","data":{"id":"1234566999"}}"#).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(data["event_name"], "error");
 
         // Fail to delete user2's comment[3] (user 2)
-        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"comment_id":{}}}}}"#, ts.comments[3].id)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, ts.comments[3].id.to_string())).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(data["event_name"], "error");
         assert!(data["message"].as_str().unwrap().contains("ermission"));
 
         // Fail to delete comment[0] that has replies
-        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"comment_id":{}}}}}"#, ts.comments[0].id)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, ts.comments[0].id.to_string())).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(data["event_name"], "error");
         assert!(data["details"].as_str().unwrap().contains("repl"));
 
         // Delete the last remaining reply comment[5]
-        ts.db.del_comment(ts.comments[5].id).unwrap();  // Delete from db directly, to avoid user permission check
+        ts.db.del_comment(&ts.comments[5].id.to_string()).unwrap();  // Delete from db directly, to avoid user permission check
 
         // Try again to delete comment id 1 that should now have no replies
-        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"comment_id":{}}}}}"#, ts.comments[0].id)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, ts.comments[0].id.to_string())).await;
         let (cmd, _) = expect_cmd_data(&mut ws).await;
         assert_eq!(cmd, "del_comment");
     }
@@ -329,7 +329,7 @@ async fn test_api_del_comment()
 #[traced_test]
 async fn test_api_list_my_messages()
 {
-    api_test! {[ws, ts] 
+    api_test! {[ws, ts]
         write(&mut ws, r#"{"cmd":"list_my_messages","data":{}}"#).await;
         expect_no_msg(&mut ws).await;
 
@@ -365,7 +365,7 @@ async fn test_api_list_my_messages()
 #[traced_test]
 async fn test_multipart_upload()
 {
-    api_test! {[_ws, ts] 
+    api_test! {[_ws, ts]
         // Upload file
         let file_body = "Testfile 1234";
         let url = format!("http://127.0.0.1:{}/api/upload", ts.port);

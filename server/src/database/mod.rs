@@ -92,10 +92,10 @@ impl DB {
     // -----------------------------------------------------------------------------------------------
 
     /// Add a new video to the database.
-    /// 
+    ///
     /// # Arguments
     /// * `video` - Video object
-    /// 
+    ///
     /// # Returns
     /// * `sql.Integer` - ID of the new video
     pub fn add_video(&self, video: &models::VideoInsert) -> DBResult<i32>
@@ -107,7 +107,7 @@ impl DB {
     }
 
     /// Set the recompressed flag for a video.
-    /// 
+    ///
     /// # Arguments
     /// * `vh` - Hash (unique identifier) of the video
     pub fn set_video_recompressed(&self, vh: &str) -> EmptyDBResult
@@ -120,7 +120,7 @@ impl DB {
     }
 
     /// Set thumbnail sheet dimensions for a video.
-    /// 
+    ///
     /// # Arguments
     /// * `vh` - Hash (unique identifier) of the video
     /// * `cols` - Width of the thumbnail sheet
@@ -135,7 +135,7 @@ impl DB {
     }
 
     /// Get a video from the database.
-    /// 
+    ///
     /// # Arguments
     /// * `vh` - Hash (unique identifier) of the video
     ///
@@ -150,10 +150,10 @@ impl DB {
     }
 
     /// Delete a video and all its comments from the database.
-    ///     
+    ///
     /// # Arguments
     /// * `vh` - Hash (unique identifier) of the video
-    /// 
+    ///
     /// # Returns
     /// * `EmptyResult`
     /// * `Err(NotFound)` - Video not found
@@ -171,11 +171,11 @@ impl DB {
     }
 
     /// Rename a video (title).
-    /// 
+    ///
     /// # Arguments
     /// * `vh` - Hash (unique identifier) of the video
     /// * `new_name` - New title
-    /// 
+    ///
     /// # Returns
     /// * `EmptyResult`
     /// * `Err(NotFound)` - Video not found
@@ -188,12 +188,12 @@ impl DB {
             .execute(&mut self.conn()?)?;
         Ok(())
     }
-    
+
     /// Get all videos for a user.
-    /// 
+    ///
     /// # Arguments
     /// * `user_id` - User ID
-    /// 
+    ///
     /// # Returns
     /// * `Vec<models::Video>` - List of Video objects
     pub fn get_all_user_videos(&self, user_id: &str) -> DBResult<Vec<models::Video>>
@@ -204,7 +204,7 @@ impl DB {
     }
 
     /// Get all videos that don't have thumbnails yet.
-    /// 
+    ///
     /// # Returns
     /// * `Vec<models::Video>` - List of Video objects
     pub fn get_all_videos_without_thumbnails(&self) -> DBResult<Vec<models::Video>>
@@ -215,40 +215,41 @@ impl DB {
     }
 
     /// Add a new comment on a video.
-    /// 
+    ///
     /// # Arguments
     /// * `comment` - Comment object
-    /// 
+    ///
     /// # Returns
-    /// * `i32` - ID of the new comment
-    pub fn add_comment(&self, cmt: &models::CommentInsert) -> DBResult<i32>
+    /// * ID of the new comment
+    pub fn add_comment(&self, cmt: &models::CommentInsert) -> DBResult<String>
     {
         use schema::comments::dsl::*;
-        let res = diesel::insert_into(comments)
+        let new_id: i32 = diesel::insert_into(comments)
             .values(cmt).returning(id).get_result(&mut self.conn()?)?;
-        Ok(res)
+        Ok(new_id.to_string())
     }
 
     /// Get a comment from the database.
-    /// 
+    ///
     /// # Arguments
     /// * `comment_id` - ID of the comment
-    /// 
+    ///
     /// # Returns
     /// * `models::Comment` - Comment object
     /// * `Err(NotFound)` - Comment not found
-    pub fn get_comment(&self, comment_id: i32 ) -> DBResult<models::Comment>
+    pub fn get_comment(&self, comment_id: &str ) -> DBResult<models::Comment>
     {
         use models::*;
         use schema::comments::dsl::*;
+        let comment_id = comment_id.parse::<i32>().map_err(|e| DBError::Other(e.into()))?;
         to_db_res(comments.filter(id.eq(comment_id)).first::<Comment>(&mut self.conn()?))
     }
 
     /// Get all comments for a video.
-    /// 
+    ///
     /// # Arguments
     /// * `vh` - Hash (unique identifier) of the video
-    /// 
+    ///
     /// # Returns
     /// * `Vec<models::Comment>` - List of Comment objects
     pub fn get_video_comments(&self, vh: &str ) -> DBResult<Vec<models::Comment>>
@@ -259,40 +260,42 @@ impl DB {
     }
 
     /// Delete a comment from the database.
-    /// 
+    ///
     /// # Arguments
     /// * `comment_id` - ID of the comment
-    /// 
+    ///
     /// # Returns
     /// * `Res<bool>` - True if comment was deleted, false if it was not found
-    pub fn del_comment(&self, comment_id: i32 ) -> DBResult<bool>
+    pub fn del_comment(&self, comment_id: &str ) -> DBResult<bool>
     {
         use schema::comments::dsl::*;
+        let comment_id = comment_id.parse::<i32>().map_err(|e| DBError::Other(e.into()))?;
         let res = diesel::delete(comments.filter(id.eq(comment_id))).execute(&mut self.conn()?)?;
         Ok(res > 0)
     }
 
     /// Edit a comment (change text).
-    /// 
+    ///
     /// # Arguments
     /// * `comment_id` - ID of the comment
     /// * `new_comment` - New text of the comment
-    /// 
+    ///
     /// # Returns
     /// * `Res<bool>` - True if comment was edited, false if it was not found
-    pub fn edit_comment(&self, comment_id: i32, new_comment: &str) -> DBResult<bool>
+    pub fn edit_comment(&self, comment_id: &str, new_comment: &str) -> DBResult<bool>
     {
         use schema::comments::dsl::*;
+        let comment_id = comment_id.parse::<i32>().map_err(|e| DBError::Other(e.into()))?;
         let res = diesel::update(comments.filter(id.eq(comment_id)))
             .set((comment.eq(new_comment), edited.eq(diesel::dsl::now))).execute(&mut self.conn()?)?;
         Ok(res > 0)
     }
 
     /// Add a new message to the database.
-    /// 
+    ///
     /// # Arguments
     /// * `msg` - Message object
-    /// 
+    ///
     /// # Returns
     /// * `models::Message` - Message object, with ID and timestamp set
     pub fn add_message(&self, msg: &models::MessageInsert) -> DBResult<models::Message>
@@ -305,10 +308,10 @@ impl DB {
     }
 
     /// Get a message from the database.
-    /// 
+    ///
     /// # Arguments
     /// * `msg_id` - ID of the message
-    /// 
+    ///
     /// # Returns
     /// * `models::Message` - Message object
     /// * `Err(NotFound)` - Message not found
@@ -320,10 +323,10 @@ impl DB {
     }
 
     /// Get all messages for a user.
-    /// 
+    ///
     /// # Arguments
     /// * `uid` - User ID
-    /// 
+    ///
     /// # Returns
     /// * `Vec<models::Message>` - List of Message objects
     pub fn get_user_messages(&self, uid: &str) -> DBResult<Vec<models::Message>>
@@ -334,11 +337,11 @@ impl DB {
     }
 
     /// Set the seen status of a message.
-    /// 
+    ///
     /// # Arguments
     /// * `msg_id` - ID of the message
     /// * `new_status` - New status
-    /// 
+    ///
     /// # Returns
     /// * `Res<bool>` - True if message was found and updated, false if it was not found
     pub fn set_message_seen(&self, msg_id: i32, new_status: bool) -> DBResult<bool>
@@ -350,10 +353,10 @@ impl DB {
     }
 
     /// Delete a message from the database.
-    /// 
+    ///
     /// # Arguments
     /// * `msg_id` - ID of the message
-    /// 
+    ///
     /// # Returns
     /// * `Res<bool>` - True if message was deleted, false if it was not found
     pub fn del_message(&self, msg_id: i32) -> DBResult<bool>
