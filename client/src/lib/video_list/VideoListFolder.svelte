@@ -46,11 +46,11 @@ function consider(e: any) {
 		dnd_items = e.detail.items;
 	}
 }
-	
+
 function finalize(e: any) {
 	if (e.detail.info.source == SOURCES.KEYBOARD) {
 		// On keyboard, dragged item can be taken back out by another (shift-)tab key hit,
-		// so we have to keep in `items` for now:		
+		// so we have to keep in `items` for now:
 		dnd_items = e.detail.items;
 	} else {
 		// On pointer, finalize() is actually final. Sink the item.
@@ -111,7 +111,7 @@ function finalize(e: any) {
 .video-list-folder {
     background: linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.2) 100%), #3b73a5;
     clip-path: polygon(0 23%, 0 5%, 4% 0, 32% 0, 52% 7%, 60% 7%, 98% 7%, 100% 10%, 100% 100%, 15% 100%, 0 100%, 0% 85%);
-    box-shadow: inset -14px -6px 32px 5px rgba(0, 0, 0, 0.2), 
+    box-shadow: inset -14px -6px 32px 5px rgba(0, 0, 0, 0.2),
                 inset 0px 12px 2px 0px rgba(0, 0, 0, 0.2);
     padding-top: 1.5em;
     border-radius: 0.375rem;

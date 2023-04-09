@@ -47,16 +47,16 @@ service OrganizerInbound {
 }
 
 // ---------------------------------------------------------
- 
+
 message ServerInfo {
-    message Database {  
+    message Database {
         enum DatabaseType {
             SQLITE = 0;
         }
         DatabaseType type = 1;
         string endpoint = 2;
     }
-    
+
     message Storage {
         message LocalFilesystem {
             string base_dir = 1;
@@ -79,7 +79,7 @@ message ServerInfo {
             TCP tcp = 2;
         }
     }
-    
+
     SemanticVersionNumber version = 1;
     Storage storage = 3;
     string url_base = 4;
@@ -158,7 +158,7 @@ message AuthzUserActionRequest {
         Op op = 2;
     }
 
-    UserSessionData ses = 1;    
+    UserSessionData ses = 1;
     oneof op {
         OtherOp other_op = 8;
         VideoOp video_op = 9;
@@ -182,7 +182,7 @@ message ClientShowPageRequest {
     string path = 3;    // e.g. "proj2/accepted/", used on client for breadcrumbs / hash navigation
 }
 
-message ClientShowUserMessageRequest {    
+message ClientShowUserMessageRequest {
     UserMessage msg = 1;
     oneof recipient {
         string sid = 100;               // send to client with this session ID
@@ -226,14 +226,43 @@ message ModifyVideoRequest {
 
 // ---------------------------------------------------------
 
-message ApiCall {
-    enum Subsystem {
-        SERVER = 0;
-        ORGANIZER = 1;
+message ScriptCall {
+    enum Lang {
+        JAVASCRIPT = 0;
     }
-    Subsystem sys = 1;
-    string cmd = 2;                                 // e.g. "rename_folder"
-    map<string, google.protobuf.Value> data = 3;    // e.g. "{folder: '{{item.id}}', new_name: '{{dlg.txt}}'}"
+    string code = 1;
+    Lang lang = 2;
+
+    /*
+    The 'code' is evaluated inside an async function defined as follows:
+
+        async function run_script( items: any[]): Promise<void> {
+            // ... code ...
+        }
+
+    Current context:
+
+        - async function call_server(cmd: string, args: Object) - call server API
+        - async function call_organizer(cmd: string, args: Object) - call organizer API
+        - Following prompts:
+            - async alert(msg: string): Promise<void>
+            - async prompt(msg: string, default_value: string): Promise<string>
+            - async confirm(msg: string): Promise<boolean>
+        - all normal browser APIs (e.g. fetch, localStorage, ...)
+
+    Example: rename_video
+
+        var it = items[0];
+        if (!it.video) {
+            await alert("Non-video rename not implemented (no Organizer).");
+            return;
+        }
+        var old_name = it.video.title;
+        var new_name = (await prompt("Rename item", old_name))?.trim();
+        if (new_name && new_name != old_name) {
+            await call_server("rename_video", {video_hash: it.video.videoHash, new_name: new_name});
+        }
+    */
 }
 
 
@@ -302,7 +331,7 @@ message UserMessage {
         optional string video_hash = 1;
         optional int32 comment_id = 2;
     }
-    
+
     Type type = 2;
     Refs refs = 3;  // Objects referenced by this message
     string message = 4;
@@ -331,7 +360,7 @@ message PageItem {
                 Video video = 2;
             }
             optional Visualization vis = 100;
-            optional ApiCall open_action = 110;     // Omit to disable "open" action
+            optional ScriptCall open_action = 110;  // Omit to disable "open" action
             repeated string popup_actions = 120;    // References to actions defined in ClientDefineActionsRequest
         }
         repeated Item items = 1;
@@ -347,18 +376,6 @@ message PageItem {
 // UI actions and popups
 // ---------------------------------------------------------
 
-enum DialogType {
-    TEXT_INPUT = 0;
-    OK_CANCEL = 1;
-}
-
-message Dialog {
-    DialogType type = 1;
-    string title = 2;               // E.g. "Rename {{item.title}}"
-    optional string desc = 3;       // E.g. "Enter new name for {{item.title}}:"
-    map<string, string> args = 4;   // Dialog-specific arguments
-}
-
 message ActionUIProps {
     optional string label = 1;           // e.g. "Rename"
     optional Icon icon = 2;
@@ -369,9 +386,7 @@ message ActionUIProps {
 
 message ActionDef {
     optional ActionUIProps ui_props = 1; // Only used for actions that are used as popups
-    optional Dialog dlg = 2;            // Dialog to show before evaling exec_if and api_call
-    optional string exec_if = 3;        // "true" or "false" after Handlebars eval. Example: "{{dlg.ok}}". Supports ember-truth-helpers.
-    ApiCall api_call = 4;               // Data map items can be Handlebars templates (e.g. "{{item.id}}")
+    optional ScriptCall    action=2;
 }
 
 // ---------------------------------------------------------
@@ -392,12 +407,9 @@ message Icon {
         string classes = 1;             // e.g. "fa fa-folder"
         optional Color color = 2;
     }
-    message ImgUrl {
-        string url = 1;
-    }
     oneof src {
         FaClass fa_class = 1;
-        ImgUrl img_url = 2;
+        string img_url = 2;
     }
     optional float size = 3;
 }

@@ -23,3 +23,5 @@ export let collab_id = writable(null);
 export let user_menu_items = writable([]);
 
 export let selected_tiles = writable([]);
+
+export let server_defined_actions = writable(null);

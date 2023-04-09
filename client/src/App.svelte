@@ -10,7 +10,7 @@
 
   import * as Proto3 from '../../protobuf/libs/typescript';
 
-  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, cur_page_items, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
+  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, cur_page_items, user_messages, video_progress_msg, collab_id, user_menu_items, server_defined_actions} from './stores.js';
 
   import type {VideoListDefItem} from "./lib/video_list/types";
   import VideoList from "./lib/video_list/VideoList.svelte";
@@ -396,6 +396,11 @@
                 (pi: any) => Proto3.PageItem.fromJSON(pi));
             break;
 
+          case 'define_actions':
+            log_abbreviated("[SERVER] define_actions: " + JSON.stringify(data));
+            $server_defined_actions = Proto3.ClientDefineActionsRequest.fromJSON(data);
+            break;
+
           case 'message':
             log_abbreviated("[SERVER] message: " + JSON.stringify(data));
             if ( data.event_name == 'progress' ) {
@@ -521,72 +526,62 @@
     }
   }
 
-  function onRequestFolderDelete(folder_id: string) {
-    alert("NOT IMPLEMENTED: delete folder: " + folder_id);
-  }
-
-  function onRequestFolderRename(folder_id: string, folder_name: string) {
-    alert("NOT IMPLEMENTED: rename folder: " + folder_id + " / " + folder_name);
-  }
-
   function onMoveItemsToFolder(_e: {detail: {folder_id: any; items: any[]}}) {
     console.log("NOT IMPLEMENTED! onMoveItemsToFolder: " + _e.detail.folder_id, "items:", _e.detail.items);
   }
 
-  function TEMP_reorderItems(e: any) {
-    console.log("TEMP_reorderItems:", e.detail.items);
+  function onReorderItems(e: any) {
+    console.log("NOT IMPLEMENTED! onReorderItems: ", e.detail);
   }
 
-  function openVideoListItem(e: { detail: Proto3.ApiCall}): void {
-    sendApiCall(e.detail);
+  function openVideoListItem(e: { detail: VideoListDefItem}): void {
+    console.log("openVideoListItem: ", e );
+    let it: Proto3.PageItem_FolderListing_Item = e.detail;
+    console.log("item = ", it);
+    if (it.openAction) {
+      if ( it.openAction.lang == Proto3.ScriptCall_Lang.JAVASCRIPT )
+        callOrganizerScript(it.openAction.code, [it]);
+      else {
+        console.error("BUG: Unsupported Organizer script language: " + it.openAction.lang);
+        acts.add({mode: 'error', message: "BUG: Unsupported script lang. See log.", lifetime: 5});
+      }
+    } else {
+      console.error("No openAction script for item: " + it);
+      acts.add({mode: 'error', message: "No open action for item. See log.", lifetime: 5});
+    }
   }
 
-  function onVideoListPopupAction(e: { detail: { action: string, items: VideoListDefItem[] }}) {
+  // ------------
+
+  /// Execute a script from Organizer (or server, if Organizer is not connected)
+  function callOrganizerScript(code: string, items: any[]): void {
+    async function call_server(cmd: string, args: Object): Promise<void> { ws_emit(cmd, args); }
+    async function call_organizer(cmd: string, args: Object): Promise<void> { ws_emit("organizer", {cmd, args}); }
+    async function alert(msg: string): Promise<void> { window.alert(msg); }
+    async function prompt(msg: string, default_value: string): Promise<string> { return window.prompt(msg, default_value); }
+    async function confirm(msg: string): Promise<boolean> { return window.confirm(msg); }
+
+    const AsyncFunction = async function () {}.constructor;
+    let script_fn = new AsyncFunction("call_server", "call_organizer", "alert", "prompt", "confirm", "items", code);
+
+    console.log("Calling organizer script. Code = ", code, "items=", items);
+
+    script_fn(call_server, call_organizer, alert, prompt, confirm, items)
+      .catch((e) => {
+        console.error("Error in organizer script:", e);
+        acts.add({mode: 'error', message: "Organizer script error. See log.", lifetime: 5});
+    });
+  }
+
+  function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: VideoListDefItem[] }}) {
     let {action, items} = e.detail;
-    switch (action) {
-      case 'delete':
-        let subject = items.length == 1 ? "this item" : items.length + " items";
-        if (confirm("Are you sure you want to DELETE " + subject + "?")) {
-          items.forEach((it) => {
-            let {video, folder} = it.obj;
-            if (video)
-              onRequestVideoDelete(video.videoHash, video.title);
-            else if (folder)
-              onRequestFolderDelete(folder.id);
-        })}
-        break;
-      case 'rename':
-        if (items.length == 1) {
-          let {video, folder} = items[0].obj;
-          if (video)
-            onRequestVideoRename(video.videoHash, video.title);
-          else if (folder)
-            onRequestFolderRename(folder.id, folder.title);
-        } else {
-          alert("Can only rename one item at a time.");
-        }
-        break;
-      default:
-        alert("NOT IMPLEMENTED (TODO: push this action blindly to server?): " + action);
-    }
+    let items_objs = items.map((it) => it.obj);
+    console.log("onVideoListPopupAction: ", action, items_objs);
+    callOrganizerScript(action.action.code, items_objs);
   }
 
+// ------------
 
-  function sendApiCall(ac: Proto3.ApiCall) {
-    log_abbreviated("makeApiCall: ", ac);
-    switch (ac.sys) {
-      case Proto3.ApiCall_Subsystem.SERVER:
-        ws_emit(ac.cmd, ac.data);
-        break;
-      case Proto3.ApiCall_Subsystem.ORGANIZER:
-        ws_emit("organizer", {cmd: ac.cmd, data: ac.data});
-        break;
-      default:
-        console.log("openVideoListItem: UNKNOWN SUBSYSTEM in API call: ", ac);
-        acts.add({mode: 'warn', message: "Unknown API call '" + ac.cmd + "'. See log.", lifetime: 5});
-        break;
-    }
-  }
 </script>
 
 <svelte:window on:popstate={popHistoryState}/>
@@ -667,7 +662,7 @@
                       id: (it.video?.videoHash || it.folder?.id),
                       obj: it }))}
                     on:open-item={openVideoListItem}
-                    on:reorder-items={TEMP_reorderItems}
+                    on:reorder-items={onReorderItems}
                     on:move-to-folder={onMoveItemsToFolder}
                     on:popup-action={onVideoListPopupAction}
                     />
@@ -729,4 +724,3 @@
 }
 
 </style>
-

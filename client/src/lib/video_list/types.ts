@@ -18,16 +18,7 @@ export interface ClapshotCommentJson
 
 // -----
 
-export class VideoListPopupMenuItem {
-    label: string;
-    icon_class: string|null;
-    key_shortcut: string|null;
-    action: string;
-}
-
-// -----
-
 export class VideoListDefItem {
-    id: string;
-    obj: Proto3.PageItem_FolderListing_Item;
+    id!: string;
+    obj!: Proto3.PageItem_FolderListing_Item;
 }

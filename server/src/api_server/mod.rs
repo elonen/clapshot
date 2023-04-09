@@ -112,8 +112,8 @@ async fn handle_ws_session(
     let (mut ws_tx, mut ws_rx) = ws.split();
 
     // Let the client know user's id and name
-    if let Err(e) = server.emit_cmd("welcome", 
-            &serde_json::json!({ "user_id": user_id, "username": username }), 
+    if let Err(e) = server.emit_cmd("welcome",
+            &serde_json::json!({ "user_id": user_id, "username": username }),
             SendTo::MsgSender(&ses.sender)) {
         tracing::error!(details=%e, "Error sending welcome message. Closing session.");
         return;
@@ -133,9 +133,9 @@ async fn handle_ws_session(
                 ses.organizer = Some(tokio::sync::Mutex::new(c).into());
                 let op = AuthzTopic::Other(None, proto::authz_user_action_request::other_op::Op::Login);
                 if ses.org_authz("login", true, &server, op).await == Some(false) {
-                    tracing::info!("User '{}' not authorized to login. Closing session.", ses.user_id);   
-                    server.emit_cmd("error", 
-                        &serde_json::json!({ "msg": "Login permission denied." }), 
+                    tracing::info!("User '{}' not authorized to login. Closing session.", ses.user_id);
+                    server.emit_cmd("error",
+                        &serde_json::json!({ "msg": "Login permission denied." }),
                         SendTo::MsgSender(&ses.sender)).ok();
                     return;
                 }
@@ -143,8 +143,8 @@ async fn handle_ws_session(
             },
             Err(e) => {
                 tracing::error!(details=%e, "Error connecting to Organizer. Closing session.");
-                server.emit_cmd("error", 
-                    &serde_json::json!({ "msg": "Error connecting to Organizer. Closing session." }), 
+                server.emit_cmd("error",
+                    &serde_json::json!({ "msg": "Error connecting to Organizer. Closing session." }),
                     SendTo::MsgSender(&ses.sender)).ok();
                 return;
             }
@@ -154,8 +154,8 @@ async fn handle_ws_session(
     // Send default actions to client if organizer doesn't want to override them
     if org_start_ses_res.map_or(true, |res| !res.dont_send_default_actions) {
         debug!("Sending default action definitions (organizer didn't want to override them).");
-        if let Err(e) = server.emit_cmd("define_actions", 
-                &serde_json::json!({ "actions": make_video_popup_actions(sid.clone()) }), 
+        if let Err(e) = server.emit_cmd("define_actions",
+                &serde_json::json!(make_video_popup_actions(sid.clone())),
                 SendTo::MsgSender(&ses.sender)) {
             tracing::error!(details=%e, "Error sending define_actions to client. Closing session.");
             return;
@@ -203,7 +203,7 @@ async fn handle_ws_session(
                                 // Check data fields for length. Only "drawing" is allowed to be long.
                                 for (k, v) in data.as_object().unwrap_or(&serde_json::Map::new()) {
                                     if k != "drawing" && v.as_str().map(|s| s.len() > 2048).unwrap_or(false) { bail!("Field too long"); }
-                                }                                
+                                }
                                 Ok((cmd, data))
                             }
 
@@ -257,7 +257,7 @@ async fn handle_ws_session(
 }
 
 /// Extract user id and name from HTTP headers (set by nginx)
-fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String) 
+fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String)
 {
     fn try_get_first_named_hdr<T>(hdrs: &HeaderMap, names: T) -> Option<String>
         where T: IntoIterator<Item=&'static str> {
@@ -278,7 +278,7 @@ fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String)
         }};
     let user_name = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Name", "X_Remote_User_Name", "HTTP_X_REMOTE_USER_NAME"])
         .unwrap_or_else(|| user_id.clone());
-    
+
     (user_id, user_name)
 }
 
@@ -415,7 +415,7 @@ async fn run_api_server_async(
                         if let Err(_) = server_state.send_to_all_video_sessions(&vh, &msg) {
                             tracing::error!(video=vh, "Failed to send notification to video hash.");
                         }
-                    }        
+                    }
                 };
 
                 // Message to a single user

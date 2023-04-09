@@ -1,60 +1,41 @@
 <script lang="ts">
     import { createEventDispatcher, onMount } from 'svelte';
-    import type { VideoListPopupMenuItem } from './types';
+    import type * as Proto3 from '../../../../protobuf/libs/typescript';
 
     export let x = 0;
     export let y = 0;
-    export let menu_lines: VideoListPopupMenuItem[] = [];
+    export let menu_lines: Proto3.ActionDef[] = [];
 
     let menu_el = null;
     let removed = false;
     const dispatch = createEventDispatcher();
 
-    // Make sure the menu doesn't go off the screen
-	$: (() => {
+    function moveKeepMenuOnScreen() {
 		if (!menu_el) return;
 		const rect = menu_el.getBoundingClientRect();
-		x = Math.min(window.innerWidth - rect.width, x);
-		if (y > window.innerHeight - rect.height) y -= rect.height;
-    })();
+            x = Math.min(window.innerWidth - rect.width, x);
+            if (y > window.innerHeight - rect.height) y -= rect.height;
+    }
+    $: moveKeepMenuOnScreen();  // $: = called on any dependency change
 
     export function hide() {
         removed = true;
         dispatch("hide");
     }
 
-    /*
-    let menuItems = [
-        {
-            'name': 'rename',
-            'displayText': "Rename",
-            'class': 'fa-solid fa-edit',
-            'handler': () => {
-                // Delay onRename() to next cycle to allow the menu to close first
-                setTimeout(() => { onRename(); }, 0);
-                hide();
-            },
-        },
-        {
-            'name': 'trash',
-            'displayText': "Delete",
-            'class': 'fa-solid fa-trash-can',
-            'handler': () => {
-                setTimeout(() => { onDelete(); }, 0);
-                hide();
-            },
-        },
-    ];
-    */
-
-    function onClickItem(item: VideoListPopupMenuItem) {
-        dispatch("action", {action: item.action});
+    function onClickItem(item: Proto3.ActionDef) {
+        dispatch("action", {action: item });
         hide();
     }
 
     onMount(() => {
         menu_el.hide = hide;    // Export hide() to the DOM element
     });
+
+    function fmtColorToCSS(c: Proto3.Color) {
+        if (!c) return "black";
+        return `rgb(${c.r},${c.g},${c.b})`;
+    }
     
 </script>
 
@@ -65,12 +46,13 @@
     <div class="popupmenu">
         <ul>
             {#each menu_lines as it}
-                {#if it.label == "hr"}
+                {#if it.uiProps.label?.toLowerCase() == "hr" && !it.apiCall}
                     <hr>
                 {:else}
                     <li><button on:click|stopPropagation={()=>{onClickItem(it)}}>
-                        {#if it.icon_class}<i class={it.icon_class}></i>{/if}
-                        {it.label}
+                        {#if it.uiProps.icon?.faClass}<i class={it.uiProps.icon?.faClass.classes} style="color: {fmtColorToCSS(it.uiProps.icon?.faClass.color)}"></i>{/if}
+                        {#if it.uiProps.icon?.imgUrl}<img alt="" src={it.uiProps.icon?.imgUrl} style="max-width: 2em; max-height: 2em;"/>{/if}
+                        {it.uiProps.label}
                     </button></li>
                 {/if}
             {/each}

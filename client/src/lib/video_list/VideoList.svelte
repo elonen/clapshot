@@ -6,8 +6,10 @@ import VideoListPopup from './VideoListPopup.svelte';
 import VideoListVideoTile from "./VideoListVideoTile.svelte";
 import VideoListFolder from "./VideoListFolder.svelte";
 
-import type { VideoListPopupMenuItem, VideoListDefItem } from "./types";
-import { selected_tiles } from "../../stores";
+import type * as Proto3 from '../../../../protobuf/libs/typescript';
+
+import type { VideoListDefItem } from "./types";
+import { selected_tiles, server_defined_actions } from "../../stores";
 import { createEventDispatcher, tick } from "svelte";
 import { fade } from "svelte/transition";
 
@@ -48,7 +50,7 @@ function handleFinalize(e: CustomEvent<DndEvent>) {
                 const idx = newItems.findIndex(item => item.id === id);
                 // to support arrow up when keyboard dragging
                 const sidx = Math.max(Object.values($selected_tiles).findIndex(item => item.id === id), 0);
-                newItems = newItems.filter(item => !Object.keys($selected_tiles).includes(item.id)) 
+                newItems = newItems.filter(item => !Object.keys($selected_tiles).includes(item.id))
                 newItems.splice(idx - sidx, 0, ...Object.values($selected_tiles));
                 items = newItems as VideoListDefItem[];
                 if (source !== SOURCES.KEYBOARD) $selected_tiles = [];
@@ -68,7 +70,7 @@ function dispatchOpenItem(id: string) {
             el.classList.add("videolist_item_pump_anim");
             setTimeout(() => { el.classList.remove("videolist_item_pump_anim"); }, 1000);
         }
-        dispatch("open-item", it.obj.openAction);
+        dispatch("open-item", it.obj);
     } else {
         alert("UI BUG: item not found or missing openAction");
     }
@@ -112,9 +114,9 @@ function transformDraggedElement(el: any) {
 
 function handleMouseUp(e: MouseEvent, item: VideoListDefItem) {
     if (e.button > 0) return; // ignore right click
-    if (!dragging && !e.ctrlKey) { 
-        $selected_tiles = []; 
-        $selected_tiles[item.id] = item; 
+    if (!dragging && !e.ctrlKey) {
+        $selected_tiles = [];
+        $selected_tiles[item.id] = item;
     }
 }
 
@@ -133,20 +135,22 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem)
     // Which tiles are we acting on?
     let target_tiles: VideoListDefItem[] = Object.values($selected_tiles)
         .concat(item)
-        .filter((item, index, self) => self.findIndex(t => t.id === item.id) === index);
+        .filter((item, index, self) => self.findIndex(t => t.id === item.id) === index); // unique
 
-    // Build the popup actions
-    let popup_lines: VideoListPopupMenuItem[] = [
-        {label: "Delete", action: "delete", icon_class: "fa-solid fa-trash", key_shortcut: "Del"},
-    ];
-    if (target_tiles.length == 1) {
-        popup_lines.unshift({label: "Rename", action: "rename", icon_class: "fa-solid fa-edit", key_shortcut: "F2"});
-    }
+    // Build the popup menu items (actions)
+    let actions: Proto3.ActionDef[] = target_tiles.map(tile => tile.obj.popupActions).flat()
+        .filter((action_id, index, self) => self.indexOf(action_id) === index)  // unique action ids
+        .map(aid => {   // convert ids to action objects
+            let a = $server_defined_actions.actions[aid];
+                if (!a) { alert("UI / Organizer BUG: popup action '" + aid + "' not found"); }
+                return a;
+            })
+        .filter(a => a !== undefined);
 
     let popup = new VideoListPopup({
         target: popup_container,
         props: {
-            menu_lines: popup_lines,
+            menu_lines: actions,
             x: e.clientX,
             y: e.clientY - 16, // Offset a bit to make it look better
         },
@@ -220,7 +224,7 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem)
     display: block;
 
     overflow: clip;
-    cursor: pointer;                
+    cursor: pointer;
 }
 
 :global(.video-list-tile-sqr:hover) {

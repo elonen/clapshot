@@ -90,7 +90,7 @@ impl UserSession {
 
     pub async fn emit_new_comment(&self, server: &ServerState, mut c: models::Comment, send_to: SendTo<'_>) -> Res<()> {
         if let Some(drawing) = &mut c.drawing {
-            if drawing != "" { 
+            if drawing != "" {
                 // If drawing is present, read it from disk and encode it into a data URI.
                 if !drawing.starts_with("data:") {
                     let path = server.videos_dir.join(&c.video_hash).join("drawings").join(&drawing);
@@ -109,7 +109,7 @@ impl UserSession {
             }
         }
         let mut fields = c.to_json()?;
-        fields["comment_id"] = fields["id"].take();  // swap id with comment_id, because the client expects comment_id        
+        fields["comment_id"] = fields["id"].take();  // swap id with comment_id, because the client expects comment_id
         server.emit_cmd("new_comment", &fields , send_to).map(|_| ())
     }
 
@@ -129,16 +129,16 @@ impl UserSession {
     }
 
     /// Check from Organizer if the user is allowed to perform given action.
-    /// 
+    ///
     /// Some(true) = allowed
     /// Some(false) = denied
     /// None = default, as determined by the server - no Organizer or it doesn't support authz
-    /// 
+    ///
     /// If Organizer is not connected, returns None.
     /// If check fails and Organizer is connected, logs an error and denies the action.
     /// If the user is not allowed, an error message is sent to the user if `msg_on_deny` is true.
     pub async fn org_authz<'a>(
-        &self, 
+        &self,
         desc: &str,
         msg_on_deny: bool,
         server: &ServerState,
@@ -151,12 +151,12 @@ impl UserSession {
         tracing::debug!(op=?op, user=self.user_id, desc, "Checking authz from Organizer");
         let pop = match op {
             AuthzTopic::Video(v, op) => proto::authz_user_action_request::Op::VideoOp(
-                proto::authz_user_action_request::VideoOp { 
+                proto::authz_user_action_request::VideoOp {
                     op: op.into(),
                     video: Some(db_video_to_proto3(v, &server.url_base)) }),
             AuthzTopic::Comment(c, op) => proto::authz_user_action_request::Op::CommentOp(
                 proto::authz_user_action_request::CommentOp {
-                    op: op.into(), 
+                    op: op.into(),
                     comment: Some(db_comment_to_proto3(c)) }),
             AuthzTopic::Other(subj, op) => proto::authz_user_action_request::Op::OtherOp(
                 proto::authz_user_action_request::OtherOp {
@@ -164,11 +164,17 @@ impl UserSession {
                     subject: subj.map(|s| s.into()) }),
         };
         let req = proto::AuthzUserActionRequest { ses: Some(self.org_session.clone()), op: Some(pop) };
-        match org.lock().await.authz_user_action(req).await {
+        let res = org.lock().await.authz_user_action(req).await;
+        match res {
             Err(e) => {
-                error!(desc, user=self.user_id, err=?e, "Error while authorizing user action");
-                self.try_send_error(&server, format!("Internal error in authz: {}", desc), None, &op).ok();
-                Some(false)
+                if e.code() == tonic::Code::Unimplemented {
+                    tracing::debug!(desc, user=self.user_id, "Organizer doesn't support authz");
+                    None
+                } else {
+                    error!(desc, user=self.user_id, err=?e, "Error while authorizing user action");
+                    self.try_send_error(&server, format!("Internal error in authz: {}", desc), None, &op).ok();
+                    Some(false)
+                }
             },
             Ok(res) => {
                 match res.get_ref().is_authorized {
@@ -181,7 +187,7 @@ impl UserSession {
                     },
                     Some(true) => {
                         debug!(desc, user=self.user_id, "Organizer said: Authorized OK");
-                        Some(true) 
+                        Some(true)
                     },
                     None => {
                         debug!(desc, user=self.user_id, "Organizer said: I don't authz, use defaults");
@@ -193,7 +199,7 @@ impl UserSession {
     }
 
     pub async fn org_authz_with_default<'a>(
-        &self, 
+        &self,
         desc: &str,
         msg_on_deny: bool,
         server: &ServerState,
