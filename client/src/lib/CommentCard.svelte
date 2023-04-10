@@ -3,40 +3,34 @@
   import { scale, slide } from "svelte/transition";
   import Avatar from './Avatar.svelte';
   import { cur_user_id } from '../stores.js';
+  import * as Proto3 from '../../../protobuf/libs/typescript';
 
   const dispatch = createEventDispatcher();
 
-  export let id: string = "";
-  export let parent_id: string = null;
-  export let username: string = "";
-  export let user_id: string = "";
-  export let comment: string = "";
-  export let edited: string = null;
   export let indent: number = 0;
-  export let timecode: string = "";
-  export let drawing_data: string = "";
+  export let comment: Proto3.Comment;
 
   let editing = false;
   let show_actions: boolean = false;
- 
+
   let show_reply: boolean = false;
   let reply_input: HTMLInputElement;
-  
+
   function onTimecodeClick(tc: string) {
-    dispatch("display-comment", {'timecode': tc, 'drawing': drawing_data});
+    dispatch("display-comment", {'timecode': tc, 'drawing': comment.drawing});
   }
 
 function onClickDeleteComment() {
   var result = confirm("Delete comment?");
   if (result) {
-    dispatch("delete-comment", {'comment_id': id});
+    dispatch("delete-comment", {'id': comment.id});
   }
 }
 
 function onReplySubmit() {
-  if (reply_input.value != "") 
+  if (reply_input.value != "")
   {
-    dispatch("reply-to-comment", {'parent_id': id, 'comment_text': reply_input.value});
+    dispatch("reply-to-comment", {'parent_id': comment.id, 'comment_text': reply_input.value});
     reply_input.value = "";
     show_reply = false;
   }
@@ -50,62 +44,62 @@ function onEditFieldKeyUp(e: KeyboardEvent) {
   if ((e.key == "Enter" && !e.shiftKey) || e.key == "Escape") {
     console.log("Enter pressed");
     editing = false;
-    comment = comment.trim();
-    if (comment != "") 
-      dispatch("edit-comment", {'comment_id': id, 'comment_text': comment});
-  }  
+    comment.comment = comment.comment.trim();
+    if (comment.comment != "")
+      dispatch("edit-comment", {'id': comment.id, 'comment_text': comment.comment});
+  }
 }
 
 </script>
 
 <div transition:scale
-  id="comment_card_{id}"
-  class="block overflow-clip rounded-lg bg-gray-800 {!!timecode ? 'hover:bg-gray-700' : ''} shadow-lg shadow-black"
+  id="comment_card_{comment.id}"
+  class="block overflow-clip rounded-lg bg-gray-800 {!!comment.timecode ? 'hover:bg-gray-700' : ''} shadow-lg shadow-black"
   style="margin-left: {indent*1.5}em"
   tabindex="0"
   role="link"
   on:focus="{() => show_actions=true}"
   on:mouseenter="{() => show_actions=true}"
   on:mouseleave="{() => show_actions=false}"
-  on:click = "{() => {if (timecode) onTimecodeClick(timecode);}}"
+  on:click = "{() => {if (comment.timecode) onTimecodeClick(comment.timecode);}}"
   on:keydown={(e) => {
     if (e.key == "Escape") { editing = false; }
-    else if (e.key == "Enter") { if (timecode) onTimecodeClick(timecode); }
+    else if (e.key == "Enter") { if (comment.timecode) onTimecodeClick(comment.timecode); }
   }}
 >
 
 
   <div class="flex mx-2 pt-3">
-    <div class="flex-none w-9 h-9 block"><Avatar username="{user_id}"/></div>
-    <h5 class="flex-1 ml-3 text-gray-500 self-end">{username}</h5>
-    <span class="flex-none hidden text-xs font-mono">[{id}@{parent_id}]</span>
+    <div class="flex-none w-9 h-9 block"><Avatar username="{comment.user?.username}"/></div>
+    <h5 class="flex-1 ml-3 text-gray-500 self-end">{comment.user?.displayname}</h5>
+    <span class="flex-none hidden text-xs font-mono">[{comment.id}@{comment.parentId}]</span>
     <span
       class="pl-2 flex-0 text-xs italic whitespace-nowrap text-yellow-700 hover:text-yellow-500 hover:underline cursor-pointer self-end">
-        {#if drawing_data && drawing_data != ""}
+        {#if comment.drawing && comment.drawing != ""}
           <i class="fas fa-pen"></i>
         {/if}
-        {timecode ? timecode : ""}
+        {comment.timecode ? comment.timecode : ""}
     </span>
   </div>
 
   <div class="p-2" lang="en">
     {#if editing}
-      <textarea class="w-full outline-dashed bg-slate-500" rows=3 use:callFocus bind:value={comment} on:keyup={onEditFieldKeyUp} on:blur="{()=>{editing=false; comment=comment.trim()}}"></textarea>
+      <textarea class="w-full outline-dashed bg-slate-500" rows=3 use:callFocus bind:value={comment.comment} on:keyup={onEditFieldKeyUp} on:blur="{()=>{editing=false; comment.comment = comment.comment.trim()}}"></textarea>
     {:else}
       <p class="text-gray-300 text-base hyphenate">
-        {comment}
-        {#if edited}
+        {comment.comment}
+        {#if comment.edited}
           <span class="text-xs italic text-gray-500"> (edited)</span>
         {/if}
       </p>
     {/if}
   </div>
 
-  {#if show_actions}  
+  {#if show_actions}
   <div class="p-2 flex place-content-end" transition:slide="{{ duration: 200 }}">
     <button class="border rounded-lg px-1 placeholder: ml-2 text-sm border-cyan-500 text-cyan-500" on:click={()=>show_reply=true}>Reply</button>
-    {#if user_id == $cur_user_id || $cur_user_id == "admin"}
-      <button class="border rounded-lg px-1 ml-2 text-sm border-cyan-600 text-cyan-600" on:click="{()=>{editing=true;}}">Edit</button>      
+    {#if comment.user?.username == $cur_user_id || $cur_user_id == "admin"}
+      <button class="border rounded-lg px-1 ml-2 text-sm border-cyan-600 text-cyan-600" on:click="{()=>{editing=true;}}">Edit</button>
       <button class="border rounded-lg px-1 ml-2 text-sm border-red-300 text-red-300" on:click={onClickDeleteComment}>Del</button>
     {/if}
   </div>
@@ -113,7 +107,7 @@ function onEditFieldKeyUp(e: KeyboardEvent) {
 
   {#if show_reply}
     <form class="p-2" on:submit|preventDefault={onReplySubmit}>
-      <input 
+      <input
         class="w-full border p-1 rounded bg-gray-900"
         type="text" placeholder="Your reply..."
         use:callFocus

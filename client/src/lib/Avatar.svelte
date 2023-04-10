@@ -31,21 +31,21 @@
 <script lang="ts">
     import { onMount } from "svelte";
 
-    export let username: string = "";
+    export let username: string | null = "";
     export let width = "32";
     export let round = true;
-    export let src = null;
+    export let src: string | null = null;
 
     /*
      * LetterAvatar. Based on https://codepen.io/arturheinze/pen/ZGvOMw, which is based on https://gist.github.com/leecrossley/6027780
      */
-    function MakeLetterAvatar(name: string, size: number): string {
-        name = name || "";
+    function MakeLetterAvatar(name: string | null, size: number): string {
+        name = name || "?";
         size = size || 60;
 
         let initials: string;
-        let canvas: HTMLCanvasElement;
-        let context: CanvasRenderingContext2D;
+        let canvas: HTMLCanvasElement = document.createElement("canvas");
+        let context: CanvasRenderingContext2D = canvas.getContext("2d") ?? new CanvasRenderingContext2D();
 
         let nameSplit = String(name).toUpperCase().replace(".", " ").split(" ");
         if (nameSplit.length == 1) {
@@ -56,23 +56,17 @@
 
         if (window.devicePixelRatio)
             size = size * window.devicePixelRatio;  // In case display zoomed or retina display
-        canvas = document.createElement("canvas");
         canvas.width = size;
         canvas.height = size;
-        context = canvas.getContext("2d");
 
         context.fillStyle = hexColorForUsername(name);
         context.fillRect(0, 0, canvas.width, canvas.height);
         context.font = "bold " + Math.round(canvas.width / 2.2) + "px Arial";
-        context.font
         context.textAlign = "center";
         context.fillStyle = "#222";
         context.fillText(initials, size / 2, size / 1.5);
 
-        let dataURI = canvas.toDataURL();
-        canvas = null;
-
-        return dataURI;  // Base64 encoded data url string + colour hex
+        return canvas.toDataURL();  // Base64 encoded data url string + colour hex
     }
 
     const letterAvatar = MakeLetterAvatar(username, parseFloat(width));

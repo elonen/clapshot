@@ -2,27 +2,29 @@
     /**
      * Thumbnail that lets you scrub through the video
      * by hovering over it and moving the mouse.
-     * 
+     *
      * Uses a sprite sheet to show the frames.
      * When the mouse is not over the thumbnail,
      * a single poster image is shown instead.
      */
 
     export let thumb_poster_url: string;
-    export let thumb_sheet_url: string;
-    export let thumb_sheet_cols: number;
-    export let thumb_sheet_rows: number;
+    export let thumb_sheet_url: string | null = null;
+    export let thumb_sheet_cols: number | null = null;
+    export let thumb_sheet_rows: number | null = null;
 
     export let extra_styles: string = "";
 
     function installThumbScrubber(e: MouseEvent)
     {
-        let thumb_el = e.target as HTMLElement;
+        if (thumb_sheet_url == null || thumb_sheet_cols == null || thumb_sheet_rows == null)
+            return;
 
+        let thumb_el = e.target as HTMLElement;
         let sheet_cols = thumb_sheet_cols;
         let sheet_rows = thumb_sheet_rows;
         let bgImg =  new Image();
-        
+
         bgImg.onload = (_e) => {
             // Total size of sprite sheet in pixels
             let sheet_w_px = bgImg.naturalWidth;

@@ -15,13 +15,13 @@
   function onClickUser(): void {
     if (!$user_menu_items) return;
     let user_menu = document.getElementById("user-menu");
-    if (user_menu.classList.contains("hidden")) {
+    if (user_menu?.classList.contains("hidden")) {
       user_menu.classList.remove("hidden");
     } else {
-      user_menu.classList.add("hidden");
+      user_menu?.classList.add("hidden");
     }
   }
-  
+
   function logoutBasicAuth(urlFor401: RequestInfo, redirUrl: string) {
     // Try to log out of basic auth by making a request to /logout and expect 401.
     // This is a bit tricky, as HTTP basic auth wasn't really designed for logout.
@@ -47,7 +47,7 @@
 </script>
 
 <nav class="px-5 py-2.5 rounded dark:bg-gray-900">
-  
+
   <div class="flex">
 
     <!-- logo with "home" link -->

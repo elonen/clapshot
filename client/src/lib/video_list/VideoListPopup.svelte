@@ -6,7 +6,7 @@
     export let y = 0;
     export let menu_lines: Proto3.ActionDef[] = [];
 
-    let menu_el = null;
+    let menu_el: HTMLElement | null = null;
     let removed = false;
     const dispatch = createEventDispatcher();
 
@@ -29,14 +29,16 @@
     }
 
     onMount(() => {
+        if (!menu_el) return;
+        // @ts-ignore
         menu_el.hide = hide;    // Export hide() to the DOM element
     });
 
-    function fmtColorToCSS(c: Proto3.Color) {
+    function fmtColorToCSS(c: Proto3.Color | null | undefined) {
         if (!c) return "black";
         return `rgb(${c.r},${c.g},${c.b})`;
     }
-    
+
 </script>
 
 {#if !removed}
@@ -46,9 +48,9 @@
     <div class="popupmenu">
         <ul>
             {#each menu_lines as it}
-                {#if it.uiProps.label?.toLowerCase() == "hr" && !it.apiCall}
+                {#if it.uiProps?.label?.toLowerCase() == "hr" && !it.action?.code}
                     <hr>
-                {:else}
+                {:else if it.uiProps}
                     <li><button on:click|stopPropagation={()=>{onClickItem(it)}}>
                         {#if it.uiProps.icon?.faClass}<i class={it.uiProps.icon?.faClass.classes} style="color: {fmtColorToCSS(it.uiProps.icon?.faClass.color)}"></i>{/if}
                         {#if it.uiProps.icon?.imgUrl}<img alt="" src={it.uiProps.icon?.imgUrl} style="max-width: 2em; max-height: 2em;"/>{/if}

@@ -1,33 +1,51 @@
 <script lang="ts">
 import { slide } from "svelte/transition";
+import * as Proto3 from '../../../protobuf/libs/typescript';
 
-export let msg: any = null;
+export let msg: Proto3.UserMessage;
 
 let show_details: boolean = false;
+
+function isError(msg: Proto3.UserMessage): boolean {
+    return msg.type == Proto3.UserMessage_Type.ERROR;
+}
+
+function msgTypeName(msg: Proto3.UserMessage): string {
+    switch (msg.type) {
+        case Proto3.UserMessage_Type.OK:
+            return 'OK';
+        case Proto3.UserMessage_Type.ERROR:
+            return 'ERROR';
+        case Proto3.UserMessage_Type.PROGRESS:
+            return 'PROGRESS';
+        default:
+            return '';
+    }
+}
 </script>
 
 <div class="border-t border-slate-800 p-1 m-1 mx-6 inline-block w-[90%]">
-    <span class="font-mono text-sm pr-1 {(msg.event_name == "error") ? 'text-red-400': 'text-green-400'}">
-        {msg.event_name.toUpperCase()}
+    <span class="font-mono text-sm pr-1 {isError(msg) ? 'text-red-400': 'text-green-400'}">
+        {msgTypeName(msg)}
     </span>
     <span class="text-xs text-gray-500 pl-2 border-l border-gray-400">{msg.created}</span>
 
-    {#if msg.ref_video_hash }
-        {#if msg.event_name == "error"}
+    {#if msg.refs?.videoHash }
+        {#if isError(msg)}
             <span class="font-mono text-xs pl-2 border-l border-gray-400 line-through text-gray-700">
-                {msg.ref_video_hash}
+                {msg.refs.videoHash}
             </span>
         {:else}
             <a class="font-mono text-xs pl-2 border-l border-gray-400 text-amber-600"
-                href="/?vid={msg.ref_video_hash}">
-                {msg.ref_video_hash}
+                href="/?vid={msg.refs.videoHash}">
+                {msg.refs.videoHash}
             </a>
         {/if}
     {/if}
 
     <span class="text-gray-400 text-sm pl-2 border-l border-gray-400 pr-2">{msg.message}</span>
 
-    {#if msg.details }    
+    {#if msg.details }
         <span class="text-xs text-gray-500 pl-2 border-l border-gray-400"></span>
         {#if show_details}
             <i class="fa fa-chevron-up text-[#cca] cursor-pointer"

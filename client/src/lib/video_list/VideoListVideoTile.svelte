@@ -5,7 +5,8 @@
     export let item: Proto3.Video;
     export function data() { return item; }
 
-    function fmt_date(d: Date) {
+    function fmt_date(d: Date | undefined) {
+        if (!d) return "(no date)";
         return d.toISOString().split('T')[0];
     }
 </script>
@@ -53,7 +54,7 @@
     text-overflow: ellipsis;
     display: -webkit-box;
     -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;    
+    -webkit-box-orient: vertical;
 }
 
 </style>

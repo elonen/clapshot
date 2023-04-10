@@ -30,11 +30,11 @@ function handleConsider(e: CustomEvent<DndEvent>) {
                     items = newItems.filter(item => !Object.keys($selected_tiles).includes(item.id)) as VideoListDefItem[];
                 });
             } else {
-                $selected_tiles = [];
+                $selected_tiles = {};
             }
         }
     }
-    if (trigger === TRIGGERS.DRAG_STOPPED) $selected_tiles = [];
+    if (trigger === TRIGGERS.DRAG_STOPPED) $selected_tiles = {};
     items = newItems as VideoListDefItem[];
 }
 function handleFinalize(e: CustomEvent<DndEvent>) {
@@ -53,7 +53,7 @@ function handleFinalize(e: CustomEvent<DndEvent>) {
                 newItems = newItems.filter(item => !Object.keys($selected_tiles).includes(item.id))
                 newItems.splice(idx - sidx, 0, ...Object.values($selected_tiles));
                 items = newItems as VideoListDefItem[];
-                if (source !== SOURCES.KEYBOARD) $selected_tiles = [];
+                if (source !== SOURCES.KEYBOARD) $selected_tiles = {};
             });
         }
     } else {
@@ -68,7 +68,7 @@ function dispatchOpenItem(id: string) {
         let el = document.getElementById("videolist_item__" + id);
         if (!el) { alert("UI BUG: item not found"); } else {
             el.classList.add("videolist_item_pump_anim");
-            setTimeout(() => { el.classList.remove("videolist_item_pump_anim"); }, 1000);
+            setTimeout(() => { el?.classList.remove("videolist_item_pump_anim"); }, 1000);
         }
         dispatch("open-item", it.obj);
     } else {
@@ -85,7 +85,7 @@ function handleMouseOrKeyDown(id: string, e: any) {
     if (e.key) {
         if (e.key == "Enter") {
             dispatchOpenItem(id);
-            $selected_tiles = [];
+            $selected_tiles = {};
             return;
         }
     }
@@ -95,27 +95,31 @@ function handleMouseOrKeyDown(id: string, e: any) {
     if (Object.keys($selected_tiles).includes(id)) {
         delete($selected_tiles[id]);
     } else {
-        $selected_tiles[id] = items.find(item => item.id === id);
+        let it = items.find(item => item.id === id);
+        if (it)
+            $selected_tiles[id] = it;
+        else
+            console.error("UI BUG: videolist item not found");
     }
     $selected_tiles = {...$selected_tiles};
 }
 
 function transformDraggedElement(el: any) {
-        if (!el.getAttribute("data-selected-items-count") && Object.keys($selected_tiles).length) {
-            el.setAttribute("data-selected-items-count", Object.keys($selected_tiles).length + 1);
-        }
-        let style = el.querySelector(".video-list-selector").style;
-        style.transition = 'all 0.2s ease-in-out';
-        style.transform = "rotate(-2deg)";
-        style.opacity = "0.5";
-        style.scale = "0.8";
+    if (!el.getAttribute("data-selected-items-count") && Object.keys($selected_tiles).length) {
+        el.setAttribute("data-selected-items-count", Object.keys($selected_tiles).length + 1);
+    }
+    let style = el.querySelector(".video-list-selector").style;
+    style.transition = 'all 0.2s ease-in-out';
+    style.transform = "rotate(-2deg)";
+    style.opacity = "0.5";
+    style.scale = "0.8";
 }
 
 
 function handleMouseUp(e: MouseEvent, item: VideoListDefItem) {
     if (e.button > 0) return; // ignore right click
     if (!dragging && !e.ctrlKey) {
-        $selected_tiles = [];
+        $selected_tiles = {};
         $selected_tiles[item.id] = item;
     }
 }
@@ -124,7 +128,7 @@ function handleMouseUp(e: MouseEvent, item: VideoListDefItem) {
 function onContextMenu(e: MouseEvent, item: VideoListDefItem)
 {
     let popup_container = document.querySelector('#popup-container');
-    if (!popup_container) { alert("UI BUG: popup container missing"); }
+    if (!popup_container) { alert("UI BUG: popup container missing"); return; }
 
     // Remove any existing popups
     for (let child of popup_container.children as any) {
@@ -141,7 +145,7 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem)
     let actions: Proto3.ActionDef[] = target_tiles.map(tile => tile.obj.popupActions).flat()
         .filter((action_id, index, self) => self.indexOf(action_id) === index)  // unique action ids
         .map(aid => {   // convert ids to action objects
-            let a = $server_defined_actions.actions[aid];
+            let a = $server_defined_actions[aid];
                 if (!a) { alert("UI / Organizer BUG: popup action '" + aid + "' not found"); }
                 return a;
             })
@@ -159,6 +163,11 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem)
     popup.$on('hide', () => popup.$destroy());
 
 }
+
+function isShadowItem(item: any) {
+    return item[SHADOW_ITEM_MARKER_PROPERTY_NAME];
+}
+
 </script>
 
 <div>
@@ -179,13 +188,13 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem)
                 class="video-list-tile-sqr"
                 class:selectedTile={Object.keys($selected_tiles).includes(item.id)}
                 on:click|stopPropagation
-                on:dblclick={(_e) => {$selected_tiles = []; dispatchOpenItem(item.id)}}
+                on:dblclick={(_e) => {$selected_tiles = {}; dispatchOpenItem(item.id)}}
                 on:mousedown={(e) => handleMouseOrKeyDown(item.id, e)}
                 on:mouseup={(e) => handleMouseUp(e, item)}
                 on:keydown={(e) => handleMouseOrKeyDown(item.id, e)}
                 on:contextmenu|preventDefault={(e) => onContextMenu(e, item)}
             >
-                {#if item[SHADOW_ITEM_MARKER_PROPERTY_NAME]}
+                {#if isShadowItem(item)}
                     <div in:fade={{duration:200}} class='custom-dnd-shadow-item'></div>
                 {:else}
                     {#if item.obj.video }
@@ -210,9 +219,8 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem)
 
 <svelte:window on:click={(_e) => {
     // Deselect all items if clicked outside of the list
-    if (!dragging) $selected_tiles = []
-    }}
-/>
+    if (!dragging) $selected_tiles = {};
+}} />
 
 
 <style>

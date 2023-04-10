@@ -14,6 +14,7 @@
 
   import type {VideoListDefItem} from "./lib/video_list/types";
   import VideoList from "./lib/video_list/VideoList.svelte";
+    import { IndentedComment, type UserMenuItem } from "./types";
 
 
   let video_player: VideoPlayer;
@@ -68,7 +69,7 @@
   }
 
   function onDisplayComment(e: any) {
-    video_player.seekTo(e.detail.timecode, 'SMPTE');
+    video_player.seekToSMPTE(e.detail.timecode);
     // Close draw mode while showing (drawing from a saved) comment
     video_player.onToggleDraw(false);
     comment_input.forceDrawMode(false);
@@ -82,7 +83,7 @@
 
   function onDeleteComment(e: any) {
     ws_emit('del_comment', {
-      comment_id: e.detail.comment_id,
+      id: e.detail.id,
     });
   }
 
@@ -96,7 +97,7 @@
 
   function onEditComment(e: any) {
     ws_emit('edit_comment', {
-      comment_id: e.detail.comment_id,
+      id: e.detail.id,
       comment: e.detail.comment_text,
     });
   }
@@ -133,15 +134,15 @@
 
   function onCommentPinClicked(e: any) {
       // Find corresponding comment in the list, scroll to it and highlight
-      let comment_id = e.detail.id;
-    let comment = $all_comments.find(c => c.id == comment_id);
-    if (comment) {
-      onDisplayComment({detail: {timecode: comment.timecode, drawing: comment.drawing_data}});
-      let comment_card = document.getElementById("comment_card_" + comment_id);
-      if (comment_card) {
-        comment_card.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"});
-        setTimeout(() => { comment_card?.classList.add("highlighted_comment"); }, 500);
-        setTimeout(() => { comment_card?.classList.remove("highlighted_comment"); }, 3000);
+    let comment_id = e.detail.id;
+    let c = $all_comments.find(c => c.comment.id == comment_id);
+    if (c) {
+      onDisplayComment({detail: {timecode: c.comment.timecode, drawing: c.comment.drawing}});
+      let card = document.getElementById("comment_card_" + comment_id);
+      if (card) {
+        card.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"});
+        setTimeout(() => { card?.classList.add("highlighted_comment"); }, 500);
+        setTimeout(() => { card?.classList.remove("highlighted_comment"); }, 3000);
       }
     }
   }
@@ -157,7 +158,7 @@
   const urlParams = new URLSearchParams(window.location.search);
   urlParams.forEach((value, key) => {
     if (key != "vid" && key != "collab") {
-      console.log("Got UNKNOWN URL parameter: '" + key + "'. Value= " + value);
+      console.error("Got UNKNOWN URL parameter: '" + key + "'. Value= " + value);
       acts.add({mode: 'warn', message: "Unknown URL parameter: '" + key + "'", lifetime: 5});
     }
   });
@@ -168,9 +169,9 @@
   if ($video_hash) {
     // console.log("Video hash: " + video_hash);
     if ($collab_id)
-      history.pushState($video_hash, null, '/?vid='+$video_hash+'&collab='+$collab_id);
+      history.pushState($video_hash, '', '/?vid='+$video_hash+'&collab='+$collab_id);
     else
-      history.pushState($video_hash, null, '/?vid='+$video_hash);
+      history.pushState($video_hash, '', '/?vid='+$video_hash);
   }
 
   let upload_url: string = "";
@@ -203,11 +204,11 @@
 
         $user_menu_items = json.user_menu_extra_items;
         if (json.user_menu_show_basic_auth_logout) {
-          $user_menu_items = [...$user_menu_items, {label: "Logout", type: "logout-basic-auth"}];
+          $user_menu_items = [...$user_menu_items, {label: "Logout", type: "logout-basic-auth"} as UserMenuItem];
         }
       })
       .catch(error => {
-          console.log("Failed to read config. " + error)
+          console.error("Failed to read config:", error)
           acts.add({mode: 'danger', message: "Failed to read config. " + error, lifetime: 50});
         });
 
@@ -340,7 +341,7 @@
         return func();
       } catch (e: any) {
         // log message, fileName, lineNumber
-        console.log("Exception in Websocket handler: ", e);
+        console.error("Exception in Websocket handler: ", e);
         console.log(e.stack);
         acts.add({mode: 'danger', message: 'Client error: ' + e, lifetime: 5});
       }
@@ -386,7 +387,7 @@
             break;
 
           case 'error':
-            console.log("[SERVER ERROR]: " + JSON.stringify(data));
+            console.error("[SERVER ERROR]: ", data);
             acts.add({mode: 'danger', message: data.msg, lifetime: 5});
             break;
 
@@ -398,7 +399,7 @@
 
           case 'define_actions':
             log_abbreviated("[SERVER] define_actions: " + JSON.stringify(data));
-            $server_defined_actions = Proto3.ClientDefineActionsRequest.fromJSON(data);
+            $server_defined_actions = Proto3.ClientDefineActionsRequest.fromJSON(data).actions;
             break;
 
           case 'message':
@@ -415,7 +416,7 @@
             else {
               $user_messages = $user_messages.filter((m) => m.id != data.id);
               if (data.created) { $user_messages.push(data); }
-              $user_messages = $user_messages.sort((a, b) => a.id > b.id ? -1 : a.id < b.id ? 1 : 0);
+              $user_messages = $user_messages.sort((a, b) => a.id! > b.id! ? -1 : a.id! < b.id! ? 1 : 0);
               if (!data.seen) {
                 const severity = (data.event_name == 'error') ? 'danger' : 'info';
                 acts.add({mode: severity, message: data.message, lifetime: 5});
@@ -427,57 +428,66 @@
 
           case 'open_video':
             log_abbreviated("[SERVER] open_video: " + JSON.stringify(data));
-            $video_url = data.video_url;
-            $video_hash = data.video_hash;
-            $video_fps = data.fps;
-            $video_title = data.title;
-            $all_comments = [];
-            if ($collab_id)
-              ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
-            else
-              history.pushState($video_hash, null, '/?vid='+$video_hash);  // Point URL to video
+            let v = Proto3.Video.fromJSON(data);
+            try
+            {
+              if (!v.playbackUrl) throw Error("No playback URL");
+              if (!v.duration) throw Error("No duration");
+              if (!v.title) throw Error("No title");
+
+              $video_url = v.playbackUrl;
+              $video_hash = v.videoHash;
+              $video_fps = parseFloat(v.duration.fps);
+              if (isNaN($video_fps)) throw Error("Invalid FPS");
+              $video_title = v.title;
+              $all_comments = [];
+
+              if ($collab_id)
+                ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
+              else
+                history.pushState($video_hash, '', '/?vid='+$video_hash);  // Point URL to video
+            } catch(error) {
+              acts.add({mode: 'danger', message: 'Bad video open request. See log.', lifetime: 5});
+              console.error("Invalid video open request. Error: ", error, "Data: ", data);
+            }
             break;
 
           case 'new_comment':
             log_abbreviated("[SERVER] new_comment: " + JSON.stringify(data));
             {
-              function reorder_comments(old_order: any[]) {
+              let new_comment = Proto3.Comment.fromJSON(data);
+
+              function reorder_comments(old_order: IndentedComment[])
+              {
                 // Helper to show comment threads in the right order and with correct indentation
-                let old_sorted = old_order.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
-                let new_order = [];
-                function find_insert_position_and_indent(parent_id: number)
+                let old_sorted = old_order.sort((a, b) => a.comment.id < b.comment.id ? -1 : a.comment.id > b.comment.id ? 1 : 0)
+                let new_order: IndentedComment[] = [];
+                function find_insert_position_and_indent(parent_id: string|undefined)
                 {
                   if (parent_id) {
                     for (let i=new_order.length-1; i>=0; i--) {
-                      if (new_order[i].id == parent_id)
+                      if (new_order[i].comment.id == parent_id)
                         return [i, new_order[i].indent+1] as const;
-                      if (new_order[i].parent_id == parent_id)
+                      if (new_order[i].comment.parentId == parent_id)
                         return [i, new_order[i].indent] as const;
                     }}
                   return [new_order.length-1, 0] as const;
                 }
-                old_sorted.forEach((comment) => {
-                  let [pos, indent] = find_insert_position_and_indent(comment.parent_id);
-                  new_order.splice(pos+1, 0, {...comment, indent: indent});
+                old_sorted.forEach((c) => {
+                  let [pos, indent] = find_insert_position_and_indent(c.comment.parentId);
+                  new_order.splice(pos+1, 0, {comment: c.comment, indent: indent} as IndentedComment);
                 });
                 return new_order;
               }
 
-              //console.log("[SERVER] new_comment id=" + data.comment_id + " parent_id=" + data.parent_id + " tc=" + data.timecode + " comment=" + data.comment);
-              if (data.video_hash == $video_hash)
+              if (new_comment.videoHash == $video_hash)
               {
                 $all_comments.push({
-                    id: data.comment_id,
-                    comment: data.comment,
-                    username: data.username,
-                    user_id: data.user_id,
-                    drawing_data: data.drawing,
-                    parent_id: data.parent_id,
-                    edited: data.edited,
-                    indent: 0,
-                    timecode: data.timecode
-                  });
+                  comment: new_comment,
+                  indent: 0
+                });
                 $all_comments = reorder_comments($all_comments);
+      console.log("all_comments: ", $all_comments);
               } else {
                 log_abbreviated("Comment not for this video. Ignoring.");
               }
@@ -485,8 +495,7 @@
             break;
 
           case 'del_comment':
-            //log_abbreviated("[SERVER] del_comment: " + data.comment_id);
-            $all_comments = $all_comments.filter((c) => c.id != data.comment_id);
+            $all_comments = $all_comments.filter((c) => c.comment.id != data.id);
             break;
 
           case 'collab_cmd':
@@ -503,7 +512,7 @@
             break;
 
           default:
-            console.log("[SERVER] UNKNOWN CMD '"+data.cmd+"'", data);
+            console.error("[SERVER] UNKNOWN CMD '"+data.cmd+"'", data);
             break;
         }
       });
@@ -527,17 +536,15 @@
   }
 
   function onMoveItemsToFolder(_e: {detail: {folder_id: any; items: any[]}}) {
-    console.log("NOT IMPLEMENTED! onMoveItemsToFolder: " + _e.detail.folder_id, "items:", _e.detail.items);
+    console.error("NOT IMPLEMENTED! onMoveItemsToFolder: " + _e.detail.folder_id, "items:", _e.detail.items);
   }
 
   function onReorderItems(e: any) {
-    console.log("NOT IMPLEMENTED! onReorderItems: ", e.detail);
+    console.error("NOT IMPLEMENTED! onReorderItems: ", e.detail);
   }
 
-  function openVideoListItem(e: { detail: VideoListDefItem}): void {
-    console.log("openVideoListItem: ", e );
-    let it: Proto3.PageItem_FolderListing_Item = e.detail;
-    console.log("item = ", it);
+  function openVideoListItem(e: { detail: Proto3.PageItem_FolderListing_Item}): void {
+    let it = e.detail;
     if (it.openAction) {
       if ( it.openAction.lang == Proto3.ScriptCall_Lang.JAVASCRIPT )
         callOrganizerScript(it.openAction.code, [it]);
@@ -554,30 +561,36 @@
   // ------------
 
   /// Execute a script from Organizer (or server, if Organizer is not connected)
-  function callOrganizerScript(code: string, items: any[]): void {
+  function callOrganizerScript(code: string|undefined, items: any[]): void {
+    if (!code) {
+      console.log("callOrganizerScript called with empty code. Ignoring.");
+      return;
+    }
     async function call_server(cmd: string, args: Object): Promise<void> { ws_emit(cmd, args); }
     async function call_organizer(cmd: string, args: Object): Promise<void> { ws_emit("organizer", {cmd, args}); }
     async function alert(msg: string): Promise<void> { window.alert(msg); }
-    async function prompt(msg: string, default_value: string): Promise<string> { return window.prompt(msg, default_value); }
+    async function prompt(msg: string, default_value: string): Promise<string|null> { return window.prompt(msg, default_value); }
     async function confirm(msg: string): Promise<boolean> { return window.confirm(msg); }
 
     const AsyncFunction = async function () {}.constructor;
+    // @ts-ignore
     let script_fn = new AsyncFunction("call_server", "call_organizer", "alert", "prompt", "confirm", "items", code);
 
     console.log("Calling organizer script. Code = ", code, "items=", items);
 
     script_fn(call_server, call_organizer, alert, prompt, confirm, items)
-      .catch((e) => {
+      .catch((e: any) => {
         console.error("Error in organizer script:", e);
         acts.add({mode: 'error', message: "Organizer script error. See log.", lifetime: 5});
     });
   }
 
-  function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: VideoListDefItem[] }}) {
+  function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: VideoListDefItem[] }})
+  {
     let {action, items} = e.detail;
     let items_objs = items.map((it) => it.obj);
     console.log("onVideoListPopupAction: ", action, items_objs);
-    callOrganizerScript(action.action.code, items_objs);
+    callOrganizerScript(action.action?.code, items_objs);
   }
 
 // ------------
@@ -627,8 +640,14 @@
             {#if $all_comments.length > 0}
             <!-- ========== comment sidepanel ============= -->
             <div id="comment_list" transition:fade class="flex-none w-72 basis-128 bg-gray-900 py-2 px-2 space-y-2 ml-2 overflow-y-auto">
-                {#each $all_comments as item}
-                  <CommentCard {...item} on:display-comment={onDisplayComment} on:delete-comment={onDeleteComment} on:reply-to-comment={onReplyComment} on:edit-comment={onEditComment}/>
+                {#each $all_comments as it}
+                  <CommentCard
+                    indent={it.indent}
+                    comment={it.comment}
+                    on:display-comment={onDisplayComment}
+                    on:delete-comment={onDeleteComment}
+                    on:reply-to-comment={onReplyComment}
+                    on:edit-comment={onEditComment}/>
                 {/each}
             </div>
             {/if}
@@ -659,7 +678,7 @@
               {:else if item.folderListing}
                 <div class="my-6">
                   <VideoList items={item.folderListing.items.map((it)=>({
-                      id: (it.video?.videoHash || it.folder?.id),
+                      id: (it.video?.videoHash ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
                       obj: it }))}
                     on:open-item={openVideoListItem}
                     on:reorder-items={onReorderItems}

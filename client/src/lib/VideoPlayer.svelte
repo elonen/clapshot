@@ -5,6 +5,7 @@
   import {create as sdb_create} from "simple-drawing-board";
   import {onMount} from 'svelte';
   import {scale} from "svelte/transition";
+  import type * as Proto3 from '../../../protobuf/libs/typescript';
 
   import {all_comments, video_is_ready, video_fps, collab_id} from '../stores';
 
@@ -25,14 +26,18 @@
 
   let debug_layout: boolean = false; // Set to true to show CSS layout boxes
 
-  let commentsWithTc = [];  // Will be populated by the store once video is ready (=frame rate is known)
-  
+  let commentsWithTc: Proto3.Comment[] = [];  // Will be populated by the store once video is ready (=frame rate is known)
+
+
   function refreshCommentPins(): void {
     // Make pins for all comments with timecode
     commentsWithTc = [];
     all_comments.subscribe(comments => {
-      for (let c of comments) { if (c.timecode) { commentsWithTc.push(c); } }
-      commentsWithTc = commentsWithTc.sort((a, b) => a.timecode - b.timecode);
+      for (let c of comments) { if (c.comment.timecode) { commentsWithTc.push(c.comment); } }
+      commentsWithTc = commentsWithTc.sort((a, b) => {
+        if (!a.timecode || !b.timecode) { return 0; }
+        return a.timecode.localeCompare(b.timecode);  // Sort by SMPTE timecode = sort by string
+      });
     });
   }
 
@@ -98,12 +103,13 @@
 	});
 
 
-	function handleMove(e: any) {
+  function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) {
+    if (!target) throw new Error("progress bar missing");
 		if (!duration) return; // video not loaded yet
-		if (e.type !== 'touchmove' && !(e.buttons & 1)) return; // mouse not down
+		if (e instanceof MouseEvent && !(e.buttons & 1)) return; // mouse not down
     video_elem.pause();
-		const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
-		const { left, right } = this.getBoundingClientRect();
+		const clientX = e instanceof TouchEvent ? e.touches[0].clientX : e.clientX;
+		const { left, right } = (target as HTMLProgressElement).getBoundingClientRect();
 		time = duration * (clientX - left) / (right - left);
     video_elem.currentTime = time;
     seekSideEffects();
@@ -157,7 +163,9 @@
   }
 
   export function getCurFrame() {
-    return Math.floor(time * vframe_calc.fps);
+    let fps = vframe_calc.fps ?? NaN;
+    if (isNaN(fps)) console.error("getCurFrame(): VideoFrame not initialized or invalid fps");
+    return Math.floor(time * fps);
   }
 
 
@@ -175,14 +183,14 @@
 
   const INTERACTIVE_ELEMS = ['input', 'textarea', 'select', 'option', 'button'];
   const INTERACTIVE_ROLES = ['textbox', 'combobox', 'listbox', 'menu', 'menubar', 'grid', 'dialog', 'alertdialog'];
-  const WINDOW_KEY_ACTIONS = {
-      ' ': togglePlay,
+  const WINDOW_KEY_ACTIONS: {[key: string]: (e: KeyboardEvent)=>any} = {
+      ' ':  () => togglePlay(),
       'ArrowLeft': () => step_video(-1),
       'ArrowRight': () => step_video(1),
       'ArrowUp': () => step_video(1),
       'ArrowDown': () => step_video(-1),
-      'z': (e: KeyboardEvent) => { if (e.ctrlKey) onDrawUndo(); },
-      'y': (e: KeyboardEvent) => { if (e.ctrlKey) onDrawRedo(); },
+      'z': (e) => { if (e.ctrlKey) onDrawUndo(); },
+      'y': (e) => { if (e.ctrlKey) onDrawRedo(); },
     };
 
   function onWindowKeyPress(e: KeyboardEvent): void {
@@ -193,7 +201,7 @@
       return;
 
     if (INTERACTIVE_ELEMS.includes(target.tagName.toLowerCase()) ||
-        INTERACTIVE_ROLES.includes(target.getAttribute('role')))
+        INTERACTIVE_ROLES.includes(target.getAttribute('role') ?? '-'))
       return;
 
     if (e.key in WINDOW_KEY_ACTIONS) {
@@ -208,15 +216,21 @@
     dispatch('seeked', {});
   }
 
-  export function seekTo(value: string, fmt: string) {
-    // fmt should be either "SMPTE" or "frame"
+  export function seekToSMPTE(smpte: string) {
     try {
       seekSideEffects();
-      let ops = new Object();
-      ops[fmt] = value;
-      vframe_calc.seekTo(ops);
+      vframe_calc.seekToSMPTE(smpte);
     } catch(err) {
-      acts.add({mode: 'warning', message: `Seek failed to: ${fmt} ${value}`, lifetime: 3});
+      acts.add({mode: 'warning', message: `Seek failed to: ${smpte}`, lifetime: 3});
+    }
+  }
+
+  export function seekToFrame(frame: number) {
+    try {
+      seekSideEffects();
+      vframe_calc.seekToFrame(frame);
+    } catch(err) {
+      acts.add({mode: 'warning', message: `Seek failed to: ${frame}`, lifetime: 3});
     }
   }
 
@@ -248,7 +262,7 @@
   export function onColorSelect(color: string) {
     setPenColor(color);
   }
-  
+
   export function onDrawUndo() {
     draw_board?.undo();
   }
@@ -264,6 +278,7 @@
       comb.width  = video_elem.videoWidth;
       comb.height = video_elem.videoHeight;
       var ctx = comb.getContext('2d');
+      if (!ctx) throw new Error("Cannot get canvas context");
       // ctx.drawImage(video_elem, 0, 0);   // Removed, as bgr frame capture is now done when draw mode is entered
       ctx.drawImage(draw_canvas, 0, 0);
       return comb.toDataURL("image/webp", 0.8);
@@ -299,17 +314,22 @@
     }
   }
 
-  function tcToDurationFract(timecode: string) {
+  function tcToDurationFract(timecode: string|undefined) {
     /// Convert SMPTE timecode to a fraction of the video duration (0-1)
+    if (timecode === undefined) { throw new Error("Timecode is undefined"); }
     if (!vframe_calc) { return 0; }
     let pos = vframe_calc.toMilliseconds(timecode)/1000.0;
     return pos / duration;
   }
 
   // Input element event handlers
+  function onTimecodeEdited(e: Event) {
+    seekToSMPTE((e.target as HTMLInputElement).value);
+    send_collab_report();
+  }
 
-  function onPosEdited(e: Event, fmt: string) {
-    seekTo((e.target as HTMLInputElement).value, fmt);
+  function onFrameEdited(e: Event) {
+    seekToFrame(parseInt((e.target as HTMLInputElement).value));
     send_collab_report();
   }
 
@@ -344,20 +364,20 @@
 
     </div>
   </div>
-  
+
 	<div class="flex-none {debug_layout?'border-2 border-red-600':''}">
 
     <div class="flex-1 space-y-0 leading-none">
       <progress value="{(time / duration) || 0}"
         class="w-full h-[2em] hover:cursor-pointer"
-        on:mousedown|preventDefault={handleMove}
-        on:mousemove={handleMove}
-        on:touchmove|preventDefault={handleMove}
+        on:mousedown|preventDefault={(e)=>handleMove(e, e.target)}
+        on:mousemove={(e)=>handleMove(e, e.target)}
+        on:touchmove|preventDefault={(e)=>handleMove(e, e.target)}
       />
       {#each commentsWithTc as item}
         <CommentTimelinePin
           id={item.id}
-          username={item.username}
+          username={item.user?.displayname || item.user?.username || '?'}
           comment={item.comment}
           x_loc={tcToDurationFract(item.timecode)}
           on:click={(_e) => { dispatch('commentPinClicked', {id: item.id});}}
@@ -367,7 +387,7 @@
 
     <!-- playback controls -->
 		<div class="flex p-1">
-			
+
       <!-- Play/Pause -->
 			<span class="flex-1 text-left ml-8 space-x-3 text-l whitespace-nowrap">
         <button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
@@ -376,12 +396,12 @@
 
         <!-- Timecode -->
         <span class="flex-0 mx-4 text-sm font-mono">
-          <input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => onPosEdited(e, 'SMPTE')}/>
-          FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => onPosEdited(e, 'frame')}/>
+          <input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => onTimecodeEdited(e)}/>
+          FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => onFrameEdited(e)}/>
         </span>
 
       </span>
- 
+
       <!-- Audio volume -->
       <span class="flex-0 text-center whitespace-nowrap">
         <button
@@ -395,14 +415,14 @@
 			<span class="flex-0 text-lg mx-4">{format_tc(duration)}</span>
 		</div>
 	</div>
-  
+
 </div>
 
 <svelte:window on:keydown={onWindowKeyPress} />
 
 <style>
   @import '@fortawesome/fontawesome-free/css/all.min.css';
-  
+
   button:disabled {
     opacity: 0.3;
   }

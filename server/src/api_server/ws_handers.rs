@@ -243,9 +243,15 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, se
         }
     };
 
+    let parent_id = match data["parent_id"].as_str().map(|s| s.parse::<i32>()) {
+        Some(Ok(id)) => Some(id),
+        Some(Err(_)) => { bail!("Invalid parent_id for comment"); }
+        None => None,
+    };
+
     let c = models::CommentInsert {
         video_hash: vh.to_string(),
-        parent_id: data["parent_id"].as_i64().map(|x| x as i32),
+        parent_id,
         user_id: ses.user_id.clone(),
         username: ses.user_name.clone(),
         comment: data["comment"].as_str().ok_or(anyhow!("comment missing"))?.to_string(),

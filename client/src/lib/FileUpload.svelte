@@ -3,8 +3,8 @@
 
     let drag_active: boolean = false;
     let files = {
-        accepted: [],
-        rejected: []
+        accepted: [] as File[],
+        rejected: [] as File[]
     };
 
     export let post_url: string;
@@ -12,7 +12,7 @@
     let progress_bar: HTMLProgressElement;
     let status_txt: string = "";
     let uploading_now: boolean = false;
-    let form: HTMLFormElement = null;
+    let form: HTMLFormElement;
 
     function afterUpload()
     {
@@ -86,9 +86,10 @@
     <div class="w-full h-full" class:display-none={uploading_now} >
         <Dropzone
             accept={['video/*']}
-            disableDefaultStyles="true"
+            disableDefaultStyles={true}
             containerClasses="custom-dropzone {drag_active ? 'drag-active' : ''}"
             containerStyles = "borderColor: '#fff', color: '#90cdf4'"
+            inputElement = {undefined}
             on:dragenter={ () => { drag_active = true; }}
             on:dragleave={ () => { drag_active = false; }}
             on:drop={onDropFiles}

@@ -1,22 +1,22 @@
 <script lang="ts">
-    import { createEventDispatcher } from 'svelte';
-    import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
-    import { dndzone, TRIGGERS, SOURCES } from 'svelte-dnd-action';
-    import { selected_tiles } from '../../stores';
-    import type * as Proto3 from '../../../../protobuf/libs/typescript';
 
-    export let id: any = {};
-    export let name: string = "";
-    export let preview_items: Proto3.PageItem_FolderListing_Item[] = [];
+import { createEventDispatcher } from 'svelte';
+import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
+import { dndzone, TRIGGERS, SOURCES } from 'svelte-dnd-action';
+import { selected_tiles } from '../../stores';
+import type * as Proto3 from '../../../../protobuf/libs/typescript';
 
-    const dispatch = createEventDispatcher();
+export let id: any = {};
+export let name: string = "";
+export let preview_items: Proto3.PageItem_FolderListing_Item[] = [];
 
-    function contentPreviewItems(data: any[]): Proto3.PageItem_FolderListing_Item[] {
-        let items = data.filter(it=>("video" in it)) as Proto3.PageItem_FolderListing_Item[];
-        if (items.length > 4) { items = items.slice(0,4); }
-        return items;
-    }
+const dispatch = createEventDispatcher();
 
+function contentPreviewItems(data: any[]): Proto3.PageItem_FolderListing_Item[] {
+    let items = data.filter(it=>("video" in it)) as Proto3.PageItem_FolderListing_Item[];
+    if (items.length > 4) { items = items.slice(0,4); }
+    return items;
+}
 
 // This only holds a DnD item temporarily during keyboard DnD, and shadow items
 // when reordering by pointer.
@@ -64,36 +64,36 @@ function finalize(e: any) {
     style="position: relative;"
     class:draggingOver={dnd_items.length>0} >
 
-<div class="w-full h-full video-list-folder"
-    use:dndzone="{{items: dnd_items, morphDisabled: true, dragDisabled: true, zoneTabIndex: -1, centreDraggedOnCursor: true}}"
-    on:consider={consider}
-    on:finalize={finalize}
->
-{#each dnd_items as _item, _i}<span/>{/each}
-</div>
-
-<div class="w-[85%] h-[85%] flex flex-col folder-deco">
-    <div class="w-full flex-shrink whitespace-nowrap overflow-hidden text-xs mt-2 mb-1.5">
-        <span class="text-slate-400 text-xs font-semibold my-1">{name}</span>
+    <div class="w-full h-full video-list-folder"
+        use:dndzone="{{items: dnd_items, morphDisabled: true, dragDisabled: true, zoneTabIndex: -1, centreDraggedOnCursor: true}}"
+        on:consider={consider}
+        on:finalize={finalize}
+    >
+    {#each dnd_items as _item, _i}<span/>{/each}
     </div>
-    <div class="flex-1 bg-[#0002] p-0.5 rounded-md shadow-inner overflow-clip leading-none text-[0px]">
-        <div class="grid grid-cols-2 gap-1">
-        {#each contentPreviewItems(preview_items) as prev, _i}
-            {#if prev.video.previewData?.thumbUrl }
-                <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md">
-                <ScrubbableVideoThumb
-                    extra_styles="border-radius: 0rem; height: 100%; width: auto; transform: translate(-50%, -50%); left: 50%; top: 50%; position: absolute; filter: opacity(66%);"
-                    thumb_poster_url={prev.video.previewData?.thumbUrl}
-                    thumb_sheet_url={prev.video.previewData?.thumbSheet?.url}
-                    thumb_sheet_rows={prev.video.previewData?.thumbSheet?.rows}
-                    thumb_sheet_cols={prev.video.previewData?.thumbSheet?.cols}
-                />
-                </div>
-            {/if}
-        {/each}
+
+    <div class="w-[85%] h-[85%] flex flex-col folder-deco">
+        <div class="w-full flex-shrink whitespace-nowrap overflow-hidden text-xs mt-2 mb-1.5">
+            <span class="text-slate-400 text-xs font-semibold my-1">{name}</span>
+        </div>
+        <div class="flex-1 bg-[#0002] p-0.5 rounded-md shadow-inner overflow-clip leading-none text-[0px]">
+            <div class="grid grid-cols-2 gap-1">
+            {#each contentPreviewItems(preview_items) as prev, _i}
+                {#if prev.video?.previewData?.thumbUrl }
+                    <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md">
+                    <ScrubbableVideoThumb
+                        extra_styles="border-radius: 0rem; height: 100%; width: auto; transform: translate(-50%, -50%); left: 50%; top: 50%; position: absolute; filter: opacity(66%);"
+                        thumb_poster_url={prev.video.previewData?.thumbUrl}
+                        thumb_sheet_url={prev.video.previewData?.thumbSheet?.url}
+                        thumb_sheet_rows={prev.video.previewData?.thumbSheet?.rows}
+                        thumb_sheet_cols={prev.video.previewData?.thumbSheet?.cols}
+                    />
+                    </div>
+                {/if}
+            {/each}
+            </div>
         </div>
     </div>
-</div>
 
 </div>
 
@@ -115,7 +115,6 @@ function finalize(e: any) {
                 inset 0px 12px 2px 0px rgba(0, 0, 0, 0.2);
     padding-top: 1.5em;
     border-radius: 0.375rem;
-
 }
 
 :global(.selectedTile .video-list-folder) {
@@ -125,4 +124,4 @@ function finalize(e: any) {
 :global(.activeDropTarget) .video-list-folder {
     filter: brightness(1.2);
 }
- </style>
+</style>
