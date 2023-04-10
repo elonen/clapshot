@@ -278,6 +278,8 @@ message Video {
     optional google.protobuf.Timestamp added_time = 5;
     optional VideoPreviewData preview_data = 6;
     optional VideoProcessingMetadata processing_metadata = 7;
+
+    optional string playback_url = 100;  // e.g. "https://example.com/video.mp4"
 }
 
 message VideoDuration {
@@ -330,14 +332,18 @@ message UserMessage {
     }
     message Refs {
         optional string video_hash = 1;
-        optional int32 comment_id = 2;
+        optional string comment_id = 2;
     }
 
-    Type type = 2;
-    Refs refs = 3;  // Objects referenced by this message
-    string message = 4;
-    optional string details = 5;
+    optional string id = 1;
+    optional google.protobuf.Timestamp created = 3;
+    bool seen = 4;
+    Type type = 5;
+    Refs refs = 6;  // Objects referenced by this message
+    string message = 7;
+    optional string details = 8;
 }
+
 
 // ---------------------------------------------------------
 // Organizer page items

@@ -16,14 +16,14 @@ pub enum Topic<'a> {
 
 #[macro_export]
 macro_rules! send_user_msg(
-    ($event_name:expr, $ses:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => {
+    ($msg_type:expr, $ses:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => {
         let (comment_id, video_hash) = match $topic {
             Topic::Video(video_hash) => (None, Some(video_hash.into())),
             Topic::Comment(comment_id) => (Some(comment_id.into()), None),
             Topic::None => (None, None)
         };
         $server.push_notify_message(&models::MessageInsert {
-            event_name: $event_name.into(),
+            event_name: crate::database::models::proto_msg_type_to_event_name($msg_type).to_string(),
             user_id: $ses.user_id.clone(),
             ref_comment_id: comment_id,
             seen: false,
@@ -42,14 +42,14 @@ macro_rules! send_user_msg(
 
 #[macro_export]
 macro_rules! send_user_error(
-    ($ses:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => { crate::send_user_msg!("error", $ses, $server, $topic, $msg, $details, $persist); };
+    ($ses:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => { crate::send_user_msg!(proto::user_message::Type::Error, $ses, $server, $topic, $msg, $details, $persist); };
     ($ses:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => { send_user_error!($ses, $server, $topic, $msg, String::new(), $persist); };
     ($ses:expr, $server:expr, $topic:expr, $msg:expr) => { send_user_error!($ses, $server, $topic, $msg, String::new(), false); };
 );
 
 #[macro_export]
 macro_rules! send_user_ok(
-    ($ses:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => { crate::send_user_msg!("ok", $ses, $server, $topic, $msg, $details, $persist); };
+    ($ses:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => { crate::send_user_msg!(proto::user_message::Type::Ok, $ses, $server, $topic, $msg, $details, $persist); };
     ($ses:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => { send_user_ok!($ses, $server, $topic, $msg, String::new(), $persist); };
     ($ses:expr, $server:expr, $topic:expr, $msg:expr) => { send_user_ok!($ses, $server, $topic, $msg, String::new(), false); };
 );

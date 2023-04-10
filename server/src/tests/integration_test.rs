@@ -16,11 +16,12 @@ mod integration_test
     use crossbeam_channel;
     use crossbeam_channel::{Receiver, RecvTimeoutError, unbounded, select};
 
+    use crate::api_server::tests::expect_user_msg;
     use crate::database::schema::videos::thumb_sheet_dims;
     use crate::video_pipeline::{metadata_reader, IncomingFile};
     use crate::api_server::test_utils::{connect_client_ws, expect_cmd_data, open_video, write};
-    use lib_clapshot_grpc::GrpcBindAddr;
-    
+    use lib_clapshot_grpc::{GrpcBindAddr, proto};
+
     use tracing;
     use tracing::{error, info, warn, instrument};
     use tracing_test::traced_test;
@@ -76,7 +77,7 @@ mod integration_test
             {
                 let $data_dir = assert_fs::TempDir::new().unwrap();
                 let $incoming_dir = $data_dir.join("incoming");
-        
+
                 // Run server
                 let port = 10000 + (rand::random::<u16>() % 10000);
                 let url_base = format!("http://127.0.0.1:{}", port);
@@ -94,7 +95,7 @@ mod integration_test
 
                 let resp = reqwest::blocking::get(&format!("{}/api/health", &url_base)).unwrap();
                 assert_eq!(resp.status(), 200);
-        
+
                 tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
                     // Connect client
                     let cur_process_user = whoami::username();
@@ -120,27 +121,36 @@ mod integration_test
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
             let (cmd, data) = expect_cmd_data(&mut ws).await;
-            assert_eq!(cmd, "message");
-            let vh = data["ref_video_hash"].as_str().unwrap();
+            let msg = expect_user_msg(&data, proto::user_message::Type::Ok);
+            let vh = msg.refs.unwrap().video_hash.unwrap();
 
             // Open video from server and check metadata
-            let (cmd, data) = open_video(&mut ws, vh).await;
-            assert_eq!(data["orig_filename"].as_str().unwrap(), mp4_file);
+            let (cmd, data) = open_video(&mut ws, &vh).await;
+            let vid = serde_json::from_value::<proto::Video>(data).unwrap();
+
+            assert_eq!(vid.processing_metadata.unwrap().orig_filename.as_str(), mp4_file);
 
             // Double slashes in the path are an error (empty path component)
-            let video_url = data.get("video_url").unwrap().as_str().unwrap();
+            let video_url = vid.playback_url.unwrap();
             let after_https = video_url.split("://").nth(1).unwrap();
             assert!(!after_https.contains("//"));
 
             // Check that video was moved to videos dir and symlinked
-            assert!(data_dir.path().join("videos").join(vh).join("orig").join(mp4_file).is_file());
+            assert!(data_dir.path().join("videos").join(&vh).join("orig").join(mp4_file).is_file());
             assert!(!incoming_dir.join(mp4_file).exists());
 
             // Add a comment
             let msg = serde_json::json!({"cmd": "add_comment", "data": { "video_hash": vh, "comment": "Test comment"}});
             write(&mut ws, &msg.to_string()).await;
-            let (cmd, data) = expect_cmd_data(&mut ws).await;
-            assert_eq!(cmd, "new_comment");
+            let mut got_new_comment = false;
+            for _ in 0..3 {
+                let (cmd, data) = expect_cmd_data(&mut ws).await;
+                if cmd == "new_comment" {
+                    got_new_comment = true;
+                    break;
+                }
+            }
+            assert!(got_new_comment);
         }
         Ok(())
     }
@@ -149,7 +159,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_corrupted_video() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, 500_000] 
+        cs_main_test! {[ws, data_dir, incoming_dir, 500_000]
             // Copy test file to incoming dir
             let f = incoming_dir.join("garbage.mp4");
             std::fs::File::create(&f).unwrap().set_len(123000).unwrap();
@@ -160,7 +170,7 @@ mod integration_test
             // Expect error
             let (cmd, data) = expect_cmd_data(&mut ws).await;
             assert_eq!(cmd, "message");
-            assert_eq!(data["event_name"].as_str().unwrap(), "error");
+            assert_eq!(data["type"].as_str().unwrap(), "ERROR");
             assert!(data["details"].as_str().unwrap().contains("garbage.mp4"));
 
             // Make sure video was moved to rejected dir
@@ -174,7 +184,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_and_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, 500_000] 
+        cs_main_test! {[ws, data_dir, incoming_dir, 500_000]
             // Copy test file to incoming dir
             let mov_file = "NASA_Red_Lettuce_excerpt.mov";
             let dangerous_name = "  -fake-arg name; \"and some more'.txt 你 .mov";
@@ -184,12 +194,11 @@ mod integration_test
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
             let (cmd, data) = expect_cmd_data(&mut ws).await;
-            assert_eq!(cmd, "message");
-            let vh = data["ref_video_hash"].as_str().unwrap();
+            let msg = expect_user_msg(&data, proto::user_message::Type::Ok);
+            let vh = msg.refs.unwrap().video_hash.unwrap();
 
             // Check that it's being transcoded
-            assert!(data["details"].as_str().unwrap().to_ascii_lowercase().contains("ranscod"));
-            let vh = data["ref_video_hash"].as_str().unwrap();
+            assert!(msg.details.unwrap().to_ascii_lowercase().contains("ranscod"));
             assert!(vh.len() > 0);
 
             // Wait until transcoding is done
@@ -201,7 +210,7 @@ mod integration_test
             'waitloop: for _ in 0..(120*5) {
                 write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
                 let (cmd, data) = expect_cmd_data(&mut ws).await;
-                if cmd == "message" && data["event_name"].as_str().unwrap() == "progress" {
+                if cmd == "message" && data.get("type").map(|s| s.as_str().unwrap()) == Some("PROGRESS") {
                     got_progress_report = true;
                 }
                 if cmd == "show_page" {

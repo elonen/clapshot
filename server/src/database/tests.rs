@@ -1,5 +1,5 @@
 use tracing_test::traced_test;
-use crate::database::*;
+use crate::{database::*, grpc::db_message_to_proto3};
 
 
 
@@ -232,7 +232,11 @@ fn test_user_messages() -> anyhow::Result<()> {
         let new_msg = db.add_message(&msgs[i])?;
         assert_eq!(new_msg.user_id, msgs[i].user_id);
         assert_eq!(new_msg.message, msgs[i].message);
-        assert_eq!(db.get_message(new_msg.id)?.to_json()?, new_msg.to_json()?);
+
+        let a = serde_json::to_value(db_message_to_proto3(&db.get_message(new_msg.id)?))?;
+        let b = serde_json::to_value(db_message_to_proto3(&new_msg))?;
+        assert_eq!(a,b);
+
         assert!(!db.get_message(new_msg.id)?.seen);
         new_msgs.push(new_msg);
     }

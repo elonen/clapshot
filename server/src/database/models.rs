@@ -1,4 +1,5 @@
 use diesel::{prelude::*, QueryId};
+use lib_clapshot_grpc::proto;
 use serde::{Deserialize, Serialize};
 use super::schema::*;
 use chrono;
@@ -115,28 +116,10 @@ pub fn humanize_utc_timestamp(timestamp: &chrono::NaiveDateTime) -> String {
     time_ago_str
 }
 
-pub fn to_json<T: serde::Serialize>(t: &T) -> Result<serde_json::Value, serde_json::Error> {
-    serde_json::to_value(&t)
-}
-
-impl Video {
-    pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
-        to_json(&self).map(|mut v| {
-            v["added_time"] = serde_json::Value::String(humanize_utc_timestamp(&self.added_time));
-            v
-        })
+pub fn proto_msg_type_to_event_name(t: proto::user_message::Type) -> &'static str {
+    match t {
+        proto::user_message::Type::Ok => "ok",
+        proto::user_message::Type::Error => "error",
+        proto::user_message::Type::Progress => "progress",
     }
 }
-
-impl VideoInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
-impl Comment { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
-impl CommentInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }
-
-impl Message { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> {
-    to_json(&self).map(|mut v| {
-        v["created"] = serde_json::Value::String(humanize_utc_timestamp(&self.created));
-        v
-    })
-}}
-
-impl MessageInsert { pub fn to_json(&self) -> Result<serde_json::Value, serde_json::Error> { to_json(&self) } }

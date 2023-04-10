@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use lib_clapshot_grpc::proto;
 use tracing_test::traced_test;
 use std::sync::atomic::Ordering::Relaxed;
 use rand;
@@ -11,7 +12,7 @@ use reqwest::{multipart, Client};
 use crate::database::error::DBError;
 use crate::api_server::{UserMessage, UserMessageTopic, run_api_server_async};
 use crate::api_server::server_state::ServerState;
-use crate::database::models;
+use crate::database::models::{self, proto_msg_type_to_event_name};
 use crate::database::tests::make_test_db;
 
 use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_cmd_data, expect_no_msg, write, open_video, connect_client_ws};
@@ -40,10 +41,9 @@ async fn test_api_push_msg()
             video_hash: None, topic: UserMessageTopic::Ok(), };
 
         ts.user_msg_tx.send(umsg.clone()).unwrap();
-        let (cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(cmd, "message");
-        assert_eq!(data["event_name"], "ok");
-        assert_eq!(data["details"], "test_details");
+        let (_cmd, data) = expect_cmd_data(&mut ws).await;
+        let proto_msg = expect_user_msg(&data, proto::user_message::Type::Ok);
+        assert_eq!(proto_msg.details, Some("test_details".into()));
 
         // Send to another user, user.num1 should not receive it
         umsg.user_id = Some("user.num2".into());
@@ -70,7 +70,7 @@ async fn test_api_list_user_videos()
         write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
         let (cmd, data) = expect_cmd_data(&mut ws).await;
         assert_eq!(cmd, "message");
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
     }
 }
 
@@ -86,8 +86,9 @@ async fn test_api_del_video()
             assert!(ts.db.get_video(&ts.videos[0].video_hash).is_ok());
             write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"video_hash":"{}"}}}}"#, ts.videos[0].video_hash)).await;
             let (_cmd, data) = expect_cmd_data(&mut ws).await;
-            assert_eq!(data["event_name"], "ok");
-            assert!(!data["details"].as_str().unwrap().contains("WARNING"));
+
+            let proto_msg = serde_json::from_value::<proto::UserMessage>(data).unwrap();
+            assert_eq!(proto_msg.r#type, proto::user_message::Type::Ok as i32);
 
             // Make sure the dir is gone
             assert!(matches!(ts.db.get_video(&ts.videos[0].video_hash).unwrap_err(), DBError::NotFound()));
@@ -106,20 +107,20 @@ async fn test_api_del_video()
         // Fail to delete a non-existent video
         write(&mut ws, r#"{"cmd":"del_video","data":{"video_hash":"non-existent"}}"#).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
 
         // Fail to delete someones else's video
         assert!(ts.db.get_video(&ts.videos[1].video_hash).is_ok());
         write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"video_hash":"{}"}}}}"#, ts.videos[1].video_hash)).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
         assert!(ts.db.get_video(&ts.videos[1].video_hash).is_ok());
 
         // Break the database
         ts.db.break_db();
         write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"video_hash":"{}"}}}}"#, ts.videos[2].video_hash)).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
     }
 }
 
@@ -131,14 +132,16 @@ async fn test_api_open_video()
     api_test! {[ws, ts]
         for vid in &ts.videos {
             let (_cmd, data) = open_video(&mut ws, &vid.video_hash).await;
-            assert_eq!(data["video_hash"], vid.video_hash);
-            assert_eq!(data["added_by_userid"], vid.added_by_userid.clone().unwrap());
-            assert_eq!(data["added_by_username"], vid.added_by_username.clone().unwrap());
-            assert_eq!(data["orig_filename"], vid.orig_filename.clone().unwrap());
-            assert_eq!(data["title"], vid.orig_filename.clone().unwrap());
 
-            // Double slashes in the path are an error (empty path component)
-            let video_url = data.get("video_url").unwrap().as_str().unwrap();
+            let proto_v = serde_json::from_value::<proto::Video>(data).unwrap();
+            assert_eq!(proto_v.video_hash, vid.video_hash);
+            assert_eq!(proto_v.added_by.clone().unwrap().username, vid.added_by_userid.clone().unwrap());
+            assert_eq!(proto_v.added_by.clone().unwrap().displayname.unwrap(), vid.added_by_username.clone().unwrap());
+            assert_eq!(proto_v.processing_metadata.unwrap().orig_filename, vid.orig_filename.clone().unwrap());
+            assert_eq!(proto_v.title.unwrap(), vid.orig_filename.clone().unwrap());
+
+            // Double slashes (=empty path component) in the path are an error
+            let video_url = proto_v.playback_url.unwrap();
             let after_https = video_url.split("://").nth(1).unwrap();
             assert!(!after_https.contains("//"));
         }
@@ -147,7 +150,7 @@ async fn test_api_open_video()
         ts.db.break_db();
         write(&mut ws, &format!(r#"{{"cmd":"open_video","data":{{"video_hash":"{}"}}}}"#, ts.videos[0].video_hash)).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        assert_eq!(data["type"], "ERROR");
     }
 }
 
@@ -158,8 +161,16 @@ async fn test_api_open_bad_video()
     api_test! {[ws, ts]
         write(&mut ws, r#"{"cmd":"open_video","data":{"video_hash":"non-existent"}}"#).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        assert_eq!(data["type"], "ERROR");
     }
+}
+
+pub fn expect_user_msg(data: &serde_json::Value, evt_type: proto::user_message::Type ) -> proto::UserMessage
+{
+    let um = serde_json::from_value::<proto::UserMessage>(data.clone()).unwrap();
+    let mtype = proto::user_message::Type::from_i32(um.r#type).unwrap();
+    assert_eq!(mtype, evt_type);
+    um
 }
 
 #[tokio::test]
@@ -173,7 +184,7 @@ async fn test_api_rename_video()
         // Rename the video (with leading/trailing whitespace that will be trimmed)
         write(&mut ws, &format!(r#"{{"cmd":"rename_video","data":{{"video_hash":"{}","new_name":"  New name  "}}}}"#, vid.video_hash)).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "ok");
+        expect_user_msg(&data, proto::user_message::Type::Ok);
 
         // Make sure the video was renamed in the DB
         let v = ts.db.get_video(&vid.video_hash).unwrap();
@@ -182,7 +193,7 @@ async fn test_api_rename_video()
         // Try to enter an invalid name
         write(&mut ws, &format!(r#"{{"cmd":"rename_video","data":{{"video_hash":"{}","new_name":" /._  "}}}}"#, vid.video_hash)).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
 
         // Make sure name wasn't changed
         let v = ts.db.get_video(&vid.video_hash).unwrap();
@@ -220,13 +231,13 @@ async fn test_api_add_plain_comment()
         // Add a comment to a nonexisting video
         write(&mut ws, r#"{"cmd":"add_comment","data":{"video_hash":"bad_hash","comment":"Test comment 3"}}"#).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
 
         // Break the database
         ts.db.break_db();
         write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_hash":"{}","comment":"Test comment 4"}}}}"#, vid.video_hash)).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
     }
 }
 
@@ -258,18 +269,18 @@ async fn test_api_edit_comment()
         // Edit nonexisting comment
         write(&mut ws, r#"{"cmd":"edit_comment","data":{"id":"1234566999","comment":"Edited comment 2"}}"#).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
 
         // Try to edit someone else's comment
         write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"id":"{}","comment":"Edited comment 3"}}}}"#, ts.comments[1].id.to_string())).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
 
         // Break the database
         ts.db.break_db();
         write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"id":"{}","comment":"Edited comment 4"}}}}"#, com.id.to_string())).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
     }
 }
 
@@ -300,19 +311,19 @@ async fn test_api_del_comment()
         // Fail to delete nonexisting comment
         write(&mut ws, r#"{"cmd":"del_comment","data":{"id":"1234566999"}}"#).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
 
         // Fail to delete user2's comment[3] (user 2)
         write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, ts.comments[3].id.to_string())).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
+        expect_user_msg(&data, proto::user_message::Type::Error);
         assert!(data["message"].as_str().unwrap().contains("ermission"));
 
         // Fail to delete comment[0] that has replies
         write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, ts.comments[0].id.to_string())).await;
         let (_cmd, data) = expect_cmd_data(&mut ws).await;
-        assert_eq!(data["event_name"], "error");
-        assert!(data["details"].as_str().unwrap().contains("repl"));
+        let msg = expect_user_msg(&data, proto::user_message::Type::Error);
+        assert!(msg.details.unwrap().contains("repl"));
 
         // Delete the last remaining reply comment[5]
         ts.db.del_comment(&ts.comments[5].id.to_string()).unwrap();  // Delete from db directly, to avoid user permission check
@@ -334,18 +345,21 @@ async fn test_api_list_my_messages()
         expect_no_msg(&mut ws).await;
 
         let msgs = [
-            models::MessageInsert { user_id: "user.num1".into(), message: "message1".into(), event_name: "info".into(), ref_video_hash: Some("HASH0".into()), ..Default::default() },
-            models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "oops".into(), ref_video_hash: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
-            models::MessageInsert { user_id: "user.num2".into(), message: "message3".into(), event_name: "info".into(), ..Default::default() },
+            models::MessageInsert { user_id: "user.num1".into(), message: "message1".into(), event_name: "ok".into(), ref_video_hash: Some("HASH0".into()), ..Default::default() },
+            models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "error".into(), ref_video_hash: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
+            models::MessageInsert { user_id: "user.num2".into(), message: "message3".into(), event_name: "ok".into(), ..Default::default() },
         ];
         let msgs = msgs.iter().map(|m| ts.db.add_message(m).unwrap()).collect::<Vec<_>>();
 
         write(&mut ws, r#"{"cmd":"list_my_messages","data":{}}"#).await;
         for m in msgs.iter().filter(|m| m.user_id == "user.num1") {
             let (cmd, data) = expect_cmd_data(&mut ws).await;
+
             assert_eq!(cmd, "message");
-            assert_eq!(data["event_name"], m.event_name);
-            assert_eq!(data["seen"], false);
+            let um = serde_json::from_value::<proto::UserMessage>(data).unwrap();
+            let mtype = proto::user_message::Type::from_i32(um.r#type).unwrap();
+            assert_eq!(proto_msg_type_to_event_name(mtype), m.event_name);
+            assert_eq!(um.seen, false);
         }
         expect_no_msg(&mut ws).await;  // No more messages
 
@@ -354,8 +368,10 @@ async fn test_api_list_my_messages()
         for m in msgs.iter().filter(|m| m.user_id == "user.num1") {
             let (cmd, data) = expect_cmd_data(&mut ws).await;
             assert_eq!(cmd, "message");
-            assert_eq!(data["event_name"], m.event_name);
-            assert_eq!(data["seen"], true);
+            let um = serde_json::from_value::<proto::UserMessage>(data).unwrap();
+            let mtype = proto::user_message::Type::from_i32(um.r#type).unwrap();
+            assert_eq!(proto_msg_type_to_event_name(mtype), m.event_name);
+            assert_eq!(um.seen, true);
         }
     }
 }

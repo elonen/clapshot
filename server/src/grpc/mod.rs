@@ -69,6 +69,17 @@ pub (crate) fn db_video_to_proto3(
             }
         ) } else { None } } else { None };
 
+    // Use transcoded or orig video?
+    let uri = match v.recompression_done {
+        Some(_) => Some("video.mp4".into()),
+        None => match &v.orig_filename {
+            Some(f) => Some(format!("orig/{}", urlencoding::encode(f))),
+            None => None
+        }};
+
+    let playback_url = uri.map(|uri|
+        format!("{}/videos/{}/{}", url_base, &v.video_hash, uri));
+
     proto::Video {
         video_hash: v.video_hash.clone(),
         title: v.title.clone(),
@@ -77,6 +88,7 @@ pub (crate) fn db_video_to_proto3(
         added_time: Some(datetime_to_proto3(&v.added_time)),
         preview_data: preview_data,
         processing_metadata: processing_metadata,
+        playback_url
     }
 }
 
@@ -107,6 +119,50 @@ pub(crate) fn db_comment_to_proto3(
         created: created_timestamp,
         edited: edited_timestamp,
         drawing: comment.drawing.clone(),
+    }
+}
+
+pub (crate) fn db_message_to_proto3(
+    msg: &crate::database::models::Message
+) -> proto::UserMessage
+{
+    proto::UserMessage {
+        id: Some(msg.id.to_string()),
+        r#type: match msg.event_name.as_str() {
+            "ok"|"info" => proto::user_message::Type::Ok,
+            "progress" => proto::user_message::Type::Progress,
+            _ => proto::user_message::Type::Error,
+        }  as i32,
+        refs:Some(proto::user_message::Refs {
+            video_hash: msg.ref_video_hash.clone(),
+            comment_id: msg.ref_comment_id.map(|id| id.to_string()),
+        }),
+        message: msg.message.clone(),
+        details: if msg.details.is_empty() { None } else { Some(msg.details.clone()) },
+        created: Some(datetime_to_proto3(&msg.created)),
+        seen: msg.seen
+    }
+}
+
+pub (crate) fn db_message_insert_to_proto3(
+    msg: &crate::database::models::MessageInsert
+) -> proto::UserMessage
+{
+    proto::UserMessage {
+        id: None,
+        created: None,
+        seen: msg.seen,
+        r#type: match msg.event_name.as_str() {
+            "error" => proto::user_message::Type::Error,
+            "progress" => proto::user_message::Type::Progress,
+            _ => proto::user_message::Type::Ok,
+        }  as i32,
+        refs:Some(proto::user_message::Refs {
+            video_hash: msg.ref_video_hash.clone(),
+            comment_id: msg.ref_comment_id.map(|id| id.to_string()),
+        }),
+        message: msg.message.clone(),
+        details: if msg.details.is_empty() { None } else { Some(msg.details.clone()) },
     }
 }
 

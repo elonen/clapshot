@@ -59,12 +59,20 @@ impl proto::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundIm
             None => return Err(Status::invalid_argument("No recipient specified")),
         };
 
+        let comment_id = match msg_in.refs.clone().and_then(|r| r.comment_id) {
+            Some(c) => match c.parse::<i32>() {
+                Ok(i) => Some(i),
+                Err(e) => return Err(Status::invalid_argument(format!("Invalid comment ID: {}", e))),
+            },
+            None => None,
+        };
+
         let send_msg = |username: &str, to: SendTo, persist: bool| -> anyhow::Result<()> {
             let msg = models::MessageInsert {
                 user_id: username.to_string(),
                 seen: false,
                 ref_video_hash: msg_in.refs.clone().and_then(|r| r.video_hash),
-                ref_comment_id: msg_in.refs.clone().and_then(|r| r.comment_id),
+                ref_comment_id: comment_id,
                 event_name: match (&msg_in).r#type() {
                     proto::user_message::Type::Ok => "ok",
                     proto::user_message::Type::Error => "error",

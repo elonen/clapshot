@@ -39,6 +39,7 @@ mod file_upload;
 use file_upload::handle_multipart_upload;
 use crate::api_server::user_session::AuthzTopic;
 use crate::database::{models};
+use crate::grpc::db_message_insert_to_proto3;
 use crate::grpc::grpc_client::OrganizerConnection;
 use crate::grpc::grpc_client::OrganizerURI;
 use crate::grpc::{grpc_server, make_video_popup_actions};
@@ -409,7 +410,7 @@ async fn run_api_server_async(
 
                 // Message to all watchers of a video
                 if let Some(vh) = m.video_hash {
-                    if let Ok(data) = &msg.to_json() {
+                    if let Ok(data) = serde_json::to_value(db_message_insert_to_proto3(&msg)) {
                         let msg = Message::text(serde_json::json!({
                             "cmd": "message", "data": data }).to_string());
                         if let Err(_) = server_state.send_to_all_video_sessions(&vh, &msg) {
@@ -422,7 +423,7 @@ async fn run_api_server_async(
                 // Save it to the database, marking it as seen if sending it to the user succeeds
                 if let Some(user_id) = m.user_id {
                     let mut user_was_online = false;
-                    if let Ok(data) = msg.to_json() {
+                    if let Ok(data) = serde_json::to_value(db_message_insert_to_proto3(&msg)) {
                         let msg = Message::text(serde_json::json!({
                             "cmd": "message", "data": data }).to_string());
                         match server_state.send_to_all_user_sessions(&user_id, &msg) {

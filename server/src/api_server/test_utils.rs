@@ -150,8 +150,13 @@ pub(crate) async fn open_video(ws: &mut WsClient, vh: &str) -> (String, serde_js
     let (cmd, data) = expect_cmd_data(ws).await;
     assert_eq!(cmd, "open_video");
     while let Some((cmt_cmd, cmt_data)) = read_cmd_data(ws).await {
-        assert_eq!(cmt_cmd, "new_comment");
-        assert_eq!(cmt_data["videoHash"], vh);
+        if cmt_cmd == "message" {
+            // Thumbnail generation can take a while, so we just ignore the message
+            assert!(cmt_data["message"].as_str().unwrap().contains("thumbnail"));
+        } else {
+            assert_eq!(cmt_cmd, "new_comment");
+            assert_eq!(cmt_data["videoHash"], vh);
+        }
     }
     (cmd.to_string(), data)
 }

@@ -28,7 +28,7 @@ use crate::api_server::user_session::Topic;
 use crate::database::error::DBError;
 use crate::database::{models, DB};
 use crate::database::schema::comments::drawing;
-use crate::grpc::db_comment_to_proto3;
+use crate::grpc::{db_comment_to_proto3, db_message_to_proto3, db_video_to_proto3};
 use crate::{send_user_error, send_user_ok};
 
 use lib_clapshot_grpc::proto;
@@ -78,18 +78,13 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, ser
                 true, AuthzTopic::Video(&v, proto::authz_user_action_request::video_op::Op::View)).await?;
 
             ses.video_session_guard = Some(server.link_session_to_video(video_hash, ses.sender.clone()));
-            let mut fields = v.to_json()?;
 
-            // Use transcoded or orig video?
-            let (file, uri) = match v.recompression_done {
-                Some(_) => Ok(("video.mp4".into(), "video.mp4".into())),
-                None => match &v.orig_filename {
-                    Some(f) => Ok((format!("orig/{}", f), format!("orig/{}", urlencoding::encode(f)))),
-                    None => Err(anyhow!("No video file"))
-                }}?;
+            let v = db_video_to_proto3(&v, &server.url_base);
+            if v.playback_url.is_none() {
+                return Err(anyhow!("No video file"));
+            }
 
-            fields["video_url"] = json!(format!("{}/videos/{}/{}", server.url_base, &v.video_hash, uri));
-            server.emit_cmd("open_video", &fields, super::SendTo::UserSession(&ses.sid) )?;
+            server.emit_cmd("open_video", &serde_json::to_value(v)?, super::SendTo::UserSession(&ses.sid) )?;
 
             for c in server.db.get_video_comments(video_hash)? {
                 let cid = c.id;
@@ -324,7 +319,7 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
 pub async fn msg_list_my_messages(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let msgs = server.db.get_user_messages(&ses.user_id)?;
     for m in msgs {
-        server.emit_cmd("message", &m.to_json()?, super::SendTo::UserSession(&ses.sid))?;
+        server.emit_cmd("message", &serde_json::to_value(db_message_to_proto3(&m))?, super::SendTo::UserSession(&ses.sid))?;
         if !m.seen {
             server.db.set_message_seen(m.id, true)?;
         }

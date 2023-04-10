@@ -10,6 +10,7 @@ use anyhow::anyhow;
 use super::user_session::OpaqueGuard;
 use super::{WsMsgSender, SenderList, SessionMap, SenderListMap, StringToStringMap, Res, UserSession, SendTo};
 use crate::database::{DB, models};
+use crate::grpc::db_message_insert_to_proto3;
 use crate::grpc::grpc_client::OrganizerURI;
 
 /// Lists of all active connections and other server state vars
@@ -87,10 +88,10 @@ impl ServerState {
     }
 
     /// Send a command to client websocket(s).
-    /// 
+    ///
     /// If send_to is a string, it is interpreted either as a video hash or user id. Returns the
     /// number of sessions the message was sent to.
-    /// 
+    ///
     /// - If it turns out to be a video hash, the message is sent to all websocket
     ///     that are watching it.
     /// - If it's a user id, the message is sent to all websocket connections that user has open.
@@ -112,7 +113,7 @@ impl ServerState {
 
     /// Send a user message to given recipients.
     pub fn push_notify_message(&self, msg: &models::MessageInsert, send_to: SendTo, persist: bool) -> Res<()> {
-        let send_res = self.emit_cmd("message", &msg.to_json()?, send_to);
+        let send_res = self.emit_cmd("message", &serde_json::to_value(db_message_insert_to_proto3(&msg))?, send_to);
         if let Ok(sent_count) = send_res {
             if persist {
                 self.db.add_message(&models::MessageInsert {
@@ -180,7 +181,7 @@ impl ServerState {
             map.insert(collab_id.to_string(), video_hash.to_string());
         } else if map.get(collab_id).unwrap() != video_hash {
             return Err(anyhow!("Mismatching video hash for pre-existing collab"));
-        }        
+        }
         Ok(self.add_sender_to_maplist(collab_id, sender, &self.collab_id_to_senders))
     }
 
