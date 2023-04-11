@@ -2,16 +2,15 @@
 
 import {dndzone, TRIGGERS, SOURCES, SHADOW_ITEM_MARKER_PROPERTY_NAME} from "svelte-dnd-action";
 import VideoListPopup from './VideoListPopup.svelte';
-
 import VideoListVideoTile from "./VideoListVideoTile.svelte";
 import VideoListFolder from "./VideoListFolder.svelte";
 
-import type * as Proto3 from '../../../../protobuf/libs/typescript';
-
 import type { VideoListDefItem } from "./types";
-import { selected_tiles, server_defined_actions } from "../../stores";
 import { createEventDispatcher, tick } from "svelte";
 import { fade } from "svelte/transition";
+
+import { selected_tiles, server_defined_actions } from "@/stores";
+import * as Proto3 from '@clapshot_protobuf/typescript';
 
 const dispatch = createEventDispatcher();
 

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { scale, slide } from "svelte/transition";
-  import Avatar from './Avatar.svelte';
-  import { cur_user_id, all_comments } from '../stores.js';
-  import * as Proto3 from '../../../protobuf/libs/typescript';
+  import Avatar from '@/lib//Avatar.svelte';
+  import { cur_user_id, all_comments } from '@/stores';
+  import * as Proto3 from '@clapshot_protobuf/typescript';
 
   const dispatch = createEventDispatcher();
 

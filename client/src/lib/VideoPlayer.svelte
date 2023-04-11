@@ -1,16 +1,15 @@
 <script lang="ts">
 
-  import {VideoFrame} from './VideoFrame';
   import {acts} from '@tadashi/svelte-notification'
   import {create as sdb_create} from "simple-drawing-board";
-  import {onMount} from 'svelte';
+  import {onMount, createEventDispatcher} from 'svelte';
   import {scale} from "svelte/transition";
-  import type * as Proto3 from '../../../protobuf/libs/typescript';
 
-  import {all_comments, video_is_ready, video_fps, collab_id} from '../stores';
+  import * as Proto3 from '@clapshot_protobuf/typescript';
+  import {VideoFrame} from '@/lib/VideoFrame';
+  import {all_comments, video_is_ready, video_fps, collab_id} from '@/stores';
 
-  import {createEventDispatcher} from 'svelte';
-  import CommentTimelinePin from './CommentTimelinePin.svelte';
+  import CommentTimelinePin from '@/lib/CommentTimelinePin.svelte';
 
   const dispatch = createEventDispatcher();
 

@@ -1,6 +1,6 @@
 <script lang="ts">
     import {createEventDispatcher} from 'svelte';
-    import {hexColorForUsername} from './Avatar.svelte';
+    import {hexColorForUsername} from '@/lib/Avatar.svelte';
 
     const dispatch = createEventDispatcher();
 

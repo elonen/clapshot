@@ -1,20 +1,20 @@
 <script lang="ts">
-  import {fade, slide} from "svelte/transition";
-  import CommentCard from './lib/CommentCard.svelte'
-  import NavBar from './lib/NavBar.svelte'
-  import CommentInput from './lib/CommentInput.svelte';
-  import UserMessage from './lib/UserMessage.svelte';
-  import FileUpload from './lib/FileUpload.svelte';
   import {Notifications, acts} from '@tadashi/svelte-notification'
-  import VideoPlayer from './lib/VideoPlayer.svelte';
+  import {fade, slide} from "svelte/transition";
 
-  import * as Proto3 from '../../protobuf/libs/typescript';
+  import * as Proto3 from '@clapshot_protobuf/typescript';
 
-  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, cur_page_items, user_messages, video_progress_msg, collab_id, user_menu_items, server_defined_actions} from './stores.js';
+  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, cur_page_items, user_messages, video_progress_msg, collab_id, user_menu_items, server_defined_actions} from '@/stores';
+  import {IndentedComment, type UserMenuItem} from "@/types";
 
-  import type {VideoListDefItem} from "./lib/video_list/types";
-  import VideoList from "./lib/video_list/VideoList.svelte";
-    import { IndentedComment, type UserMenuItem } from "./types";
+  import CommentCard from '@/lib/CommentCard.svelte'
+  import NavBar from '@/lib/NavBar.svelte'
+  import CommentInput from '@/lib/CommentInput.svelte';
+  import UserMessage from '@/lib/UserMessage.svelte';
+  import FileUpload from '@/lib/FileUpload.svelte';
+  import VideoPlayer from '@/lib/VideoPlayer.svelte';
+  import type {VideoListDefItem} from "@/lib/video_list/types";
+  import VideoList from "@/lib/video_list/VideoList.svelte";
 
 
   let video_player: VideoPlayer;

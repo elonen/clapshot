@@ -16,6 +16,7 @@
     "@sveltejs/vite-plugin-svelte": "^2.0.2",
     "@tadashi/svelte-notification": "^1.1.0",
     "@tsconfig/svelte": "^4.0.1",
+    "@types/node": "^18.15.11",
     "autoprefixer": "^10.4.13",
     "picmo": "^5.7.2",
     "postcss": "^8.4.19",

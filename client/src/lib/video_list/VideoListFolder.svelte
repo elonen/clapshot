@@ -3,8 +3,8 @@
 import { createEventDispatcher } from 'svelte';
 import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
 import { dndzone, TRIGGERS, SOURCES } from 'svelte-dnd-action';
-import { selected_tiles } from '../../stores';
-import type * as Proto3 from '../../../../protobuf/libs/typescript';
+import { selected_tiles } from '@/stores';
+import * as Proto3 from '@clapshot_protobuf/typescript';
 
 export let id: any = {};
 export let name: string = "";

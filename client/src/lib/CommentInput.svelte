@@ -2,10 +2,11 @@
     import { createPopup } from '@picmo/popup-picker';
     import { darkTheme } from 'picmo';
     import { TwemojiRenderer  } from '@picmo/renderer-twemoji';
-    
+
     import { createEventDispatcher } from 'svelte';
     import { fade } from "svelte/transition";
-    import { video_is_ready } from '../stores.js';
+
+    import { video_is_ready } from '@/stores';
 
     const dispatch = createEventDispatcher();
 
@@ -45,14 +46,14 @@
 
   // Picmo emoji picker
   let emoji_picker: any = null;
-  function onEmojiPicker(e: any) 
+  function onEmojiPicker(e: any)
   {
     if (!emoji_picker) {
             emoji_picker = createPopup({
-                theme: darkTheme,                
+                theme: darkTheme,
                 renderer: new TwemojiRenderer()}, {
             referenceElement: e.target,
-            triggerElement: e.target,            
+            triggerElement: e.target,
             position: 'right-end',
             className: 'my-picmo-popup',
         });
@@ -83,8 +84,8 @@
 
 <form on:submit|preventDefault={onClickSend} class="flex justify-left rounded-lg shadow-lg bg-gray-800 text-left p-2 w-full" >
 
-    <input 
-        bind:value={input_text} 
+    <input
+        bind:value={input_text}
         class="flex-1 p-2 bg-gray-700 rounded-lg" placeholder="Add a comment{timed_comment ? ' - at current time' :''}..." />
 
     <button type="button"
@@ -100,7 +101,7 @@
                 <i class="fa-solid fa-stopwatch fa-stack-2x"></i>
                 {#if !timed_comment}
                     <i class="fa-solid fa-x fa-stack-2x text-red-800"></i>
-                {/if}            
+                {/if}
             </span>
         </button>
 
@@ -132,4 +133,3 @@
     }
 </style>
 
-    

@@ -1,4 +1,4 @@
-import type * as Proto3 from '../../../../protobuf/libs/typescript';
+import * as Proto3 from '@clapshot_protobuf/typescript';
 
 export interface ClapshotCommentJson
 {

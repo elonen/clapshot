@@ -1,4 +1,4 @@
-import * as Proto3 from '../../protobuf/libs/typescript';
+import * as Proto3 from '@clapshot_protobuf/typescript';
 
 export class IndentedComment {
     comment!: Proto3.Comment;

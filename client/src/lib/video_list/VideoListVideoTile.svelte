@@ -1,6 +1,6 @@
 <script lang="ts">
     import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
-    import type * as Proto3 from '../../../../protobuf/libs/typescript';
+    import * as Proto3 from '@clapshot_protobuf/typescript';
 
     export let item: Proto3.Video;
     export function data() { return item; }

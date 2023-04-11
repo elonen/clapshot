@@ -1,6 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher, onMount } from 'svelte';
-    import type * as Proto3 from '../../../../protobuf/libs/typescript';
+    import * as Proto3 from '@clapshot_protobuf/typescript';
 
     export let x = 0;
     export let y = 0;

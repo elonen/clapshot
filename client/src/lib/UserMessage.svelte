@@ -1,6 +1,6 @@
 <script lang="ts">
 import { slide } from "svelte/transition";
-import * as Proto3 from '../../../protobuf/libs/typescript';
+import * as Proto3 from '@clapshot_protobuf/typescript';
 
 export let msg: Proto3.UserMessage;
 

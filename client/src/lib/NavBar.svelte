@@ -1,10 +1,9 @@
 <script lang="ts">
 
   import { createEventDispatcher } from 'svelte';
-  import { cur_username, cur_user_pic, video_title, video_hash, video_progress_msg, collab_id, user_menu_items } from "../stores";
-  import Avatar from './Avatar.svelte';
-
-  import logo from "../assets/clapshot-logo.svg";
+  import { cur_username, cur_user_pic, video_title, video_hash, video_progress_msg, collab_id, user_menu_items } from "@/stores";
+  import Avatar from '@/lib/Avatar.svelte';
+  import logo from "@/assets/clapshot-logo.svg";
 
   const dispatch = createEventDispatcher();
 

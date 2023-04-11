@@ -1,7 +1,7 @@
 import { writable, type Writable } from 'svelte/store';
-import type * as Proto3 from '../../protobuf/libs/typescript';
-import type { IndentedComment, UserMenuItem } from './types';
-import type { VideoListDefItem } from './lib/video_list/types';
+import type { IndentedComment, UserMenuItem } from '@/types';
+import type { VideoListDefItem } from '@/lib/video_list/types';
+import * as Proto3 from '@clapshot_protobuf/typescript';
 
 export let video_url: Writable<string|null> = writable(null);
 export let video_hash: Writable<string|null> = writable(null);
