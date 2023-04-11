@@ -1,7 +1,6 @@
 <script lang="ts">
 import { createPopup } from '@picmo/popup-picker';
 import { darkTheme } from 'picmo';
-import { TwemojiRenderer  } from '@picmo/renderer-twemoji';
 
 import { createEventDispatcher } from 'svelte';
 import { fade } from "svelte/transition";
@@ -50,8 +49,7 @@ function onEmojiPicker(e: any)
 {
     if (!emoji_picker) {
             emoji_picker = createPopup({
-                theme: darkTheme,
-                renderer: new TwemojiRenderer()}, {
+                theme: darkTheme }, {
             referenceElement: e.target,
             triggerElement: e.target,
             position: 'right-end',
