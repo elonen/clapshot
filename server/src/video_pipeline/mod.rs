@@ -59,11 +59,11 @@ fn calc_video_hash(file_path: &PathBuf, user_id: &str) -> anyhow::Result<String>
     let fname = file_path.file_name()
         .ok_or(anyhow!("Bad filename: {:?}", file_path))?.to_str()
         .ok_or(anyhow!("Bad filename encoding {:?}", file_path))?;
-    
+
     file_hash.update(fname.as_bytes());
     file_hash.update(user_id.as_bytes());
     file_hash.update(&file_path.metadata()?.len().to_be_bytes());
-    
+
     // Read max 32k of contents
     let file = std::fs::File::open(file_path)?;
     let mut buf = Vec::with_capacity(32*1024);
@@ -112,7 +112,7 @@ fn ingest_video(
 
                     tracing::info!("User already has this video.");
                     user_msg_tx.send(UserMessage {
-                        topic: UserMessageTopic::Ok(),
+                        topic: UserMessageTopic::Ok,
                         msg: "You already have this video".to_string(),
                         details: None,
                         user_id: Some(new_owner.clone()),
@@ -177,8 +177,8 @@ fn ingest_video(
         {
             let bitrate_fine = (new_bitrate >= md.bitrate || (md.bitrate as f32) <= 1.2 * (target_max_bitrate as f32));
             let codec_fine = ["h264", "avc", "hevc", "h265"].contains(&md.orig_codec.to_lowercase().as_str());
-            let container_fine = ["mp4", "mkv"].contains(&ext.as_str());        
-    
+            let container_fine = ["mp4", "mkv"].contains(&ext.as_str());
+
             if !container_fine { Some(format!("container '{}' not supported", md.src_file.extension().unwrap_or_default().to_string_lossy())) }
             else if !codec_fine { Some(format!("codec '{}' not supported", md.orig_codec)) }
             else if !bitrate_fine { Some(format!("bitrate is too high: old {} > new {}", md.bitrate, new_bitrate)) }
@@ -217,7 +217,7 @@ fn ingest_video(
             }) {
                 tracing::error!(details=?e, "Failed to send file to thumbnailing");
                 if let Err(e) = user_msg_tx.send(UserMessage {
-                        topic: UserMessageTopic::Error(),
+                        topic: UserMessageTopic::Error,
                         msg: "Thumbnailing failed.".to_string(),
                         details: Some(format!("Error sending file to thumbnailing: {}", e)),
                         user_id: Some(md.user_id.clone()),
@@ -231,7 +231,7 @@ fn ingest_video(
         Ok((do_transcode, reason)) => {
             tracing::info!(transcode=do_transcode, reason=reason, "Video added to DB. Transcode");
             user_msg_tx.send(UserMessage {
-                topic: UserMessageTopic::Ok(),
+                topic: UserMessageTopic::Ok,
                 msg: "Video added".to_string() + if do_transcode {". Transcoding..."} else {""},
                 details: if do_transcode { Some(format!("Transcoding because {reason}")) } else { None },
                 user_id: Some(md.user_id.clone()),
@@ -242,7 +242,7 @@ fn ingest_video(
         Err(e) => {
             tracing::error!(details=?e, "Video added to DB, but failed to send to transcoding.");
             user_msg_tx.send(UserMessage {
-                topic: UserMessageTopic::Error(),
+                topic: UserMessageTopic::Error,
                 msg: "Video added but not transcoded. Video may not play.".to_string(),
                 details: Some(format!("Error sending video to transcoder: {}", e)),
                 user_id: Some(md.user_id.clone()),
@@ -315,7 +315,7 @@ pub fn run_forever(
 
     // Migration from older version: find a video that is missing thumbnail sheet
     fn legacy_thumbnail_next_video(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<video_compressor::CmprInput>) -> Option<String> {
-        let next = match db.get_all_videos_without_thumbnails() {
+        let next = match db.get_all_videos_with_missing_thumbnails() {
             Ok(videos) => videos.first().cloned(),
             Err(e) => {
                 tracing::error!(details=?e, "DB: Failed to get videos without thumbnails.");
@@ -369,7 +369,7 @@ pub fn run_forever(
                 match msg {
                     Ok(msg) => {
                         tracing::info!("Got upload result. Submitting it for processing. {:?}", msg);
-                        to_md.send(IncomingFile { 
+                        to_md.send(IncomingFile {
                             file_path: msg.file_path.clone(),
                             user_id: msg.user_id}).unwrap_or_else(|e| {
                                 tracing::error!("Error sending file to metadata reader: {:?}", e);
@@ -384,7 +384,7 @@ pub fn run_forever(
             // Metadata reader results
             recv(from_md) -> msg => {
                 match msg {
-                    Ok(md_res) => { 
+                    Ok(md_res) => {
                         let (vh, ing_res) = match md_res {
                             MetadataResult::Ok(md) => {
                                 tracing::debug!("Got metadata for {:?}", md.src_file);
@@ -419,7 +419,7 @@ pub fn run_forever(
                                     Err(e) => { format!(" Cleanup also failed: {:?}", e) },
                                     Ok(()) => { "".into() } };
                             user_msg_tx.send(UserMessage {
-                                    topic: UserMessageTopic::Error(),
+                                    topic: UserMessageTopic::Error,
                                     msg: "Error reading video metadata.".into(),
                                     details: Some(format!("'{}': ", e.src_file.file_name().unwrap_or_default().to_string_lossy()) + &e.details + &cleanup_err),
                                     user_id: Some(e.user_id),
@@ -448,7 +448,7 @@ pub fn run_forever(
                 match msg {
                     Ok((vh, user_id, msg)) => {
                         user_msg_tx.send(UserMessage {
-                                topic: UserMessageTopic::Progress(),
+                                topic: UserMessageTopic::Progress,
                                 msg: msg,
                                 details: None,
                                 user_id: Some(user_id),
@@ -490,7 +490,7 @@ pub fn run_forever(
 
                                 // Send VideoUpdated message to user
                                 user_msg_tx.send(UserMessage {
-                                        topic: UserMessageTopic::VideoUpdated(),
+                                        topic: UserMessageTopic::VideoUpdated,
                                         msg: "Video thumbnail generated".into(),
                                         details: None,
                                         user_id: Some(res.user_id),
@@ -541,7 +541,7 @@ pub fn run_forever(
 
                                 // Send success message
                                 user_msg_tx.send(UserMessage {
-                                        topic: if linked_ok {UserMessageTopic::Ok()} else {UserMessageTopic::Error()},
+                                        topic: if linked_ok {UserMessageTopic::Ok} else {UserMessageTopic::Error},
                                         msg: "Video transcoded.".to_string() + if linked_ok {""} else {" But linking or DB failed."},
                                         details: None,
                                         user_id: Some(res.dmsg.user_id),
@@ -553,7 +553,7 @@ pub fn run_forever(
                             let msg = format!("Video {} failed", if res.video_dst.is_some() {"transcoding"} else {"thumbnailing"});
                             tracing::error!(video=res.video_hash, details=?res.dmsg, msg);
                             user_msg_tx.send(UserMessage {
-                                    topic: UserMessageTopic::Error(),
+                                    topic: UserMessageTopic::Error,
                                     msg: msg,
                                     details: Some(res.dmsg.details),
                                     user_id: Some(res.dmsg.user_id),

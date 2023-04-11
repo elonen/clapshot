@@ -38,6 +38,7 @@ pub mod tests;
 mod file_upload;
 use file_upload::handle_multipart_upload;
 use crate::api_server::user_session::AuthzTopic;
+use crate::database::models::proto_msg_type_to_event_name;
 use crate::database::{models};
 use crate::grpc::db_message_insert_to_proto3;
 use crate::grpc::grpc_client::OrganizerConnection;
@@ -61,8 +62,7 @@ pub enum SendTo<'a> {
     Collab(&'a str),
 }
 
-#[derive (Clone, Debug)]
-pub enum UserMessageTopic { Ok(), Error(), Progress(), VideoUpdated() }
+pub type UserMessageTopic = proto::user_message::Type;
 
 /// Message from other server modules to user(s)
 #[derive (Clone, Debug)]
@@ -392,12 +392,7 @@ async fn run_api_server_async(
         while !server_state.terminate_flag.load(Relaxed) {
             sleep(Duration::from_millis(100)).await;
             while let Ok(m) = user_msg_rx.try_recv() {
-                let topic_str = match m.topic{
-                    UserMessageTopic::Ok() => "ok",
-                    UserMessageTopic::Error() => "error",
-                    UserMessageTopic::Progress() => "progress",
-                    UserMessageTopic::VideoUpdated() => "video_updated",
-                };
+                let topic_str = proto_msg_type_to_event_name(m.topic);
 
                 let msg = models::MessageInsert  {
                     event_name: topic_str.into(),
@@ -431,7 +426,7 @@ async fn run_api_server_async(
                             Err(e) => tracing::error!(user=user_id, details=%e, "Failed to send user notification."),
                         }
                     }
-                    if !matches!(m.topic, UserMessageTopic::Progress()) {
+                    if !matches!(m.topic, UserMessageTopic::Progress) {
                         let msg = models::MessageInsert {
                             seen: msg.seen || user_was_online,
                             ..msg

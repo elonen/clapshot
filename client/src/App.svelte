@@ -381,52 +381,64 @@
         switch (cmd)
         {
           case 'welcome':
+          {
             //log_abbreviated("[SERVER] welcome: " + JSON.stringify(data));
             $cur_username = data.username;
             $cur_user_id = data.user_id
             break;
+          }
 
           case 'error':
+          {
             console.error("[SERVER ERROR]: ", data);
             acts.add({mode: 'danger', message: data.msg, lifetime: 5});
             break;
+          }
 
           case 'show_page':
+          {
             log_abbreviated("[SERVER] show_page: " + JSON.stringify(data));
             $cur_page_items = data.page_items.map(
                 (pi: any) => Proto3.PageItem.fromJSON(pi));
             break;
+          }
 
           case 'define_actions':
+          {
             log_abbreviated("[SERVER] define_actions: " + JSON.stringify(data));
             $server_defined_actions = Proto3.ClientDefineActionsRequest.fromJSON(data).actions;
             break;
+          }
 
           case 'message':
+          {
             log_abbreviated("[SERVER] message: " + JSON.stringify(data));
-            if ( data.event_name == 'progress' ) {
-              if (data.ref_video_hash == $video_hash) {
-                $video_progress_msg = data.message;
+            const msg = Proto3.UserMessage.fromJSON(data);
+
+            if ( msg.type === Proto3.UserMessage_Type.PROGRESS ) {
+              if (msg.refs?.videoHash == $video_hash) {
+                $video_progress_msg = msg.message;
                 last_video_progress_msg_ts = Date.now();
               }
             }
-            else if ( data.event_name == 'video_updated' ) {
+            else if ( msg.type === Proto3.UserMessage_Type.VIDEO_UPDATED ) {
               refresh_my_videos();
             }
             else {
-              $user_messages = $user_messages.filter((m) => m.id != data.id);
-              if (data.created) { $user_messages.push(data); }
-              $user_messages = $user_messages.sort((a, b) => a.id! > b.id! ? -1 : a.id! < b.id! ? 1 : 0);
-              if (!data.seen) {
-                const severity = (data.event_name == 'error') ? 'danger' : 'info';
-                acts.add({mode: severity, message: data.message, lifetime: 5});
+              $user_messages = $user_messages.filter((m) => m.id != msg.id);
+              if (msg.created) { $user_messages.push(msg); }
+              if (!msg.seen) {
+                const severity = (msg.type == Proto3.UserMessage_Type.ERROR) ? 'danger' : 'info';
+                acts.add({mode: severity, message: msg.message, lifetime: 5});
                 if (severity == 'info') {
                   refresh_my_videos();
               }};
             }
             break;
+          }
 
           case 'open_video':
+          {
             log_abbreviated("[SERVER] open_video: " + JSON.stringify(data));
             let v = Proto3.Video.fromJSON(data);
             try
@@ -451,33 +463,38 @@
               console.error("Invalid video open request. Error: ", error, "Data: ", data);
             }
             break;
+          }
 
           case 'new_comment':
+          {
             log_abbreviated("[SERVER] new_comment: " + JSON.stringify(data));
             {
               let new_comment = Proto3.Comment.fromJSON(data);
 
-              function reorder_comments(old_order: IndentedComment[])
+              function indentCommentTree(items: IndentedComment[]): IndentedComment[]
               {
-                // Helper to show comment threads in the right order and with correct indentation
-                let old_sorted = old_order.sort((a, b) => a.comment.id < b.comment.id ? -1 : a.comment.id > b.comment.id ? 1 : 0)
-                let new_order: IndentedComment[] = [];
-                function find_insert_position_and_indent(parent_id: string|undefined)
-                {
-                  if (parent_id) {
-                    for (let i=new_order.length-1; i>=0; i--) {
-                      if (new_order[i].comment.id == parent_id)
-                        return [i, new_order[i].indent+1] as const;
-                      if (new_order[i].comment.parentId == parent_id)
-                        return [i, new_order[i].indent] as const;
-                    }}
-                  return [new_order.length-1, 0] as const;
+                let rootComments = items.filter(item => item.comment.parentId == null);
+                rootComments.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
+
+                // Recursive DFS function to traverse and build the ordered list
+                function dfs(c: IndentedComment, depth: number, result: IndentedComment[]): void {
+                  if (result.find((it) => it.comment.id === c.comment.id)) return;  // already added, cut infinite loop
+                  result.push({ ...c, indent: depth });
+                  let children = items.filter(item => (item.comment.parentId === c.comment.id));
+                  children.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
+                  for (let child of children)
+                    dfs(child, depth + 1, result);
                 }
-                old_sorted.forEach((c) => {
-                  let [pos, indent] = find_insert_position_and_indent(c.comment.parentId);
-                  new_order.splice(pos+1, 0, {comment: c.comment, indent: indent} as IndentedComment);
+
+                let res: IndentedComment[] = [];
+                rootComments.forEach((c) => dfs(c, 0, res));
+
+                // Add any orphaned comments to the end (we may receive them out of order)
+                items.forEach((c) => {
+                  if (!res.find((it) => it.comment.id === c.comment.id))
+                    res.push(c);
                 });
-                return new_order;
+                return res;
               }
 
               if (new_comment.videoHash == $video_hash)
@@ -486,19 +503,22 @@
                   comment: new_comment,
                   indent: 0
                 });
-                $all_comments = reorder_comments($all_comments);
-      console.log("all_comments: ", $all_comments);
+                $all_comments = indentCommentTree($all_comments);
               } else {
                 log_abbreviated("Comment not for this video. Ignoring.");
               }
             }
             break;
+          }
 
           case 'del_comment':
+          {
             $all_comments = $all_comments.filter((c) => c.comment.id != data.id);
             break;
+          }
 
           case 'collab_cmd':
+          {
             log_abbreviated("[SERVER] collab_cmd: " + JSON.stringify(data));
             if (!data.paused) {
               video_player.collabPlay(data.seek_time);
@@ -510,10 +530,13 @@
               acts.add({mode: 'info', message: last_collab_controlling_user + " is controlling", lifetime: 5});
             }
             break;
+          }
 
           default:
+          {
             console.error("[SERVER] UNKNOWN CMD '"+data.cmd+"'", data);
             break;
+          }
         }
       });
     });

@@ -2,7 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { scale, slide } from "svelte/transition";
   import Avatar from './Avatar.svelte';
-  import { cur_user_id } from '../stores.js';
+  import { cur_user_id, all_comments } from '../stores.js';
   import * as Proto3 from '../../../protobuf/libs/typescript';
 
   const dispatch = createEventDispatcher();
@@ -50,6 +50,11 @@ function onEditFieldKeyUp(e: KeyboardEvent) {
   }
 }
 
+function hasChildren(): boolean {
+  console.log(".");
+  return $all_comments.filter(c => c.comment.parentId == comment.id).length > 0;
+}
+
 </script>
 
 <div transition:scale
@@ -68,16 +73,12 @@ function onEditFieldKeyUp(e: KeyboardEvent) {
   }}
 >
 
-
   <div class="flex mx-2 pt-3">
     <div class="flex-none w-9 h-9 block"><Avatar username="{comment.user?.username}"/></div>
     <h5 class="flex-1 ml-3 text-gray-500 self-end">{comment.user?.displayname}</h5>
     <span class="flex-none hidden text-xs font-mono">[{comment.id}@{comment.parentId}]</span>
     <span
       class="pl-2 flex-0 text-xs italic whitespace-nowrap text-yellow-700 hover:text-yellow-500 hover:underline cursor-pointer self-end">
-        {#if comment.drawing && comment.drawing != ""}
-          <i class="fas fa-pen"></i>
-        {/if}
         {comment.timecode ? comment.timecode : ""}
     </span>
   </div>
@@ -100,7 +101,9 @@ function onEditFieldKeyUp(e: KeyboardEvent) {
     <button class="border rounded-lg px-1 placeholder: ml-2 text-sm border-cyan-500 text-cyan-500" on:click={()=>show_reply=true}>Reply</button>
     {#if comment.user?.username == $cur_user_id || $cur_user_id == "admin"}
       <button class="border rounded-lg px-1 ml-2 text-sm border-cyan-600 text-cyan-600" on:click="{()=>{editing=true;}}">Edit</button>
+      {#if !hasChildren()}
       <button class="border rounded-lg px-1 ml-2 text-sm border-red-300 text-red-300" on:click={onClickDeleteComment}>Del</button>
+      {/if}
     {/if}
   </div>
   {/if}

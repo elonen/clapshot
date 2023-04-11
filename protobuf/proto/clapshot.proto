@@ -329,6 +329,7 @@ message UserMessage {
         OK = 0;
         ERROR = 1;
         PROGRESS = 2;
+        VIDEO_UPDATED = 3;  // Video metadata changed
     }
     message Refs {
         optional string video_hash = 1;

@@ -38,7 +38,8 @@ async fn test_api_push_msg()
             msg: "test_msg".into(),
             user_id: Some("user.num1".into()),
             details: Some("test_details".into()),
-            video_hash: None, topic: UserMessageTopic::Ok(), };
+            video_hash: None, topic: UserMessageTopic::Ok,
+        };
 
         ts.user_msg_tx.send(umsg.clone()).unwrap();
         let (_cmd, data) = expect_cmd_data(&mut ws).await;

@@ -22,13 +22,29 @@ function msgTypeName(msg: Proto3.UserMessage): string {
             return '';
     }
 }
+
+function dateObjToISO(d: Date|undefined): string {
+    if (d == null) return '';
+    var tzo = -d.getTimezoneOffset(),
+        dif = tzo >= 0 ? '+' : '-',
+        pad = function(num: number) { return (num < 10 ? '0' : '') + num; };
+
+    return d.getFullYear() +
+        '-' + pad(d.getMonth() + 1) +
+        '-' + pad(d.getDate()) +
+        ' ' + pad(d.getHours()) +
+        ':' + pad(d.getMinutes()) +
+        ':' + pad(d.getSeconds()) +
+        ' ' + dif + pad(Math.floor(Math.abs(tzo) / 60)) +
+        ':' + pad(Math.abs(tzo) % 60);
+}
 </script>
 
 <div class="border-t border-slate-800 p-1 m-1 mx-6 inline-block w-[90%]">
     <span class="font-mono text-sm pr-1 {isError(msg) ? 'text-red-400': 'text-green-400'}">
         {msgTypeName(msg)}
     </span>
-    <span class="text-xs text-gray-500 pl-2 border-l border-gray-400">{msg.created}</span>
+    <span class="text-xs text-gray-500 pl-2 border-l border-gray-400">{dateObjToISO(msg.created)}</span>
 
     {#if msg.refs?.videoHash }
         {#if isError(msg)}

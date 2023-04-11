@@ -195,23 +195,23 @@ impl DB {
     /// * `user_id` - User ID
     ///
     /// # Returns
-    /// * `Vec<models::Video>` - List of Video objects
+    /// * `Vec<models::Video>` - List of Video objects, sorted by upload date (newest first)
     pub fn get_all_user_videos(&self, user_id: &str) -> DBResult<Vec<models::Video>>
     {
         use models::*;
         use schema::videos::dsl::*;
-        to_db_res(videos.filter(added_by_userid.eq(user_id)).load::<Video>(&mut self.conn()?))
+        to_db_res(videos.filter(added_by_userid.eq(user_id)).order_by(added_time.desc()).load::<Video>(&mut self.conn()?))
     }
 
     /// Get all videos that don't have thumbnails yet.
     ///
     /// # Returns
     /// * `Vec<models::Video>` - List of Video objects
-    pub fn get_all_videos_without_thumbnails(&self) -> DBResult<Vec<models::Video>>
+    pub fn get_all_videos_with_missing_thumbnails(&self) -> DBResult<Vec<models::Video>>
     {
         use models::*;
         use schema::videos::dsl::*;
-        to_db_res(videos.filter(thumb_sheet_dims.is_null()).load::<Video>(&mut self.conn()?))
+        to_db_res(videos.filter(thumb_sheet_dims.is_null()).order_by(added_time.desc()).load::<Video>(&mut self.conn()?))
     }
 
     /// Add a new comment on a video.
@@ -252,11 +252,11 @@ impl DB {
     ///
     /// # Returns
     /// * `Vec<models::Comment>` - List of Comment objects
-    pub fn get_video_comments(&self, vh: &str ) -> DBResult<Vec<models::Comment>>
+    pub fn get_video_comments(&self, vh: &str) -> DBResult<Vec<models::Comment>>
     {
         use models::*;
         use schema::comments::dsl::*;
-        Ok(comments.filter(video_hash.eq(vh)).load::<Comment>(&mut self.conn()?)?)
+        Ok(comments.filter(video_hash.eq(vh)).order_by(created.desc()).load::<Comment>(&mut self.conn()?)?)
     }
 
     /// Delete a comment from the database.
@@ -328,12 +328,12 @@ impl DB {
     /// * `uid` - User ID
     ///
     /// # Returns
-    /// * `Vec<models::Message>` - List of Message objects
+    /// * `Vec<models::Message>` - List of Message objects, sorted by timestamp (newest first)
     pub fn get_user_messages(&self, uid: &str) -> DBResult<Vec<models::Message>>
     {
         use models::*;
         use schema::messages::dsl::*;
-        Ok(messages.filter(user_id.eq(uid)).load::<Message>(&mut self.conn()?)?)
+        Ok(messages.filter(user_id.eq(uid)).order(created.desc()).load::<Message>(&mut self.conn()?)?)
     }
 
     /// Set the seen status of a message.

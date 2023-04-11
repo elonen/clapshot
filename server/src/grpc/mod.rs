@@ -6,6 +6,8 @@ use std::{num::NonZeroU64, collections::HashMap};
 
 use lib_clapshot_grpc::proto;
 
+use crate::database::models::msg_event_name_to_proto_msg_type;
+
 
 /// Convert database time to protobuf3
 pub fn datetime_to_proto3(dt: &chrono::NaiveDateTime) -> pbjson_types::Timestamp {
@@ -128,11 +130,7 @@ pub (crate) fn db_message_to_proto3(
 {
     proto::UserMessage {
         id: Some(msg.id.to_string()),
-        r#type: match msg.event_name.as_str() {
-            "ok"|"info" => proto::user_message::Type::Ok,
-            "progress" => proto::user_message::Type::Progress,
-            _ => proto::user_message::Type::Error,
-        }  as i32,
+        r#type: msg_event_name_to_proto_msg_type(&msg.event_name.as_str()).into(),
         refs:Some(proto::user_message::Refs {
             video_hash: msg.ref_video_hash.clone(),
             comment_id: msg.ref_comment_id.map(|id| id.to_string()),

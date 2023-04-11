@@ -1,7 +1,7 @@
 use std::{sync::atomic::Ordering::Relaxed, path::Path};
 use anyhow::Context;
 use tonic::{Request, Response, Status};
-use crate::{api_server::{server_state::ServerState}};
+use crate::{api_server::{server_state::ServerState}, database::models::proto_msg_type_to_event_name};
 use crate::database::models;
 
 use lib_clapshot_grpc::{proto, RpcResult, GrpcBindAddr, run_grpc_server};
@@ -73,11 +73,7 @@ impl proto::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundIm
                 seen: false,
                 ref_video_hash: msg_in.refs.clone().and_then(|r| r.video_hash),
                 ref_comment_id: comment_id,
-                event_name: match (&msg_in).r#type() {
-                    proto::user_message::Type::Ok => "ok",
-                    proto::user_message::Type::Error => "error",
-                    proto::user_message::Type::Progress => "progress",
-                }.to_string(),
+                event_name: proto_msg_type_to_event_name((&msg_in).r#type()).to_string(),
                 message: msg_in.message.clone(),
                 details: msg_in.details.clone().unwrap_or_default(),
             };
