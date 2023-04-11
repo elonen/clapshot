@@ -1,14 +1,14 @@
 <script lang="ts">
-    import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
-    import * as Proto3 from '@clapshot_protobuf/typescript';
+import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
+import * as Proto3 from '@clapshot_protobuf/typescript';
 
-    export let item: Proto3.Video;
-    export function data() { return item; }
+export let item: Proto3.Video;
+export function data() { return item; }
 
-    function fmt_date(d: Date | undefined) {
-        if (!d) return "(no date)";
-        return d.toISOString().split('T')[0];
-    }
+function fmt_date(d: Date | undefined) {
+    if (!d) return "(no date)";
+    return d.toISOString().split('T')[0];
+}
 </script>
 
 <div class="w-full h-full video-list-video video-list-selector">
@@ -31,6 +31,7 @@
         <div class="w-full video-title-line h-[3em]"><span title="{item.title}">{item.title}</span></div>
     </div>
 </div>
+
 
 <style>
 .video-list-video {

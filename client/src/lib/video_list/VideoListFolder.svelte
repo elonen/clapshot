@@ -57,7 +57,6 @@ function finalize(e: any) {
 		onSink(e);
 	}
 }
-
 </script>
 
 <div class="w-full h-full video-list-selector"

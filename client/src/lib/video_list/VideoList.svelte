@@ -166,7 +166,6 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem)
 function isShadowItem(item: any) {
     return item[SHADOW_ITEM_MARKER_PROPERTY_NAME];
 }
-
 </script>
 
 <div>

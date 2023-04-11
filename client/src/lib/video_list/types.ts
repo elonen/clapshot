@@ -16,8 +16,6 @@ export interface ClapshotCommentJson
     drawing: string | null;
 }
 
-// -----
-
 export class VideoListDefItem {
     id!: string;
     obj!: Proto3.PageItem_FolderListing_Item;
