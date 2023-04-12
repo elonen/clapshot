@@ -8,6 +8,17 @@ use lib_clapshot_grpc::proto;
 
 use crate::database::models::msg_event_name_to_proto_msg_type;
 
+// Helper macro to simplify creation of ServerToClientCmd messages.
+// Prost/Tonic syntax is a bit verbose.
+#[macro_export]
+macro_rules! client_cmd {
+    ($msg:ident, { $($field:ident: $value:expr),* $(,)? }) => {
+        proto::server_to_client_cmd::Cmd::$msg(
+            proto::server_to_client_cmd::$msg {
+            $($field: $value,)*
+        })
+    };
+}
 
 /// Convert database time to protobuf3
 pub fn datetime_to_proto3(dt: &chrono::NaiveDateTime) -> pbjson_types::Timestamp {
@@ -153,6 +164,7 @@ pub (crate) fn db_message_insert_to_proto3(
         r#type: match msg.event_name.as_str() {
             "error" => proto::user_message::Type::Error,
             "progress" => proto::user_message::Type::Progress,
+            "video_updated" => proto::user_message::Type::VideoUpdated,
             _ => proto::user_message::Type::Ok,
         }  as i32,
         refs:Some(proto::user_message::Refs {
@@ -166,15 +178,11 @@ pub (crate) fn db_message_insert_to_proto3(
 
 
 
-pub (crate) fn make_video_popup_actions(sid: String) -> proto::ClientDefineActionsRequest {
-
-    proto::ClientDefineActionsRequest {
-        actions: HashMap::from([
-            ("popup_rename".into(), make_rename_action()),
-            ("popup_trash".into(), make_trash_action()),
-        ]),
-        sid
-    }
+pub (crate) fn make_video_popup_actions() -> HashMap<String, proto::ActionDef> {
+    HashMap::from([
+        ("popup_rename".into(), make_rename_action()),
+        ("popup_trash".into(), make_trash_action()),
+    ])
 }
 
 fn make_rename_action() -> proto::ActionDef {

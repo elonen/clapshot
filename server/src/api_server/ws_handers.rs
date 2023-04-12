@@ -29,7 +29,7 @@ use crate::database::error::DBError;
 use crate::database::{models, DB};
 use crate::database::schema::comments::drawing;
 use crate::grpc::{db_comment_to_proto3, db_message_to_proto3, db_video_to_proto3};
-use crate::{send_user_error, send_user_ok};
+use crate::{send_user_error, send_user_ok, client_cmd};
 
 use lib_clapshot_grpc::proto;
 
@@ -54,11 +54,7 @@ pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession,
     let page = vec![heading, listing];
 
     server.emit_cmd(
-        "show_page",
-        &json!({
-            "username": ses.user_name.clone(),
-            "user_id": ses.user_id.clone(),
-            "page_items": serde_json::to_value(page)? }),
+        client_cmd!(ShowPage, {page_items: page}),
         super::SendTo::UserSession(&ses.sid))?;
     Ok(())
 }
@@ -84,15 +80,19 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, ser
                 return Err(anyhow!("No video file"));
             }
 
-            server.emit_cmd("open_video", &serde_json::to_value(v)?, super::SendTo::UserSession(&ses.sid) )?;
+            server.emit_cmd(
+                client_cmd!(OpenVideo, {video: Some(v)}),
+                super::SendTo::UserSession(&ses.sid))?;
 
-            for c in server.db.get_video_comments(video_hash)? {
-                let cid = c.id;
-                if let Err(e) = ses.emit_new_comment(server, c, super::SendTo::UserSession(&ses.sid)).await {
-                    tracing::error!("Error sending comment: {}", e);
-                    send_user_error!(ses, server, Topic::Comment(cid), format!("Error sending comment #{cid}: {:?}", e));
-                }
+            let mut cmts = vec![];
+            for mut c in server.db.get_video_comments(video_hash)? {
+                ses.fetch_drawing_data_into_comment(server, &mut c).await?;
+                cmts.push(db_comment_to_proto3(&c));
             }
+
+            server.emit_cmd(
+                client_cmd!(AddComments, {comments: cmts}),
+                super::SendTo::UserSession(&ses.sid))?;
         }
     }
     ses.cur_video_hash = Some(video_hash.into());
@@ -280,7 +280,11 @@ pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut UserSession, s
 
             let vh = &old.video_hash;
             server.db.edit_comment(id, &new_text)?;
-            server.emit_cmd("del_comment", &json!({ "id": id }), super::SendTo::VideoHash(&vh))?;
+
+            server.emit_cmd(
+                client_cmd!(DelComment, {comment_id: id.to_string()}),
+                super::SendTo::VideoHash(&vh))?;
+
             let c = server.db.get_comment(id)?;
             ses.emit_new_comment(server, c, super::SendTo::VideoHash(&vh)).await?;
         }
@@ -312,7 +316,9 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
                 return Ok(());
             }
             server.db.del_comment(id)?;
-            server.emit_cmd("del_comment", &json!({ "id": id }), super::SendTo::VideoHash(&vh))?;
+            server.emit_cmd(
+                client_cmd!(DelComment, {comment_id: id.to_string()}),
+                super::SendTo::VideoHash(&vh))?;
         }
         Err(DBError::NotFound()) => {
             send_user_error!(ses, server, Topic::None, "Failed to delete comment.", "No such comment. Cannot delete.", true);
@@ -324,11 +330,12 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
 
 pub async fn msg_list_my_messages(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let msgs = server.db.get_user_messages(&ses.user_id)?;
+    server.emit_cmd(
+        client_cmd!(ShowMessages, { msgs: (&msgs).into_iter().map(|m| db_message_to_proto3(&m)).collect() }),
+        super::SendTo::UserSession(&ses.sid)
+    )?;
     for m in msgs {
-        server.emit_cmd("message", &serde_json::to_value(db_message_to_proto3(&m))?, super::SendTo::UserSession(&ses.sid))?;
-        if !m.seen {
-            server.db.set_message_seen(m.id, true)?;
-        }
+        if !m.seen { server.db.set_message_seen(m.id, true)?; }
     }
     Ok(())
 }
@@ -360,7 +367,16 @@ pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut UserSession, se
                 Ok(csg) => {
                     ses.collab_session_guard = Some(csg);
                     ses.cur_collab_id = Some(collab_id.to_string());
-                    server.emit_cmd("message", &json!({"event_name": "ok", "message": format!("'{}' joined collab", ses.user_name)}), super::SendTo::Collab(&collab_id))?;
+                    server.emit_cmd(
+                        client_cmd!(ShowMessages, { msgs: vec![
+                                proto::UserMessage {
+                                r#type: proto::user_message::Type::Ok as i32,
+                                message: format!("'{}' joined collab", &ses.user_name),
+                                ..Default::default()
+                            }]
+                        }),
+                        super::SendTo::Collab(&collab_id)
+                    )?;
                 }
                 Err(e) => {
                     send_user_error!(ses, server, Topic::Video(video_hash), format!("Failed to join collab session: {}", e));
@@ -373,7 +389,16 @@ pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut UserSession, se
 
 pub async fn msg_leave_collab(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     if let Some(collab_id) = &ses.cur_collab_id {
-        server.emit_cmd("message", &json!({"event_name": "ok", "message": format!("'{}' left collab", ses.user_name)}), super::SendTo::Collab(&collab_id))?;
+        server.emit_cmd(
+            client_cmd!(ShowMessages, { msgs: vec![
+                    proto::UserMessage {
+                    r#type: proto::user_message::Type::Ok as i32,
+                    message: format!("'{}' left collab", &ses.user_name),
+                    ..Default::default()
+                }]
+            }),
+            super::SendTo::Collab(&collab_id)
+        )?;
         ses.collab_session_guard = None;
         ses.cur_collab_id = None;
     }
@@ -385,12 +410,22 @@ pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut UserSession, 
         let paused = data["paused"].as_bool().ok_or(anyhow!("paused missing"))?;
         let seek_time = data["seek_time"].as_f64().ok_or(anyhow!("seek_time missing"))?;
         let img_url = data["drawing"].as_str();
-        let msg = if img_url.is_some() {
-            json!({ "paused": paused, "seek_time": seek_time, "drawing": img_url, "from_user": &ses.user_name })
+        let ce = if img_url.is_some() {
+            client_cmd!(CollabEvent, {
+                paused: paused,
+                seek_time_sec: seek_time,
+                from_user: ses.user_name.clone(),
+                drawing: img_url.map(|s| s.to_string()),
+            })
         } else {
-            json!({ "paused": paused, "seek_time": seek_time, "from_user": &ses.user_name })
+            client_cmd!(CollabEvent, {
+                paused: paused,
+                seek_time_sec: seek_time,
+                from_user: ses.user_name.clone(),
+                drawing: None,
+            })
         };
-        server.emit_cmd("collab_cmd", &msg, super::SendTo::Collab(collab_id)).map(|_| ())
+        server.emit_cmd(ce, super::SendTo::Collab(collab_id)).map(|_| ())
     } else {
         send_user_error!(ses, server, Topic::None, "Report rejected: no active collab session.");
         return Ok(());

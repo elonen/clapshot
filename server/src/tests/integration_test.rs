@@ -18,8 +18,9 @@ mod integration_test
 
     use crate::api_server::tests::expect_user_msg;
     use crate::database::schema::videos::thumb_sheet_dims;
+    use crate::expect_client_cmd;
     use crate::video_pipeline::{metadata_reader, IncomingFile};
-    use crate::api_server::test_utils::{connect_client_ws, expect_cmd_data, open_video, write};
+    use crate::api_server::test_utils::{connect_client_ws, open_video, write};
     use lib_clapshot_grpc::{GrpcBindAddr, proto};
 
     use tracing;
@@ -107,7 +108,6 @@ mod integration_test
         }
     }
 
-
     #[test]
     #[traced_test]
     fn test_video_ingest_no_transcode() -> anyhow::Result<()>
@@ -120,14 +120,13 @@ mod integration_test
 
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
-            let (cmd, data) = expect_cmd_data(&mut ws).await;
-            let msg = expect_user_msg(&data, proto::user_message::Type::Ok);
-            let vh = msg.refs.unwrap().video_hash.unwrap();
+            let m = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
+            let vh = m.refs.unwrap().video_hash.unwrap();
+
+            crate::api_server::test_utils::wait_for_thumbnails(&mut ws).await;
 
             // Open video from server and check metadata
-            let (cmd, data) = open_video(&mut ws, &vh).await;
-            let vid = serde_json::from_value::<proto::Video>(data).unwrap();
-
+            let vid = open_video(&mut ws, &vh).await.video.unwrap();
             assert_eq!(vid.processing_metadata.unwrap().orig_filename.as_str(), mp4_file);
 
             // Double slashes in the path are an error (empty path component)
@@ -144,10 +143,12 @@ mod integration_test
             write(&mut ws, &msg.to_string()).await;
             let mut got_new_comment = false;
             for _ in 0..3 {
-                let (cmd, data) = expect_cmd_data(&mut ws).await;
-                if cmd == "new_comment" {
-                    got_new_comment = true;
-                    break;
+                match crate::api_server::test_utils::expect_parsed::<proto::ServerToClientCmd>(&mut ws).await.cmd {
+                    Some(proto::server_to_client_cmd::Cmd::AddComments(m)) => {
+                        got_new_comment = true;
+                        break;
+                    },
+                    _ => {},
                 }
             }
             assert!(got_new_comment);
@@ -160,6 +161,8 @@ mod integration_test
     fn test_video_ingest_corrupted_video() -> anyhow::Result<()>
     {
         cs_main_test! {[ws, data_dir, incoming_dir, 500_000]
+            tracing::info!("WRITING CORRUPTED VIDEO");
+
             // Copy test file to incoming dir
             let f = incoming_dir.join("garbage.mp4");
             std::fs::File::create(&f).unwrap().set_len(123000).unwrap();
@@ -168,10 +171,8 @@ mod integration_test
             thread::sleep(Duration::from_secs_f32(0.5));
 
             // Expect error
-            let (cmd, data) = expect_cmd_data(&mut ws).await;
-            assert_eq!(cmd, "message");
-            assert_eq!(data["type"].as_str().unwrap(), "ERROR");
-            assert!(data["details"].as_str().unwrap().contains("garbage.mp4"));
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
+            assert!(msg.details.unwrap().contains("garbage.mp4"));
 
             // Make sure video was moved to rejected dir
             assert!(!f.exists());
@@ -193,8 +194,7 @@ mod integration_test
 
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
-            let (cmd, data) = expect_cmd_data(&mut ws).await;
-            let msg = expect_user_msg(&data, proto::user_message::Type::Ok);
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
             let vh = msg.refs.unwrap().video_hash.unwrap();
 
             // Check that it's being transcoded
@@ -207,27 +207,70 @@ mod integration_test
             let mut ts_cols = String::new();
             let mut ts_rows = String::new();
 
-            'waitloop: for _ in 0..(120*5) {
-                write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
-                let (cmd, data) = expect_cmd_data(&mut ws).await;
-                if cmd == "message" && data.get("type").map(|s| s.as_str().unwrap()) == Some("PROGRESS") {
-                    got_progress_report = true;
-                }
-                if cmd == "show_page" {
-                    let pitems = data["page_items"].as_array().unwrap();
-                    assert!(pitems.len() == 1+1);
-                    let v = &pitems[1]["folderListing"]["items"][0]["video"];
-                    assert_eq!(v["videoHash"].as_str().unwrap(), vh);
+            let mut got_video_updated = false;
 
-                    if !v["processingMetadata"]["recompressionDone"].is_null() && !v["previewData"].is_null() {
-                        transcode_complete = true;
-                        let thumb_sheet = &v["previewData"]["thumbSheet"];
-                        assert!(!thumb_sheet.is_null());
-                        ts_cols = thumb_sheet["cols"].as_u64().unwrap().to_string();
-                        ts_rows = thumb_sheet["rows"].as_u64().unwrap().to_string();
-                        break 'waitloop;
+            'waitloop: for _ in 0..(120*5)
+            {
+                if !got_video_updated {
+                    got_video_updated |= match crate::api_server::test_utils::try_get_parsed::<proto::ServerToClientCmd>(&mut ws).await
+                        .map(|c| c.cmd).flatten() {
+                            Some(proto::server_to_client_cmd::Cmd::ShowMessages(m)) => {
+                                got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
+                                // return true if we got a VideoUpdated message (which is sent when video is done transcoding)
+                                m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::VideoUpdated as i32)
+                            },
+                            _ => { false }
+                        };
+                    if !got_video_updated {
+                        println!("...still waiting for VideoUpdated...");
+                        thread::sleep(Duration::from_millis(100));
+                        continue;
                     }
                 }
+
+                println!("... doing list_my_videos ...");
+                write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
+
+                match crate::api_server::test_utils::expect_parsed::<proto::ServerToClientCmd>(&mut ws).await.cmd {
+
+                    Some(proto::server_to_client_cmd::Cmd::ShowMessages(m)) => {
+                        got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
+                    },
+
+                    Some(proto::server_to_client_cmd::Cmd::ShowPage(p)) => {
+                        let pitems = p.page_items;
+                        assert!(pitems.len() == 1+1);
+
+                        match &pitems[0].item {
+                            Some(proto::page_item::Item::Html(_)) => {},
+                            _ => panic!("Expected HTML for page item 0"),
+                        };
+
+                        let fl = match &pitems[1].item {
+                            Some(proto::page_item::Item::FolderListing(fl)) => fl,
+                            _ => panic!("Expected folder listing for page item 1"),
+                        };
+                        let v = match fl.items[0].item.clone().unwrap() {
+                            proto::page_item::folder_listing::item::Item::Video(v) => v,
+                            _ => panic!("Expected video"),
+                        };
+                        assert_eq!(v.video_hash, vh);
+
+                        if let Some(pd) = v.preview_data {
+                            if let Some(pm) = v.processing_metadata {
+                                if pm.recompression_done.is_some() {
+                                    transcode_complete = true;
+                                    let thumb_sheet = pd.thumb_sheet.unwrap();
+                                    ts_cols = thumb_sheet.cols.to_string();
+                                    ts_rows = thumb_sheet.rows.to_string();
+                                    break 'waitloop;
+                                }
+                            }
+                        }
+                    },
+                    _ => {},
+                }
+
                 thread::sleep(Duration::from_secs_f32(0.2));
             }
 

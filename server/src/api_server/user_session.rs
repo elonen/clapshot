@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{database::models::{self, Video, Comment}, grpc::{grpc_client::OrganizerConnection, db_video_to_proto3, db_comment_to_proto3}};
+use crate::{database::models::{self, Video, Comment}, grpc::{grpc_client::OrganizerConnection, db_video_to_proto3, db_comment_to_proto3}, client_cmd};
 
 use super::{WsMsgSender, server_state::ServerState, SendTo};
 use base64::{Engine as _, engine::general_purpose as Base64GP};
@@ -88,7 +88,8 @@ pub struct UserSession {
 
 impl UserSession {
 
-    pub async fn emit_new_comment(&self, server: &ServerState, mut c: models::Comment, send_to: SendTo<'_>) -> Res<()> {
+    /// Reads the drawing data from disk and encodes it into a data URI, updating the comment's drawing field
+    pub async fn fetch_drawing_data_into_comment(&self, server: &ServerState, c: &mut models::Comment) -> Res<()> {
         if let Some(drawing) = &mut c.drawing {
             if drawing != "" {
                 // If drawing is present, read it from disk and encode it into a data URI.
@@ -107,11 +108,15 @@ impl UserSession {
                     tracing::warn!("Comment '{}' has data URI drawing stored in DB. Should be on disk.", c.id);
                 }
             }
-        }
-        let proto_cmt = db_comment_to_proto3(&c);
-        server.emit_cmd("new_comment", &serde_json::to_value(proto_cmt)?, send_to).map(|_| ())
+        };
+        Ok(())
     }
 
+    pub async fn emit_new_comment(&self, server: &ServerState, mut c: models::Comment, send_to: SendTo<'_>) -> Res<()> {
+        self.fetch_drawing_data_into_comment(server, &mut c).await?;
+        let cmd = client_cmd!(AddComments, {comments: vec![db_comment_to_proto3(&c)]});
+        server.emit_cmd(cmd, send_to).map(|_| ())
+    }
 
     fn try_send_error<'a>(&self, server: &ServerState, msg: String, details: Option<String>, op: &AuthzTopic<'a>) -> anyhow::Result<()> {
         let topic = match op {

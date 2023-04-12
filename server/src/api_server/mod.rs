@@ -38,6 +38,7 @@ pub mod tests;
 mod file_upload;
 use file_upload::handle_multipart_upload;
 use crate::api_server::user_session::AuthzTopic;
+use crate::client_cmd;
 use crate::database::models::proto_msg_type_to_event_name;
 use crate::database::{models};
 use crate::grpc::db_message_insert_to_proto3;
@@ -113,9 +114,12 @@ async fn handle_ws_session(
     let (mut ws_tx, mut ws_rx) = ws.split();
 
     // Let the client know user's id and name
-    if let Err(e) = server.emit_cmd("welcome",
-            &serde_json::json!({ "user_id": user_id, "username": username }),
-            SendTo::MsgSender(&ses.sender)) {
+    if let Err(e) = server.emit_cmd(
+        client_cmd!(Welcome, {
+            user: Some(proto::UserInfo { username: user_id, displayname: Some(username) }),
+        }),
+        SendTo::MsgSender(&ses.sender)
+    ) {
         tracing::error!(details=%e, "Error sending welcome message. Closing session.");
         return;
     }
@@ -135,17 +139,18 @@ async fn handle_ws_session(
                 let op = AuthzTopic::Other(None, proto::authz_user_action_request::other_op::Op::Login);
                 if ses.org_authz("login", true, &server, op).await == Some(false) {
                     tracing::info!("User '{}' not authorized to login. Closing session.", ses.user_id);
-                    server.emit_cmd("error",
-                        &serde_json::json!({ "msg": "Login permission denied." }),
+                    server.emit_cmd(
+                        client_cmd!(Error, {msg: "Login permission denied.".into()}),
                         SendTo::MsgSender(&ses.sender)).ok();
                     return;
                 }
                 Some(res)
             },
             Err(e) => {
-                tracing::error!(details=%e, "Error connecting to Organizer. Closing session.");
-                server.emit_cmd("error",
-                    &serde_json::json!({ "msg": "Error connecting to Organizer. Closing session." }),
+                const MSG: &str = "Error connecting to Organizer. Closing session.";
+                tracing::error!(details=%e, MSG);
+                server.emit_cmd(
+                    client_cmd!(Error, {msg: MSG.into()}),
                     SendTo::MsgSender(&ses.sender)).ok();
                 return;
             }
@@ -155,8 +160,8 @@ async fn handle_ws_session(
     // Send default actions to client if organizer doesn't want to override them
     if org_start_ses_res.map_or(true, |res| !res.dont_send_default_actions) {
         debug!("Sending default action definitions (organizer didn't want to override them).");
-        if let Err(e) = server.emit_cmd("define_actions",
-                &serde_json::json!(make_video_popup_actions(sid.clone())),
+        if let Err(e) = server.emit_cmd(
+                client_cmd!(DefineActions, {actions: make_video_popup_actions()}),
                 SendTo::MsgSender(&ses.sender)) {
             tracing::error!(details=%e, "Error sending define_actions to client. Closing session.");
             return;
@@ -215,8 +220,9 @@ async fn handle_ws_session(
                                     #[cfg(not(test))] {
                                         sleep(Duration::from_secs(5)).await;
                                     }
-                                    let answ = format!("Invalid message, bye -- {}", e);
-                                    ws_tx.send(Message::text(format!(r#"{{"cmd":"error", "data":{{"message": "{}"}}}}"#, answ))).await.ok();
+                                    let err_msg = proto::server_to_client_cmd::Error { msg: format!("Invalid message, bye -- {}", e) };
+                                    let json_txt = serde_json::to_string(&err_msg).expect("Error serializing error message");
+                                    ws_tx.send(Message::text(json_txt)).await.ok();
                                     break;
                                 }
                             };
@@ -231,7 +237,9 @@ async fn handle_ws_session(
                                     } else {
                                         let answ = format!("Error handling command '{}'.", cmd);
                                         tracing::warn!("[{}] {}: {}", sid, answ, e);
-                                        if ws_tx.send(Message::text(format!(r#"{{"cmd":"error", "data":{{"message": "{}"}}}}"#, answ))).await.is_err() { break; };
+                                        let err_msg = proto::server_to_client_cmd::Error { msg: answ };
+                                        let json_txt = serde_json::to_string(&err_msg).expect("Error serializing error message");
+                                        if ws_tx.send(Message::text(json_txt)).await.is_err() { break; };
                                     }
                                 }
 
@@ -405,12 +413,11 @@ async fn run_api_server_async(
 
                 // Message to all watchers of a video
                 if let Some(vh) = m.video_hash {
-                    if let Ok(data) = serde_json::to_value(db_message_insert_to_proto3(&msg)) {
-                        let msg = Message::text(serde_json::json!({
-                            "cmd": "message", "data": data }).to_string());
-                        if let Err(_) = server_state.send_to_all_video_sessions(&vh, &msg) {
-                            tracing::error!(video=vh, "Failed to send notification to video hash.");
-                        }
+                    if let Err(_) = server_state.emit_cmd(
+                        client_cmd!(ShowMessages, { msgs: vec![db_message_insert_to_proto3(&msg)] }),
+                        SendTo::VideoHash(&vh)
+                    ) {
+                        tracing::error!(video=vh, "Failed to send notification to video hash.");
                     }
                 };
 
@@ -418,13 +425,12 @@ async fn run_api_server_async(
                 // Save it to the database, marking it as seen if sending it to the user succeeds
                 if let Some(user_id) = m.user_id {
                     let mut user_was_online = false;
-                    if let Ok(data) = serde_json::to_value(db_message_insert_to_proto3(&msg)) {
-                        let msg = Message::text(serde_json::json!({
-                            "cmd": "message", "data": data }).to_string());
-                        match server_state.send_to_all_user_sessions(&user_id, &msg) {
-                            Ok(session_cnt) => { user_was_online = session_cnt>0 },
-                            Err(e) => tracing::error!(user=user_id, details=%e, "Failed to send user notification."),
-                        }
+                    match server_state.emit_cmd(
+                        client_cmd!(ShowMessages, { msgs: vec![db_message_insert_to_proto3(&msg)] }),
+                        SendTo::UserId(&user_id))
+                    {
+                        Ok(session_cnt) => { user_was_online = session_cnt>0 },
+                        Err(e) => tracing::error!(user=user_id, details=%e, "Failed to send user notification."),
                     }
                     if !matches!(m.topic, UserMessageTopic::Progress) {
                         let msg = models::MessageInsert {

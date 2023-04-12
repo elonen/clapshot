@@ -52,7 +52,6 @@ function onEditFieldKeyUp(e: KeyboardEvent) {
 }
 
 function hasChildren(): boolean {
-    console.log(".");
     return $all_comments.filter(c => c.comment.parentId == comment.id).length > 0;
 }
 

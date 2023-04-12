@@ -423,3 +423,54 @@ message Icon {
 }
 
 message Empty {}
+
+
+// ---------------------------------------
+// Clapshot client / server communications
+// ---------------------------------------
+
+// These are internal and may change between versions -- don't use in Organizer code
+message ServerToClientCmd {
+    message Welcome {
+        UserInfo user = 1;
+    }
+    message Error {
+        string msg = 1;
+    }
+    message ShowPage {
+        repeated PageItem page_items = 1;
+    }
+    message DefineActions {
+        map<string, ActionDef> actions = 1;
+    }
+    message ShowMessages {
+        repeated UserMessage msgs = 1;
+    }
+    message OpenVideo {
+        Video video = 1;
+    }
+    message AddComments {
+        repeated Comment comments = 1;
+    }
+    message DelComment {
+        string comment_id = 1;
+    }
+    message CollabEvent {
+        string from_user = 1;
+        bool paused = 2;
+        double seek_time_sec = 3;       // From start of video
+        optional string drawing = 4;    // data-uri of an image
+    }
+
+    oneof cmd {
+        Welcome welcome = 10;
+        Error error = 20;
+        ShowPage show_page = 30;
+        DefineActions define_actions = 40;
+        ShowMessages show_messages = 50;
+        OpenVideo open_video = 60;
+        AddComments add_comments = 70;
+        DelComment del_comment = 80;
+        CollabEvent collab_event = 90;
+    }
+}

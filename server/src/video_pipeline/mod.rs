@@ -516,6 +516,8 @@ pub fn run_forever(
                                 }
 
                                 // Symlink to transcoded file
+                                let user_id = res.dmsg.clone().user_id;
+                                let utx = user_msg_tx.clone();
                                 let linked_ok = (move || {
                                     let vh_dir = videos_dir.join(&vh);
                                     if !vh_dir.exists() {
@@ -533,6 +535,13 @@ pub fn run_forever(
                                         return false;
                                     }
                                     if let Err(e) = db.set_video_recompressed(&vh) {
+                                        utx.send(UserMessage {
+                                            topic: UserMessageTopic::VideoUpdated,
+                                            msg: "Transcoding done".into(),
+                                            details: None,
+                                            user_id: Some(user_id),
+                                            video_hash: Some(vh.clone())
+                                        }).ok();
                                         tracing::error!(details=%e, "Error marking video as recompressed in DB");
                                         return false;
                                     }

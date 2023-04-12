@@ -9,9 +9,11 @@ use anyhow::anyhow;
 
 use super::user_session::OpaqueGuard;
 use super::{WsMsgSender, SenderList, SessionMap, SenderListMap, StringToStringMap, Res, UserSession, SendTo};
+use crate::client_cmd;
 use crate::database::{DB, models};
 use crate::grpc::db_message_insert_to_proto3;
 use crate::grpc::grpc_client::OrganizerURI;
+use lib_clapshot_grpc::proto;
 
 /// Lists of all active connections and other server state vars
 #[derive (Clone)]
@@ -87,20 +89,11 @@ impl ServerState {
         }
     }
 
-    /// Send a command to client websocket(s).
-    ///
-    /// If send_to is a string, it is interpreted either as a video hash or user id. Returns the
-    /// number of sessions the message was sent to.
-    ///
-    /// - If it turns out to be a video hash, the message is sent to all websocket
-    ///     that are watching it.
-    /// - If it's a user id, the message is sent to all websocket connections that user has open.
-    /// - If it's a MsgSender, the message is sent to that connection only.
-    /// - If it's a SendTo::CurSession, the message is sent to the current session only.
-    /// - If it's a SendTo::CurCollab, the message is sent to all users in the current collab session.
-    pub fn emit_cmd(&self, cmd: &str, data: &serde_json::Value, send_to: SendTo) -> Res<u32>
+    /// Send a client command to websocket of given recipient(s)
+    pub fn emit_cmd(&self, cmd: proto::server_to_client_cmd::Cmd, send_to: SendTo) -> Res<u32>
     {
-        let msg = serde_json::json!({ "cmd": cmd, "data": data });
+        let cmd = proto::ServerToClientCmd { cmd: Some(cmd) };
+        let msg = serde_json::to_value(cmd)?;
         let msg = warp::ws::Message::text(msg.to_string());
         match send_to {
             SendTo::UserSession(sid) => { self.send_to_user_session(&sid, &msg) },
@@ -113,7 +106,8 @@ impl ServerState {
 
     /// Send a user message to given recipients.
     pub fn push_notify_message(&self, msg: &models::MessageInsert, send_to: SendTo, persist: bool) -> Res<()> {
-        let send_res = self.emit_cmd("message", &serde_json::to_value(db_message_insert_to_proto3(&msg))?, send_to);
+        let cmd = client_cmd!(ShowMessages, {msgs: vec![db_message_insert_to_proto3(&msg)]});
+        let send_res = self.emit_cmd(cmd, send_to);
         if let Ok(sent_count) = send_res {
             if persist {
                 self.db.add_message(&models::MessageInsert {

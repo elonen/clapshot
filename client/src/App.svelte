@@ -368,47 +368,43 @@ function connect_websocket_after_auth_check(ws_url: string)
         const msg_json = JSON.parse(event.data);
         handle_with_errors(() =>
         {
-            const cmd = msg_json.cmd;
-            const data = msg_json.data;
-
-            log_abbreviated("[RAW SERVER] cmd: '" + cmd + "', data size = " + JSON.stringify(data).length);
+            const cmd = Proto3.ServerToClientCmd.fromJSON(msg_json);
+            if (!cmd) {
+                console.error("Got INVALID message: ", msg_json);
+                return;
+            }
+            console.log("Got '" + Object.keys(msg_json)[0] + "'");
 
             if (Date.now() - last_video_progress_msg_ts > 5000) {
                 $video_progress_msg = null; // timeout progress message after a while
             }
 
-            switch (cmd)
-            {
-                case 'welcome': {
-                    //log_abbreviated("[SERVER] welcome: " + JSON.stringify(data));
-                    $cur_username = data.username;
-                    $cur_user_id = data.user_id
-                    break;
+            // welcome
+            if (cmd.welcome) {
+                if (!cmd.welcome.user) {
+                    console.error("No user in welcome message");
+                    acts.add({mode: 'danger', message: 'No user in welcome message', lifetime: 5});
+                    return;
                 }
-
-                case 'error': {
-                    console.error("[SERVER ERROR]: ", data);
-                    acts.add({mode: 'danger', message: data.msg, lifetime: 5});
-                    break;
-                }
-
-                case 'show_page': {
-                    log_abbreviated("[SERVER] show_page: " + JSON.stringify(data));
-                    $cur_page_items = data.page_items.map(
-                    (pi: any) => Proto3.PageItem.fromJSON(pi));
-                    break;
-                }
-
-                case 'define_actions': {
-                    log_abbreviated("[SERVER] define_actions: " + JSON.stringify(data));
-                    $server_defined_actions = Proto3.ClientDefineActionsRequest.fromJSON(data).actions;
-                    break;
-                }
-
-                case 'message': {
-                    log_abbreviated("[SERVER] message: " + JSON.stringify(data));
-                    const msg = Proto3.UserMessage.fromJSON(data);
-
+                $cur_username = cmd.welcome.user.displayname ?? cmd.welcome.user.username;
+                $cur_user_id = cmd.welcome.user.username;
+            }
+            // error
+            else if (cmd.error) {
+                console.error("[SERVER ERROR]: ", cmd.error);
+                acts.add({mode: 'danger', message: cmd.error.msg, lifetime: 5});
+            }
+            // showPage
+            else if (cmd.showPage) {
+                $cur_page_items = cmd.showPage.pageItems;
+            }
+            // defineActions
+            else if (cmd.defineActions) {
+                $server_defined_actions = cmd.defineActions.actions;
+            }
+            // messages
+            else if (cmd.showMessages) {
+                for (const msg of cmd.showMessages.msgs) {
                     if ( msg.type === Proto3.UserMessage_Type.PROGRESS ) {
                         if (msg.refs?.videoHash == $video_hash) {
                             $video_progress_msg = msg.message;
@@ -417,115 +413,106 @@ function connect_websocket_after_auth_check(ws_url: string)
                     }
                     else if ( msg.type === Proto3.UserMessage_Type.VIDEO_UPDATED ) {
                         refresh_my_videos();
-                    }
-                    else {
+                    } else {
                         $user_messages = $user_messages.filter((m) => m.id != msg.id);
                         if (msg.created) { $user_messages.push(msg); }
                         if (!msg.seen) {
                             const severity = (msg.type == Proto3.UserMessage_Type.ERROR) ? 'danger' : 'info';
                             acts.add({mode: severity, message: msg.message, lifetime: 5});
                             if (severity == 'info') {
-                                refresh_my_videos();
-                            }};
-                        }
-                        break;
-                    }
-
-                case 'open_video': {
-                    log_abbreviated("[SERVER] open_video: " + JSON.stringify(data));
-                    let v = Proto3.Video.fromJSON(data);
-                    try
-                    {
-                        if (!v.playbackUrl) throw Error("No playback URL");
-                        if (!v.duration) throw Error("No duration");
-                        if (!v.title) throw Error("No title");
-
-                        $video_url = v.playbackUrl;
-                        $video_hash = v.videoHash;
-                        $video_fps = parseFloat(v.duration.fps);
-                        if (isNaN($video_fps)) throw Error("Invalid FPS");
-                        $video_title = v.title;
-                        $all_comments = [];
-
-                        if ($collab_id)
-                        ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
-                        else
-                        history.pushState($video_hash, '', '/?vid='+$video_hash);  // Point URL to video
-                    } catch(error) {
-                        acts.add({mode: 'danger', message: 'Bad video open request. See log.', lifetime: 5});
-                        console.error("Invalid video open request. Error: ", error, "Data: ", data);
-                    }
-                    break;
-                }
-
-                case 'new_comment': {
-                    log_abbreviated("[SERVER] new_comment: " + JSON.stringify(data));
-                    {
-                        let new_comment = Proto3.Comment.fromJSON(data);
-
-                        function indentCommentTree(items: IndentedComment[]): IndentedComment[]
-                        {
-                            let rootComments = items.filter(item => item.comment.parentId == null);
-                            rootComments.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
-
-                            // Recursive DFS function to traverse and build the ordered list
-                            function dfs(c: IndentedComment, depth: number, result: IndentedComment[]): void {
-                                if (result.find((it) => it.comment.id === c.comment.id)) return;  // already added, cut infinite loop
-                                result.push({ ...c, indent: depth });
-                                let children = items.filter(item => (item.comment.parentId === c.comment.id));
-                                children.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
-                                for (let child of children)
-                                dfs(child, depth + 1, result);
+                                refresh_my_videos();    // hack, rename and other such actions send info notifications
                             }
-
-                            let res: IndentedComment[] = [];
-                            rootComments.forEach((c) => dfs(c, 0, res));
-
-                            // Add any orphaned comments to the end (we may receive them out of order)
-                            items.forEach((c) => {
-                                if (!res.find((it) => it.comment.id === c.comment.id))
-                                res.push(c);
-                            });
-                            return res;
-                        }
-
-                        if (new_comment.videoHash == $video_hash)
-                        {
-                            $all_comments.push({
-                                comment: new_comment,
-                                indent: 0
-                            });
-                            $all_comments = indentCommentTree($all_comments);
-                        } else {
-                            log_abbreviated("Comment not for this video. Ignoring.");
-                        }
+                        };
                     }
-                    break;
                 }
+            }
+            // openVideo
+            else if (cmd.openVideo) {
+                try {
+                    const v = cmd.openVideo.video!;
+                    if (!v.playbackUrl) throw Error("No playback URL");
+                    if (!v.duration) throw Error("No duration");
+                    if (!v.title) throw Error("No title");
 
-                case 'del_comment': {
-                    $all_comments = $all_comments.filter((c) => c.comment.id != data.id);
-                    break;
+                    $video_url = v.playbackUrl;
+                    $video_hash = v.videoHash;
+                    $video_fps = parseFloat(v.duration.fps);
+                    if (isNaN($video_fps)) throw Error("Invalid FPS");
+                    $video_title = v.title;
+                    $all_comments = [];
+
+                    if ($collab_id)
+                        ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
+                    else
+                        history.pushState($video_hash, '', '/?vid=' + $video_hash);  // Point URL to video
+                } catch(error) {
+                    acts.add({mode: 'danger', message: 'Bad video open request. See log.', lifetime: 5});
+                    console.error("Invalid video open request. Error: ", error);
                 }
+            }
+            // addComments
+            else if (cmd.addComments) {
 
-                case 'collab_cmd': {
-                    log_abbreviated("[SERVER] collab_cmd: " + JSON.stringify(data));
-                    if (!data.paused) {
-                        video_player.collabPlay(data.seek_time);
-                    } else {
-                        video_player.collabPause(data.seek_time, data.drawing);
+                // Add/replace the new comments
+                for (const new_comment of cmd.addComments.comments) {
+                    if (new_comment.videoHash != $video_hash) {
+                        console.warn("Comment not for current video. Ignoring.");
+                        continue;
                     }
-                    if (last_collab_controlling_user != data.from_user) {
-                        last_collab_controlling_user = data.from_user;
-                        acts.add({mode: 'info', message: last_collab_controlling_user + " is controlling", lifetime: 5});
-                    }
-                    break;
+                    $all_comments = $all_comments.filter((c) => c.comment.id !== new_comment.id);
+                    $all_comments.push({
+                        comment: new_comment,
+                        indent: 0
+                    });
                 }
 
-                default: {
-                    console.error("[SERVER] UNKNOWN CMD '"+data.cmd+"'", data);
-                    break;
+                // Re-sort / turn updated comment tree into an indented, ordered list for UI
+                function indentCommentTree(items: IndentedComment[]): IndentedComment[]
+                {
+                    let rootComments = items.filter(item => item.comment.parentId == null);
+                    rootComments.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
+
+                    // Recursive DFS function to traverse and build the ordered list
+                    function dfs(c: IndentedComment, depth: number, result: IndentedComment[]): void {
+                        if (result.find((it) => it.comment.id === c.comment.id)) return;  // already added, cut infinite loop
+                        result.push({ ...c, indent: depth });
+                        let children = items.filter(item => (item.comment.parentId === c.comment.id));
+                        children.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
+                        for (let child of children)
+                        dfs(child, depth + 1, result);
+                    }
+
+                    let res: IndentedComment[] = [];
+                    rootComments.forEach((c) => dfs(c, 0, res));
+
+                    // Add any orphaned comments to the end (we may receive them out of order)
+                    items.forEach((c) => {
+                        if (!res.find((it) => it.comment.id === c.comment.id))
+                        res.push(c);
+                    });
+                    return res;
                 }
+                $all_comments = indentCommentTree($all_comments);
+            }
+            // delComment
+            else if (cmd.delComment) {
+                $all_comments = $all_comments.filter((c) => c.comment.id != cmd.delComment!.commentId);
+            }
+            // collabEvent
+            else if (cmd.collabEvent) {
+                const evt = cmd.collabEvent;
+                if (!evt.paused) {
+                    video_player.collabPlay(evt.seekTimeSec);
+                } else {
+                    video_player.collabPause(evt.seekTimeSec, evt.drawing);
+                }
+                if (last_collab_controlling_user != evt.fromUser) {
+                    last_collab_controlling_user = evt.fromUser;
+                    acts.add({mode: 'info', message: last_collab_controlling_user + " is controlling", lifetime: 5});
+                }
+            }
+            else {
+                console.error("[SERVER] UNKNOWN command from server. Raw JSON:", msg_json);
             }
         });
     });
