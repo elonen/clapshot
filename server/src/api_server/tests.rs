@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tracing_test::traced_test;
 use std::sync::atomic::Ordering::Relaxed;
-use rand;
 
 use reqwest::{multipart, Client};
 

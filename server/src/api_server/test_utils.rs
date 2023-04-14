@@ -95,7 +95,7 @@ macro_rules! api_test {
         {
             let (db, data_dir, videos, comments) = make_test_db();
 
-            let port = 10000 + (rand::random::<u16>() % 10000);
+            let port = portpicker::pick_unused_port().expect("No TCP ports free");
             let (user_msg_tx, user_msg_rx) = crossbeam_channel::unbounded();
             let (upload_res_tx, upload_res_rx) = crossbeam_channel::unbounded();
             let terminate_flag = Arc::new(AtomicBool::new(false));

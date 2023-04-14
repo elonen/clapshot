@@ -77,7 +77,7 @@ mod integration_test
                 let $incoming_dir = $data_dir.join("incoming");
         
                 // Run server
-                let port = 10000 + (rand::random::<u16>() % 10000);
+                let port = portpicker::pick_unused_port().expect("No TCP ports free");
                 let url_base = format!("http://127.0.0.1:{}", port);
                 let ws_url = format!("{}/api/ws", &url_base.replace("http", "ws"));
                 let target_bitrate = $bitrate;

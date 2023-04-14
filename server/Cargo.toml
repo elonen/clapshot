@@ -85,6 +85,7 @@ tracing-appender = "0.2.2"
 timeago = "0.4.1"
 tempfile = "3.4.0"
 time = "0.3.20"
+portpicker = "0.1.1"
 
 [dev-dependencies]
 assert_fs = "1.0.10"

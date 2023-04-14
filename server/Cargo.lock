@@ -401,6 +401,7 @@ dependencies = [
  "mpart-async",
  "num_cpus",
  "path-absolutize",
+ "portpicker",
  "r2d2",
  "rand",
  "reqwest",
@@ -1500,6 +1501,15 @@ dependencies = [
  "log",
  "pin-project-lite",
  "windows-sys 0.45.0",
+]
+
+[[package]]
+name = "portpicker"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be97d76faf1bfab666e1375477b23fde79eccf0276e9b63b92a39d676a889ba9"
+dependencies = [
+ "rand",
 ]
 
 [[package]]
