@@ -143,7 +143,7 @@ mod integration_test
             write(&mut ws, &msg.to_string()).await;
             let mut got_new_comment = false;
             for _ in 0..3 {
-                match crate::api_server::test_utils::expect_parsed::<proto::ServerToClientCmd>(&mut ws).await.cmd {
+                match crate::api_server::test_utils::try_get_parsed::<proto::ServerToClientCmd>(&mut ws).await.map(|x| x.cmd.unwrap()) {
                     Some(proto::server_to_client_cmd::Cmd::AddComments(m)) => {
                         got_new_comment = true;
                         break;
