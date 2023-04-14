@@ -5,7 +5,6 @@ use std::sync::atomic::AtomicBool;
 use lib_clapshot_grpc::proto;
 use tracing_test::traced_test;
 use std::sync::atomic::Ordering::Relaxed;
-use rand;
 
 use reqwest::{multipart, Client};
 

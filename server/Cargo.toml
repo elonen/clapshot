@@ -97,6 +97,7 @@ parking_lot = "0.12.1"
 time = "0.3.20"
 pbjson = "0.5.1"
 pbjson-types = "0.5.1"
+portpicker = "0.1.1"
 
 [dev-dependencies]
 assert_fs = "1.0.10"
