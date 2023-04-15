@@ -4,7 +4,7 @@ import * as Proto3 from '@clapshot_protobuf/typescript';
 
 export let x = 0;
 export let y = 0;
-export let menu_lines: Proto3.ActionDef[] = [];
+export let menuLines: Proto3.ActionDef[] = [];
 
 let menu_el: HTMLElement | null = null;
 let removed = false;
@@ -47,7 +47,7 @@ function fmtColorToCSS(c: Proto3.Color | null | undefined) {
 >
     <div class="popupmenu">
         <ul>
-            {#each menu_lines as it}
+            {#each menuLines as it}
                 {#if it.uiProps?.label?.toLowerCase() == "hr" && !it.action?.code}
                     <hr>
                 {:else if it.uiProps}

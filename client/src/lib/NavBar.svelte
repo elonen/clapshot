@@ -1,7 +1,7 @@
 <script lang="ts">
 
 import { createEventDispatcher } from 'svelte';
-import { cur_username, cur_user_pic, video_title, video_hash, video_progress_msg, collab_id, user_menu_items } from "@/stores";
+import { curUsername, curUserPic, videoTitle, videoHash, videoProgressMsg, collabId, userMenuItems } from "@/stores";
 import Avatar from '@/lib/Avatar.svelte';
 import logo from "@/assets/clapshot-logo.svg";
 
@@ -12,7 +12,7 @@ function onClickBanner(): void {
 }
 
 function onClickUser(): void {
-    if (!$user_menu_items) return;
+    if (!$userMenuItems) return;
     let user_menu = document.getElementById("user-menu");
     if (user_menu?.classList.contains("hidden")) {
         user_menu.classList.remove("hidden");
@@ -42,7 +42,7 @@ function logoutBasicAuth(urlFor401: RequestInfo, redirUrl: string) {
         })
 }
 
-const random_session_id = Math.random().toString(36).substring(2, 15);
+const randomSessionId = Math.random().toString(36).substring(2, 15);
 
 </script>
 
@@ -61,20 +61,20 @@ const random_session_id = Math.random().toString(36).substring(2, 15);
 
 		<!-- video info -->
 		<div class="flex-1 justify-between">
-			{#if $video_hash}
+			{#if $videoHash}
 			<span class="grid grid-flow-row auto-rows-max items-center font-mono text-gray-600 mx-4">
 					<h2 class=" text-lg text-center">
-						{$video_hash}
-						<a href="?vid={$video_hash}" class="text-gray-700 hover:text-gray-500"><i class="fas fa-share-square text-sm"></i></a>
-						{#if $collab_id}
-							<a href="?vid={$video_hash}" class="text-green-500 hover:text-orange-600" title="Collaborative session active. Click to exit."><i class="fas fa-users text-sm"></i></a>
+						{$videoHash}
+						<a href="?vid={$videoHash}" class="text-gray-700 hover:text-gray-500"><i class="fas fa-share-square text-sm"></i></a>
+						{#if $collabId}
+							<a href="?vid={$videoHash}" class="text-green-500 hover:text-orange-600" title="Collaborative session active. Click to exit."><i class="fas fa-users text-sm"></i></a>
 						{:else}
-							<a href="?vid={$video_hash}&collab={random_session_id}" title="Start collaborative session" class="text-gray-700 hover:text-gray-500"><i class="fas fa-user-plus text-sm"></i></a>
+							<a href="?vid={$videoHash}&collab={randomSessionId}" title="Start collaborative session" class="text-gray-700 hover:text-gray-500"><i class="fas fa-user-plus text-sm"></i></a>
 						{/if}
 					</h2>
-				<span class="mx-4 text-xs text-center">{$video_title}</span>
-				{#if $video_progress_msg}
-					<span class="text-cyan-800 mx-4 text-xs text-center">{$video_progress_msg}</span>
+				<span class="mx-4 text-xs text-center">{$videoTitle}</span>
+				{#if $videoProgressMsg}
+					<span class="text-cyan-800 mx-4 text-xs text-center">{$videoProgressMsg}</span>
 				{/if}
 			</span>
 			{/if}
@@ -82,21 +82,21 @@ const random_session_id = Math.random().toString(36).substring(2, 15);
 
 
 		<!-- Username & avatar-->
-		<div class="flex-0" style="visibility: {$cur_username ? 'visible': 'hidden'}">
+		<div class="flex-0" style="visibility: {$curUsername ? 'visible': 'hidden'}">
 			<span class="flex w-auto items-center">
-				<h6 class="flex-1 mx-4 text-gray-500 font-semibold">{$cur_username}</h6>
+				<h6 class="flex-1 mx-4 text-gray-500 font-semibold">{$curUsername}</h6>
 				<button id="user-button" class="flex-0 ring-4 ring-slate-800 text-sm rounded-full" on:click|preventDefault={onClickUser}>
-					{#if $cur_user_pic || $cur_username}
-					<div class="w-10 block"><Avatar username={$cur_username} /></div>
+					{#if $curUserPic || $curUsername}
+					<div class="w-10 block"><Avatar username={$curUsername} /></div>
 					{/if}
 				</button>
 			</span>
 
 			<!-- floating user menu, hidden by default -->
-			{#if $user_menu_items != undefined && $user_menu_items.length > 0 }
+			{#if $userMenuItems != undefined && $userMenuItems.length > 0 }
 				<div id="user-menu" class="absolute right-0 w-48 mt-2 origin-top-right z-[200] bg-white border border-gray-200 divide-y divide-gray-100 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none hidden">
 					<div class="py-1">
-						{#each $user_menu_items as item}
+						{#each $userMenuItems as item}
 							{#if item.type === "logout-basic-auth" }
 								<button on:click|preventDefault={() => logoutBasicAuth('/logout', '/')} class="block text-left px-4 py-2 w-full text-sm text-gray-700 hover:bg-gray-100" role="menuitem">{item.label}</button>
 							{:else if item.type === "divider"}

@@ -7,7 +7,7 @@ import {scale} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import {VideoFrame} from '@/lib/VideoFrame';
-import {all_comments, video_is_ready, video_fps, collab_id} from '@/stores';
+import {allComments, videoIsReady, videoFps, collabId} from '@/stores';
 
 import CommentTimelinePin from '@/lib/CommentTimelinePin.svelte';
 
@@ -31,7 +31,7 @@ let commentsWithTc: Proto3.Comment[] = [];  // Will be populated by the store on
 function refreshCommentPins(): void {
     // Make pins for all comments with timecode
     commentsWithTc = [];
-    all_comments.subscribe(comments => {
+    allComments.subscribe(comments => {
         for (let c of comments) { if (c.comment.timecode) { commentsWithTc.push(c.comment); } }
         commentsWithTc = commentsWithTc.sort((a, b) => {
             if (!a.timecode || !b.timecode) { return 0; }
@@ -41,7 +41,7 @@ function refreshCommentPins(): void {
 }
 
 function send_collab_report(): void {
-    if ($collab_id) {
+    if ($collabId) {
         let drawing = paused ? getScreenshot() : null;
         dispatch('collabReport', {paused: video_elem.paused, seek_time: video_elem.currentTime, drawing: drawing});
     }
@@ -61,11 +61,11 @@ function prepare_drawing(): void
 {
     if (!draw_board && video_elem.videoWidth>0)
     {
-        $video_is_ready = true;
+        $videoIsReady = true;
 
         vframe_calc = new VideoFrame({
             video: video_elem,
-            frameRate: $video_fps,
+            frameRate: $videoFps,
             callback: function(response: any) { console.log(response); } });
 
         refreshCommentPins(); // Creates CommentTimelinePin components, now that we can calculate timecodes properly
@@ -98,7 +98,7 @@ onMount(async () => {
     // Force the video to load
     if (!video_elem.videoWidth) { video_elem.load(); }
     prepare_drawing();
-    all_comments.subscribe((_v) => { refreshCommentPins(); });
+    allComments.subscribe((_v) => { refreshCommentPins(); });
 });
 
 
@@ -346,7 +346,7 @@ function onFrameEdited(e: Event) {
 				crossOrigin="anonymous"
 				preload="auto"
 				class="h-full w-full"
-				style="opacity: {$video_is_ready ? 1.0 : 0}; transition-opacity: 1.0s;"
+				style="opacity: {$videoIsReady ? 1.0 : 0}; transition-opacity: 1.0s;"
 				bind:this={video_elem}
 				on:loadedmetadata={prepare_drawing}
 				on:click={togglePlay}

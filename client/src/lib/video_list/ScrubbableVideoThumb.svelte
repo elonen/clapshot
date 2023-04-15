@@ -7,21 +7,21 @@
  * When the mouse is not over the thumbnail,
  * a single poster image is shown instead.
  */
-export let thumb_poster_url: string;
-export let thumb_sheet_url: string | null = null;
-export let thumb_sheet_cols: number | null = null;
-export let thumb_sheet_rows: number | null = null;
+export let thumbPosterUrl: string;
+export let thumbSheetUrl: string | null = null;
+export let thumbSheetCols: number | null = null;
+export let thumbSheetRows: number | null = null;
 
 export let extra_styles: string = "";
 
 function installThumbScrubber(e: MouseEvent)
 {
-    if (thumb_sheet_url == null || thumb_sheet_cols == null || thumb_sheet_rows == null)
+    if (thumbSheetUrl == null || thumbSheetCols == null || thumbSheetRows == null)
         return;
 
-    let thumb_el = e.target as HTMLElement;
-    let sheet_cols = thumb_sheet_cols;
-    let sheet_rows = thumb_sheet_rows;
+    let el = e.target as HTMLElement;
+    let sheetCols = thumbSheetCols;
+    let sheetRows = thumbSheetRows;
     let bgImg =  new Image();
 
     bgImg.onload = (_e) => {
@@ -30,57 +30,57 @@ function installThumbScrubber(e: MouseEvent)
         let sheet_h_px = bgImg.naturalHeight;
 
         // Size of one frame in pixels
-        let frame_width = sheet_w_px / sheet_cols;
-        let frame_height = sheet_h_px / sheet_rows;
+        let frame_width = sheet_w_px / sheetCols;
+        let frame_height = sheet_h_px / sheetRows;
 
         // Size of current div (that shows the sprite sheet) in pixels
-        let div_w_px = thumb_el.clientWidth;
-        let div_h_px = thumb_el.clientHeight;
+        let div_w_px = el.clientWidth;
+        let div_h_px = el.clientHeight;
 
         // Switch background image to the now loaded sprite sheet
-        thumb_el.style.backgroundRepeat = 'no-repeat';
-        thumb_el.style.backgroundImage = 'url(' + bgImg.src + ')';
+        el.style.backgroundRepeat = 'no-repeat';
+        el.style.backgroundImage = 'url(' + bgImg.src + ')';
 
         // Scale the sprite sheet so one frame fits in the div
         let scaled_bgr_w = (div_w_px / frame_width) * sheet_w_px;
         let scaled_bgr_h = (div_h_px / frame_height) * sheet_h_px;
-        thumb_el.style.backgroundSize = scaled_bgr_w + 'px ' + scaled_bgr_h + 'px';
+        el.style.backgroundSize = scaled_bgr_w + 'px ' + scaled_bgr_h + 'px';
 
         function show_frame(frame_idx: number) {
-            let frame_xi = frame_idx % sheet_cols;
-            let frame_yi = Math.floor(frame_idx / sheet_cols);
+            let frame_xi = frame_idx % sheetCols;
+            let frame_yi = Math.floor(frame_idx / sheetCols);
 
-            let frame_left = scaled_bgr_w * (frame_xi / sheet_cols);
-            let frame_top = scaled_bgr_h * (frame_yi / sheet_rows);
+            let frame_left = scaled_bgr_w * (frame_xi / sheetCols);
+            let frame_top = scaled_bgr_h * (frame_yi / sheetRows);
 
-            thumb_el.style.backgroundPosition = '-' + frame_left + 'px -' + frame_top + 'px';
+            el.style.backgroundPosition = '-' + frame_left + 'px -' + frame_top + 'px';
         }
         show_frame(0);
 
         // Scrub sheet on mouse move
-        thumb_el.onmousemove = (e: MouseEvent) => {
-            let frame_idx = Math.floor((e.offsetX / thumb_el.clientWidth) * (sheet_cols * sheet_rows));
+        el.onmousemove = (e: MouseEvent) => {
+            let frame_idx = Math.floor((e.offsetX / el.clientWidth) * (sheetCols * sheetRows));
             show_frame(frame_idx);
         }
     };
     // Start loading the sprite sheet
-    bgImg.src = thumb_sheet_url;
+    bgImg.src = thumbSheetUrl;
 }
 
 function removeThumbScrubber(e: MouseEvent)
 {
     // Restore original background image (item.thumb_url)
-    let thumb_el = e.target as HTMLElement;
-    thumb_el.onmousemove = null;
-    thumb_el.onload = null;
-    thumb_el.style.backgroundImage = 'url(' + thumb_poster_url + ')';
-    thumb_el.style.backgroundPosition = '0 0';
-    thumb_el.style.backgroundSize = '100% 100%';
+    let el = e.target as HTMLElement;
+    el.onmousemove = null;
+    el.onload = null;
+    el.style.backgroundImage = 'url(' + thumbPosterUrl + ')';
+    el.style.backgroundPosition = '0 0';
+    el.style.backgroundSize = '100% 100%';
 }
 </script>
 
 <div class="w-full aspect-video mx-auto rounded-md overflow-hidden"
-  style="background-image: url('{thumb_poster_url}'); background-size: cover; background-position: 0 0; {extra_styles}"
+  style="background-image: url('{thumbPosterUrl}'); background-size: cover; background-position: 0 0; {extra_styles}"
   on:blur={()=>{}}
   on:focus={()=>{}}
   on:mouseover={installThumbScrubber}

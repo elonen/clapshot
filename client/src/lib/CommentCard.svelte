@@ -3,7 +3,7 @@
 import { createEventDispatcher } from 'svelte';
 import { scale, slide } from "svelte/transition";
 import Avatar from '@/lib//Avatar.svelte';
-import { cur_user_id, all_comments } from '@/stores';
+import { curUserId, allComments } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
 const dispatch = createEventDispatcher();
@@ -12,10 +12,10 @@ export let indent: number = 0;
 export let comment: Proto3.Comment;
 
 let editing = false;
-let show_actions: boolean = false;
+let showActions: boolean = false;
 
-let show_reply: boolean = false;
-let reply_input: HTMLInputElement;
+let showReply: boolean = false;
+let replyInput: HTMLInputElement;
 
 function onTimecodeClick(tc: string) {
     dispatch("display-comment", {'timecode': tc, 'drawing': comment.drawing});
@@ -29,11 +29,11 @@ function onClickDeleteComment() {
 }
 
 function onReplySubmit() {
-    if (reply_input.value != "")
+    if (replyInput.value != "")
     {
-        dispatch("reply-to-comment", {'parent_id': comment.id, 'comment_text': reply_input.value});
-        reply_input.value = "";
-        show_reply = false;
+        dispatch("reply-to-comment", {'parent_id': comment.id, 'comment_text': replyInput.value});
+        replyInput.value = "";
+        showReply = false;
     }
 }
 
@@ -52,7 +52,7 @@ function onEditFieldKeyUp(e: KeyboardEvent) {
 }
 
 function hasChildren(): boolean {
-    return $all_comments.filter(c => c.comment.parentId == comment.id).length > 0;
+    return $allComments.filter(c => c.comment.parentId == comment.id).length > 0;
 }
 
 </script>
@@ -63,9 +63,9 @@ function hasChildren(): boolean {
     style="margin-left: {indent*1.5}em"
     tabindex="0"
     role="link"
-    on:focus="{() => show_actions=true}"
-    on:mouseenter="{() => show_actions=true}"
-    on:mouseleave="{() => show_actions=false}"
+    on:focus="{() => showActions=true}"
+    on:mouseenter="{() => showActions=true}"
+    on:mouseleave="{() => showActions=false}"
     on:click = "{() => {if (comment.timecode) onTimecodeClick(comment.timecode);}}"
     on:keydown={(e) => {
         if (e.key == "Escape") { editing = false; }
@@ -96,10 +96,10 @@ function hasChildren(): boolean {
         {/if}
     </div>
 
-    {#if show_actions}
+    {#if showActions}
     <div class="p-2 flex place-content-end" transition:slide="{{ duration: 200 }}">
-        <button class="border rounded-lg px-1 placeholder: ml-2 text-sm border-cyan-500 text-cyan-500" on:click={()=>show_reply=true}>Reply</button>
-        {#if comment.user?.username == $cur_user_id || $cur_user_id == "admin"}
+        <button class="border rounded-lg px-1 placeholder: ml-2 text-sm border-cyan-500 text-cyan-500" on:click={()=>showReply=true}>Reply</button>
+        {#if comment.user?.username == $curUserId || $curUserId == "admin"}
             <button class="border rounded-lg px-1 ml-2 text-sm border-cyan-600 text-cyan-600" on:click="{()=>{editing=true;}}">Edit</button>
             {#if !hasChildren()}
             <button class="border rounded-lg px-1 ml-2 text-sm border-red-300 text-red-300" on:click={onClickDeleteComment}>Del</button>
@@ -108,14 +108,14 @@ function hasChildren(): boolean {
     </div>
     {/if}
 
-    {#if show_reply}
+    {#if showReply}
         <form class="p-2" on:submit|preventDefault={onReplySubmit}>
             <input
                 class="w-full border p-1 rounded bg-gray-900"
                 type="text" placeholder="Your reply..."
                 use:callFocus
-                bind:this={reply_input}
-                on:blur="{()=>show_reply=false}" />
+                bind:this={replyInput}
+                on:blur="{()=>showReply=false}" />
         </form>
     {/if}
 </div>

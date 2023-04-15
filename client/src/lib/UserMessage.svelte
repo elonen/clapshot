@@ -3,8 +3,7 @@ import { slide } from "svelte/transition";
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
 export let msg: Proto3.UserMessage;
-
-let show_details: boolean = false;
+let showDetails: boolean = false;
 
 function isError(msg: Proto3.UserMessage): boolean {
     return msg.type == Proto3.UserMessage_Type.ERROR;
@@ -63,12 +62,12 @@ function dateObjToISO(d: Date|undefined): string {
 
     {#if msg.details }
         <span class="text-xs text-gray-500 pl-2 border-l border-gray-400"></span>
-        {#if show_details}
+        {#if showDetails}
             <i class="fa fa-chevron-up text-[#cca] cursor-pointer"
                 tabindex="0"
                 role="link"
-                on:keyup={e=> {if (e.key==='Enter') show_details=false; }}
-                on:click={()=>{show_details=false}}></i>
+                on:keyup={e=> {if (e.key==='Enter') showDetails=false; }}
+                on:click={()=>{showDetails=false}}></i>
             <div
                 class="bg-[#cca] font-mono rounded-md mt-2 p-2 text-black text-xs block"
                 transition:slide="{{ duration: 200 }}">
@@ -78,8 +77,8 @@ function dateObjToISO(d: Date|undefined): string {
             <i class="fa fa-chevron-down text-[#cca] cursor-pointer"
                 tabindex="0"
                 role="link"
-                on:keyup={e=> {if (e.key==='Enter') show_details=true; }}
-                on:click={()=>{show_details=true}}></i>
+                on:keyup={e=> {if (e.key==='Enter') showDetails=true; }}
+                on:click={()=>{showDetails=true}}></i>
         {/if}
     {/if}
 </div>

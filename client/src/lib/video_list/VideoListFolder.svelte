@@ -3,7 +3,7 @@
 import { createEventDispatcher } from 'svelte';
 import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
 import { dndzone, TRIGGERS, SOURCES } from 'svelte-dnd-action';
-import { selected_tiles } from '@/stores';
+import { selectedTiles } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
 export let id: any = {};
@@ -20,21 +20,21 @@ function contentPreviewItems(data: any[]): Proto3.PageItem_FolderListing_Item[] 
 
 // This only holds a DnD item temporarily during keyboard DnD, and shadow items
 // when reordering by pointer.
-let dnd_items: any = [];
+let dndItems: any = [];
 
 function onSink(e: any) {
 	console.log("Sunk #" + e.detail.items[0].id + " into #" + id)
 
     // Add multiselected items
     let new_items = [...e.detail.items].concat(
-        Object.keys($selected_tiles).length ? [...Object.values($selected_tiles)] : []);
+        Object.keys($selectedTiles).length ? [...Object.values($selectedTiles)] : []);
     // Remove duplicates
     new_items = new_items.filter((item, pos) =>
         new_items.map((mi) => mi['id']).indexOf(item['id']) === pos );
 
     dispatch("drop-items-into", {'folder_id': id, 'items': new_items});
 
-    dnd_items = [];
+    dndItems = [];
 }
 
 function consider(e: any) {
@@ -43,7 +43,7 @@ function consider(e: any) {
 		// On keyboard drag, DRAG_STOPPED on consider() is the _real_ "finalize" state
 		onSink(e);
 	} else {
-		dnd_items = e.detail.items;
+		dndItems = e.detail.items;
 	}
 }
 
@@ -51,7 +51,7 @@ function finalize(e: any) {
 	if (e.detail.info.source == SOURCES.KEYBOARD) {
 		// On keyboard, dragged item can be taken back out by another (shift-)tab key hit,
 		// so we have to keep in `items` for now:
-		dnd_items = e.detail.items;
+		dndItems = e.detail.items;
 	} else {
 		// On pointer, finalize() is actually final. Sink the item.
 		onSink(e);
@@ -61,14 +61,14 @@ function finalize(e: any) {
 
 <div class="w-full h-full video-list-selector"
     style="position: relative;"
-    class:draggingOver={dnd_items.length>0} >
+    class:draggingOver={dndItems.length>0} >
 
     <div class="w-full h-full video-list-folder"
-        use:dndzone="{{items: dnd_items, morphDisabled: true, dragDisabled: true, zoneTabIndex: -1, centreDraggedOnCursor: true}}"
+        use:dndzone="{{items: dndItems, morphDisabled: true, dragDisabled: true, zoneTabIndex: -1, centreDraggedOnCursor: true}}"
         on:consider={consider}
         on:finalize={finalize}
     >
-    {#each dnd_items as _item, _i}<span/>{/each}
+    {#each dndItems as _item, _i}<span/>{/each}
     </div>
 
     <div class="w-[85%] h-[85%] flex flex-col folder-deco">
@@ -82,10 +82,10 @@ function finalize(e: any) {
                     <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md">
                     <ScrubbableVideoThumb
                         extra_styles="border-radius: 0rem; height: 100%; width: auto; transform: translate(-50%, -50%); left: 50%; top: 50%; position: absolute; filter: opacity(66%);"
-                        thumb_poster_url={prev.video.previewData?.thumbUrl}
-                        thumb_sheet_url={prev.video.previewData?.thumbSheet?.url}
-                        thumb_sheet_rows={prev.video.previewData?.thumbSheet?.rows}
-                        thumb_sheet_cols={prev.video.previewData?.thumbSheet?.cols}
+                        thumbPosterUrl={prev.video.previewData?.thumbUrl}
+                        thumbSheetUrl={prev.video.previewData?.thumbSheet?.url}
+                        thumbSheetRows={prev.video.previewData?.thumbSheet?.rows}
+                        thumbSheetCols={prev.video.previewData?.thumbSheet?.cols}
                     />
                     </div>
                 {/if}

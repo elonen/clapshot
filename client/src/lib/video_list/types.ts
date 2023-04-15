@@ -1,21 +1,5 @@
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-export interface ClapshotCommentJson
-{
-    id: number;
-    video_hash: string;
-    parent_id: number | null;
-
-    created: number;  // unix timestamp
-    edited: number | null;
-
-    user_id: string;
-    username: string;
-    comment: string;
-    timecode: string | null;
-    drawing: string | null;
-}
-
 export class VideoListDefItem {
     id!: string;
     obj!: Proto3.PageItem_FolderListing_Item;

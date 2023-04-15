@@ -15,10 +15,10 @@ function fmt_date(d: Date | undefined) {
 
     {#if item.previewData?.thumbUrl}
         <ScrubbableVideoThumb
-            thumb_poster_url={item.previewData?.thumbUrl}
-            thumb_sheet_url={item.previewData?.thumbSheet?.url}
-            thumb_sheet_rows={item.previewData?.thumbSheet?.rows}
-            thumb_sheet_cols={item.previewData?.thumbSheet?.cols}
+            thumbPosterUrl={item.previewData?.thumbUrl}
+            thumbSheetUrl={item.previewData?.thumbSheet?.url}
+            thumbSheetRows={item.previewData?.thumbSheet?.rows}
+            thumbSheetCols={item.previewData?.thumbSheet?.cols}
         />
     {/if}
 
