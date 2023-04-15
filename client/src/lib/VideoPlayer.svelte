@@ -290,7 +290,7 @@ export function collabPlay(seek_time: number) {
     video_elem.play();
 }
 
-export function collabPause(seek_time: number, drawing: string) {
+export function collabPause(seek_time: number, drawing: string|undefined) {
     if (!paused)
         video_elem.pause();
     if (time != seek_time) {

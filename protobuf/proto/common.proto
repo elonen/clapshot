@@ -1,0 +1,211 @@
+syntax = "proto3";
+package clapshot.organizer;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+
+message Empty {}
+
+message Cookies {
+    map<string, string> cookies = 1;
+}
+
+// ---------------------------------------------------------
+// Video metadata
+// ---------------------------------------------------------
+
+message Video {
+    string video_hash = 1;
+    optional string title = 2;
+    optional UserInfo added_by = 3;
+    optional VideoDuration duration = 4;
+    optional google.protobuf.Timestamp added_time = 5;
+    optional VideoPreviewData preview_data = 6;
+    optional VideoProcessingMetadata processing_metadata = 7;
+
+    optional string playback_url = 100;  // e.g. "https://example.com/video.mp4"
+}
+
+message VideoDuration {
+    double duration = 1;
+    int64 total_frames = 2;
+    string fps = 3; // e.g. "29.97"
+}
+
+message VideoProcessingMetadata {
+    optional google.protobuf.Timestamp recompression_done = 2;
+    string orig_filename = 102;
+    optional string ffprobe_metadata_all = 103;
+}
+
+message VideoPreviewData {
+    message ThumbSheet {
+        string url = 1;     // Sprite sheet of thumbnails
+        uint32 rows = 2;
+        uint32 cols = 3;
+    }
+    optional string thumb_url = 1;
+    optional ThumbSheet thumb_sheet = 2;
+}
+
+// ---------------------------------------------------------
+// Comments
+// ---------------------------------------------------------
+
+message Comment {
+    string id = 1;
+    string video_hash = 2;
+    UserInfo user = 3;
+    string comment = 4;
+    optional string timecode = 5;       // e.g. "00:00:00.000"
+    optional string parent_id = 6;      // parent comment, null if top-level
+    optional string drawing = 12;       // data-uri of an image
+    optional google.protobuf.Timestamp created = 100;
+    optional google.protobuf.Timestamp edited = 101;
+}
+
+// ---------------------------------------------------------
+// User messages (notifications)
+// ---------------------------------------------------------
+
+message UserMessage {
+    enum Type {
+        OK = 0;
+        ERROR = 1;
+        PROGRESS = 2;
+        VIDEO_UPDATED = 3;  // Video metadata changed
+    }
+    message Refs {
+        optional string video_hash = 1;
+        optional string comment_id = 2;
+    }
+
+    optional string id = 1;
+    optional google.protobuf.Timestamp created = 3;
+    bool seen = 4;
+    Type type = 5;
+    Refs refs = 6;  // Objects referenced by this message
+    string message = 7;
+    optional string details = 8;
+}
+
+
+// ---------------------------------------------------------
+// Organizer page items
+// ---------------------------------------------------------
+
+message PageItem {
+
+    message FolderListing {
+        message Folder {
+            string id = 1;
+            string title = 2;
+            repeated Item preview_items = 4;
+        }
+        message Item {
+            message Visualization {
+                optional Color base_color = 1;
+                optional Icon icon = 2;
+            }
+            oneof item {
+                Folder folder = 1;
+                Video video = 2;
+            }
+            optional Visualization vis = 100;
+            optional ScriptCall open_action = 110;  // Omit to disable "open" action
+            repeated string popup_actions = 120;    // References to actions defined in ClientDefineActionsRequest
+        }
+        repeated Item items = 1;
+    }
+
+    oneof item {
+        string html = 1;
+        FolderListing folder_listing = 2;
+    }
+}
+
+// ---------------------------------------------------------
+// UI actions and popups
+// ---------------------------------------------------------
+
+message ActionUIProps {
+    optional string label = 1;           // e.g. "Rename"
+    optional Icon icon = 2;
+    optional string key_shortcut = 3;    // e.g. "F2", "Insert", "Delete"
+    optional string natural_desc = 4;    // e.g. For tooltips and AI. Example: "Rename the selected item"
+    optional Color text_color = 5;
+}
+
+message ActionDef {
+    optional ActionUIProps ui_props = 1; // Only used for actions that are used as popups
+    optional ScriptCall    action=2;
+}
+
+// ---------------------------------------------------------
+
+message UserInfo {
+    string username = 1;
+    optional string displayname = 2;
+}
+
+message Color {
+    uint32 r = 1;   // 0-255
+    uint32 g = 2;
+    uint32 b = 3;
+}
+
+message Icon {
+    message FaClass {
+        string classes = 1;             // e.g. "fa fa-folder"
+        optional Color color = 2;
+    }
+    oneof src {
+        FaClass fa_class = 1;
+        string img_url = 2;
+    }
+    optional float size = 3;
+}
+
+// ---------------------------------------------------------
+// Client-side action scripts
+// ---------------------------------------------------------
+
+message ScriptCall {
+    enum Lang {
+        JAVASCRIPT = 0;
+    }
+    string code = 1;
+    Lang lang = 2;
+
+    /*
+    The 'code' is evaluated inside an async function defined as follows:
+
+        async function run_script( items: any[]): Promise<void> {
+            // ... code ...
+        }
+
+    Current context:
+
+        - async function call_server(cmd: string, args: Object) - call server API
+        - async function call_organizer(cmd: string, args: Object) - call organizer API
+        - Following prompts:
+            - async alert(msg: string): Promise<void>
+            - async prompt(msg: string, default_value: string): Promise<string>
+            - async confirm(msg: string): Promise<boolean>
+        - all normal browser APIs (e.g. fetch, localStorage, ...)
+
+    Example: rename_video
+
+        var it = items[0];
+        if (!it.video) {
+            await alert("Non-video rename not implemented (no Organizer).");
+            return;
+        }
+        var old_name = it.video.title;
+        var new_name = (await prompt("Rename item", old_name))?.trim();
+        if (new_name && new_name != old_name) {
+            await call_server("rename_video", {video_hash: it.video.videoHash, new_name: new_name});
+        }
+    */
+}

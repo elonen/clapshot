@@ -1,0 +1,222 @@
+syntax = "proto3";
+package clapshot.organizer;
+
+import public "common.proto";
+
+
+// This defines the gRPC API for Clapshot Organizer services.
+//
+// An **organizer plugin** is responsible for organizing
+// Clapshot videos into UI folders and enforcing access
+// control according to your particular business logic,
+// perhaps by looking up projects and ACL groups from
+// some LDAP or project management SQL database.
+//
+// Clapshot server will connect the organizer
+// on startup, and sends the handshake message. Organizer
+// connects back to the server and send its own
+// handshake message.
+//
+// The organizer service must live as long as the Clapshot
+// server and have a stable connection, which is why it is
+// recommended to have the server actually launch the
+// organizer service as a subprocess and use Unix sockets
+// for communication.
+
+
+// Calls that Organizer makes to Clapshot server
+service OrganizerOutbound {
+    rpc handshake (OrganizerInfo) returns (Empty);
+
+    rpc client_define_actions (ClientDefineActionsRequest) returns (Empty);
+    rpc client_show_page(ClientShowPageRequest) returns (Empty);
+    rpc client_show_user_message (ClientShowUserMessageRequest) returns (Empty);
+    rpc client_open_video (ClientOpenVideoRequest) returns (Empty);
+    rpc client_set_cookies (ClientSetCookiesRequest) returns (Empty);
+    rpc client_open_external_url (ClientOpenExternalURLRequest) returns (Empty);
+
+    rpc delete_video (DeleteVideoRequest) returns (Empty);
+    rpc modify_video (ModifyVideoRequest) returns (Empty);
+}
+
+// Calls that Clapshot server makes to Organizer
+service OrganizerInbound {
+    rpc handshake (ServerInfo) returns (Empty);
+    rpc on_start_user_session (OnStartUserSessionRequest) returns (OnStartUserSessionResult);
+    rpc navigate_page (NavigatePageRequest) returns (ClientShowPageRequest);
+    rpc authz_user_action (AuthzUserActionRequest) returns (AuthzResult);
+}
+
+// ---------------------------------------------------------
+
+message ServerInfo {
+    message Database {
+        enum DatabaseType {
+            SQLITE = 0;
+        }
+        DatabaseType type = 1;
+        string endpoint = 2;
+    }
+
+    message Storage {
+        message LocalFilesystem {
+            string base_dir = 1;
+        }
+        oneof storage {
+            LocalFilesystem local_fs = 1;
+        }
+    }
+
+    message GrpcEndpoint {
+        message Unix {
+            string path = 1;
+        }
+        message TCP {
+            string host = 1;
+            uint32 port = 2;
+        }
+        oneof endpoint {
+            Unix unix = 1;
+            TCP tcp = 2;
+        }
+    }
+
+    SemanticVersionNumber version = 1;
+    Storage storage = 3;
+    string url_base = 4;
+    Database db = 5;
+    GrpcEndpoint backchannel = 6;
+}
+
+message OrganizerInfo {
+}
+
+message SemanticVersionNumber {
+    uint64 major = 1;
+    uint64 minor = 2;
+    uint64 patch = 3;
+}
+
+// ---------------------------------------------------------
+
+message UserSessionData {
+    string sid = 1;
+    UserInfo user = 2;
+    Cookies cookies = 3;
+}
+
+// ---------------------------------------------------------
+// Server -> Organizer commands
+// ---------------------------------------------------------
+
+message OnStartUserSessionRequest {
+    UserSessionData ses = 1;
+}
+
+message OnStartUserSessionResult {
+    bool dont_send_default_actions = 10;     // If true, server will not send default action definitions (e.g. "rename_video")
+}
+
+message NavigatePageRequest {
+    UserSessionData ses = 1;
+    string path = 2; // e.g. "/home"
+}
+
+message AuthzUserActionRequest {
+
+    message OtherOp {
+        enum Op {
+            LOGIN = 0;
+            VIEW_HOME = 1;
+            UPLOAD_VIDEO = 2;
+            JOIN_COLLAB_SESSION = 10;
+        }
+        Op op = 1;
+        optional string subject = 2;
+    }
+
+    message VideoOp {
+        enum Op {
+            VIEW = 0;
+            RENAME = 1;
+            DELETE = 2;
+            COMMENT = 3;
+        }
+        Video video = 1;
+        Op op = 2;
+    }
+
+    message CommentOp {
+        enum Op {
+            EDIT = 0;
+            DELETE = 1;
+        }
+        Comment comment = 1;
+        Op op = 2;
+    }
+
+    UserSessionData ses = 1;
+    oneof op {
+        OtherOp other_op = 8;
+        VideoOp video_op = 9;
+        CommentOp comment_op = 10;
+    }
+}
+
+message AuthzResult {
+    optional bool is_authorized = 1;     // If not set, leave authorization decision to server
+    optional string message = 2;         // e.g. "You are not authorized to view this video"
+    optional string details = 3;         // e.g. "You are not a member of the project"
+}
+
+// ---------------------------------------------------------
+// Organizer -> Server commands
+// ---------------------------------------------------------
+
+message ClientShowPageRequest {
+    repeated PageItem items = 1;
+    string sid = 2;
+    string path = 3;    // e.g. "proj2/accepted/", used on client for breadcrumbs / hash navigation
+}
+
+message ClientShowUserMessageRequest {
+    UserMessage msg = 1;
+    oneof recipient {
+        string sid = 100;               // send to client with this session ID
+        string user_temp = 101;         // send to all session with this username
+        string user_persist = 102;      // send to all sessions with this username, and store in DB
+        string video_hash = 103;        // send to all clients watching this video
+        string collab_session = 104;    // send to all clients in this collaboration session
+    }
+}
+
+message ClientDefineActionsRequest {
+    map<string, ActionDef> actions = 1; // e.g. "rename" -> {label: "Rename", icon: "edit"}
+    string sid = 2;
+}
+
+message ClientOpenVideoRequest {
+    string video_hash = 1;
+    string sid = 2;
+}
+
+message ClientSetCookiesRequest {
+    Cookies replace = 1;
+    repeated string delete = 2;
+    string sid = 3;
+}
+
+message ClientOpenExternalURLRequest {
+    string url = 1;
+    string sid = 2;
+}
+
+message DeleteVideoRequest {
+    string video_hash = 1;
+}
+
+message ModifyVideoRequest {
+    string video_hash = 1;
+    Video new_data = 2;
+}
+
