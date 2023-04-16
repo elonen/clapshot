@@ -16,7 +16,7 @@ This gRPC server can bind to Unix socket or TCP address.
 
 Usage:
   {NAME} [options] [--tcp] <bind>
-  
+
   {NAME} (-h | --help)
   {NAME} (-v | --version)
 
@@ -44,7 +44,7 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()>
-{    
+{
     let args: Args = Docopt::new(USAGE.replace("{NAME}", NAME).replace("{VERSION}", VERSION))
         .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
@@ -53,7 +53,7 @@ async fn main() -> anyhow::Result<()>
         println!("{}", VERSION);
         return Ok(());
     }
-    
+
     log::setup_logging(args.flag_json, args.flag_debug)?;
 
     tracing::info!("Organizer plugin '{}' v{} starting up...", NAME, VERSION);
@@ -78,7 +78,7 @@ async fn run_grpc_server(bind: BindAddr) -> anyhow::Result<()>
     tracing::info!("srv->org gRPC server: Binding to '{:?}'", bind);
 
     use tonic::{transport::Server};
-    use proto::organizer_inbound_server::OrganizerInboundServer;
+    use proto::org::organizer_inbound_server::OrganizerInboundServer;
     use simple_organizer::SimpleOrganizer;
 
     let refl = tonic_reflection::server::Builder::configure()

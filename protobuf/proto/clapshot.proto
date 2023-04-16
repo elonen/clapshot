@@ -1,6 +1,6 @@
 syntax = "proto3";
-package clapshot.organizer;
+package clapshot;
 
 import public "common.proto";
-import public "server_to_client.proto";
-import public "organizer_rpc.proto";
+import public "client.proto";
+import public "organizer.proto";

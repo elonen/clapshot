@@ -1,5 +1,5 @@
 syntax = "proto3";
-package clapshot.organizer;
+package clapshot;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";

@@ -70,8 +70,8 @@ pub(crate) async fn try_get_parsed<T>(ws: &mut WsClient) -> Option<T>
 macro_rules! expect_client_cmd {
     ($ws:expr, $variant:ident) => {{
         println!("Expecting client command '{}'...", stringify!($variant));
-        match crate::api_server::test_utils::expect_parsed::<proto::ServerToClientCmd>($ws).await.cmd {
-            Some(lib_clapshot_grpc::proto::server_to_client_cmd::Cmd::$variant(v)) => {
+        match crate::api_server::test_utils::expect_parsed::<proto::client::ServerToClientCmd>($ws).await.cmd {
+            Some(lib_clapshot_grpc::proto::client::server_to_client_cmd::Cmd::$variant(v)) => {
                 println!("...got '{}' ok.", stringify!($variant));
                 println!(". . .");
                 v
@@ -103,9 +103,9 @@ pub (crate) async fn wait_for_thumbnails(ws: &mut WsClient) {
     println!("Waiting for thumbnail generation...");
     let mut thumb_done = false;
     for _ in 0..12 {
-        match crate::api_server::test_utils::try_get_parsed::<proto::ServerToClientCmd>(ws).await
+        match crate::api_server::test_utils::try_get_parsed::<proto::client::ServerToClientCmd>(ws).await
         .map(|c| c.cmd).flatten() {
-            Some(proto::server_to_client_cmd::Cmd::ShowMessages(m)) => {
+            Some(proto::client::server_to_client_cmd::Cmd::ShowMessages(m)) => {
                 if m.msgs[0].r#type == proto::user_message::Type::VideoUpdated as i32 {
                     thumb_done = true;
                     break;
@@ -210,21 +210,21 @@ macro_rules! api_test {
 ///
 /// # Returns
 /// * OpenVideo message from the server
-pub(crate) async fn open_video(ws: &mut WsClient, vh: &str) -> proto::server_to_client_cmd::OpenVideo
+pub(crate) async fn open_video(ws: &mut WsClient, vh: &str) -> proto::client::server_to_client_cmd::OpenVideo
 {
     println!("--------- TEST: open_video '{}'...", vh);
     write(ws, &format!(r#"{{"cmd":"open_video","data":{{"video_hash":"{}"}}}}"#, vh)).await;
     let ov = expect_client_cmd!(ws, OpenVideo);
 
     while let Some(msg) = read(ws).await {
-        let cmd: proto::ServerToClientCmd = serde_json::from_str(&msg).expect("Failed to parse ServerToClientCmd from JSON");
+        let cmd: proto::client::ServerToClientCmd = serde_json::from_str(&msg).expect("Failed to parse ServerToClientCmd from JSON");
         match cmd.cmd {
             // Make sure the comments are for the video we opened
-            Some(proto::server_to_client_cmd::Cmd::AddComments(m)) => {
+            Some(proto::client::server_to_client_cmd::Cmd::AddComments(m)) => {
                 assert!(m.comments.iter().all(|c| c.video_hash == vh));
             },
             // Thumbnail generation can take a while, so ignore it if it happens to be in the queue
-            Some(proto::server_to_client_cmd::Cmd::ShowMessages(m)) => {
+            Some(proto::client::server_to_client_cmd::Cmd::ShowMessages(m)) => {
                 assert!(m.msgs.iter().any(|m| m.message.contains("thumbnail")));
             },
             None => {},

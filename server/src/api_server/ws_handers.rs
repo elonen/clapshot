@@ -33,6 +33,9 @@ use crate::{send_user_error, send_user_ok, client_cmd};
 
 use lib_clapshot_grpc::proto;
 
+use proto::org::authz_user_action_request as authz_req;
+
+
 // ---------------------------------------------------------------------
 // Command handlers
 // ---------------------------------------------------------------------
@@ -40,7 +43,7 @@ use lib_clapshot_grpc::proto;
 /// Send user a list of all videos they have.
 pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     ses.org_authz_with_default("list videos", true, server,
-        true, AuthzTopic::Other(None, proto::authz_user_action_request::other_op::Op::ViewHome)).await?;
+        true, AuthzTopic::Other(None, authz_req::other_op::Op::ViewHome)).await?;
 
     let videos = server.db.get_all_user_videos(&ses.user_id)?;
 
@@ -71,7 +74,7 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, ser
         Err(e) => { bail!(e); }
         Ok(v) => {
             ses.org_authz_with_default("open video", true, server,
-                true, AuthzTopic::Video(&v, proto::authz_user_action_request::video_op::Op::View)).await?;
+                true, AuthzTopic::Video(&v, authz_req::video_op::Op::View)).await?;
 
             ses.video_session_guard = Some(server.link_session_to_video(video_hash, ses.sender.clone()));
 
@@ -106,7 +109,7 @@ pub async fn msg_del_video(data: &serde_json::Value, ses: &mut UserSession, serv
         Ok(v) => {
             let default_perm = Some(ses.user_id.to_string()) == (&v).added_by_userid || ses.user_id == "admin";
             ses.org_authz_with_default("delete video", true, server,
-                default_perm, AuthzTopic::Video(&v, proto::authz_user_action_request::video_op::Op::Delete)).await?;
+                default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Delete)).await?;
 
             server.db.del_video_and_comments(video_hash)?;
             let mut details = format!("Added by '{}' ({}) on {}. Filename was {}.",
@@ -169,7 +172,7 @@ pub async fn msg_rename_video(data: &serde_json::Value, ses: &mut UserSession, s
         Ok(v) => {
             let default_perm = Some(ses.user_id.to_string()) == (&v).added_by_userid || ses.user_id == "admin";
             ses.org_authz_with_default("rename video", true, server,
-                default_perm, AuthzTopic::Video(&v, proto::authz_user_action_request::video_op::Op::Rename)).await?;
+                default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Rename)).await?;
 
             let new_name = new_name.trim();
             if new_name.is_empty() || !new_name.chars().any(|c| c.is_alphanumeric()) {
@@ -199,7 +202,7 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, se
         Ok(v) => {
             let default_perm = Some(ses.user_id.to_string()) == (&v).added_by_userid || ses.user_id == "admin";
             ses.org_authz_with_default("comment video", true, server,
-                default_perm, AuthzTopic::Video(&v, proto::authz_user_action_request::video_op::Op::Comment)).await?;
+                default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Comment)).await?;
         },
         Err(DBError::NotFound()) => {
             send_user_error!(ses, server, Topic::Video(vh), "No such video. Cannot comment.");
@@ -276,7 +279,7 @@ pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut UserSession, s
         Ok(old) => {
             let default_perm = ses.user_id == old.user_id || ses.user_id == "admin";
             ses.org_authz_with_default("edit comment", true, server,
-                default_perm, AuthzTopic::Comment(&old, proto::authz_user_action_request::comment_op::Op::Edit)).await?;
+                default_perm, AuthzTopic::Comment(&old, authz_req::comment_op::Op::Edit)).await?;
 
             let vh = &old.video_hash;
             server.db.edit_comment(id, &new_text)?;
@@ -303,7 +306,7 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
         Ok(cmt) => {
             let default_perm = ses.user_id == cmt.user_id || ses.user_id == "admin";
             ses.org_authz_with_default("delete comment", true, server,
-                default_perm, AuthzTopic::Comment(&cmt, proto::authz_user_action_request::comment_op::Op::Delete)).await?;
+                default_perm, AuthzTopic::Comment(&cmt, authz_req::comment_op::Op::Delete)).await?;
 
             let vh = cmt.video_hash;
             if ses.user_id != cmt.user_id && ses.user_id != "admin" {
@@ -361,7 +364,7 @@ pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut UserSession, se
         Err(e) => { bail!(e); }
         Ok(v) => {
             ses.org_authz_with_default("join collab", true, server,
-                true, AuthzTopic::Other(Some(collab_id.clone()), proto::authz_user_action_request::other_op::Op::JoinCollabSession)).await?;
+                true, AuthzTopic::Other(Some(collab_id.clone()), authz_req::other_op::Op::JoinCollabSession)).await?;
 
             match server.link_session_to_collab(collab_id, video_hash, ses.sender.clone()) {
                 Ok(csg) => {

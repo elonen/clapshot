@@ -1,7 +1,7 @@
 use std::{path::{Path, PathBuf}};
 
 use lib_clapshot_grpc::{unix_socket, subprocess::spawn_shell, subprocess::ProcHandle};
-use lib_clapshot_grpc::proto::organizer_inbound_client::OrganizerInboundClient;
+use lib_clapshot_grpc::proto::org::organizer_inbound_client::OrganizerInboundClient;
 
 use anyhow::{Context, bail};
 use tokio::net::UnixStream;
@@ -20,7 +20,7 @@ pub enum OrganizerURI {
 
 /// Connect to a gRPC server, either via a Unix socket or HTTP(S).
 /// Plain path string means Unix socket, "http://..." or "https://..." means HTTP(S).
-pub async fn connect(uri: OrganizerURI) -> anyhow::Result<OrganizerConnection> 
+pub async fn connect(uri: OrganizerURI) -> anyhow::Result<OrganizerConnection>
 {
     let channel = match uri {
         OrganizerURI::UnixSocket(path) =>
@@ -58,7 +58,7 @@ pub fn prepare_organizer(
             Some((pcol, _)) => bail!("Unsupported gRPC protocol: {}", pcol),
         }),
     };
-    let org_hdl = 
+    let org_hdl =
         if let Some(cmd) = cmd {
             // Use a temp sock if none was given
             if org_uri.is_none() {

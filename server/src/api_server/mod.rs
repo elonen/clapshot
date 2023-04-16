@@ -5,7 +5,7 @@
 use async_std::task::block_on;
 use lib_clapshot_grpc::GrpcBindAddr;
 use lib_clapshot_grpc::proto;
-use lib_clapshot_grpc::proto::OnStartUserSessionResult;
+use lib_clapshot_grpc::proto::org::OnStartUserSessionResult;
 use tracing::debug;
 use warp::Filter;
 use std::collections::HashMap;
@@ -100,7 +100,7 @@ async fn handle_ws_session(
         video_session_guard: None,
         collab_session_guard: None,
         organizer: None,
-        org_session: proto::UserSessionData {
+        org_session: proto::org::UserSessionData {
             sid: sid.clone(),
             user: Some(proto::UserInfo {
                 username: user_id.clone(),
@@ -124,9 +124,9 @@ async fn handle_ws_session(
         return;
     }
 
-    async fn connect_organizer(uri: OrganizerURI, ses: &proto::UserSessionData) -> Res<(OrganizerConnection, OnStartUserSessionResult)> {
+    async fn connect_organizer(uri: OrganizerURI, ses: &proto::org::UserSessionData) -> Res<(OrganizerConnection, OnStartUserSessionResult)> {
         let mut c = crate::grpc::grpc_client::connect(uri).await?;
-        let start_ses_req = proto::OnStartUserSessionRequest { ses: Some(ses.clone()) };
+        let start_ses_req = proto::org::OnStartUserSessionRequest { ses: Some(ses.clone()) };
         let res = c.on_start_user_session(start_ses_req).await?.into_inner();
         Ok((c, res))
     }
@@ -136,7 +136,7 @@ async fn handle_ws_session(
         match connect_organizer(uri, &ses.org_session).await {
             Ok((c, res)) => {
                 ses.organizer = Some(tokio::sync::Mutex::new(c).into());
-                let op = AuthzTopic::Other(None, proto::authz_user_action_request::other_op::Op::Login);
+                let op = AuthzTopic::Other(None, proto::org::authz_user_action_request::other_op::Op::Login);
                 if ses.org_authz("login", true, &server, op).await == Some(false) {
                     tracing::info!("User '{}' not authorized to login. Closing session.", ses.user_id);
                     server.emit_cmd(
@@ -220,7 +220,7 @@ async fn handle_ws_session(
                                     #[cfg(not(test))] {
                                         sleep(Duration::from_secs(5)).await;
                                     }
-                                    let err_msg = proto::server_to_client_cmd::Error { msg: format!("Invalid message, bye -- {}", e) };
+                                    let err_msg = proto::client::server_to_client_cmd::Error { msg: format!("Invalid message, bye -- {}", e) };
                                     let json_txt = serde_json::to_string(&err_msg).expect("Error serializing error message");
                                     ws_tx.send(Message::text(json_txt)).await.ok();
                                     break;
@@ -237,7 +237,7 @@ async fn handle_ws_session(
                                     } else {
                                         let answ = format!("Error handling command '{}'.", cmd);
                                         tracing::warn!("[{}] {}: {}", sid, answ, e);
-                                        let err_msg = proto::server_to_client_cmd::Error { msg: answ };
+                                        let err_msg = proto::client::server_to_client_cmd::Error { msg: answ };
                                         let json_txt = serde_json::to_string(&err_msg).expect("Error serializing error message");
                                         if ws_tx.send(Message::text(json_txt)).await.is_err() { break; };
                                     }

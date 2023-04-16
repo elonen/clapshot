@@ -370,7 +370,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
         const msgJson = JSON.parse(event.data);
         handleWithErrors(() =>
         {
-            const cmd = Proto3.ServerToClientCmd.fromJSON(msgJson);
+            const cmd = Proto3.client.ServerToClientCmd.fromJSON(msgJson);
             if (!cmd) {
                 console.error("Got INVALID message: ", msgJson);
                 return;

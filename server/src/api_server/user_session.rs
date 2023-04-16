@@ -56,9 +56,9 @@ macro_rules! send_user_ok(
 
 #[derive (Debug, Clone)]
 pub enum AuthzTopic<'a> {
-    Video(&'a Video, proto::authz_user_action_request::video_op::Op),
-    Comment(&'a Comment, proto::authz_user_action_request::comment_op::Op),
-    Other(Option<&'a str>, proto::authz_user_action_request::other_op::Op)
+    Video(&'a Video, proto::org::authz_user_action_request::video_op::Op),
+    Comment(&'a Comment, proto::org::authz_user_action_request::comment_op::Op),
+    Other(Option<&'a str>, proto::org::authz_user_action_request::other_op::Op)
 }
 
 #[derive (thiserror::Error, Debug)]
@@ -83,7 +83,7 @@ pub struct UserSession {
     pub collab_session_guard: Option<OpaqueGuard>,
 
     pub organizer: Option<Arc<tokio::sync::Mutex<OrganizerConnection>>>,
-    pub org_session: proto::UserSessionData,
+    pub org_session: proto::org::UserSessionData,
 }
 
 impl UserSession {
@@ -153,21 +153,23 @@ impl UserSession {
             None => { return None; }
         };
         tracing::debug!(op=?op, user=self.user_id, desc, "Checking authz from Organizer");
+
+        use proto::org::authz_user_action_request as authz_op;
         let pop = match op {
-            AuthzTopic::Video(v, op) => proto::authz_user_action_request::Op::VideoOp(
-                proto::authz_user_action_request::VideoOp {
+            AuthzTopic::Video(v, op) => authz_op::Op::VideoOp(
+                authz_op::VideoOp {
                     op: op.into(),
                     video: Some(db_video_to_proto3(v, &server.url_base)) }),
-            AuthzTopic::Comment(c, op) => proto::authz_user_action_request::Op::CommentOp(
-                proto::authz_user_action_request::CommentOp {
+            AuthzTopic::Comment(c, op) => authz_op::Op::CommentOp(
+                authz_op::CommentOp {
                     op: op.into(),
                     comment: Some(db_comment_to_proto3(c)) }),
-            AuthzTopic::Other(subj, op) => proto::authz_user_action_request::Op::OtherOp(
-                proto::authz_user_action_request::OtherOp {
+            AuthzTopic::Other(subj, op) => authz_op::Op::OtherOp(
+                authz_op::OtherOp {
                     op: op.into(),
                     subject: subj.map(|s| s.into()) }),
         };
-        let req = proto::AuthzUserActionRequest { ses: Some(self.org_session.clone()), op: Some(pop) };
+        let req = proto::org::AuthzUserActionRequest { ses: Some(self.org_session.clone()), op: Some(pop) };
         let res = org.lock().await.authz_user_action(req).await;
         match res {
             Err(e) => {

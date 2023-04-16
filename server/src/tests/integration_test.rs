@@ -22,6 +22,8 @@ mod integration_test
     use crate::video_pipeline::{metadata_reader, IncomingFile};
     use crate::api_server::test_utils::{connect_client_ws, open_video, write};
     use lib_clapshot_grpc::{GrpcBindAddr, proto};
+    use lib_clapshot_grpc::proto::client::ServerToClientCmd;
+    use lib_clapshot_grpc::proto::client::server_to_client_cmd as s2c;
 
     use tracing;
     use tracing::{error, info, warn, instrument};
@@ -143,8 +145,8 @@ mod integration_test
             write(&mut ws, &msg.to_string()).await;
             let mut got_new_comment = false;
             for _ in 0..3 {
-                match crate::api_server::test_utils::try_get_parsed::<proto::ServerToClientCmd>(&mut ws).await.map(|x| x.cmd.unwrap()) {
-                    Some(proto::server_to_client_cmd::Cmd::AddComments(m)) => {
+                match crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(&mut ws).await.map(|x| x.cmd.unwrap()) {
+                    Some(proto::client::server_to_client_cmd::Cmd::AddComments(m)) => {
                         got_new_comment = true;
                         break;
                     },
@@ -212,9 +214,9 @@ mod integration_test
             'waitloop: for _ in 0..(120*5)
             {
                 if !got_video_updated {
-                    got_video_updated |= match crate::api_server::test_utils::try_get_parsed::<proto::ServerToClientCmd>(&mut ws).await
+                    got_video_updated |= match crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(&mut ws).await
                         .map(|c| c.cmd).flatten() {
-                            Some(proto::server_to_client_cmd::Cmd::ShowMessages(m)) => {
+                            Some(s2c::Cmd::ShowMessages(m)) => {
                                 got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
                                 // return true if we got a VideoUpdated message (which is sent when video is done transcoding)
                                 m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::VideoUpdated as i32)
@@ -231,13 +233,13 @@ mod integration_test
                 println!("... doing list_my_videos ...");
                 write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
 
-                match crate::api_server::test_utils::expect_parsed::<proto::ServerToClientCmd>(&mut ws).await.cmd {
+                match crate::api_server::test_utils::expect_parsed::<ServerToClientCmd>(&mut ws).await.cmd {
 
-                    Some(proto::server_to_client_cmd::Cmd::ShowMessages(m)) => {
+                    Some(s2c::Cmd::ShowMessages(m)) => {
                         got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
                     },
 
-                    Some(proto::server_to_client_cmd::Cmd::ShowPage(p)) => {
+                    Some(s2c::Cmd::ShowPage(p)) => {
                         let pitems = p.page_items;
                         assert!(pitems.len() == 1+1);
 

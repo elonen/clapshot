@@ -13,41 +13,42 @@ impl OrganizerCaller {
     pub fn new(uri: OrganizerURI ) -> Self {
         OrganizerCaller { uri }
     }
-    
+
     pub fn handshake_organizer(&self, data_dir: &Path, server_url: &str, db_file: &Path, backchannel: &GrpcBindAddr)
         -> anyhow::Result<()>
     {
         async fn call_it(conn: &mut OrganizerConnection, backchannel: &GrpcBindAddr, data_dir: &Path, server_url: &str, db_file: &Path) -> anyhow::Result<()> {
             let v = semver::Version::parse(crate::PKG_VERSION)?;
-            let req = proto::ServerInfo {
-                storage: Some(proto::server_info::Storage {
-                    storage: Some(proto::server_info::storage::Storage::LocalFs(
-                        proto::server_info::storage::LocalFilesystem {
+            use lib_clapshot_grpc::proto::org::server_info;
+            let req = proto::org::ServerInfo {
+                storage: Some(server_info::Storage {
+                    storage: Some(server_info::storage::Storage::LocalFs(
+                        server_info::storage::LocalFilesystem {
                             base_dir: data_dir.to_string_lossy().into()
                     }))}),
-                backchannel: Some(proto::server_info::GrpcEndpoint {
+                backchannel: Some(server_info::GrpcEndpoint {
                     endpoint: Some(
                         match backchannel {
-                            GrpcBindAddr::Tcp(addr) => 
-                                proto::server_info::grpc_endpoint::Endpoint::Tcp(
-                                    proto::server_info::grpc_endpoint::Tcp {
+                            GrpcBindAddr::Tcp(addr) =>
+                                server_info::grpc_endpoint::Endpoint::Tcp(
+                                    server_info::grpc_endpoint::Tcp {
                                         host: addr.ip().to_string(),
                                         port: addr.port() as u32,
                                     }),
                             GrpcBindAddr::Unix(path) =>
-                                proto::server_info::grpc_endpoint::Endpoint::Unix(
-                                    proto::server_info::grpc_endpoint::Unix {
+                                server_info::grpc_endpoint::Endpoint::Unix(
+                                    server_info::grpc_endpoint::Unix {
                                         path: path.to_string_lossy().into(),
                                     }),
                         })
                     }),
                 url_base: server_url.into(),
-                db: Some(proto::server_info::Database {
-                    r#type: proto::server_info::database::DatabaseType::Sqlite.into(),
+                db: Some(server_info::Database {
+                    r#type: server_info::database::DatabaseType::Sqlite.into(),
                     endpoint: db_file.canonicalize()?.to_str().ok_or(
                         anyhow::anyhow!("Sqlite path is not valid UTF-8"))?.into()
                     }),
-                version: Some(proto::SemanticVersionNumber { major: v.major, minor: v.minor, patch: v.patch }),
+                version: Some(proto::org::SemanticVersionNumber { major: v.major, minor: v.minor, patch: v.patch }),
             };
             conn.handshake(req).await?;
             Ok(())
@@ -62,6 +63,6 @@ impl OrganizerCaller {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
         let client = rt.block_on(connect(self.uri.clone()))?;
         Ok((rt, client))
-    }    
+    }
 
 }

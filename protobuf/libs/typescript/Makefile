@@ -25,7 +25,7 @@ src/clapshot.ts: ../../proto/*.proto
 # Clean the build artifacts
 clean:
 	rm -rf $(DIST_DIR)
-	rm -f src/clapshot.ts
+	rm -f src/*.ts
 	rm -rf src/google
 
 .PHONY: build clean

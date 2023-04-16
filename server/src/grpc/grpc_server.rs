@@ -5,6 +5,7 @@ use crate::{api_server::{server_state::ServerState}, database::models::proto_msg
 use crate::database::models;
 
 use lib_clapshot_grpc::{proto, RpcResult, GrpcBindAddr, run_grpc_server};
+use lib_clapshot_grpc::proto::org;
 
 pub struct OrganizerOutboundImpl {
     server: ServerState,
@@ -23,30 +24,30 @@ pub fn make_grpc_server_bind(tcp: &Option<String>, data_dir: &Path) -> anyhow::R
 // Implement the RCP methods
 
 #[tonic::async_trait]
-impl proto::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
+impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
 {
-    async fn handshake(&self, _req: tonic::Request<proto::OrganizerInfo>) -> RpcResult<proto::Empty>
+    async fn handshake(&self, _req: tonic::Request<org::OrganizerInfo>) -> RpcResult<proto::Empty>
     {
         tracing::debug!("org->srv handshake received");
         self.server.organizer_has_connected.store(true, Relaxed);
         Ok(Response::new(proto::Empty {}))
     }
 
-    async fn client_define_actions(&self, req: Request<proto::ClientDefineActionsRequest>) -> RpcResult<proto::Empty>
+    async fn client_define_actions(&self, req: Request<org::ClientDefineActionsRequest>) -> RpcResult<proto::Empty>
     {
         tracing::info!("Got a request: {:?}", req);
         Err(Status::unimplemented("Not implemented"))
     }
 
-    async fn client_show_page(&self, req: Request<proto::ClientShowPageRequest>) -> RpcResult<proto::Empty>
+    async fn client_show_page(&self, req: Request<org::ClientShowPageRequest>) -> RpcResult<proto::Empty>
     {
         tracing::info!("Got a request: {:?}", req);
         Err(Status::unimplemented("Not implemented"))
     }
 
-    async fn client_show_user_message(&self, req: Request<proto::ClientShowUserMessageRequest>) -> RpcResult<proto::Empty>
+    async fn client_show_user_message(&self, req: Request<org::ClientShowUserMessageRequest>) -> RpcResult<proto::Empty>
     {
-        use proto::client_show_user_message_request::Recipient;
+        use org::client_show_user_message_request::Recipient;
         use crate::api_server::SendTo;
 
         let req = req.into_inner();
@@ -100,31 +101,31 @@ impl proto::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundIm
         }
     }
 
-    async fn client_open_video(&self, req: Request<proto::ClientOpenVideoRequest>) -> RpcResult<proto::Empty>
+    async fn client_open_video(&self, req: Request<org::ClientOpenVideoRequest>) -> RpcResult<proto::Empty>
     {
         tracing::info!("Got a request: {:?}", req);
         Err(Status::unimplemented("Not implemented"))
     }
 
-    async fn client_set_cookies(&self, req: Request<proto::ClientSetCookiesRequest>) -> RpcResult<proto::Empty>
+    async fn client_set_cookies(&self, req: Request<org::ClientSetCookiesRequest>) -> RpcResult<proto::Empty>
     {
         tracing::info!("Got a request: {:?}", req);
         Err(Status::unimplemented("Not implemented"))
     }
 
-    async fn client_open_external_url(&self, req: Request<proto::ClientOpenExternalUrlRequest>) -> RpcResult<proto::Empty>
+    async fn client_open_external_url(&self, req: Request<org::ClientOpenExternalUrlRequest>) -> RpcResult<proto::Empty>
     {
         tracing::info!("Got a request: {:?}", req);
         Err(Status::unimplemented("Not implemented"))
     }
 
-    async fn delete_video(&self, req: Request<proto::DeleteVideoRequest>) -> RpcResult<proto::Empty>
+    async fn delete_video(&self, req: Request<org::DeleteVideoRequest>) -> RpcResult<proto::Empty>
     {
         tracing::info!("Got a request: {:?}", req);
         Err(Status::unimplemented("Not implemented"))
     }
 
-    async fn modify_video(&self, req: Request<proto::ModifyVideoRequest>) -> RpcResult<proto::Empty>
+    async fn modify_video(&self, req: Request<org::ModifyVideoRequest>) -> RpcResult<proto::Empty>
     {
         tracing::info!("Got a request: {:?}", req);
         Err(Status::unimplemented("Not implemented"))
@@ -136,7 +137,7 @@ pub async fn run_org_to_srv_grpc_server(bind: GrpcBindAddr, server: ServerState)
 {
     let span = tracing::info_span!("gRPC server for org->srv");
     let terminate_flag = server.terminate_flag.clone();
-    let service = proto::organizer_outbound_server::OrganizerOutboundServer::new(OrganizerOutboundImpl {
+    let service = org::organizer_outbound_server::OrganizerOutboundServer::new(OrganizerOutboundImpl {
         server,
     });
     run_grpc_server(bind, service, span, terminate_flag).await

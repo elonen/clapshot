@@ -90,9 +90,9 @@ impl ServerState {
     }
 
     /// Send a client command to websocket of given recipient(s)
-    pub fn emit_cmd(&self, cmd: proto::server_to_client_cmd::Cmd, send_to: SendTo) -> Res<u32>
+    pub fn emit_cmd(&self, cmd: proto::client::server_to_client_cmd::Cmd, send_to: SendTo) -> Res<u32>
     {
-        let cmd = proto::ServerToClientCmd { cmd: Some(cmd) };
+        let cmd = proto::client::ServerToClientCmd { cmd: Some(cmd) };
         let msg = serde_json::to_value(cmd)?;
         let msg = warp::ws::Message::text(msg.to_string());
         match send_to {

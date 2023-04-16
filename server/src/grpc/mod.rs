@@ -13,8 +13,8 @@ use crate::database::models::msg_event_name_to_proto_msg_type;
 #[macro_export]
 macro_rules! client_cmd {
     ($msg:ident, { $($field:ident: $value:expr),* $(,)? }) => {
-        proto::server_to_client_cmd::Cmd::$msg(
-            proto::server_to_client_cmd::$msg {
+        proto::client::server_to_client_cmd::Cmd::$msg(
+            proto::client::server_to_client_cmd::$msg {
             $($field: $value,)*
         })
     };

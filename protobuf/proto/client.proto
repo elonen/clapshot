@@ -1,5 +1,5 @@
 syntax = "proto3";
-package clapshot.organizer;
+package clapshot.client;
 
 import public "common.proto";
 

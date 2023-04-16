@@ -8,7 +8,8 @@ use lib_clapshot_grpc::{
     proto3_get_field,
     proto::{
         self,
-        organizer_outbound_client::OrganizerOutboundClient,
+        org,
+        org::organizer_outbound_client::OrganizerOutboundClient,
     }
 };
 
@@ -26,9 +27,9 @@ type RpcResult<T> = Result<Response<T>, Status>;
 // Implement inbound RCP methods
 
 #[tonic::async_trait]
-impl proto::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
+impl org::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
 {
-    async fn handshake(&self, req: Request<proto::ServerInfo>) -> RpcResult<proto::Empty>
+    async fn handshake(&self, req: Request<org::ServerInfo>) -> RpcResult<proto::Empty>
     {
         // Check version
         let my_ver = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
@@ -36,7 +37,7 @@ impl proto::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
         if my_ver.major != server_ver.major {
             return Err(Status::invalid_argument(format!("Major version mismatch: organizer='{}', clapshot='{:?}'", my_ver, server_ver)));
         }
- 
+
         tracing::info!("Connecting back, org->srv");
         let client = connect_back_and_finish_handshake(&req).await?;
         self.client.lock().await.replace(client);
@@ -44,32 +45,32 @@ impl proto::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
         Ok(Response::new(proto::Empty {}))
     }
 
-    async fn navigate_page(&self, req: Request<proto::NavigatePageRequest>) -> RpcResult<proto::ClientShowPageRequest>
+    async fn navigate_page(&self, req: Request<org::NavigatePageRequest>) -> RpcResult<org::ClientShowPageRequest>
     {
         let ses = proto3_get_field!(req.get_ref(), ses, "No session data in request")?;
 
         tracing::info!("Got a request: {:?}", req);
-        Ok(Response::new(proto::ClientShowPageRequest {
+        Ok(Response::new(org::ClientShowPageRequest {
             items: vec![],
             sid: ses.sid.clone(),
             path: "/not_implemented".into(),
         }))
     }
 
-    async fn authz_user_action(&self, req: Request<proto::AuthzUserActionRequest>) -> RpcResult<proto::AuthzResult>
+    async fn authz_user_action(&self, req: Request<org::AuthzUserActionRequest>) -> RpcResult<org::AuthzResult>
     {
        tracing::info!("Got a request: {:?}", req);
-        Ok(Response::new(proto::AuthzResult {
+        Ok(Response::new(org::AuthzResult {
             is_authorized: None,
             message: Some("NOT IMPLEMENTED".into()),
             details: Some("NOT IMPLEMENTED".into()),
         }))
     }
 
-    async fn on_start_user_session(&self, req: Request<proto::OnStartUserSessionRequest>) -> RpcResult<proto::OnStartUserSessionResult>
+    async fn on_start_user_session(&self, req: Request<org::OnStartUserSessionRequest>) -> RpcResult<org::OnStartUserSessionResult>
     {
         tracing::debug!("on_start_user_session: {:?}", req);
-        Ok(Response::new(proto::OnStartUserSessionResult {
+        Ok(Response::new(org::OnStartUserSessionResult {
             dont_send_default_actions: false,
         }))
     }
