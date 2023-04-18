@@ -6,7 +6,7 @@ use tracing;
 /// Clean up after a video processing error. Attempts to preserve the original file
 /// by moving it under the rejected directory. Then deletes any dangling files that were
 /// created during the failed ingestion.
-pub fn clean_up_rejected_file(data_dir: &Path, src_file: &Path, video_hash: Option<String>) -> anyhow::Result<()>
+pub fn clean_up_rejected_file(data_dir: &Path, src_file: &Path, video_id: Option<String>) -> anyhow::Result<()>
 {
     // Create rejected directory if it doesn't exist
     let rejected_dir = data_dir.join("rejected");
@@ -19,19 +19,19 @@ pub fn clean_up_rejected_file(data_dir: &Path, src_file: &Path, video_hash: Opti
         std::fs::rename(src_file, &move_to)?;
     } else {
         // If the destination file already exists, make a subdirectory for the new one.
-        // Use video hash if available, otherwise an UUID4.
-        let extra_dir = match &video_hash {
-            Some(hash) => rejected_dir.join(hash),
+        // Use video id if available, otherwise an UUID4.
+        let extra_dir = match &video_id {
+            Some(id) => rejected_dir.join(id),
             None => rejected_dir.join( uuid::Uuid::new_v4().to_string() ),
         };
         if !extra_dir.exists() { std::fs::create_dir(&extra_dir)?; };
-        
+
         let move_to = extra_dir.join(src_file_name);
         if !move_to.exists() {
             // Move it to the new subdirectory
             std::fs::rename(src_file, move_to)?;
         } else {
-            // The file already exists in the new subdirectory. Since hash is equal, it's
+            // The file already exists in the new subdirectory. Since id (hash) is equal, it's
             // probably the same file, but check the size to be sure.
             let src_size = std::fs::metadata(src_file)?.len();
             let dest_size = std::fs::metadata(&move_to)?.len();

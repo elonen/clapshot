@@ -17,7 +17,7 @@ mod integration_test
     use crossbeam_channel::{Receiver, RecvTimeoutError, unbounded, select};
 
     use crate::api_server::tests::expect_user_msg;
-    use crate::database::schema::videos::thumb_sheet_dims;
+    use crate::database::schema::videos::{thumb_sheet_cols, thumb_sheet_rows};
     use crate::expect_client_cmd;
     use crate::video_pipeline::{metadata_reader, IncomingFile};
     use crate::api_server::test_utils::{connect_client_ws, open_video, write};
@@ -123,25 +123,25 @@ mod integration_test
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
             let m = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
-            let vh = m.refs.unwrap().video_hash.unwrap();
+            let vid = m.refs.unwrap().video_id.unwrap();
 
             crate::api_server::test_utils::wait_for_thumbnails(&mut ws).await;
 
             // Open video from server and check metadata
-            let vid = open_video(&mut ws, &vh).await.video.unwrap();
-            assert_eq!(vid.processing_metadata.unwrap().orig_filename.as_str(), mp4_file);
+            let cideo = open_video(&mut ws, &vid).await.video.unwrap();
+            assert_eq!(cideo.processing_metadata.unwrap().orig_filename.as_str(), mp4_file);
 
             // Double slashes in the path are an error (empty path component)
-            let video_url = vid.playback_url.unwrap();
+            let video_url = cideo.playback_url.unwrap();
             let after_https = video_url.split("://").nth(1).unwrap();
             assert!(!after_https.contains("//"));
 
             // Check that video was moved to videos dir and symlinked
-            assert!(data_dir.path().join("videos").join(&vh).join("orig").join(mp4_file).is_file());
+            assert!(data_dir.path().join("videos").join(&vid).join("orig").join(mp4_file).is_file());
             assert!(!incoming_dir.join(mp4_file).exists());
 
             // Add a comment
-            let msg = serde_json::json!({"cmd": "add_comment", "data": { "video_hash": vh, "comment": "Test comment"}});
+            let msg = serde_json::json!({"cmd": "add_comment", "data": { "video_id": vid, "comment": "Test comment"}});
             write(&mut ws, &msg.to_string()).await;
             let mut got_new_comment = false;
             for _ in 0..3 {
@@ -197,11 +197,11 @@ mod integration_test
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
             let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
-            let vh = msg.refs.unwrap().video_hash.unwrap();
+            let vid = msg.refs.unwrap().video_id.unwrap();
 
             // Check that it's being transcoded
             assert!(msg.details.unwrap().to_ascii_lowercase().contains("ranscod"));
-            assert!(vh.len() > 0);
+            assert!(vid.len() > 0);
 
             // Wait until transcoding is done
             let mut transcode_complete = false;
@@ -256,7 +256,7 @@ mod integration_test
                             proto::page_item::folder_listing::item::Item::Video(v) => v,
                             _ => panic!("Expected video"),
                         };
-                        assert_eq!(v.video_hash, vh);
+                        assert_eq!(v.id, vid);
 
                         if let Some(pd) = v.preview_data {
                             if let Some(pm) = v.processing_metadata {
@@ -279,7 +279,7 @@ mod integration_test
             assert!(transcode_complete, "Transcode did not complete / was not marked done");
             assert!(got_progress_report);
 
-            let vid_dir = data_dir.path().join("videos").join(vh);
+            let vid_dir = data_dir.path().join("videos").join(vid);
             assert!(vid_dir.join("video.mp4").is_symlink());
             assert!(vid_dir.join("stdout.txt").is_file());
             assert!(vid_dir.join("stderr.txt").is_file());

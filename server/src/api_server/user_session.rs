@@ -17,8 +17,8 @@ pub enum Topic<'a> {
 #[macro_export]
 macro_rules! send_user_msg(
     ($msg_type:expr, $ses:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => {
-        let (comment_id, video_hash) = match $topic {
-            Topic::Video(video_hash) => (None, Some(video_hash.into())),
+        let (comment_id, video_id) = match $topic {
+            Topic::Video(video_id) => (None, Some(video_id.into())),
             Topic::Comment(comment_id) => (Some(comment_id.into()), None),
             Topic::None => (None, None)
         };
@@ -27,7 +27,7 @@ macro_rules! send_user_msg(
             user_id: $ses.user_id.clone(),
             ref_comment_id: comment_id,
             seen: false,
-            ref_video_hash: video_hash,
+            ref_video_id: video_id,
             message: $msg.into(),
             details: $details.into()
         }, crate::api_server::SendTo::UserId(&($ses.user_id)), $persist)?;
@@ -77,7 +77,7 @@ pub struct UserSession {
     pub user_id: String,
     pub user_name: String,
 
-    pub cur_video_hash: Option<String>,
+    pub cur_video_id: Option<String>,
     pub cur_collab_id: Option<String>,
     pub video_session_guard: Option<OpaqueGuard>,
     pub collab_session_guard: Option<OpaqueGuard>,
@@ -94,7 +94,7 @@ impl UserSession {
             if drawing != "" {
                 // If drawing is present, read it from disk and encode it into a data URI.
                 if !drawing.starts_with("data:") {
-                    let path = server.videos_dir.join(&c.video_hash).join("drawings").join(&drawing);
+                    let path = server.videos_dir.join(&c.video_id).join("drawings").join(&drawing);
                     if path.exists() {
                         let data = tokio::fs::read(path).await?;
                         *drawing = format!("data:image/webp;base64,{}", Base64GP::STANDARD_NO_PAD.encode(&data));
@@ -120,7 +120,7 @@ impl UserSession {
 
     fn try_send_error<'a>(&self, server: &ServerState, msg: String, details: Option<String>, op: &AuthzTopic<'a>) -> anyhow::Result<()> {
         let topic = match op {
-            AuthzTopic::Video(v, _op) => Topic::Video(&v.video_hash),
+            AuthzTopic::Video(v, _op) => Topic::Video(&v.id),
             AuthzTopic::Comment(c, _op) => Topic::Comment(c.id),
             AuthzTopic::Other(_t, _op) => Topic::None,
         };

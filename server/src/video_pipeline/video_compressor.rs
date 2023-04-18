@@ -18,7 +18,7 @@ pub struct CmprInput {
     pub video_dst: Option<PathBuf>,
     pub thumb_dir: Option<PathBuf>,
     pub video_bitrate: u32,
-    pub video_hash: String,
+    pub video_id: String,
     pub user_id: String,
 }
 
@@ -27,7 +27,7 @@ pub struct CmprOutput {
     pub success: bool,
     pub video_dst: Option<PathBuf>,
     pub thumb_dir: Option<PathBuf>,
-    pub video_hash: String,
+    pub video_id: String,
     pub stdout: String,
     pub stderr: String,
     pub dmsg: DetailedMsg,
@@ -42,7 +42,7 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
         success: false,
         video_dst: args.video_dst.clone(),
         thumb_dir: args.thumb_dir.clone(),
-        video_hash: args.video_hash.clone(),
+        video_id: args.video_id.clone(),
         stdout: "".into(),
         stderr: "".into(),
         dmsg: DetailedMsg {
@@ -57,15 +57,15 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
 
 /// Run FFMpeg shell command and return the output (stdout, stderr)
 /// Send progress updates to the progress channel.
-/// 
+///
 /// # Arguments
 /// * `args` - what to compress and where to put the result
 /// * `progress` - channel to send progress updates to
-/// 
+///
 fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutput
 {
     let _span = tracing::info_span!("run_ffmpeg_transcode",
-        video = %args.video_hash,
+        video = %args.video_id,
         user = %args.user_id,
         thread = ?std::thread::current().id()).entered();
 
@@ -86,17 +86,17 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
                 .map(|_| fname.to_string())
                 .map_err(|e| e.to_string())
         }.map_or_else(|e| { tracing::warn!(details=e, "Won't track FFMPEG progress; failed to create pipe file."); None}, |f| Some(f))
-    };  
-    
+    };
+
     // Start encoder thread
     let ffmpeg_thread = {
         let src = args.src.clone();
         let dst = video_dst.clone();
-        let ppipe_fname = ppipe_fname.clone();        
+        let ppipe_fname = ppipe_fname.clone();
         std::thread::spawn(move || {
             let _span = tracing::info_span!("ffmpeg_transcode_thread",
                 thread = ?std::thread::current().id()).entered();
-    
+
             let mut cmd = &mut Command::new("nice");
             cmd = cmd.arg("-n").arg("10").arg("--")
                 .arg("ffmpeg").arg("-y").arg("-i").arg(&src);
@@ -143,12 +143,12 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
         match ppipe_fname {
             None => std::thread::spawn(move || {}),
             Some(pfn) => {
-                let vh = args.video_hash.clone();
+                let vid = args.video_id.clone();
                 let src = args.src.clone();
                 std::thread::spawn(move || {
                     let _span = tracing::info_span!("progress_thread",
                         thread = ?std::thread::current().id()).entered();
-    
+
                     let total_frames = count_frames(&src);
 
                     let f = match unix_named_pipe::open_read(&pfn) {
@@ -216,7 +216,7 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
                                         }}}
                                 // Send progress message (if any)
                                 if let Some(msg) = msg.take() {
-                                    if let Err(e) = progress.send((vh.clone(), user_id.clone(), msg)) {
+                                    if let Err(e) = progress.send((vid.clone(), user_id.clone(), msg)) {
                                         tracing::debug!(details=%e, "Failed to send FFMPEG progress message. Ending progress tracking.");
                                         return;
                                     }}
@@ -244,7 +244,7 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
         success: err_msg.is_none(),
         video_dst: Some(video_dst),
         thumb_dir: None,
-        video_hash: args.video_hash.clone(),
+        video_id: args.video_id.clone(),
         stdout: stdout,
         stderr: stderr,
         dmsg: DetailedMsg {
@@ -294,7 +294,7 @@ fn count_frames( src: &PathBuf ) -> Option<i32>
 fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 {
     let _span = tracing::info_span!("run_ffmpeg_thumbnailer",
-        video = %args.video_hash,
+        video = %args.video_id,
         user = %args.user_id,
         thread = ?std::thread::current().id()).entered();
 
@@ -362,7 +362,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
                     Some(d) => d,
                     None => return (Some("ffprobe count_frames failed".to_string()), "".into(), "".into())
                 };
-        
+
             // Make a "-vf" filter that selects exactly THUMB_COUNT frames from the video
             let frame_select_filter = (0..THUMB_COUNT).map(|pos| {
                     let frame = (pos as f64 * (total_frames as f64 / (THUMB_COUNT as f64))) as i32;
@@ -426,7 +426,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
         success: comb_err.is_none(),
         video_dst: None,
         thumb_dir: Some(thumb_dir),
-        video_hash: args.video_hash.clone(),
+        video_id: args.video_id.clone(),
         stdout: comb_stdout,
         stderr: comb_stderr,
         dmsg: DetailedMsg {
@@ -442,11 +442,11 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 
 /// Listen to incoming transcoding/thumbnailing requests and spawn a thread (from a pool) to handle each one.
 /// Calls FFMpeg CLI to do the actual work, and sends progress updates to the given channel.
-/// 
+///
 /// # Arguments
 /// * `inq` - Channel to receive incoming requests
 /// * `outq` - Channel to send results
-/// * `progress` - Channel to send transcoding progress updates. Tuple: (video_hash, progress_msg)
+/// * `progress` - Channel to send transcoding progress updates. Tuple: (video_id, progress_msg)
 /// * `n_workers` - Number of worker threads to spawn for processing. This should be at most the number of CPU cores.
 pub fn run_forever(
     inq: Receiver<CmprInput>,

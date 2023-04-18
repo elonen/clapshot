@@ -4,7 +4,7 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, videoUrl, videoHash, videoFps, videoTitle, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions} from '@/stores';
+import {allComments, curUsername, curUserId, videoIsReady, videoUrl, videoId, videoFps, videoTitle, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions} from '@/stores';
 import {IndentedComment, type UserMenuItem} from "@/types";
 
 import CommentCard from '@/lib/CommentCard.svelte'
@@ -46,7 +46,7 @@ function onCommentInputButton(e: any) {
         if (e.detail.comment_text != "")
         {
             wsEmit('add_comment', {
-                video_hash: $videoHash,
+                video_id: $videoId,
                 parent_id: null,            // TODO: parent id here
                 comment: e.detail.comment_text,
                 drawing: videoPlayer.getScreenshot(),
@@ -89,7 +89,7 @@ function onDeleteComment(e: any) {
 
 function onReplyComment(e: any) {
     wsEmit('add_comment', {
-        video_hash: $videoHash,
+        video_id: $videoId,
         parent_id: e.detail.parent_id,
         comment: e.detail.comment_text,
     });
@@ -108,7 +108,7 @@ function closeVideo() {
     console.log("closeVideo");
     wsEmit('leave_collab', {});
     $collabId = null;
-    $videoHash = null;
+    $videoId = null;
     $videoUrl = null;
     $videoFps = null;
     $videoTitle = null;
@@ -149,7 +149,7 @@ function onCommentPinClicked(e: any) {
 
 function popHistoryState(e: any) {
     if (e.state && e.state !== '/')
-    wsEmit('open_video', {video_hash: e.state});
+    wsEmit('open_video', {id: e.state});
     else
     closeVideo();
 }
@@ -163,15 +163,14 @@ urlParams.forEach((value, key) => {
     }
 });
 
-$videoHash = urlParams.get('vid');
+$videoId = urlParams.get('vid');
 const prevCollabId = $collabId;
 $collabId = urlParams.get('collab');
-if ($videoHash) {
-    // console.log("Video hash: " + video_hash);
+if ($videoId) {
     if ($collabId)
-    history.pushState($videoHash, '', '/?vid='+$videoHash+'&collab='+$collabId);
+    history.pushState($videoId, '', '/?vid='+$videoId+'&collab='+$collabId);
     else
-    history.pushState($videoHash, '', '/?vid='+$videoHash);
+    history.pushState($videoId, '', '/?vid='+$videoId);
 }
 
 let uploadUrl: string = "";
@@ -327,8 +326,8 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
 
         console.log("Socket connected");
         //acts.add({mode: 'info', message: 'Connected.', lifetime: 1.5});
-        if ($videoHash) {
-            wsEmit('open_video', {video_hash: $videoHash});
+        if ($videoId) {
+            wsEmit('open_video', {id: $videoId});
         } else {
             wsEmit('list_my_videos', {});
             wsEmit('list_my_messages', {});
@@ -359,7 +358,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
         if (prevCollabId)
         wsEmit('leave_collab', {});
         if ($collabId)
-        wsEmit('join_collab', {collab_id: $collabId, video_hash: $videoHash});
+        wsEmit('join_collab', {collab_id: $collabId, video_id: $videoId});
     }
 
     // Incoming messages
@@ -408,7 +407,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             else if (cmd.showMessages) {
                 for (const msg of cmd.showMessages.msgs) {
                     if ( msg.type === Proto3.UserMessage_Type.PROGRESS ) {
-                        if (msg.refs?.videoHash == $videoHash) {
+                        if (msg.refs?.videoId == $videoId) {
                             $videoProgressMsg = msg.message;
                             lastVideoProgressMsgTime = Date.now();
                         }
@@ -437,16 +436,16 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     if (!v.title) throw Error("No title");
 
                     $videoUrl = v.playbackUrl;
-                    $videoHash = v.videoHash;
+                    $videoId = v.id;
                     $videoFps = parseFloat(v.duration.fps);
                     if (isNaN($videoFps)) throw Error("Invalid FPS");
                     $videoTitle = v.title;
                     $allComments = [];
 
                     if ($collabId)
-                        wsEmit('join_collab', {collab_id: $collabId, video_hash: $videoHash});
+                        wsEmit('join_collab', {collab_id: $collabId, video_id: $videoId});
                     else
-                        history.pushState($videoHash, '', '/?vid=' + $videoHash);  // Point URL to video
+                        history.pushState($videoId, '', '/?vid=' + $videoId);  // Point URL to video
                 } catch(error) {
                     acts.add({mode: 'danger', message: 'Bad video open request. See log.', lifetime: 5});
                     console.error("Invalid video open request. Error: ", error);
@@ -457,7 +456,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
 
                 // Add/replace the new comments
                 for (const newComment of cmd.addComments.comments) {
-                    if (newComment.videoHash != $videoHash) {
+                    if (newComment.videoId != $videoId) {
                         console.warn("Comment not for current video. Ignoring.");
                         continue;
                     }
@@ -520,17 +519,17 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
     });
 }
 
-function onRequestVideoDelete(videoHash: string, videoName: string) {
-    logAbbrev("onRequestVideoDelete: " + videoHash + " / " + videoName);
-    wsEmit('del_video', {video_hash: videoHash});
+function onRequestVideoDelete(videoId: string, videoName: string) {
+    logAbbrev("onRequestVideoDelete: " + videoId + " / " + videoName);
+    wsEmit('del_video', {id: videoId});
     wsEmit('list_my_videos', {});
 }
 
-function onRequestVideoRename(videoHash: string, videoName: string) {
-    logAbbrev("onRequestVideoRename: " + videoHash + " / " + videoName);
+function onRequestVideoRename(videoId: string, videoName: string) {
+    logAbbrev("onRequestVideoRename: " + videoId + " / " + videoName);
     let newName = prompt("Rename video to:", videoName);
     if (newName) {
-        wsEmit('rename_video', {video_hash: videoHash, new_name: newName});
+        wsEmit('rename_video', {id: videoId, new_name: newName});
         wsEmit('list_my_videos', {});
     }
 }
@@ -617,7 +616,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
 
         </div>
 
-        {:else if $videoHash}
+        {:else if $videoId}
 
         <!-- ========== video review widgets ============= -->
         <div transition:slide class="flex h-full w-full {debugLayout?'border-2 border-blue-700':''}">
@@ -677,7 +676,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
             {:else if item.folderListing}
             <div class="my-6">
                 <VideoList items={item.folderListing.items.map((it)=>({
-                    id: (it.video?.videoHash ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
+                    id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
                     obj: it }))}
                     on:open-item={openVideoListItem}
                     on:reorder-items={onReorderItems}

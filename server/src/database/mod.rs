@@ -98,7 +98,7 @@ impl DB {
     ///
     /// # Returns
     /// * `sql.Integer` - ID of the new video
-    pub fn add_video(&self, video: &models::VideoInsert) -> DBResult<i32>
+    pub fn add_video(&self, video: &models::VideoInsert) -> DBResult<String>
     {
         use schema::videos::dsl::*;
         let res = diesel::insert_into(videos)
@@ -109,11 +109,11 @@ impl DB {
     /// Set the recompressed flag for a video.
     ///
     /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
-    pub fn set_video_recompressed(&self, vh: &str) -> EmptyDBResult
+    /// * `vid` - Id of the video
+    pub fn set_video_recompressed(&self, vid: &str) -> EmptyDBResult
     {
         use schema::videos::dsl::*;
-        diesel::update(videos.filter(video_hash.eq(vh)))
+        diesel::update(videos.filter(id.eq(vid)))
             .set(recompression_done.eq(Local::now().naive_local()))
             .execute(&mut self.conn()?)?;
         Ok(())
@@ -122,14 +122,14 @@ impl DB {
     /// Set thumbnail sheet dimensions for a video.
     ///
     /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
+    /// * `vid` - Id of the video
     /// * `cols` - Width of the thumbnail sheet
     /// * `rows` - Height of the thumbnail sheet
-    pub fn set_video_thumb_sheet_dimensions(&self, vh: &str, cols: u32, rows: u32) -> EmptyDBResult
+    pub fn set_video_thumb_sheet_dimensions(&self, vid: &str, cols: u32, rows: u32) -> EmptyDBResult
     {
         use schema::videos::dsl::*;
-        diesel::update(videos.filter(video_hash.eq(vh)))
-            .set(thumb_sheet_dims.eq(format!("{cols}x{rows}")))
+        diesel::update(videos.filter(id.eq(vid)))
+            .set((thumb_sheet_cols.eq(cols as i32), thumb_sheet_rows.eq(rows as i32)))
             .execute(&mut self.conn()?)?;
         Ok(())
     }
@@ -137,34 +137,34 @@ impl DB {
     /// Get a video from the database.
     ///
     /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
+    /// * `vid` - Id of the video
     ///
     /// # Returns
     /// * `models::Video` - Video object
     /// * `Err(NotFound)` - Video not found
-    pub fn get_video(&self, vh: &str) -> DBResult<models::Video>
+    pub fn get_video(&self, vid: &str) -> DBResult<models::Video>
     {
         use models::*;
         use schema::videos::dsl::*;
-        to_db_res(videos.filter(video_hash.eq(vh)).first::<Video>(&mut self.conn()?))
+        to_db_res(videos.filter(id.eq(vid)).first::<Video>(&mut self.conn()?))
     }
 
     /// Delete a video and all its comments from the database.
     ///
     /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
+    /// * `vid` - Id of the video
     ///
     /// # Returns
     /// * `EmptyResult`
     /// * `Err(NotFound)` - Video not found
-    pub fn del_video_and_comments(&self, vh: &str) -> EmptyDBResult
+    pub fn del_video_and_comments(&self, vid: &str) -> EmptyDBResult
     {
         use schema::videos::dsl as sv;
         use schema::comments::dsl as sc;
         let conn = &mut self.conn()?;
         conn.transaction::<_, diesel::result::Error, _>(|conn| {
-            diesel::delete(sv::videos.filter(sv::video_hash.eq(vh))).execute(conn)?;
-            diesel::delete(sc::comments.filter(sc::video_hash.eq(vh))).execute(conn)?;
+            diesel::delete(sv::videos.filter(sv::id.eq(vid))).execute(conn)?;
+            diesel::delete(sc::comments.filter(sc::video_id.eq(vid))).execute(conn)?;
             Ok(())
         })?;
         Ok(())
@@ -173,17 +173,17 @@ impl DB {
     /// Rename a video (title).
     ///
     /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
+    /// * `vid` - Id of the video
     /// * `new_name` - New title
     ///
     /// # Returns
     /// * `EmptyResult`
     /// * `Err(NotFound)` - Video not found
     /// * `Err(Other)` - Other error
-    pub fn rename_video(&self, vh: &str, new_name: &str) -> EmptyDBResult
+    pub fn rename_video(&self, vid: &str, new_name: &str) -> EmptyDBResult
     {
         use schema::videos::dsl::*;
-        diesel::update(videos.filter(video_hash.eq(vh)))
+        diesel::update(videos.filter(id.eq(vid)))
             .set(title.eq(new_name))
             .execute(&mut self.conn()?)?;
         Ok(())
@@ -211,7 +211,10 @@ impl DB {
     {
         use models::*;
         use schema::videos::dsl::*;
-        to_db_res(videos.filter(thumb_sheet_dims.is_null()).order_by(added_time.desc()).load::<Video>(&mut self.conn()?))
+        to_db_res(videos.filter(
+                thumb_sheet_cols.is_null().or(
+                thumb_sheet_rows.is_null()))
+            .order_by(added_time.desc()).load::<Video>(&mut self.conn()?))
     }
 
     /// Add a new comment on a video.
@@ -248,15 +251,15 @@ impl DB {
     /// Get all comments for a video.
     ///
     /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
+    /// * `vid` - Id of the video
     ///
     /// # Returns
     /// * `Vec<models::Comment>` - List of Comment objects
-    pub fn get_video_comments(&self, vh: &str) -> DBResult<Vec<models::Comment>>
+    pub fn get_video_comments(&self, vid: &str) -> DBResult<Vec<models::Comment>>
     {
         use models::*;
         use schema::comments::dsl::*;
-        Ok(comments.filter(video_hash.eq(vh)).order_by(created.desc()).load::<Comment>(&mut self.conn()?)?)
+        Ok(comments.filter(video_id.eq(vid)).order_by(created.desc()).load::<Comment>(&mut self.conn()?)?)
     }
 
     /// Delete a comment from the database.

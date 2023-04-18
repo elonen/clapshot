@@ -2,7 +2,7 @@ pub mod grpc_client;
 pub mod caller;
 pub mod grpc_server;
 
-use std::{num::NonZeroU64, collections::HashMap};
+use std::collections::HashMap;
 
 use lib_clapshot_grpc::proto;
 
@@ -61,26 +61,17 @@ pub (crate) fn db_video_to_proto3(
         _ => None,
     };
 
-    fn parse_sheet_dims(sheet_dims: &str) -> Option<(u32, u32)> {
-        let (w, h) = sheet_dims.split_once('x')
-            .or_else(|| { tracing::error!("Invalid sheet dimensions: {}", sheet_dims); None })?;
-        let err_fn = || { tracing::error!("Invalid dim number(s): {}", sheet_dims); None };
-        Some((w.parse::<NonZeroU64>().ok().or_else(err_fn)?.get() as u32,
-            h.parse::<NonZeroU64>().ok().or_else(err_fn)?.get() as u32))
-    }
-
-    let preview_data = if let Some(sheet_dims) = v.thumb_sheet_dims.clone() {
-        if let Some((cols, rows)) = parse_sheet_dims(&sheet_dims) {
-            let thumb_sheet = Some(proto::video_preview_data::ThumbSheet {
-                url: format!("{}/videos/{}/thumbs/sheet-{}.webp", url_base, &v.video_hash, sheet_dims),
-                rows,
-                cols,
-            });
-            Some(proto::VideoPreviewData {
-                thumb_url: Some(format!("{}/videos/{}/thumbs/thumb.webp", url_base, &v.video_hash)),
-                thumb_sheet,
-            }
-        ) } else { None } } else { None };
+    let preview_data = if let (Some(cols), Some(rows)) = (v.thumb_sheet_cols, v.thumb_sheet_rows) {
+        let thumb_sheet = Some(proto::video_preview_data::ThumbSheet {
+            url: format!("{}/videos/{}/thumbs/sheet-{}x{}.webp", url_base, &v.id, cols, rows),
+            rows: rows as u32,
+            cols: cols as u32,
+        });
+        Some(proto::VideoPreviewData {
+            thumb_url: Some(format!("{}/videos/{}/thumbs/thumb.webp", url_base, &v.id)),
+            thumb_sheet,
+        }
+        ) } else { None };
 
     // Use transcoded or orig video?
     let uri = match v.recompression_done {
@@ -91,10 +82,10 @@ pub (crate) fn db_video_to_proto3(
         }};
 
     let playback_url = uri.map(|uri|
-        format!("{}/videos/{}/{}", url_base, &v.video_hash, uri));
+        format!("{}/videos/{}/{}", url_base, &v.id, uri));
 
     proto::Video {
-        video_hash: v.video_hash.clone(),
+        id: v.id.clone(),
         title: v.title.clone(),
         added_by,
         duration,
@@ -124,7 +115,7 @@ pub(crate) fn db_comment_to_proto3(
 
     proto::Comment {
         id: comment.id.to_string(),
-        video_hash: comment.video_hash.clone(),
+        video_id: comment.video_id.clone(),
         user: Some(user),
         comment: comment.comment.clone(),
         timecode: comment.timecode.clone(),
@@ -143,7 +134,7 @@ pub (crate) fn db_message_to_proto3(
         id: Some(msg.id.to_string()),
         r#type: msg_event_name_to_proto_msg_type(&msg.event_name.as_str()).into(),
         refs:Some(proto::user_message::Refs {
-            video_hash: msg.ref_video_hash.clone(),
+            video_id: msg.ref_video_id.clone(),
             comment_id: msg.ref_comment_id.map(|id| id.to_string()),
         }),
         message: msg.message.clone(),
@@ -168,7 +159,7 @@ pub (crate) fn db_message_insert_to_proto3(
             _ => proto::user_message::Type::Ok,
         }  as i32,
         refs:Some(proto::user_message::Refs {
-            video_hash: msg.ref_video_hash.clone(),
+            video_id: msg.ref_video_id.clone(),
             comment_id: msg.ref_comment_id.map(|id| id.to_string()),
         }),
         message: msg.message.clone(),
@@ -209,7 +200,7 @@ if (!it.video) {
 var old_name = it.video.title;
 var new_name = (await prompt("Rename item", old_name))?.trim();
 if (new_name && new_name != old_name) {
-    await call_server("rename_video", {video_hash: it.video.videoHash, new_name: new_name});
+    await call_server("rename_video", {id: it.video.id, new_name: new_name});
 }
                 "#.into()
         })
@@ -239,7 +230,7 @@ if (await confirm(msg)) {
     for (var i = 0; i < items.length; i++) {
         var it = items[i];
         if (it.video) {
-            await call_server("del_video", {video_hash: it.video.videoHash});
+            await call_server("del_video", {id: it.video.id});
         } else {
             await alert("Non-video trash not implemented (no Organizer).");
         }
@@ -259,7 +250,7 @@ pub (crate) fn folder_listing_for_videos(videos: &[crate::database::models::Vide
                 item: Some(proto::page_item::folder_listing::item::Item::Video(db_video_to_proto3(v, url_base))),
                 open_action: Some(proto::ScriptCall {
                     lang: proto::script_call::Lang::Javascript.into(),
-                    code: r#"await call_server("open_video", {video_hash: items[0].video.videoHash});"#.into()
+                    code: r#"await call_server("open_video", {id: items[0].video.id});"#.into()
                 }),
                 popup_actions: vec!["popup_rename".into(), "popup_trash".into()],
                 vis: None,

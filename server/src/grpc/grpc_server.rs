@@ -72,7 +72,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             let msg = models::MessageInsert {
                 user_id: username.to_string(),
                 seen: false,
-                ref_video_hash: msg_in.refs.clone().and_then(|r| r.video_hash),
+                ref_video_id: msg_in.refs.clone().and_then(|r| r.video_id),
                 ref_comment_id: comment_id,
                 event_name: proto_msg_type_to_event_name((&msg_in).r#type()).to_string(),
                 message: msg_in.message.clone(),
@@ -91,7 +91,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             },
             Recipient::UserTemp(username) => { send_msg(&username, SendTo::UserId(&username), false) },
             Recipient::UserPersist(username) => { send_msg(&username, SendTo::UserId(&username), true) },
-            Recipient::VideoHash(vh) => { send_msg(&vh, SendTo::VideoHash(&vh), false) },
+            Recipient::VideoId(id) => { send_msg(&id, SendTo::VideoId(&id), false) },
             Recipient::CollabSession(csi) => { send_msg(&csi, SendTo::Collab(&csi), false) },
         };
 

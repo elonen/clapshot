@@ -37,7 +37,7 @@ async fn test_api_push_msg()
             msg: "test_msg".into(),
             user_id: Some("user.num1".into()),
             details: Some("test_details".into()),
-            video_hash: None, topic: UserMessageTopic::Ok,
+            video_id: None, topic: UserMessageTopic::Ok,
         };
 
         ts.user_msg_tx.send(umsg.clone()).unwrap();
@@ -77,37 +77,37 @@ async fn test_api_del_video()
 
         // Delete one successfully
         {
-            assert!(ts.db.get_video(&ts.videos[0].video_hash).is_ok());
-            write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"video_hash":"{}"}}}}"#, ts.videos[0].video_hash)).await;
+            assert!(ts.db.get_video(&ts.videos[0].id).is_ok());
+            write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"id":"{}"}}}}"#, ts.videos[0].id)).await;
             expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
 
             // Make sure the dir is gone
-            assert!(matches!(ts.db.get_video(&ts.videos[0].video_hash).unwrap_err(), DBError::NotFound()));
+            assert!(matches!(ts.db.get_video(&ts.videos[0].id).unwrap_err(), DBError::NotFound()));
 
             // Make sure it's in trash, and DB row was backed up on disk
             let trash_dir = ts.videos_dir.join("trash");
             let first_trash_dir = trash_dir.read_dir().unwrap().next().unwrap().unwrap().path();
             let backup_path = first_trash_dir.join("db_backup.json");
-            assert!(backup_path.to_string_lossy().contains(&ts.videos[0].video_hash));
+            assert!(backup_path.to_string_lossy().contains(&ts.videos[0].id));
             assert!(backup_path.is_file());
             let backup_json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(backup_path).unwrap()).unwrap();
-            assert_eq!(backup_json["video_hash"], ts.videos[0].video_hash);
+            assert_eq!(backup_json["id"], ts.videos[0].id);
             assert_eq!(backup_json["orig_filename"], ts.videos[0].orig_filename.clone().unwrap());
         }
 
         // Fail to delete a non-existent video
-        write(&mut ws, r#"{"cmd":"del_video","data":{"video_hash":"non-existent"}}"#).await;
+        write(&mut ws, r#"{"cmd":"del_video","data":{"id":"non-existent"}}"#).await;
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Fail to delete someones else's video
-        assert!(ts.db.get_video(&ts.videos[1].video_hash).is_ok());
-        write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"video_hash":"{}"}}}}"#, ts.videos[1].video_hash)).await;
+        assert!(ts.db.get_video(&ts.videos[1].id).is_ok());
+        write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"id":"{}"}}}}"#, ts.videos[1].id)).await;
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
-        assert!(ts.db.get_video(&ts.videos[1].video_hash).is_ok());
+        assert!(ts.db.get_video(&ts.videos[1].id).is_ok());
 
         // Break the database
         ts.db.break_db();
-        write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"video_hash":"{}"}}}}"#, ts.videos[2].video_hash)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"id":"{}"}}}}"#, ts.videos[2].id)).await;
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
@@ -119,8 +119,8 @@ async fn test_api_open_video()
 {
     api_test! {[ws, ts]
         for vid in &ts.videos {
-            let v = open_video(&mut ws, &vid.video_hash).await.video.unwrap();
-            assert_eq!(v.video_hash, vid.video_hash);
+            let v = open_video(&mut ws, &vid.id).await.video.unwrap();
+            assert_eq!(v.id, vid.id);
             assert_eq!(v.added_by.clone().unwrap().username, vid.added_by_userid.clone().unwrap());
             assert_eq!(v.added_by.clone().unwrap().displayname.unwrap(), vid.added_by_username.clone().unwrap());
             assert_eq!(v.processing_metadata.unwrap().orig_filename, vid.orig_filename.clone().unwrap());
@@ -134,7 +134,7 @@ async fn test_api_open_video()
 
         // Break the database
         ts.db.break_db();
-        write(&mut ws, &format!(r#"{{"cmd":"open_video","data":{{"video_hash":"{}"}}}}"#, ts.videos[0].video_hash)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"open_video","data":{{"id":"{}"}}}}"#, ts.videos[0].id)).await;
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
@@ -144,7 +144,7 @@ async fn test_api_open_video()
 async fn test_api_open_bad_video()
 {
     api_test! {[ws, ts]
-        write(&mut ws, r#"{"cmd":"open_video","data":{"video_hash":"non-existent"}}"#).await;
+        write(&mut ws, r#"{"cmd":"open_video","data":{"id":"non-existent"}}"#).await;
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
      }
 }
@@ -163,23 +163,23 @@ pub async fn expect_user_msg(ws: &mut crate::api_server::test_utils::WsClient, e
 async fn test_api_rename_video()
 {
     api_test! {[ws, ts]
-        let vid = &ts.videos[0];
-        open_video(&mut ws, &vid.video_hash).await;
+        let video = &ts.videos[0];
+        open_video(&mut ws, &video.id).await;
 
         // Rename the video (with leading/trailing whitespace that will be trimmed)
-        write(&mut ws, &format!(r#"{{"cmd":"rename_video","data":{{"video_hash":"{}","new_name":"  New name  "}}}}"#, vid.video_hash)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"rename_video","data":{{"id":"{}","new_name":"  New name  "}}}}"#, video.id)).await;
         expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
 
         // Make sure the video was renamed in the DB
-        let v = ts.db.get_video(&vid.video_hash).unwrap();
+        let v = ts.db.get_video(&video.id).unwrap();
         assert_eq!(v.title, Some("New name".to_string()));
 
         // Try to enter an invalid name
-        write(&mut ws, &format!(r#"{{"cmd":"rename_video","data":{{"video_hash":"{}","new_name":" /._  "}}}}"#, vid.video_hash)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"rename_video","data":{{"id":"{}","new_name":" /._  "}}}}"#, video.id)).await;
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Make sure name wasn't changed
-        let v = ts.db.get_video(&vid.video_hash).unwrap();
+        let v = ts.db.get_video(&video.id).unwrap();
         assert_eq!(v.title, Some("New name".to_string()));
     }
 }
@@ -191,17 +191,17 @@ async fn test_api_rename_video()
 async fn test_api_add_plain_comment()
 {
     api_test! {[ws, ts]
-        let vid = &ts.videos[0];
-        write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_hash":"{}","comment":"Test comment"}}}}"#, vid.video_hash)).await;
+        let video = &ts.videos[0];
+        write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_id":"{}","comment":"Test comment"}}}}"#, video.id)).await;
 
         // No video opened by the client yet, so no response
         expect_no_msg(&mut ws).await;
-        open_video(&mut ws, &vid.video_hash).await;
+        open_video(&mut ws, &video.id).await;
 
         // Add another comment
         let drw_data = "data:image/webp;charset=utf-8;base64,SU1BR0VfREFUQQ==";  // "IMAGE_DATA"
 
-        write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_hash":"{}","comment":"Test comment 2","drawing":"{}"}}}}"#, vid.video_hash, drw_data)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_id":"{}","comment":"Test comment 2","drawing":"{}"}}}}"#, video.id, drw_data)).await;
 
         let c = expect_client_cmd!(&mut ws, AddComments);
         assert_eq!(c.comments.len(), 1);
@@ -212,12 +212,12 @@ async fn test_api_add_plain_comment()
         assert!(c.comments[0].clone().drawing.unwrap().starts_with("data:image/webp"));
 
         // Add a comment to a nonexisting video
-        write(&mut ws, r#"{"cmd":"add_comment","data":{"video_hash":"bad_hash","comment":"Test comment 3"}}"#).await;
+        write(&mut ws, r#"{"cmd":"add_comment","data":{"video_id":"bad_id","comment":"Test comment 3"}}"#).await;
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Break the database
         ts.db.break_db();
-        write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_hash":"{}","comment":"Test comment 4"}}}}"#, vid.video_hash)).await;
+        write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_id":"{}","comment":"Test comment 4"}}}}"#, video.id)).await;
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
@@ -228,9 +228,9 @@ async fn test_api_add_plain_comment()
 async fn test_api_edit_comment()
 {
     api_test! {[ws, ts]
-        let vid = &ts.videos[0];
+        let video = &ts.videos[0];
         let com = &ts.comments[0];
-        open_video(&mut ws, &vid.video_hash).await;
+        open_video(&mut ws, &video.id).await;
 
         // Edit comment
         write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"id":"{}","comment":"Edited comment"}}}}"#, com.id.to_string())).await;
@@ -242,7 +242,7 @@ async fn test_api_edit_comment()
         assert_eq!(m.comments.len(), 1);
         assert_eq!(m.comments[0].id, com.id.to_string());
         assert_eq!(m.comments[0].comment, "Edited comment");
-        assert_eq!(m.comments[0].video_hash, vid.video_hash);
+        assert_eq!(m.comments[0].video_id, video.id);
 
         assert!(m.comments[0].clone().drawing.unwrap().starts_with("data:image/webp"));
         let drw_data = String::from_utf8( data_url::DataUrl::process(m.comments[0].clone().drawing.unwrap().as_str()).unwrap().decode_to_vec().unwrap().0 ).unwrap();
@@ -277,9 +277,9 @@ async fn test_api_del_comment()
     //     comment[3] (user 2)
 
     api_test! {[ws, ts]
-        let vid = &ts.videos[0];
+        let video = &ts.videos[0];
         let com = &ts.comments[6];
-        open_video(&mut ws, &vid.video_hash).await;
+        open_video(&mut ws, &video.id).await;
 
         // Delete comment[6] (user 1)
         write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, com.id.to_string())).await;
@@ -322,8 +322,8 @@ async fn test_api_list_my_messages()
         assert_eq!(m.msgs.len(), 0);
 
         let msgs = [
-            models::MessageInsert { user_id: "user.num1".into(), message: "message1".into(), event_name: "ok".into(), ref_video_hash: Some("HASH0".into()), ..Default::default() },
-            models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "error".into(), ref_video_hash: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
+            models::MessageInsert { user_id: "user.num1".into(), message: "message1".into(), event_name: "ok".into(), ref_video_id: Some("HASH0".into()), ..Default::default() },
+            models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "error".into(), ref_video_id: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
             models::MessageInsert { user_id: "user.num2".into(), message: "message3".into(), event_name: "ok".into(), ..Default::default() },
         ];
         let msgs = msgs.iter().map(|m| ts.db.add_message(m).unwrap()).collect::<Vec<_>>();

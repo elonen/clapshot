@@ -185,7 +185,7 @@ message ClientShowUserMessageRequest {
         string sid = 100;               // send to client with this session ID
         string user_temp = 101;         // send to all session with this username
         string user_persist = 102;      // send to all sessions with this username, and store in DB
-        string video_hash = 103;        // send to all clients watching this video
+        string video_id = 103;          // send to all clients watching this video
         string collab_session = 104;    // send to all clients in this collaboration session
     }
 }
@@ -195,8 +195,9 @@ message ClientDefineActionsRequest {
     string sid = 2;
 }
 
+// Tell client of session `sid` to open video `id` in the video player
 message ClientOpenVideoRequest {
-    string video_hash = 1;
+    string id = 1;
     string sid = 2;
 }
 
@@ -212,11 +213,11 @@ message ClientOpenExternalURLRequest {
 }
 
 message DeleteVideoRequest {
-    string video_hash = 1;
+    string id = 1;
 }
 
 message ModifyVideoRequest {
-    string video_hash = 1;
+    string id = 1;
     Video new_data = 2;
 }
 

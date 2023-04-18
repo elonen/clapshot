@@ -26,7 +26,7 @@ function fmt_date(d: Date | undefined) {
         <div class="w-full flex whitespace-nowrap overflow-hidden text-xs my-1">
             <span class="text-amber-400 text-xs">{fmt_date(item.addedTime)}</span>
             <span class="mx-1 text-neutral-400"> | </span>
-            <span class="text-amber-500 font-mono text-xs">{item.videoHash}</span>
+            <span class="text-amber-500 font-mono text-xs">{item.id}</span>
         </div>
         <div class="w-full video-title-line h-[3em]"><span title="{item.title}">{item.title}</span></div>
     </div>

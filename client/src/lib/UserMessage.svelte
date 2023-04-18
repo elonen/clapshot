@@ -45,15 +45,15 @@ function dateObjToISO(d: Date|undefined): string {
     </span>
     <span class="text-xs text-gray-500 pl-2 border-l border-gray-400">{dateObjToISO(msg.created)}</span>
 
-    {#if msg.refs?.videoHash }
+    {#if msg.refs?.videoId }
         {#if isError(msg)}
             <span class="font-mono text-xs pl-2 border-l border-gray-400 line-through text-gray-700">
-                {msg.refs.videoHash}
+                {msg.refs.videoId}
             </span>
         {:else}
             <a class="font-mono text-xs pl-2 border-l border-gray-400 text-amber-600"
-                href="/?vid={msg.refs.videoHash}">
-                {msg.refs.videoHash}
+                href="/?vid={msg.refs.videoId}">
+                {msg.refs.videoId}
             </a>
         {/if}
     {/if}

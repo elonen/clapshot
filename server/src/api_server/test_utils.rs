@@ -206,14 +206,14 @@ macro_rules! api_test {
 ///
 /// # Arguments
 /// * `ws` - WebSocket connection to the server
-/// * `vh` - ID of the video to open
+/// * `vid` - ID of the video to open
 ///
 /// # Returns
 /// * OpenVideo message from the server
-pub(crate) async fn open_video(ws: &mut WsClient, vh: &str) -> proto::client::server_to_client_cmd::OpenVideo
+pub(crate) async fn open_video(ws: &mut WsClient, vid: &str) -> proto::client::server_to_client_cmd::OpenVideo
 {
-    println!("--------- TEST: open_video '{}'...", vh);
-    write(ws, &format!(r#"{{"cmd":"open_video","data":{{"video_hash":"{}"}}}}"#, vh)).await;
+    println!("--------- TEST: open_video '{}'...", vid);
+    write(ws, &format!(r#"{{"cmd":"open_video","data":{{"id":"{}"}}}}"#, vid)).await;
     let ov = expect_client_cmd!(ws, OpenVideo);
 
     while let Some(msg) = read(ws).await {
@@ -221,7 +221,7 @@ pub(crate) async fn open_video(ws: &mut WsClient, vh: &str) -> proto::client::se
         match cmd.cmd {
             // Make sure the comments are for the video we opened
             Some(proto::client::server_to_client_cmd::Cmd::AddComments(m)) => {
-                assert!(m.comments.iter().all(|c| c.video_hash == vh));
+                assert!(m.comments.iter().all(|c| c.video_id == vid));
             },
             // Thumbnail generation can take a while, so ignore it if it happens to be in the queue
             Some(proto::client::server_to_client_cmd::Cmd::ShowMessages(m)) => {

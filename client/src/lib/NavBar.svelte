@@ -1,7 +1,7 @@
 <script lang="ts">
 
 import { createEventDispatcher } from 'svelte';
-import { curUsername, curUserPic, videoTitle, videoHash, videoProgressMsg, collabId, userMenuItems } from "@/stores";
+import { curUsername, curUserPic, videoTitle, videoId, videoProgressMsg, collabId, userMenuItems } from "@/stores";
 import Avatar from '@/lib/Avatar.svelte';
 import logo from "@/assets/clapshot-logo.svg";
 
@@ -61,15 +61,15 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 
 		<!-- video info -->
 		<div class="flex-1 justify-between">
-			{#if $videoHash}
+			{#if $videoId}
 			<span class="grid grid-flow-row auto-rows-max items-center font-mono text-gray-600 mx-4">
 					<h2 class=" text-lg text-center">
-						{$videoHash}
-						<a href="?vid={$videoHash}" class="text-gray-700 hover:text-gray-500"><i class="fas fa-share-square text-sm"></i></a>
+						{$videoId}
+						<a href="?vid={$videoId}" class="text-gray-700 hover:text-gray-500"><i class="fas fa-share-square text-sm"></i></a>
 						{#if $collabId}
-							<a href="?vid={$videoHash}" class="text-green-500 hover:text-orange-600" title="Collaborative session active. Click to exit."><i class="fas fa-users text-sm"></i></a>
+							<a href="?vid={$videoId}" class="text-green-500 hover:text-orange-600" title="Collaborative session active. Click to exit."><i class="fas fa-users text-sm"></i></a>
 						{:else}
-							<a href="?vid={$videoHash}&collab={randomSessionId}" title="Start collaborative session" class="text-gray-700 hover:text-gray-500"><i class="fas fa-user-plus text-sm"></i></a>
+							<a href="?vid={$videoId}&collab={randomSessionId}" title="Start collaborative session" class="text-gray-700 hover:text-gray-500"><i class="fas fa-user-plus text-sm"></i></a>
 						{/if}
 					</h2>
 				<span class="mx-4 text-xs text-center">{$videoTitle}</span>

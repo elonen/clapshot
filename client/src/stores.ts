@@ -4,7 +4,7 @@ import type { VideoListDefItem } from '@/lib/video_list/types';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
 export let videoUrl: Writable<string|null> = writable(null);
-export let videoHash: Writable<string|null> = writable(null);
+export let videoId: Writable<string|null> = writable(null);
 export let videoFps: Writable<number|null> = writable(null);
 export let videoTitle: Writable<string|null> = writable("(no video loaded)");
 export let videoProgressMsg: Writable<string|null> = writable(null);

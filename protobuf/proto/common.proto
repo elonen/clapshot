@@ -16,7 +16,7 @@ message Cookies {
 // ---------------------------------------------------------
 
 message Video {
-    string video_hash = 1;
+    string id = 1;
     optional string title = 2;
     optional UserInfo added_by = 3;
     optional VideoDuration duration = 4;
@@ -55,7 +55,7 @@ message VideoPreviewData {
 
 message Comment {
     string id = 1;
-    string video_hash = 2;
+    string video_id = 2;
     UserInfo user = 3;
     string comment = 4;
     optional string timecode = 5;       // e.g. "00:00:00.000"
@@ -77,7 +77,7 @@ message UserMessage {
         VIDEO_UPDATED = 3;  // Video metadata changed
     }
     message Refs {
-        optional string video_hash = 1;
+        optional string video_id = 1;
         optional string comment_id = 2;
     }
 
@@ -205,7 +205,7 @@ message ScriptCall {
         var old_name = it.video.title;
         var new_name = (await prompt("Rename item", old_name))?.trim();
         if (new_name && new_name != old_name) {
-            await call_server("rename_video", {video_hash: it.video.videoHash, new_name: new_name});
+            await call_server("rename_video", {video_id: it.video.videoId, new_name: new_name});
         }
     */
 }

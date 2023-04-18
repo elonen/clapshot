@@ -58,7 +58,7 @@ type SessionMap = Arc<RwLock<HashMap<String, UserSession>>>;
 pub enum SendTo<'a> {
     UserSession(&'a str),
     UserId(&'a str),
-    VideoHash(&'a str),
+    VideoId(&'a str),
     MsgSender(&'a WsMsgSender),
     Collab(&'a str),
 }
@@ -72,7 +72,7 @@ pub struct UserMessage {
     pub user_id: Option<String>,
     pub msg: String,
     pub details: Option<String>,
-    pub video_hash: Option<String>
+    pub video_id: Option<String>
 }
 
 fn abbrv(msg: &str) -> String {
@@ -95,7 +95,7 @@ async fn handle_ws_session(
         sender: msgq_tx,
         user_id: user_id.clone(),
         user_name: username.clone(),
-        cur_video_hash: None,
+        cur_video_id: None,
         cur_collab_id: None,
         video_session_guard: None,
         collab_session_guard: None,
@@ -408,16 +408,16 @@ async fn run_api_server_async(
                     message: m.msg.clone(),
                     details: m.details.clone().unwrap_or("".into()),
                     seen: false, ref_comment_id: None,
-                    ref_video_hash: m.video_hash.clone()
+                    ref_video_id: m.video_id.clone()
                 };
 
                 // Message to all watchers of a video
-                if let Some(vh) = m.video_hash {
+                if let Some(vid) = m.video_id {
                     if let Err(_) = server_state.emit_cmd(
                         client_cmd!(ShowMessages, { msgs: vec![db_message_insert_to_proto3(&msg)] }),
-                        SendTo::VideoHash(&vh)
+                        SendTo::VideoId(&vid)
                     ) {
-                        tracing::error!(video=vh, "Failed to send notification to video hash.");
+                        tracing::error!(video=vid, "Failed to send notification to video watchers.");
                     }
                 };
 
