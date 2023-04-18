@@ -57,11 +57,11 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
 
 /// Run FFMpeg shell command and return the output (stdout, stderr)
 /// Send progress updates to the progress channel.
-/// 
+///
 /// # Arguments
 /// * `args` - what to compress and where to put the result
 /// * `progress` - channel to send progress updates to
-/// 
+///
 fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutput
 {
     let _span = tracing::info_span!("run_ffmpeg_transcode",
@@ -86,17 +86,17 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
                 .map(|_| fname.to_string())
                 .map_err(|e| e.to_string())
         }.map_or_else(|e| { tracing::warn!(details=e, "Won't track FFMPEG progress; failed to create pipe file."); None}, |f| Some(f))
-    };  
-    
+    };
+
     // Start encoder thread
     let ffmpeg_thread = {
         let src = args.src.clone();
         let dst = video_dst.clone();
-        let ppipe_fname = ppipe_fname.clone();        
+        let ppipe_fname = ppipe_fname.clone();
         std::thread::spawn(move || {
             let _span = tracing::info_span!("ffmpeg_transcode_thread",
                 thread = ?std::thread::current().id()).entered();
-    
+
             let mut cmd = &mut Command::new("nice");
             cmd = cmd.arg("-n").arg("10").arg("--")
                 .arg("ffmpeg").arg("-y").arg("-i").arg(&src);
@@ -108,7 +108,8 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
                 "-nostats",
                 "-vcodec", "libx264",
                 "-vf", &format!("scale={}:{}", 1920, -8),
-                "-map", "0",  // copy all streams
+                "-map", "0",  // copy all streams...
+                "-dn", // ...but remove data stream
                 "-preset", "faster",
                 "-acodec", "aac",
                 "-ac", "2",
@@ -148,7 +149,7 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
                 std::thread::spawn(move || {
                     let _span = tracing::info_span!("progress_thread",
                         thread = ?std::thread::current().id()).entered();
-    
+
                     let total_frames = count_frames(&src);
 
                     let f = match unix_named_pipe::open_read(&pfn) {
@@ -362,7 +363,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
                     Some(d) => d,
                     None => return (Some("ffprobe count_frames failed".to_string()), "".into(), "".into())
                 };
-        
+
             // Make a "-vf" filter that selects exactly THUMB_COUNT frames from the video
             let frame_select_filter = (0..THUMB_COUNT).map(|pos| {
                     let frame = (pos as f64 * (total_frames as f64 / (THUMB_COUNT as f64))) as i32;
@@ -442,7 +443,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 
 /// Listen to incoming transcoding/thumbnailing requests and spawn a thread (from a pool) to handle each one.
 /// Calls FFMpeg CLI to do the actual work, and sends progress updates to the given channel.
-/// 
+///
 /// # Arguments
 /// * `inq` - Channel to receive incoming requests
 /// * `outq` - Channel to send results
