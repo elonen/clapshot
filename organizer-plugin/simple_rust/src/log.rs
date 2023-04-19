@@ -1,14 +1,14 @@
 
 /// Configure `tracing` logger
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `json_log` - If true, log in JSON format.
 /// * `debug` - If true, enable debug logging.
 pub(crate) fn setup_logging(json_log: bool, debug: bool) -> anyhow::Result<()>
 {
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", if debug {"debug,simple_organizer=debug"} else {"info,simple_organizer=info"});
+        std::env::set_var("RUST_LOG", if debug {"debug,simple_organizer=debug,h2=info"} else {"info,simple_organizer=info"});
     };
     // Clapshot server, when spawhing this as a subprocess, will
     // merge plugin's stdout/stderr within its logs, so we'll need to

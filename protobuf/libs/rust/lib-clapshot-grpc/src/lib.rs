@@ -140,7 +140,7 @@ pub async fn connect_back_and_finish_handshake(req: &tonic::Request<proto::org::
     use tonic::Status;
     use tower::service_fn;
 
-    // Connect back to organizer
+    // Connect back to server
     let bc = proto3_get_field!(req.get_ref(), backchannel)?;
     let ep = proto3_get_field!(bc, endpoint)?.clone();
 
@@ -151,12 +151,31 @@ pub async fn connect_back_and_finish_handshake(req: &tonic::Request<proto::org::
             if !std::path::Path::new(&path).exists() {
                 return Err(Status::invalid_argument(format!("Unix socket does not exist: {}", path)));
             }
-            tonic::transport::Endpoint::try_from("file://dummy")
-                .map_err(|e| Status::invalid_argument(format!("Failed to parse org->srv URI: {:?}", e)))?
-                .connect_timeout(std::time::Duration::from_secs(8))
-                .connect_with_connector(service_fn(move |_: Uri| {
-                    UnixStream::connect(path.clone()) })).await
-                    .map_err(|e| Status::invalid_argument(format!("UnixStream::connect org->srv failed: {:?}", e)))?
+            const MAX_RETRIES: u32 = 5;
+            let mut chan = None;
+
+            for retry in 1..(MAX_RETRIES+1) {
+                let path = path.clone();
+                chan = match tonic::transport::Endpoint::try_from("file://dummy")
+                    .map_err(|e| Status::invalid_argument(format!("Failed to parse org->srv URI: {:?}", e)))?
+                    .connect_timeout(std::time::Duration::from_secs(8))
+                    .connect_with_connector(service_fn(move |_: Uri| {
+                        UnixStream::connect(path.clone()) })).await {
+                    Ok(c) => {
+                        tracing::info!("Connected back to server (on attempt {retry}/{MAX_RETRIES})");
+                        Some(c) },
+                    Err(e) => {
+                        tracing::warn!("Failed to connect back to server (attempt {retry}/{MAX_RETRIES}): {:?}", e);
+                        tokio::time::sleep(std::time::Duration::from_secs_f32(0.5)).await;
+                        None
+                    }
+                };
+                if chan.is_some() { break; }
+            }
+
+            if let Some(c) = chan { c } else {
+                return Err(Status::invalid_argument(format!("UnixStream::connect org->srv failed: connection failed.")));
+            }
         },
         grpc_endpoint::Endpoint::Tcp(tcp) =>
         {

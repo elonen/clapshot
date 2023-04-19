@@ -1,5 +1,5 @@
+use anyhow::Context;
 use lib_clapshot_grpc::GrpcBindAddr;
-
 use crate::{grpc::{grpc_client::{OrganizerURI}, caller::OrganizerCaller}, api_server::server_state::ServerState};
 
 pub mod video_pipeline;
@@ -26,13 +26,13 @@ pub fn run_clapshot(
     resubmit_delay: f32)
         -> anyhow::Result<()>
 {
-    use std::thread;    
+    use std::thread;
     use std::sync::atomic::{AtomicBool, Ordering};
     use signal_hook::consts::TERM_SIGNALS;
     use signal_hook::flag;
     use std::sync::Arc;
     use anyhow::bail;
-    
+
     use crossbeam_channel::unbounded;   // Work queue
 
     // Setup SIGINT / SIGTERM handling
@@ -56,6 +56,16 @@ pub fn run_clapshot(
 
     // Check & apply database migrations
     if  (migrate || was_missing) && db.migrations_needed()? {
+        if !was_missing {
+            // Make a gzipped backup
+            let now = chrono::Local::now();
+            let backup_path = db_file.with_extension(format!("backup-{}.sqlite.gz", now.format("%Y-%m-%dT%H_%M_%S")));
+            tracing::warn!(file=%db_file.display(), backup=%backup_path.display(), "Backing up database before migration.");
+            let backup_file = std::fs::File::create(&backup_path).context("Error creating DB backup file")?;
+            let mut gzip_writer = flate2::write::GzEncoder::new(backup_file, flate2::Compression::fast());
+            let mut fh = std::fs::File::open(&db_file).context("Error reading current DB file for backup")?;
+            std::io::copy(&mut fh, &mut gzip_writer).context("Error copying DB file to backup")?;
+        }
         match db.run_migrations() {
             Ok(_) => {
                 assert!(!db.migrations_needed()?);
@@ -67,7 +77,7 @@ pub fn run_clapshot(
         match db.migrations_needed() {
             Ok(false) => {},
             Ok(true) => {
-                eprintln!("Database migrations needed. Make a backup and run `clapshot-server --migrate`");
+                eprintln!("Database migrations needed. Run `clapshot-server --migrate`");
                 std::process::exit(1);
             },
             Err(e) => { bail!("Error checking database migrations: {:?}", e); },
@@ -77,7 +87,7 @@ pub fn run_clapshot(
     // Run API server
     let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
     let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
-    let api_thread = { 
+    let api_thread = {
         let db = db.clone();
         let data_dir = data_dir.clone();
 
@@ -92,13 +102,13 @@ pub fn run_clapshot(
         let ub = url_base.clone();
         thread::spawn(move || {
             api_server::run_forever(
-                    user_msg_rx, 
+                    user_msg_rx,
                     grpc_srv,
-                    upload_tx, 
+                    upload_tx,
                     bind_api.to_string(),
                     ub,
                     server,
-                    port) 
+                    port)
             })
         };
 

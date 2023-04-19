@@ -53,8 +53,21 @@ impl OrganizerCaller {
             conn.handshake(req).await?;
             Ok(())
         }
-        let (rt, mut conn) = self.tokio_connect()?;
-        rt.block_on(call_it(&mut conn, backchannel, data_dir, server_url, db_file))
+
+        const MAX_TRIES: usize = 5;
+        for retry in 1..(MAX_TRIES+1) {
+            match self.tokio_connect() {
+                Ok((rt, mut conn)) => {
+                    tracing::info!("Connected to organizer established (on attempt {retry}). Doing handshake.");
+                    return rt.block_on(call_it(&mut conn, backchannel, data_dir, server_url, db_file));
+                },
+                Err(e) => {
+                    tracing::warn!("Connecting organizer failed (attempt {retry}/{MAX_TRIES}: {}", e);
+                    std::thread::sleep(std::time::Duration::from_secs_f32(0.5));
+                }
+            }
+        }
+        anyhow::bail!("Connecting organizer failed after {MAX_TRIES} attempts");
     }
 
 

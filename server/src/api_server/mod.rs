@@ -387,7 +387,7 @@ async fn run_api_server_async(
         .allow_headers(vec!["x-file-name"]));
 
 
-    debug!("Binding to {}:{}", bind_addr, port);
+    debug!("Binding Websocket API to {}:{}", bind_addr, port);
     let (_addr, server) = warp::serve(routes)
         .bind_with_graceful_shutdown((bind_addr, port), async move {
             while !server_state_cln1.terminate_flag.load(Relaxed) {
