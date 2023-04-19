@@ -10,7 +10,7 @@ use anyhow::anyhow;
 use super::user_session::OpaqueGuard;
 use super::{WsMsgSender, SenderList, SessionMap, SenderListMap, StringToStringMap, Res, UserSession, SendTo};
 use crate::client_cmd;
-use crate::database::{DB, models};
+use crate::database::{DB, models, DbBasicQuery};
 use crate::grpc::db_message_insert_to_proto3;
 use crate::grpc::grpc_client::OrganizerURI;
 use lib_clapshot_grpc::proto;
@@ -110,7 +110,7 @@ impl ServerState {
         let send_res = self.emit_cmd(cmd, send_to);
         if let Ok(sent_count) = send_res {
             if persist {
-                self.db.add_message(&models::MessageInsert {
+                models::Message::add(&self.db, &models::MessageInsert {
                     seen: msg.seen || sent_count > 0,
                     ..msg.clone()
                 })?;

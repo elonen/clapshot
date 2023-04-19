@@ -37,10 +37,12 @@ fn to_db_res<U>(res: QueryResult<U>) -> DBResult<U> {
 }
 
 
+
 pub struct DB {
     pool: Pool,
     broken_for_test: AtomicBool,
 }
+
 
 impl DB {
 
@@ -48,7 +50,14 @@ impl DB {
     pub fn connect_db_url( db_url: &str ) -> DBResult<DB> {
         let manager = ConnectionManager::<SqliteConnection>::new(db_url);
         let pool = Pool::builder().max_size(1).build(manager).context("Failed to build DB pool")?;
-        Ok(DB { pool: pool, broken_for_test: AtomicBool::new(false) })
+
+        let db = DB { pool: pool, broken_for_test: AtomicBool::new(false) };
+
+        diesel::sql_query("PRAGMA foreign_keys = ON;")
+            .execute(&mut db.conn()?)
+            .context("Failed to enable foreign keys")?;
+
+        Ok(db)
     }
 
     /// Connect to SQLite database with a file path
@@ -79,8 +88,10 @@ impl DB {
     pub fn run_migrations(&self) -> EmptyDBResult
     {
         let mut conn = self.conn()?;
+        diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(&mut conn)?;
         let migr = conn.run_pending_migrations(MIGRATIONS).map_err(|e| anyhow!("Failed to apply migrations: {:?}", e))?;
         for m in migr { tracing::info!("Applied DB migration: {}", m); }
+        diesel::sql_query("PRAGMA foreign_keys = ON;").execute(&mut conn)?;
         Ok(())
     }
 
@@ -88,34 +99,135 @@ impl DB {
     pub fn break_db(&self) {
         self.broken_for_test.store(true, std::sync::atomic::Ordering::Relaxed);
     }
+}
 
-    // -----------------------------------------------------------------------------------------------
 
-    /// Add a new video to the database.
+
+pub trait DbBasicQuery<P, I>: Sized
+    where P: std::str::FromStr + Send + Sync + Clone,
+          I: Send + Sync,
+{
+    /// Insert a new object into the database.
+    fn add(db: &DB, item: &I) -> DBResult<Self>;
+
+    /// Insert multiple objects into the database.
+    fn add_many(db: &DB, items: &[I]) -> DBResult<Vec<Self>>;
+
+    /// Get a single object by its primary key.
+    /// Returns None if no object with the given ID was found.
+    fn get(db: &DB, pk: &P) -> DBResult<Self>;
+
+    /// Get multiple objects by their primary keys.
+    fn get_many(db: &DB, ids: &[P]) -> DBResult<Vec<Self>>;
+
+    /// Get all nodes of type Self, with no filtering, paginated.
     ///
     /// # Arguments
-    /// * `video` - Video object
+    /// * `db` - Database connection
+    /// * `page` - Page number (0 = first page)
+    /// * `page_size` - Number of items per page
+    fn get_all(db: &DB, page: u64, page_size: u64) -> DBResult<Vec<Self>>;
+
+    /// Delete a single object from the database.
+    fn delete(db: &DB, id: &P) -> DBResult<bool>;
+
+    /// Delete multiple objects from the database.
+    fn delete_many(db: &DB, ids: &[P]) -> DBResult<usize>;
+}
+
+mod basic_query;
+crate::implement_basic_query_traits!(models::Video, models::VideoInsert, videos, String);
+crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32);
+crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32);
+crate::implement_basic_query_traits!(models::PropNode, models::PropNodeInsert, prop_nodes, i32);
+crate::implement_basic_query_traits!(models::PropEdge, models::PropEdgeInsert, prop_edges, i32);
+
+
+
+pub trait DbQueryByUser: Sized {
+    /// Get all objects of type Self that belong to given user.
     ///
-    /// # Returns
-    /// * `sql.Integer` - ID of the new video
-    pub fn add_video(&self, video: &models::VideoInsert) -> DBResult<String>
-    {
-        use schema::videos::dsl::*;
-        let res = diesel::insert_into(videos)
-            .values(video).returning(id).get_result(&mut self.conn()?)?;
-        Ok(res)
-    }
+    /// # Arguments
+    /// * `db` - Database connection
+    /// * `uid` - User ID
+    /// * `page` - Page number (0 = first page)
+    /// * `page_size` - Number of items per page
+    fn get_by_user(db: &DB, uid: &str, page: u64, page_size: u64) -> DBResult<Vec<Self>>;
+}
+crate::implement_query_by_user_traits!(models::Video, videos, added_time.desc());
+crate::implement_query_by_user_traits!(models::Comment, comments, created.desc());
+crate::implement_query_by_user_traits!(models::Message, messages, created.desc());
+
+
+
+pub trait DbQueryByVideo: Sized {
+    /// Get all objects of type Self that are linked to given video.
+    ///
+    /// # Arguments
+    /// * `db` - Database connection
+    /// * `vid` - Video ID
+    /// * `page` - Page number (0 = first page)
+    /// * `page_size` - Number of items per page
+    fn get_by_video(db: &DB, vid: &str, page: u64, page_size: u64) -> DBResult<Vec<Self>>;
+}
+crate::implement_query_by_video_traits!(models::Comment, comments, video_id, created.desc());
+crate::implement_query_by_video_traits!(models::Message, messages, ref_video_id, created.desc());
+
+
+
+pub enum GraphObjId<'a> {
+    Video(&'a str),
+    Node(&'a i32),
+    Comment(&'a i32)
+}
+pub struct EdgeAndObj<T> {
+    pub edge: models::PropEdge,
+    pub obj: T
+}
+
+pub trait DbGraphQuery: Sized {
+
+    /// Get nodes of type Self that have edges pointing to the given node.
+    /// If `edge_type` is Some, only edges of that type are considered.
+    fn graph_get_by_parent(db: &DB, parent_id: GraphObjId, edge_type: Option<&str>)
+        -> DBResult<Vec<EdgeAndObj<Self>>>;
+
+    /// Get nodes of type Self that have edges pointing to it from the given node.
+    /// If edge_type is Some, only edges of that type are considered.
+    fn graph_get_by_child(db: &DB, child_id: GraphObjId, edge_type: Option<&str>)
+        -> DBResult<Vec<EdgeAndObj<Self>>>;
+
+    /// Get nodes of type Self that have no edges pointing away from them.
+    /// If `edge_type` is Some, only edges of that type are considered.
+    fn graph_get_parentless(db: &DB, edge_type: Option<&str>)
+        -> DBResult<Vec<Self>>;
+
+    /// Get nodes of type Self that have no edges pointing to them.
+    /// If `edge_type` is Some, only edges of that type are considered.
+    fn graph_get_childless(db: &DB, edge_type: Option<&str>)
+        -> DBResult<Vec<Self>>;
+}
+
+mod graph_query;
+crate::implement_graph_query_traits!(models::Video, videos, String, from_video, to_video);
+crate::implement_graph_query_traits!(models::PropNode, prop_nodes, i32, from_node, to_node);
+crate::implement_graph_query_traits!(models::Comment, comments, i32, from_comment, to_comment);
+
+
+// --------------------------------------------------------
+
+impl models::Video {
 
     /// Set the recompressed flag for a video.
     ///
     /// # Arguments
     /// * `vid` - Id of the video
-    pub fn set_video_recompressed(&self, vid: &str) -> EmptyDBResult
+    pub fn set_recompressed(db: &DB, vid: &str) -> EmptyDBResult
     {
         use schema::videos::dsl::*;
         diesel::update(videos.filter(id.eq(vid)))
             .set(recompression_done.eq(Local::now().naive_local()))
-            .execute(&mut self.conn()?)?;
+            .execute(&mut db.conn()?)?;
         Ok(())
     }
 
@@ -125,48 +237,12 @@ impl DB {
     /// * `vid` - Id of the video
     /// * `cols` - Width of the thumbnail sheet
     /// * `rows` - Height of the thumbnail sheet
-    pub fn set_video_thumb_sheet_dimensions(&self, vid: &str, cols: u32, rows: u32) -> EmptyDBResult
+    pub fn set_thumb_sheet_dimensions(db: &DB, vid: &str, cols: u32, rows: u32) -> EmptyDBResult
     {
         use schema::videos::dsl::*;
         diesel::update(videos.filter(id.eq(vid)))
             .set((thumb_sheet_cols.eq(cols as i32), thumb_sheet_rows.eq(rows as i32)))
-            .execute(&mut self.conn()?)?;
-        Ok(())
-    }
-
-    /// Get a video from the database.
-    ///
-    /// # Arguments
-    /// * `vid` - Id of the video
-    ///
-    /// # Returns
-    /// * `models::Video` - Video object
-    /// * `Err(NotFound)` - Video not found
-    pub fn get_video(&self, vid: &str) -> DBResult<models::Video>
-    {
-        use models::*;
-        use schema::videos::dsl::*;
-        to_db_res(videos.filter(id.eq(vid)).first::<Video>(&mut self.conn()?))
-    }
-
-    /// Delete a video and all its comments from the database.
-    ///
-    /// # Arguments
-    /// * `vid` - Id of the video
-    ///
-    /// # Returns
-    /// * `EmptyResult`
-    /// * `Err(NotFound)` - Video not found
-    pub fn del_video_and_comments(&self, vid: &str) -> EmptyDBResult
-    {
-        use schema::videos::dsl as sv;
-        use schema::comments::dsl as sc;
-        let conn = &mut self.conn()?;
-        conn.transaction::<_, diesel::result::Error, _>(|conn| {
-            diesel::delete(sv::videos.filter(sv::id.eq(vid))).execute(conn)?;
-            diesel::delete(sc::comments.filter(sc::video_id.eq(vid))).execute(conn)?;
-            Ok(())
-        })?;
+            .execute(&mut db.conn()?)?;
         Ok(())
     }
 
@@ -180,102 +256,32 @@ impl DB {
     /// * `EmptyResult`
     /// * `Err(NotFound)` - Video not found
     /// * `Err(Other)` - Other error
-    pub fn rename_video(&self, vid: &str, new_name: &str) -> EmptyDBResult
+    pub fn rename(db: &DB, vid: &str, new_name: &str) -> EmptyDBResult
     {
         use schema::videos::dsl::*;
         diesel::update(videos.filter(id.eq(vid)))
             .set(title.eq(new_name))
-            .execute(&mut self.conn()?)?;
+            .execute(&mut db.conn()?)?;
         Ok(())
-    }
-
-    /// Get all videos for a user.
-    ///
-    /// # Arguments
-    /// * `user_id` - User ID
-    ///
-    /// # Returns
-    /// * `Vec<models::Video>` - List of Video objects, sorted by upload date (newest first)
-    pub fn get_all_user_videos(&self, user_id: &str) -> DBResult<Vec<models::Video>>
-    {
-        use models::*;
-        use schema::videos::dsl::*;
-        to_db_res(videos.filter(added_by_userid.eq(user_id)).order_by(added_time.desc()).load::<Video>(&mut self.conn()?))
     }
 
     /// Get all videos that don't have thumbnails yet.
     ///
     /// # Returns
     /// * `Vec<models::Video>` - List of Video objects
-    pub fn get_all_videos_with_missing_thumbnails(&self) -> DBResult<Vec<models::Video>>
+    pub fn get_all_with_missing_thumbnails(db: &DB) -> DBResult<Vec<models::Video>>
     {
         use models::*;
         use schema::videos::dsl::*;
         to_db_res(videos.filter(
                 thumb_sheet_cols.is_null().or(
                 thumb_sheet_rows.is_null()))
-            .order_by(added_time.desc()).load::<Video>(&mut self.conn()?))
+            .order_by(added_time.desc()).load::<Video>(&mut db.conn()?))
     }
+}
 
-    /// Add a new comment on a video.
-    ///
-    /// # Arguments
-    /// * `comment` - Comment object
-    ///
-    /// # Returns
-    /// * ID of the new comment
-    pub fn add_comment(&self, cmt: &models::CommentInsert) -> DBResult<String>
-    {
-        use schema::comments::dsl::*;
-        let new_id: i32 = diesel::insert_into(comments)
-            .values(cmt).returning(id).get_result(&mut self.conn()?)?;
-        Ok(new_id.to_string())
-    }
 
-    /// Get a comment from the database.
-    ///
-    /// # Arguments
-    /// * `comment_id` - ID of the comment
-    ///
-    /// # Returns
-    /// * `models::Comment` - Comment object
-    /// * `Err(NotFound)` - Comment not found
-    pub fn get_comment(&self, comment_id: &str ) -> DBResult<models::Comment>
-    {
-        use models::*;
-        use schema::comments::dsl::*;
-        let comment_id = comment_id.parse::<i32>().map_err(|e| DBError::Other(e.into()))?;
-        to_db_res(comments.filter(id.eq(comment_id)).first::<Comment>(&mut self.conn()?))
-    }
-
-    /// Get all comments for a video.
-    ///
-    /// # Arguments
-    /// * `vid` - Id of the video
-    ///
-    /// # Returns
-    /// * `Vec<models::Comment>` - List of Comment objects
-    pub fn get_video_comments(&self, vid: &str) -> DBResult<Vec<models::Comment>>
-    {
-        use models::*;
-        use schema::comments::dsl::*;
-        Ok(comments.filter(video_id.eq(vid)).order_by(created.desc()).load::<Comment>(&mut self.conn()?)?)
-    }
-
-    /// Delete a comment from the database.
-    ///
-    /// # Arguments
-    /// * `comment_id` - ID of the comment
-    ///
-    /// # Returns
-    /// * `Res<bool>` - True if comment was deleted, false if it was not found
-    pub fn del_comment(&self, comment_id: &str ) -> DBResult<bool>
-    {
-        use schema::comments::dsl::*;
-        let comment_id = comment_id.parse::<i32>().map_err(|e| DBError::Other(e.into()))?;
-        let res = diesel::delete(comments.filter(id.eq(comment_id))).execute(&mut self.conn()?)?;
-        Ok(res > 0)
-    }
+impl models::Comment {
 
     /// Edit a comment (change text).
     ///
@@ -285,59 +291,16 @@ impl DB {
     ///
     /// # Returns
     /// * `Res<bool>` - True if comment was edited, false if it was not found
-    pub fn edit_comment(&self, comment_id: &str, new_comment: &str) -> DBResult<bool>
+    pub fn edit(db: &DB, comment_id: i32, new_comment: &str) -> DBResult<bool>
     {
         use schema::comments::dsl::*;
-        let comment_id = comment_id.parse::<i32>().map_err(|e| DBError::Other(e.into()))?;
         let res = diesel::update(comments.filter(id.eq(comment_id)))
-            .set((comment.eq(new_comment), edited.eq(diesel::dsl::now))).execute(&mut self.conn()?)?;
+            .set((comment.eq(new_comment), edited.eq(diesel::dsl::now))).execute(&mut db.conn()?)?;
         Ok(res > 0)
     }
+}
 
-    /// Add a new message to the database.
-    ///
-    /// # Arguments
-    /// * `msg` - Message object
-    ///
-    /// # Returns
-    /// * `models::Message` - Message object, with ID and timestamp set
-    pub fn add_message(&self, msg: &models::MessageInsert) -> DBResult<models::Message>
-    {
-        use schema::messages::dsl::*;
-        assert!(msg.event_name != "progress", "Must not add progress messages to database");
-        let res = diesel::insert_into(messages)
-            .values(msg).get_result(&mut self.conn()?)?;
-        Ok(res)
-    }
-
-    /// Get a message from the database.
-    ///
-    /// # Arguments
-    /// * `msg_id` - ID of the message
-    ///
-    /// # Returns
-    /// * `models::Message` - Message object
-    /// * `Err(NotFound)` - Message not found
-    pub fn get_message(&self, msg_id: i32) -> DBResult<models::Message>
-    {
-        use models::*;
-        use schema::messages::dsl::*;
-        to_db_res(messages.filter(id.eq(msg_id)).first::<Message>(&mut self.conn()?))
-    }
-
-    /// Get all messages for a user.
-    ///
-    /// # Arguments
-    /// * `uid` - User ID
-    ///
-    /// # Returns
-    /// * `Vec<models::Message>` - List of Message objects, sorted by timestamp (newest first)
-    pub fn get_user_messages(&self, uid: &str) -> DBResult<Vec<models::Message>>
-    {
-        use models::*;
-        use schema::messages::dsl::*;
-        Ok(messages.filter(user_id.eq(uid)).order(created.desc()).load::<Message>(&mut self.conn()?)?)
-    }
+impl models::Message {
 
     /// Set the seen status of a message.
     ///
@@ -347,26 +310,53 @@ impl DB {
     ///
     /// # Returns
     /// * `Res<bool>` - True if message was found and updated, false if it was not found
-    pub fn set_message_seen(&self, msg_id: i32, new_status: bool) -> DBResult<bool>
+    pub fn set_seen(db: &DB, msg_id: i32, new_status: bool) -> DBResult<bool>
     {
         use schema::messages::dsl::*;
         let res = diesel::update(messages.filter(id.eq(msg_id)))
-            .set(seen.eq(new_status)).execute(&mut self.conn()?)?;
+            .set(seen.eq(new_status)).execute(&mut db.conn()?)?;
         Ok(res > 0)
     }
+}
 
-    /// Delete a message from the database.
+
+impl models::PropNode {
+
+    /// Get (some) nodes from the prop graph database, filtered by node type.
     ///
     /// # Arguments
-    /// * `msg_id` - ID of the message
-    ///
-    /// # Returns
-    /// * `Res<bool>` - True if message was deleted, false if it was not found
-    pub fn del_message(&self, msg_id: i32) -> DBResult<bool>
+    /// * `db` - Database
+    /// * `node_type` - Node type to filter by.
+    /// * `node_ids` - Optional list of node IDs to filter by. If None, consider all nodes.
+    pub fn get_by_type(db: &DB, node_type: &str, node_ids: Option<&[i32]>) -> DBResult<Vec<models::PropNode>>
     {
-        use schema::messages::dsl::*;
-        let res = diesel::delete(messages.filter(id.eq(msg_id))).execute(&mut self.conn()?)?;
-        Ok(res > 0)
+        let xnt = node_type;
+        {
+            use schema::prop_nodes::dsl::*;
+            let q = prop_nodes.filter(node_type.eq(xnt)).into_boxed();
+            let q = if let Some(node_ids) = node_ids { q.filter(id.eq_any(node_ids)) } else { q };
+            to_db_res(q.load::<models::PropNode>(&mut db.conn()?))
+        }
     }
 
+}
+
+impl models::PropEdge {
+
+    /// Get (some) edges from the prop graph database, filtered by edge type.
+    ///
+    /// # Arguments
+    /// * `db` - Database
+    /// * `edge_type` - Edge type to filter by.
+    /// * `edge_ids` - Optional list of edge IDs to filter by. If None, consider all edges.
+    pub fn get_by_type(db: &DB, edge_type: &str, edge_ids: Option<&[i32]>) -> DBResult<Vec<models::PropEdge>>
+    {
+        let et = edge_type;
+        {
+            use schema::prop_edges::dsl::*;
+            let q = prop_edges.filter(edge_type.eq(et)).into_boxed();
+            let q = if let Some(edge_ids) = edge_ids { q.filter(id.eq_any(edge_ids)) } else { q };
+            to_db_res(q.load::<models::PropEdge>(&mut db.conn()?))
+        }
+    }
 }

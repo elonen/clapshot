@@ -44,7 +44,7 @@ pub (crate) fn db_video_to_proto3(
         _ => None,
     };
 
-    let added_by = match (&v.added_by_userid, &v.added_by_username) {
+    let added_by = match (&v.user_id, &v.user_name) {
         (Some(user_id), user_name) => Some(proto::UserInfo {
             username: user_id.clone(),
             displayname: user_name.clone(),
@@ -107,7 +107,7 @@ pub(crate) fn db_comment_to_proto3(
 {
     let user = proto::UserInfo {
         username: comment.user_id.clone(),
-        displayname: Some(comment.username.clone()),
+        displayname: Some(comment.user_name.clone()),
     };
 
     let created_timestamp = Some(datetime_to_proto3(&comment.created));

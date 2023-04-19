@@ -56,6 +56,7 @@ SELECT
 FROM
     videos;
 
-DROP TABLE videos;
+ALTER TABLE videos RENAME TO videos_trash;
 ALTER TABLE new_videos RENAME TO videos;
+DROP INDEX IF EXISTS ix_video_added_by_userid;
 CREATE INDEX ix_video_added_by_userid ON videos (added_by_userid);

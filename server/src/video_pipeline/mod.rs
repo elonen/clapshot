@@ -29,7 +29,7 @@ use metadata_reader::MetadataResult;
 use crate::api_server::{UserMessage, UserMessageTopic};
 use crate::database::error::DBError;
 use cleanup_rejected::clean_up_rejected_file;
-use crate::database::{DB, models};
+use crate::database::{DB, models, DbBasicQuery};
 
 pub const THUMB_SHEET_COLS: u32 = 10;
 pub const THUMB_SHEET_ROWS: u32 = 10;
@@ -105,10 +105,10 @@ fn ingest_video(
     // Video already exists on disk?
     if dir_for_video.exists() {
         tracing::debug!("Video dir already exists.");
-        match db.get_video(&vid) {
+        match models::Video::get(&db, &vid.into()) {
             Ok(v) => {
                 let new_owner = &md.user_id;
-                if v.added_by_userid == Some(new_owner.clone()) {
+                if v.user_id == Some(new_owner.clone()) {
 
                     tracing::info!("User already has this video.");
                     user_msg_tx.send(UserMessage {
@@ -156,10 +156,10 @@ fn ingest_video(
 
     // Add to DB
     tracing::info!("Adding video to DB.");
-    db.add_video(&models::VideoInsert {
+    models::Video::add(&db, &models::VideoInsert {
         id: vid.to_string(),
-        added_by_userid: Some(md.user_id.clone()),
-        added_by_username: Some(md.user_id.clone()),  // TODO: get username from somewhere
+        user_id: Some(md.user_id.clone()),
+        user_name: Some(md.user_id.clone()),  // TODO: get username from somewhere
         recompression_done: None,
         thumb_sheet_cols: None,
         thumb_sheet_rows: None,
@@ -316,7 +316,7 @@ pub fn run_forever(
 
     // Migration from older version: find a video that is missing thumbnail sheet
     fn legacy_thumbnail_next_video(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<video_compressor::CmprInput>) -> Option<String> {
-        let next = match db.get_all_videos_with_missing_thumbnails() {
+        let next = match models::Video::get_all_with_missing_thumbnails(&db) {
             Ok(videos) => videos.first().cloned(),
             Err(e) => {
                 tracing::error!(details=?e, "DB: Failed to get videos without thumbnails.");
@@ -337,7 +337,7 @@ pub fn run_forever(
                         }}
                 };
 
-            match (&v.added_by_userid, video_file) {
+            match (&v.user_id, video_file) {
                 (Some(user_id), Some(video_file)) => {
                     let req = video_compressor::CmprInput {
                         src: video_file,
@@ -471,7 +471,7 @@ pub fn run_forever(
 
                             // Thumbnails done?
                             if let Some(thumb_dir) = res.thumb_dir {
-                                if let Err(e) = db.set_video_thumb_sheet_dimensions(&vid, THUMB_SHEET_COLS, THUMB_SHEET_ROWS) {
+                                if let Err(e) = models::Video::set_thumb_sheet_dimensions(&db, &vid, THUMB_SHEET_COLS, THUMB_SHEET_ROWS) {
                                     tracing::error!(details=%e, "Error storing thumbnail sheet dims in DB");
                                 } else {
                                     // Thumbnailer for old videos: find next video to thumbnail, if any
@@ -535,7 +535,7 @@ pub fn run_forever(
                                         tracing::error!(details=%e, "Failed to create symlink {:?} -> {:?}", symlink_path, res.video_dst);
                                         return false;
                                     }
-                                    if let Err(e) = db.set_video_recompressed(&vid) {
+                                    if let Err(e) = models::Video::set_recompressed(&db, &vid) {
                                         utx.send(UserMessage {
                                             topic: UserMessageTopic::VideoUpdated,
                                             msg: "Transcoding done".into(),

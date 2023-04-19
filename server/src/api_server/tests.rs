@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::sync::Arc;
+use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
 use lib_clapshot_grpc::proto;
 use tracing_test::traced_test;
@@ -8,6 +9,7 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use reqwest::{multipart, Client};
 
+use crate::database::DbBasicQuery;
 use crate::database::error::DBError;
 use crate::api_server::{UserMessage, UserMessageTopic, run_api_server_async};
 use crate::api_server::server_state::ServerState;
@@ -77,12 +79,13 @@ async fn test_api_del_video()
 
         // Delete one successfully
         {
-            assert!(ts.db.get_video(&ts.videos[0].id).is_ok());
+            assert!(models::Video::get(&ts.db, &ts.videos[0].id).is_ok());
+
             write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"id":"{}"}}}}"#, ts.videos[0].id)).await;
             expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
 
             // Make sure the dir is gone
-            assert!(matches!(ts.db.get_video(&ts.videos[0].id).unwrap_err(), DBError::NotFound()));
+            assert!(matches!(models::Video::get(&ts.db, &ts.videos[0].id).unwrap_err(), DBError::NotFound()));
 
             // Make sure it's in trash, and DB row was backed up on disk
             let trash_dir = ts.videos_dir.join("trash");
@@ -100,10 +103,10 @@ async fn test_api_del_video()
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Fail to delete someones else's video
-        assert!(ts.db.get_video(&ts.videos[1].id).is_ok());
+        assert!(models::Video::get(&ts.db, &ts.videos[1].id).is_ok());
         write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"id":"{}"}}}}"#, ts.videos[1].id)).await;
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
-        assert!(ts.db.get_video(&ts.videos[1].id).is_ok());
+        assert!(models::Video::get(&ts.db, &ts.videos[1].id).is_ok());
 
         // Break the database
         ts.db.break_db();
@@ -121,8 +124,8 @@ async fn test_api_open_video()
         for vid in &ts.videos {
             let v = open_video(&mut ws, &vid.id).await.video.unwrap();
             assert_eq!(v.id, vid.id);
-            assert_eq!(v.added_by.clone().unwrap().username, vid.added_by_userid.clone().unwrap());
-            assert_eq!(v.added_by.clone().unwrap().displayname.unwrap(), vid.added_by_username.clone().unwrap());
+            assert_eq!(v.added_by.clone().unwrap().username, vid.user_id.clone().unwrap());
+            assert_eq!(v.added_by.clone().unwrap().displayname.unwrap(), vid.user_name.clone().unwrap());
             assert_eq!(v.processing_metadata.unwrap().orig_filename, vid.orig_filename.clone().unwrap());
             assert_eq!(v.title.unwrap(), vid.orig_filename.clone().unwrap());
 
@@ -171,7 +174,7 @@ async fn test_api_rename_video()
         expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
 
         // Make sure the video was renamed in the DB
-        let v = ts.db.get_video(&video.id).unwrap();
+        let v = models::Video::get(&ts.db, &video.id).unwrap();
         assert_eq!(v.title, Some("New name".to_string()));
 
         // Try to enter an invalid name
@@ -179,7 +182,7 @@ async fn test_api_rename_video()
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Make sure name wasn't changed
-        let v = ts.db.get_video(&video.id).unwrap();
+        let v = models::Video::get(&ts.db, &video.id).unwrap();
         assert_eq!(v.title, Some("New name".to_string()));
     }
 }
@@ -208,7 +211,8 @@ async fn test_api_add_plain_comment()
         assert_eq!(c.comments[0].comment, "Test comment 2");
 
         // Stored in database, the the image must be path to a file, not the actual image data as data URI
-        assert!(!ts.db.get_comment(c.comments[0].id.as_str()).unwrap().drawing.unwrap().contains("data:image"));
+        let cid = i32::from_str(&c.comments[0].id).unwrap();
+        assert!(!models::Comment::get(&ts.db, &cid).unwrap().drawing.unwrap().contains("data:image"));
         assert!(c.comments[0].clone().drawing.unwrap().starts_with("data:image/webp"));
 
         // Add a comment to a nonexisting video
@@ -302,7 +306,7 @@ async fn test_api_del_comment()
         assert!(m.details.unwrap().contains("repl"));
 
         // Delete the last remaining reply comment[5]
-        ts.db.del_comment(&ts.comments[5].id.to_string()).unwrap();  // Delete from db directly, to avoid user permission check
+        models::Comment::delete(&ts.db, &ts.comments[5].id).unwrap(); // Delete from db directly, to avoid user permission check
 
         // Try again to delete comment id 1 that should now have no replies
         write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, ts.comments[0].id.to_string())).await;
@@ -326,7 +330,7 @@ async fn test_api_list_my_messages()
             models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "error".into(), ref_video_id: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
             models::MessageInsert { user_id: "user.num2".into(), message: "message3".into(), event_name: "ok".into(), ..Default::default() },
         ];
-        let msgs = msgs.iter().map(|m| ts.db.add_message(m).unwrap()).collect::<Vec<_>>();
+        let msgs = msgs.iter().map(|m| models::Message::add(&ts.db, &m).unwrap()).collect::<Vec<_>>();
 
         write(&mut ws, r#"{"cmd":"list_my_messages","data":{}}"#).await;
         let sm = expect_client_cmd!(&mut ws, ShowMessages);

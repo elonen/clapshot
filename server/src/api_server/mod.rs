@@ -39,6 +39,7 @@ mod file_upload;
 use file_upload::handle_multipart_upload;
 use crate::api_server::user_session::AuthzTopic;
 use crate::client_cmd;
+use crate::database::DbBasicQuery;
 use crate::database::models::proto_msg_type_to_event_name;
 use crate::database::{models};
 use crate::grpc::db_message_insert_to_proto3;
@@ -437,7 +438,7 @@ async fn run_api_server_async(
                             seen: msg.seen || user_was_online,
                             ..msg
                         };
-                        if let Err(e) = server_state.db.add_message(&msg) {
+                        if let Err(e) = models::Message::add(&server_state.db, &msg) {
                             tracing::error!(details=%e, "Failed to save user notification in DB.");
                         }
                     }
