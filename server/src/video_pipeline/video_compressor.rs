@@ -108,7 +108,8 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
                 "-nostats",
                 "-vcodec", "libx264",
                 "-vf", &format!("scale={}:{}", 1920, -8),
-                "-map", "0",  // copy all streams
+                "-map", "0",  // copy all streams...
+                "-dn", // ...but remove data stream
                 "-preset", "faster",
                 "-acodec", "aac",
                 "-ac", "2",
