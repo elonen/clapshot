@@ -119,15 +119,41 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         Err(Status::unimplemented("Not implemented"))
     }
 
-    async fn delete_video(&self, req: Request<org::DeleteVideoRequest>) -> RpcResult<proto::Empty>
+    // -------------------------------
+
+    async fn db_get_videos(&self, req: Request<org::DbGetVideosRequest>) -> RpcResult<org::DbVideoList>
     {
         tracing::info!("Got a request: {:?}", req);
         Err(Status::unimplemented("Not implemented"))
     }
 
-    async fn modify_video(&self, req: Request<org::ModifyVideoRequest>) -> RpcResult<proto::Empty>
-    {
-        tracing::info!("Got a request: {:?}", req);
+    async fn db_get_comments(&self, req: Request<org::DbGetCommentsRequest>) -> RpcResult<org::DbCommentList> {
+        tracing::info!("Got a db_get_comments req: {:?}", req);
+        Err(Status::unimplemented("Not implemented"))
+    }
+
+    async fn db_get_user_messages(&self, req: Request<org::DbGetUserMessagesRequest>) -> RpcResult<org::DbUserMessageList> {
+        tracing::info!("Got a db_get_user_messages req: {:?}", req);
+        Err(Status::unimplemented("Not implemented"))
+    }
+
+    async fn db_get_prop_nodes(&self, req: Request<org::DbGetPropNodesRequest>) -> RpcResult<org::DbPropNodeList> {
+        tracing::info!("Got a db_get_prop_nodes req: {:?}", req);
+        Err(Status::unimplemented("Not implemented"))
+    }
+
+    async fn db_get_prop_edges(&self, req: Request<org::DbGetPropEdgesRequest>) -> RpcResult<org::DbPropEdgeList> {
+        tracing::info!("Got a db_get_prop_edges req: {:?}", req);
+        Err(Status::unimplemented("Not implemented"))
+    }
+
+    async fn db_upsert(&self, req: Request<org::DbUpsertRequest>) -> RpcResult<org::DbUpsertResponse> {
+        tracing::info!("Got a db_upsert req: {:?}", req);
+        Err(Status::unimplemented("Not implemented"))
+    }
+
+    async fn db_delete(&self, req: Request<org::DbDeleteRequest>) -> RpcResult<org::DbDeleteResponse> {
+        tracing::info!("Got a db_delete req: {:?}", req);
         Err(Status::unimplemented("Not implemented"))
     }
 }
@@ -142,3 +168,5 @@ pub async fn run_org_to_srv_grpc_server(bind: GrpcBindAddr, server: ServerState)
     });
     run_grpc_server(bind, service, span, terminate_flag).await
 }
+
+

@@ -1,0 +1,164 @@
+syntax = "proto3";
+package clapshot.organizer;
+
+import public "common.proto";
+
+
+message DbGetVideosRequest {
+    optional DbPaging paging = 1;
+    oneof filter {
+        Empty all = 10;             // All videos in the database. Make sure to set paging.
+        IdList ids = 11;            // List of video ids
+        string user_id = 12;        // Owner of the video
+        GraphObj child_of = 13;     // Object the queried videos points to (via a prop edge)
+        GraphObj parent_of = 14;    // Object that points to the queried videos (via a prop edge)
+    }
+}
+
+message DbGetCommentsRequest {
+    optional DbPaging paging = 1;
+    oneof filter {
+        Empty all = 10;             // All comments in the database. Make sure to set paging.
+        IdList ids = 11;            // List of comment ids
+        string user_id = 12;        // User who posted the comment
+        string video_id = 13;       // Video the comments are attached to
+        GraphObj child_of = 14;     // Object the queried comments points to (via a prop edge)
+        GraphObj parent_of = 15;    // Object that points to the queried comments (via a prop edge)
+    }
+}
+
+message DbGetUserMessagesRequest {
+    optional DbPaging paging = 1;
+    oneof filter {
+        Empty all = 10;             // All user messages in the database. Make sure to set paging.
+        IdList ids = 11;            // List of message ids
+        string user_id = 12;        // Message recipient
+        string video_id = 13;       // Video the message refers to
+        string comment_id = 14;     // Comment the message refers to
+    }
+}
+
+
+
+message DbGetPropNodesRequest {
+    optional DbPaging paging = 1;
+    optional string node_type = 2;
+    optional GraphObj child_of = 3;
+    optional GraphObj parent_of = 4;
+    // Leave all fields empty to get all nodes in the database (use paging)
+}
+
+message DbGetPropEdgesRequest {
+    optional DbPaging paging = 1;
+    optional string edge_type = 2;
+    optional GraphObj from = 3;
+    optional GraphObj to = 4;
+    // Leave all fields empty to get all edges in the database (use paging)
+}
+
+// ----------------------------------------
+
+// Add or replace objects in the database.
+// If an ID is not specified, a new object will be created,
+// otherwise the existing object will be replaced.
+message DbUpsertRequest {
+    repeated Video videos = 1;
+    repeated Comment comments = 2;
+    repeated UserMessage user_messages = 3;
+    repeated PropNode nodes = 4;
+    repeated PropEdge edges = 5;
+}
+
+message DbUpsertResponse {
+    // These will have IDs, creation timestamps, etc. filled in.
+    repeated Video videos = 1;
+    repeated Comment comments = 2;
+    repeated UserMessage user_messages = 3;
+    repeated PropNode nodes = 4;
+    repeated PropEdge edges = 5;
+}
+
+message DbDeleteRequest {
+    repeated string video_ids = 1;
+    repeated string comment_ids = 2;
+    repeated string user_message_ids = 3;
+    repeated string node_ids = 4;
+    repeated string edge_ids = 5;
+}
+
+message DbDeleteResponse {
+    uint32 videos_deleted = 1;
+    uint32 comments_deleted = 2;
+    uint32 user_messages_deleted = 3;
+    uint32 nodes_deleted = 4;
+    uint32 edges_deleted = 5;
+}
+
+// ----------------------------------------
+
+message DbPaging {
+    uint32 page_size = 1;   // Number of items per page
+    uint32 page_num = 2;    // Page number (0 = first page)
+}
+
+message IdList {
+    repeated string ids = 1;
+}
+
+// ---- result messages ---
+
+message DbVideoList {
+    repeated Video videos = 1;
+    optional DbPaging paging = 2;  // Paging info for the result. Some queries may not do paging even if requested, so check for presence.
+}
+
+message DbCommentList {
+    repeated Comment comments = 1;
+    optional DbPaging paging = 2;
+}
+
+message DbUserMessageList {
+    repeated UserMessage user_messages = 1;
+    optional DbPaging paging = 2;
+}
+
+message DbPropNodeList {
+    repeated PropNode nodes = 1;
+    optional DbPaging paging = 2;
+}
+
+message DbPropEdgeList {
+    repeated PropEdge edges = 1;
+    optional DbPaging paging = 2;
+}
+
+// ----------------------------------------
+// Prop graph
+// ----------------------------------------
+
+message PropNode {
+    string id = 1;
+    string node_type = 2;
+    optional string body = 3;
+}
+
+message GraphObj {
+    oneof obj {
+        string video_id = 1;
+        string comment_id = 2;
+        string node_id = 3;
+    }
+}
+
+message PropEdge {
+    string id = 1;
+
+    GraphObj from = 2;
+    GraphObj to = 3;
+
+    string edge_type = 8;
+    optional string body = 9;
+
+    optional float sort_order = 10;
+    optional int32 sibling_id = 11;
+}

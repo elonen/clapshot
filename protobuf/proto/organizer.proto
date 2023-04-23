@@ -2,6 +2,7 @@ syntax = "proto3";
 package clapshot.organizer;
 
 import public "common.proto";
+import public "database.proto";
 
 
 // This defines the gRPC API for Clapshot Organizer services.
@@ -28,6 +29,8 @@ import public "common.proto";
 service OrganizerOutbound {
     rpc handshake (OrganizerInfo) returns (Empty);
 
+    // Frontend commands
+
     rpc client_define_actions (ClientDefineActionsRequest) returns (Empty);
     rpc client_show_page(ClientShowPageRequest) returns (Empty);
     rpc client_show_user_message (ClientShowUserMessageRequest) returns (Empty);
@@ -35,8 +38,16 @@ service OrganizerOutbound {
     rpc client_set_cookies (ClientSetCookiesRequest) returns (Empty);
     rpc client_open_external_url (ClientOpenExternalURLRequest) returns (Empty);
 
-    rpc delete_video (DeleteVideoRequest) returns (Empty);
-    rpc modify_video (ModifyVideoRequest) returns (Empty);
+    // Database calls
+
+    rpc DbGetVideos(DbGetVideosRequest) returns (DbVideoList);
+    rpc DbGetComments(DbGetCommentsRequest) returns (DbCommentList);
+    rpc DbGetUserMessages(DbGetUserMessagesRequest) returns (DbUserMessageList);
+    rpc DbGetPropNodes(DbGetPropNodesRequest) returns (DbPropNodeList);
+    rpc DbGetPropEdges(DbGetPropEdgesRequest) returns (DbPropEdgeList);
+
+    rpc DbUpsert(DbUpsertRequest) returns (DbUpsertResponse);
+    rpc DbDelete(DbDeleteRequest) returns (DbDeleteResponse);
 }
 
 // Calls that Clapshot server makes to Organizer
@@ -50,7 +61,10 @@ service OrganizerInbound {
 // ---------------------------------------------------------
 
 message ServerInfo {
+
     message Database {
+        // Use direct database connection only as a last resort hack.
+        // gRPC API methods are more future-proof and robust.
         enum DatabaseType {
             SQLITE = 0;
         }
