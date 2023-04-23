@@ -39,14 +39,14 @@ diesel::table! {
         user_id -> Text,
         created -> Timestamp,
         seen -> Bool,
-        ref_video_id -> Nullable<Text>,
-        ref_comment_id -> Nullable<Integer>,
+        video_id -> Nullable<Text>,
+        comment_id -> Nullable<Integer>,
         event_name -> Text,
         message -> Text,
         details -> Text,
     }
 }
-diesel::joinable!(messages -> comments (ref_comment_id));
+diesel::joinable!(messages -> comments (comment_id));
 
 
 diesel::table! {

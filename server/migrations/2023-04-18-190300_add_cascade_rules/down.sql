@@ -21,6 +21,9 @@ ALTER TABLE comments_old RENAME TO comments;
 CREATE INDEX ix_comment_parent_id ON comments (parent_id);
 
 -- messages table
+ALTER TABLE messages RENAME COLUMN video_id TO ref_video_id;
+ALTER TABLE messages RENAME COLUMN comment_id TO ref_comment_id;
+
 CREATE TABLE messages_old (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     user_id VARCHAR NOT NULL,

@@ -326,8 +326,8 @@ async fn test_api_list_my_messages()
         assert_eq!(m.msgs.len(), 0);
 
         let msgs = [
-            models::MessageInsert { user_id: "user.num1".into(), message: "message1".into(), event_name: "ok".into(), ref_video_id: Some("HASH0".into()), ..Default::default() },
-            models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "error".into(), ref_video_id: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
+            models::MessageInsert { user_id: "user.num1".into(), message: "message1".into(), event_name: "ok".into(), video_id: Some("HASH0".into()), ..Default::default() },
+            models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "error".into(), video_id: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
             models::MessageInsert { user_id: "user.num2".into(), message: "message3".into(), event_name: "ok".into(), ..Default::default() },
         ];
         let msgs = msgs.iter().map(|m| models::Message::add(&ts.db, &m).unwrap()).collect::<Vec<_>>();

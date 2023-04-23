@@ -408,8 +408,8 @@ async fn run_api_server_async(
                     user_id: m.user_id.clone().unwrap_or("".into()),
                     message: m.msg.clone(),
                     details: m.details.clone().unwrap_or("".into()),
-                    seen: false, ref_comment_id: None,
-                    ref_video_id: m.video_id.clone()
+                    seen: false, comment_id: None,
+                    video_id: m.video_id.clone()
                 };
 
                 // Message to all watchers of a video

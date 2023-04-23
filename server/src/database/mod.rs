@@ -67,7 +67,6 @@ impl DB {
         DB::connect_db_url(&db_url)
     }
 
-
     /// Get a connection from the pool
     pub fn conn(&self) ->  DBResult<PooledConnection> {
         if self.broken_for_test.load(std::sync::atomic::Ordering::Relaxed) {
@@ -101,7 +100,7 @@ impl DB {
     }
 }
 
-
+// ---------------- Query traits ----------------
 
 pub trait DbBasicQuery<P, I>: Sized
     where P: std::str::FromStr + Send + Sync + Clone,
@@ -171,7 +170,7 @@ pub trait DbQueryByVideo: Sized {
     fn get_by_video(db: &DB, vid: &str, page: u64, page_size: u64) -> DBResult<Vec<Self>>;
 }
 crate::implement_query_by_video_traits!(models::Comment, comments, video_id, created.desc());
-crate::implement_query_by_video_traits!(models::Message, messages, ref_video_id, created.desc());
+crate::implement_query_by_video_traits!(models::Message, messages, video_id, created.desc());
 
 
 
@@ -214,7 +213,7 @@ crate::implement_graph_query_traits!(models::PropNode, prop_nodes, i32, from_nod
 crate::implement_graph_query_traits!(models::Comment, comments, i32, from_comment, to_comment);
 
 
-// --------------------------------------------------------
+// ------------------- Model-specific operations -------------------
 
 impl models::Video {
 

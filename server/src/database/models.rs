@@ -83,8 +83,8 @@ pub struct CommentInsert {
 // -------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, Associations, Clone)]
-#[diesel(belongs_to(Video, foreign_key = ref_video_id))]
-#[diesel(belongs_to(Comment, foreign_key = ref_comment_id))]
+#[diesel(belongs_to(Video, foreign_key = video_id))]
+#[diesel(belongs_to(Comment, foreign_key = comment_id))]
 pub struct Message {
     pub id: i32,
     pub user_id: String,
@@ -93,8 +93,8 @@ pub struct Message {
     pub created: chrono::NaiveDateTime,
 
     pub seen: bool,
-    pub ref_video_id: Option<String>,
-    pub ref_comment_id: Option<i32>,
+    pub video_id: Option<String>,
+    pub comment_id: Option<i32>,
     pub event_name: String,
     pub message: String,
     pub details: String,
@@ -102,13 +102,13 @@ pub struct Message {
 
 #[derive(Serialize, Deserialize, Debug, Default, Insertable, Clone, Associations)]
 #[diesel(table_name = messages)]
-#[diesel(belongs_to(Video, foreign_key = ref_video_id))]
-#[diesel(belongs_to(Comment, foreign_key = ref_comment_id))]
+#[diesel(belongs_to(Video, foreign_key = video_id))]
+#[diesel(belongs_to(Comment, foreign_key = comment_id))]
 pub struct MessageInsert {
     pub user_id: String,
     pub seen: bool,
-    pub ref_video_id: Option<String>,
-    pub ref_comment_id: Option<i32>,
+    pub video_id: Option<String>,
+    pub comment_id: Option<i32>,
     pub event_name: String,
     pub message: String,
     pub details: String,

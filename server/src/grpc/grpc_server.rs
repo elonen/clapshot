@@ -72,8 +72,8 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             let msg = models::MessageInsert {
                 user_id: username.to_string(),
                 seen: false,
-                ref_video_id: msg_in.refs.clone().and_then(|r| r.video_id),
-                ref_comment_id: comment_id,
+                video_id: msg_in.refs.clone().and_then(|r| r.video_id),
+                comment_id: comment_id,
                 event_name: proto_msg_type_to_event_name((&msg_in).r#type()).to_string(),
                 message: msg_in.message.clone(),
                 details: msg_in.details.clone().unwrap_or_default(),

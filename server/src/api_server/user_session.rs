@@ -25,9 +25,9 @@ macro_rules! send_user_msg(
         $server.push_notify_message(&models::MessageInsert {
             event_name: crate::database::models::proto_msg_type_to_event_name($msg_type).to_string(),
             user_id: $ses.user_id.clone(),
-            ref_comment_id: comment_id,
+            comment_id,
             seen: false,
-            ref_video_id: video_id,
+            video_id,
             message: $msg.into(),
             details: $details.into()
         }, crate::api_server::SendTo::UserId(&($ses.user_id)), $persist)?;

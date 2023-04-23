@@ -134,8 +134,8 @@ pub (crate) fn db_message_to_proto3(
         id: Some(msg.id.to_string()),
         r#type: msg_event_name_to_proto_msg_type(&msg.event_name.as_str()).into(),
         refs:Some(proto::user_message::Refs {
-            video_id: msg.ref_video_id.clone(),
-            comment_id: msg.ref_comment_id.map(|id| id.to_string()),
+            video_id: msg.video_id.clone(),
+            comment_id: msg.comment_id.map(|id| id.to_string()),
         }),
         message: msg.message.clone(),
         details: if msg.details.is_empty() { None } else { Some(msg.details.clone()) },
@@ -159,8 +159,8 @@ pub (crate) fn db_message_insert_to_proto3(
             _ => proto::user_message::Type::Ok,
         }  as i32,
         refs:Some(proto::user_message::Refs {
-            video_id: msg.ref_video_id.clone(),
-            comment_id: msg.ref_comment_id.map(|id| id.to_string()),
+            video_id: msg.video_id.clone(),
+            comment_id: msg.comment_id.map(|id| id.to_string()),
         }),
         message: msg.message.clone(),
         details: if msg.details.is_empty() { None } else { Some(msg.details.clone()) },
