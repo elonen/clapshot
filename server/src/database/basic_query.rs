@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! implement_basic_query_traits {
-    ($model:ty, $insert_model:ty, $table:ident, $pk_type:ty) => {
+    ($model:ty, $insert_model:ty, $table:ident, $pk_type:ty, $order_by:expr) => {
 
         impl DbBasicQuery<$pk_type, $insert_model> for $model {
 
@@ -38,12 +38,13 @@ macro_rules! implement_basic_query_traits {
             fn get_all(db: &DB, page: u64, page_size: u64) -> DBResult<Vec<Self>> {
                 use schema::$table::dsl::*;
 
-                let page = std::cmp::max(1, page);
+                let page = std::cmp::max(0, page);
                 let page_size = std::cmp::max(1, page_size);
-                let offset = (page - 1) * page_size;
+                let offset = page * page_size;
 
                 to_db_res($table
-                    .order(id.asc())
+                    .order($order_by)
+                    .then_order_by(id.asc())
                     .offset(offset as i64)
                     .limit(page_size as i64)
                     .load::<$model>(&mut db.conn()?))
@@ -77,13 +78,14 @@ macro_rules! implement_query_by_user_traits {
             fn get_by_user(db: &DB, uid: &str, page: u64, page_size: u64) -> DBResult<Vec<Self>> {
                 use schema::$table::dsl::*;
 
-                let page = std::cmp::max(1, page);
+                let page = std::cmp::max(0, page);
                 let page_size = std::cmp::max(1, page_size);
-                let offset = (page - 1) * page_size;
+                let offset = page * page_size;
 
                 to_db_res($table
                     .filter(user_id.eq(uid))
                     .order($order_by)
+                    .then_order_by(id.asc())
                     .offset(offset as i64)
                     .limit(page_size as i64)
                     .load::<$model>(&mut db.conn()?))
@@ -101,13 +103,14 @@ macro_rules! implement_query_by_video_traits {
             fn get_by_video(db: &DB, vid: &str, page: u64, page_size: u64) -> DBResult<Vec<Self>> {
                 use schema::$table::dsl::*;
 
-                let page = std::cmp::max(1, page);
+                let page = std::cmp::max(0, page);
                 let page_size = std::cmp::max(1, page_size);
-                let offset = (page - 1) * page_size;
+                let offset = page * page_size;
 
                 to_db_res($table
                     .filter($video_col.eq(vid))
                     .order($order_by)
+                    .then_order_by(id.asc())
                     .offset(offset as i64)
                     .limit(page_size as i64)
                     .load::<$model>(&mut db.conn()?))

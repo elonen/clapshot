@@ -135,11 +135,11 @@ pub trait DbBasicQuery<P, I>: Sized
 }
 
 mod basic_query;
-crate::implement_basic_query_traits!(models::Video, models::VideoInsert, videos, String);
-crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32);
-crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32);
-crate::implement_basic_query_traits!(models::PropNode, models::PropNodeInsert, prop_nodes, i32);
-crate::implement_basic_query_traits!(models::PropEdge, models::PropEdgeInsert, prop_edges, i32);
+crate::implement_basic_query_traits!(models::Video, models::VideoInsert, videos, String, added_time.desc());
+crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32, created.desc());
+crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32, created.desc());
+crate::implement_basic_query_traits!(models::PropNode, models::PropNodeInsert, prop_nodes, i32, id.asc());
+crate::implement_basic_query_traits!(models::PropEdge, models::PropEdgeInsert, prop_edges, i32, sort_order.asc());
 
 
 
@@ -220,6 +220,7 @@ impl models::Video {
     /// Set the recompressed flag for a video.
     ///
     /// # Arguments
+    /// * `db` - Database
     /// * `vid` - Id of the video
     pub fn set_recompressed(db: &DB, vid: &str) -> EmptyDBResult
     {
@@ -233,6 +234,7 @@ impl models::Video {
     /// Set thumbnail sheet dimensions for a video.
     ///
     /// # Arguments
+    /// * `db` - Database
     /// * `vid` - Id of the video
     /// * `cols` - Width of the thumbnail sheet
     /// * `rows` - Height of the thumbnail sheet
@@ -248,6 +250,7 @@ impl models::Video {
     /// Rename a video (title).
     ///
     /// # Arguments
+    /// * `db` - Database
     /// * `vid` - Id of the video
     /// * `new_name` - New title
     ///
@@ -299,11 +302,13 @@ impl models::Comment {
     }
 }
 
+
 impl models::Message {
 
     /// Set the seen status of a message.
     ///
     /// # Arguments
+    /// * `db` - Database
     /// * `msg_id` - ID of the message
     /// * `new_status` - New status
     ///
@@ -339,6 +344,7 @@ impl models::PropNode {
     }
 
 }
+
 
 impl models::PropEdge {
 

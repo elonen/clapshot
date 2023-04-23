@@ -124,7 +124,7 @@ println!("--- make_test_db");
         .collect::<Vec<_>>();
     comments.extend(more_comments);
 
-    // Add another comment with empty drawing (caused an error at one point)
+    // Add another comment (#8) with empty drawing (caused an error at one point)
     let c = CommentInsert {
         video_id: videos[0].id.clone(),
         parent_id: None,
@@ -134,7 +134,8 @@ println!("--- make_test_db");
         comment: "Comment_with_empty_drawing".to_string(),
         drawing: Some("".into()),
     };
-    models::Comment::add(&db, &c).unwrap();
+    let cmt = models::Comment::add(&db, &c).unwrap();
+    comments.push(cmt);
 
     // Make a test props graph
 
@@ -173,6 +174,41 @@ println!("--- make_test_db");
 
     (std::sync::Arc::new(db), data_dir, videos, comments, nodes, edges)
 }
+
+
+#[test]
+#[traced_test]
+fn test_pagination() -> anyhow::Result<()> {
+    let (db, _data_dir, _videos, comments, _nodes, _edges) = make_test_db();
+
+    // Test pagination of comments
+    let mut res = Comment::get_all(&db, 0, 3)?;
+    println!("---- page 0, 3");
+    println!("res: {:#?}", res);
+
+    assert_eq!(res.len(), 3);
+    assert_eq!(res[0].id, comments[0].id);
+    assert_eq!(res[1].id, comments[1].id);
+    assert_eq!(res[2].id, comments[2].id);
+
+    res = Comment::get_all(&db, 1, 3)?;
+    println!("---- page 1, 3");
+    println!("res: {:#?}", res);
+    assert_eq!(res.len(), 3);
+    assert_eq!(res[0].id, comments[3].id);
+    assert_eq!(res[1].id, comments[4].id);
+    assert_eq!(res[2].id, comments[5].id);
+
+    res = Comment::get_all(&db, 2, 3)?;
+    println!("---- page 2, 3");
+    println!("res: {:#?}", res);
+    assert_eq!(res.len(), 2);
+    assert_eq!(res[0].id, comments[6].id);
+    assert_eq!(res[1].id, comments[7].id);
+
+    Ok(())
+}
+
 
 
 #[test]
