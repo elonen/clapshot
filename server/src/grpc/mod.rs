@@ -1,9 +1,9 @@
 pub mod grpc_client;
 pub mod caller;
 pub mod grpc_server;
+pub mod grpc_impl_helpers;
 
 use std::collections::HashMap;
-
 use lib_clapshot_grpc::proto;
 
 use crate::database::models::msg_event_name_to_proto_msg_type;
@@ -167,6 +167,32 @@ pub (crate) fn db_message_insert_to_proto3(
     }
 }
 
+
+pub (crate) fn db_prop_edge_to_proto3(e: &crate::database::models::PropEdge) -> proto::org::PropEdge {
+
+    fn row_to_graph_obj(video_id: Option<String>, comment_id: Option<i32>, node_id: Option<i32>)
+        -> Option<proto::org::GraphObj>
+    {
+        Some(proto::org::GraphObj {
+            obj: Some(
+                match (video_id, comment_id, node_id) {
+                    (Some(v), None, None) => proto::org::graph_obj::Obj::VideoId(v),
+                    (None, Some(c), None) => proto::org::graph_obj::Obj::CommentId(c.to_string()),
+                    (None, None, Some(n)) => proto::org::graph_obj::Obj::NodeId(n.to_string()),
+                    _ => return None,
+            })
+        })
+    }
+    proto::org::PropEdge {
+        id: e.id.to_string(),
+        edge_type: e.edge_type.clone(),
+        from: row_to_graph_obj(e.from_video.clone(), e.from_comment, e.from_node),
+        to: row_to_graph_obj(e.to_video.clone(), e.to_comment, e.to_node),
+        body: e.body.clone(),
+        sort_order: e.sort_order,
+        sibling_id: e.sibling_id,
+    }
+}
 
 
 pub (crate) fn make_video_popup_actions() -> HashMap<String, proto::ActionDef> {

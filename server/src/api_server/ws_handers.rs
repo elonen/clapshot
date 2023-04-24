@@ -27,7 +27,7 @@ use super::UserSession;
 use crate::api_server::server_state::ServerState;
 use crate::api_server::user_session::Topic;
 use crate::database::error::DBError;
-use crate::database::{models, DB, DbBasicQuery, DbQueryByUser, DbQueryByVideo};
+use crate::database::{models, DB, DbBasicQuery, DbQueryByUser, DbQueryByVideo, DBPaging};
 use crate::database::schema::comments::drawing;
 use crate::grpc::{db_comment_to_proto3, db_message_to_proto3, db_video_to_proto3};
 use crate::{send_user_error, send_user_ok, client_cmd};
@@ -46,7 +46,7 @@ pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession,
     ses.org_authz_with_default("list videos", true, server,
         true, AuthzTopic::Other(None, authz_req::other_op::Op::ViewHome)).await?;
 
-    let videos = models::Video::get_by_user(&server.db, &ses.user_id, 0, 999)?;
+    let videos = models::Video::get_by_user(&server.db, &ses.user_id, DBPaging::default())?;
 
     let h_txt = if videos.is_empty() {
         "<h2>You have no videos yet.</h2>"
@@ -89,7 +89,7 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, ser
                 super::SendTo::UserSession(&ses.sid))?;
 
             let mut cmts = vec![];
-            for mut c in models::Comment::get_by_video(&server.db, video_id, 0, 999)? {
+            for mut c in models::Comment::get_by_video(&server.db, video_id, DBPaging::default())? {
                 ses.fetch_drawing_data_into_comment(server, &mut c).await?;
                 cmts.push(db_comment_to_proto3(&c));
             }
@@ -312,7 +312,7 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
                 send_user_error!(ses, server, Topic::Video(&vid), "Failed to delete comment.", "You can only delete your own comments", true);
                 return Ok(());
             }
-            let all_comm = models::Comment::get_by_video(&server.db, &vid, 0, 999)?;
+            let all_comm = models::Comment::get_by_video(&server.db, &vid, DBPaging::default())?;
             if all_comm.iter().any(|c| c.parent_id.map(|i| i.to_string()) == Some(id.to_string())) {
                 send_user_error!(ses, server, Topic::Video(&vid), "Failed to delete comment.", "Comment has replies. Cannot delete.", true);
                 return Ok(());
@@ -331,7 +331,7 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
 }
 
 pub async fn msg_list_my_messages(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
-    let msgs = models::Message::get_by_user(&server.db, &ses.user_id, 0, 999)?;
+    let msgs = models::Message::get_by_user(&server.db, &ses.user_id, DBPaging::default())?;
     server.emit_cmd(
         client_cmd!(ShowMessages, { msgs: (&msgs).into_iter().map(|m| db_message_to_proto3(&m)).collect() }),
         super::SendTo::UserSession(&ses.sid)

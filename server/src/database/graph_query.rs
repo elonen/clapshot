@@ -27,7 +27,7 @@ macro_rules! implement_graph_query_traits {
                                     q.filter($to_col.eq($to_id).and($from_col.is_not_null()).and(edge_type.eq(et)))
                                 } else {
                                     q.filter($to_col.eq($to_id).and($from_col.is_not_null()))
-                                }.order(sort_order.asc());
+                                }.order(sort_order.asc()).then_order_by(id.asc());
 
                                 // We shouldn't get NULLs because of the filter above, but just in case...
                                 let res = q.load::<ResultType>(&mut $db.conn()?)?;
@@ -73,7 +73,7 @@ macro_rules! implement_graph_query_traits {
                                     q.filter($from_col.eq($from_id).and($to_col.is_not_null()).and(edge_type.eq(et)))
                                 } else {
                                     q.filter($from_col.eq($from_id).and($to_col.is_not_null()))
-                                }.order(sort_order.asc());
+                                }.order(sort_order.asc()).then_order_by(id.asc());
 
                                 // We shouldn't get NULLs because of the filter above, but just in case...
                                 let res = q.load::<ResultType>(&mut $db.conn()?)?;

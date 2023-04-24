@@ -10,8 +10,7 @@ message DbGetVideosRequest {
         Empty all = 10;             // All videos in the database. Make sure to set paging.
         IdList ids = 11;            // List of video ids
         string user_id = 12;        // Owner of the video
-        GraphObj child_of = 13;     // Object the queried videos points to (via a prop edge)
-        GraphObj parent_of = 14;    // Object that points to the queried videos (via a prop edge)
+        GraphObjRel graph_rel = 13; // Videos that are immediate children/parents of the given object (via a prop edge)
     }
 }
 
@@ -22,8 +21,7 @@ message DbGetCommentsRequest {
         IdList ids = 11;            // List of comment ids
         string user_id = 12;        // User who posted the comment
         string video_id = 13;       // Video the comments are attached to
-        GraphObj child_of = 14;     // Object the queried comments points to (via a prop edge)
-        GraphObj parent_of = 15;    // Object that points to the queried comments (via a prop edge)
+        GraphObjRel graph_rel = 14; // Comments that are immediate children/parents of the given object (via a prop edge)
     }
 }
 
@@ -43,8 +41,8 @@ message DbGetUserMessagesRequest {
 message DbGetPropNodesRequest {
     optional DbPaging paging = 1;
     optional string node_type = 2;
-    optional GraphObj child_of = 3;
-    optional GraphObj parent_of = 4;
+    optional GraphObjRel graph_rel = 3;
+    optional IdList ids = 4;
     // Leave all fields empty to get all nodes in the database (use paging)
 }
 
@@ -53,6 +51,7 @@ message DbGetPropEdgesRequest {
     optional string edge_type = 2;
     optional GraphObj from = 3;
     optional GraphObj to = 4;
+    optional IdList ids = 5;
     // Leave all fields empty to get all edges in the database (use paging)
 }
 
@@ -97,8 +96,8 @@ message DbDeleteResponse {
 // ----------------------------------------
 
 message DbPaging {
-    uint32 page_size = 1;   // Number of items per page
-    uint32 page_num = 2;    // Page number (0 = first page)
+    uint32 page_num = 1;    // Page number (0 = first page)
+    uint32 page_size = 2;   // Number of items per page
 }
 
 message IdList {
@@ -108,27 +107,27 @@ message IdList {
 // ---- result messages ---
 
 message DbVideoList {
-    repeated Video videos = 1;
+    repeated Video items = 1;
     optional DbPaging paging = 2;  // Paging info for the result. Some queries may not do paging even if requested, so check for presence.
 }
 
 message DbCommentList {
-    repeated Comment comments = 1;
+    repeated Comment items = 1;
     optional DbPaging paging = 2;
 }
 
 message DbUserMessageList {
-    repeated UserMessage user_messages = 1;
+    repeated UserMessage items = 1;
     optional DbPaging paging = 2;
 }
 
 message DbPropNodeList {
-    repeated PropNode nodes = 1;
+    repeated PropNode items = 1;
     optional DbPaging paging = 2;
 }
 
 message DbPropEdgeList {
-    repeated PropEdge edges = 1;
+    repeated PropEdge items = 1;
     optional DbPaging paging = 2;
 }
 
@@ -148,6 +147,14 @@ message GraphObj {
         string comment_id = 2;
         string node_id = 3;
     }
+}
+
+message GraphObjRel {
+    oneof rel {
+        GraphObj parent_of = 1;
+        GraphObj child_of = 2;
+    }
+    optional string edge_type = 3;
 }
 
 message PropEdge {

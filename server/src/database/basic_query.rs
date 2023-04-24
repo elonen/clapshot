@@ -30,23 +30,13 @@ macro_rules! implement_basic_query_traits {
             }
 
             /// Get all nodes of type Self, with no filtering, paginated.
-            ///
-            /// # Arguments
-            /// * `db` - Database connection
-            /// * `page` - Page number (0 = first page)
-            /// * `page_size` - Number of items per page
-            fn get_all(db: &DB, page: u64, page_size: u64) -> DBResult<Vec<Self>> {
+            fn get_all(db: &DB, pg: DBPaging) -> DBResult<Vec<Self>> {
                 use schema::$table::dsl::*;
-
-                let page = std::cmp::max(0, page);
-                let page_size = std::cmp::max(1, page_size);
-                let offset = page * page_size;
-
                 to_db_res($table
                     .order($order_by)
                     .then_order_by(id.asc())
-                    .offset(offset as i64)
-                    .limit(page_size as i64)
+                    .offset(pg.offset())
+                    .limit(pg.limit())
                     .load::<$model>(&mut db.conn()?))
             }
 
@@ -75,19 +65,14 @@ macro_rules! implement_query_by_user_traits {
 
         impl DbQueryByUser for $model {
 
-            fn get_by_user(db: &DB, uid: &str, page: u64, page_size: u64) -> DBResult<Vec<Self>> {
+            fn get_by_user(db: &DB, uid: &str, pg: DBPaging) -> DBResult<Vec<Self>> {
                 use schema::$table::dsl::*;
-
-                let page = std::cmp::max(0, page);
-                let page_size = std::cmp::max(1, page_size);
-                let offset = page * page_size;
-
                 to_db_res($table
                     .filter(user_id.eq(uid))
                     .order($order_by)
                     .then_order_by(id.asc())
-                    .offset(offset as i64)
-                    .limit(page_size as i64)
+                    .offset(pg.offset())
+                    .limit(pg.limit())
                     .load::<$model>(&mut db.conn()?))
             }
         }
@@ -100,19 +85,15 @@ macro_rules! implement_query_by_video_traits {
 
         impl DbQueryByVideo for $model {
 
-            fn get_by_video(db: &DB, vid: &str, page: u64, page_size: u64) -> DBResult<Vec<Self>> {
+            fn get_by_video(db: &DB, vid: &str, pg: DBPaging) -> DBResult<Vec<Self>> {
                 use schema::$table::dsl::*;
-
-                let page = std::cmp::max(0, page);
-                let page_size = std::cmp::max(1, page_size);
-                let offset = page * page_size;
 
                 to_db_res($table
                     .filter($video_col.eq(vid))
                     .order($order_by)
                     .then_order_by(id.asc())
-                    .offset(offset as i64)
-                    .limit(page_size as i64)
+                    .offset(pg.offset())
+                    .limit(pg.limit())
                     .load::<$model>(&mut db.conn()?))
             }
         }

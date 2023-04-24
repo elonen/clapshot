@@ -28,23 +28,23 @@ macro_rules! test_insert_edge {
 fn _dump_db(db: &DB) {
     println!("================ dump_db ================");
 
-    let videos = Video::get_all(db, 0, 999).unwrap();
+    let videos = Video::get_all(db, DBPaging::default()).unwrap();
     println!("----- Videos -----");
     for v in videos { println!("----\n{:#?}", v);}
 
-    let comments = Comment::get_all(db, 0, 999).unwrap();
+    let comments = Comment::get_all(db, DBPaging::default()).unwrap();
     println!("----- Comments -----");
     for c in comments { println!("----\n{:#?}", c);}
 
-    let messages = Message::get_all(db, 0, 999).unwrap();
+    let messages = Message::get_all(db, DBPaging::default()).unwrap();
     println!("----- Messages -----");
     for m in messages { println!("----\n{:#?}", m);}
 
-    let nodes = PropNode::get_all(db, 0, 999).unwrap();
+    let nodes = PropNode::get_all(db, DBPaging::default()).unwrap();
     println!("----- Nodes -----");
     for n in nodes { println!("----\n{:#?}", n);}
 
-    let edges = PropEdge::get_all(db, 0, 999).unwrap();
+    let edges = PropEdge::get_all(db, DBPaging::default()).unwrap();
     println!("----- Edges -----");
     for e in edges { println!("----\n{:#?}", e);}
 
@@ -182,7 +182,7 @@ fn test_pagination() -> anyhow::Result<()> {
     let (db, _data_dir, _videos, comments, _nodes, _edges) = make_test_db();
 
     // Test pagination of comments
-    let mut res = Comment::get_all(&db, 0, 3)?;
+    let mut res = Comment::get_all(&db, DBPaging { page_num: 0, page_size: 3.try_into()? })?;
     println!("---- page 0, 3");
     println!("res: {:#?}", res);
 
@@ -191,7 +191,7 @@ fn test_pagination() -> anyhow::Result<()> {
     assert_eq!(res[1].id, comments[1].id);
     assert_eq!(res[2].id, comments[2].id);
 
-    res = Comment::get_all(&db, 1, 3)?;
+    res = Comment::get_all(&db, DBPaging { page_num: 1, page_size: 3.try_into()? })?;
     println!("---- page 1, 3");
     println!("res: {:#?}", res);
     assert_eq!(res.len(), 3);
@@ -199,7 +199,7 @@ fn test_pagination() -> anyhow::Result<()> {
     assert_eq!(res[1].id, comments[4].id);
     assert_eq!(res[2].id, comments[5].id);
 
-    res = Comment::get_all(&db, 2, 3)?;
+    res = Comment::get_all(&db, DBPaging { page_num: 2, page_size: 3.try_into()? })?;
     println!("---- page 2, 3");
     println!("res: {:#?}", res);
     assert_eq!(res.len(), 2);
@@ -253,10 +253,10 @@ fn test_graph_db_pointing_queries() -> anyhow::Result<()> {
 
     // Videos pointing to nodes
 
-    assert_eq!(Video::graph_get_by_parent(&db, GraphObjId::Node(&nodes[3].id), None)?.len(), 1);
-    assert_eq!(Video::graph_get_by_parent(&db, GraphObjId::Node(&nodes[4].id), None)?.len(), 0);
+    assert_eq!(Video::graph_get_by_parent(&db, GraphObjId::Node(nodes[3].id), None)?.len(), 1);
+    assert_eq!(Video::graph_get_by_parent(&db, GraphObjId::Node(nodes[4].id), None)?.len(), 0);
 
-    let res = Video::graph_get_by_parent(&db, GraphObjId::Node(&nodes[2].id), None)?;
+    let res = Video::graph_get_by_parent(&db, GraphObjId::Node(nodes[2].id), None)?;
     assert_eq!(res.len(), 2);
     assert_eq!(res[0].edge.from_video, Some(res[0].obj.id.clone()));
 
@@ -274,7 +274,7 @@ fn test_graph_db_pointing_queries() -> anyhow::Result<()> {
     assert_eq!(res[1].edge.body, Some("edge_body7".to_string()));
     assert_eq!(res[1].edge.sort_order, Some(7.0));
 
-    let res = Video::graph_get_by_parent(&db, GraphObjId::Node(&nodes[2].id), Some("edge_type_b"))?;
+    let res = Video::graph_get_by_parent(&db, GraphObjId::Node(nodes[2].id), Some("edge_type_b"))?;
     assert_eq!(res.len(), 1);
     assert_eq!(res[0].obj.id, videos[2].id);
 
@@ -292,7 +292,7 @@ fn test_graph_db_pointing_queries() -> anyhow::Result<()> {
     assert_eq!(res[1].edge.body, None);
 
     // Nodes pointing to nodes
-    let res = PropNode::graph_get_by_parent(&db, GraphObjId::Node(&nodes[1].id), None)?;
+    let res = PropNode::graph_get_by_parent(&db, GraphObjId::Node(nodes[1].id), None)?;
     assert_eq!(res.len(), 2);
 
     assert_eq!(res[0].edge.from_node, Some(nodes[0].id));
@@ -305,10 +305,10 @@ fn test_graph_db_pointing_queries() -> anyhow::Result<()> {
     assert_eq!(res[1].edge.edge_type, "edge_type_b");
     assert_eq!(res[1].edge.body, Some("edge_body1".to_string()));
 
-    assert_eq!(PropNode::graph_get_by_parent(&db, GraphObjId::Node(&nodes[1].id), Some("edge_type_a"))?.len(), 1);
-    assert_eq!(PropNode::graph_get_by_parent(&db, GraphObjId::Node(&nodes[1].id), Some("NO_SUCH_TYPE"))?.len(), 0);
+    assert_eq!(PropNode::graph_get_by_parent(&db, GraphObjId::Node(nodes[1].id), Some("edge_type_a"))?.len(), 1);
+    assert_eq!(PropNode::graph_get_by_parent(&db, GraphObjId::Node(nodes[1].id), Some("NO_SUCH_TYPE"))?.len(), 0);
 
-    let res = Comment::graph_get_by_child(&db, GraphObjId::Node(&nodes[0].id), None)?;
+    let res = Comment::graph_get_by_child(&db, GraphObjId::Node(nodes[0].id), None)?;
     assert_eq!(res.len(), 2);
     assert_eq!(res[0].obj.id, comments[0].id);
     assert_eq!(res[1].obj.id, comments[1].id);
@@ -342,12 +342,16 @@ fn test_graph_db_pointing_queries() -> anyhow::Result<()> {
     assert_eq!(res.len(), 4);
     assert!(res.iter().find(|v| v.id == videos[0].id).is_none());
 
-    assert_eq!(PropEdge::get_all(&db, 0, 999)?.len(), 17);
+    assert_eq!(PropEdge::get_all(&db, DBPaging::default())?.len(), 17);
 
-    assert_eq!(PropEdge::get_by_type(&db, "edge_type_a", None).unwrap().len(), 6);
-    assert_eq!(PropEdge::get_by_type(&db, "edge_type_loop", None).unwrap().len(), 1);
+    let et_a = PropEdge::get_filtered(&db, None, None, Some("edge_type_a"), &None, DBPaging::default())?;
+    assert_eq!(et_a.len(), 6);
+    let et_loop = PropEdge::get_filtered(&db, None, None, Some("edge_type_loop"), &None, DBPaging::default())?;
+    assert_eq!(et_loop.len(), 1);
+
     let edge_ids = &[edges[0].id, edges[2].id];
     assert_eq!(PropEdge::get_many(&db, edge_ids)?.len(), 2);
+    assert_eq!( PropEdge::get_filtered(&db, None, None, None, &Some(edge_ids.to_vec()), DBPaging::default())?.len(), 2);
 
     Ok(())
 }
@@ -357,17 +361,17 @@ fn test_graph_db_pointing_queries() -> anyhow::Result<()> {
 fn test_graph_db_delete_nodes() -> anyhow::Result<()> {
     let (db, _data_dir, videos, _comments, nodes, _edges) = make_test_db();
 
-    assert_eq!(PropNode::get_all(&db, 0, 999)?.len(), 5);
-    assert_eq!(PropEdge::get_all(&db, 0, 999)?.len(), 17);
+    assert_eq!(PropNode::get_all(&db, DBPaging::default())?.len(), 5);
+    assert_eq!(PropEdge::get_all(&db, DBPaging::default())?.len(), 17);
 
     PropNode::delete_many(&db, &[nodes[0].id, nodes[1].id])?;
-    assert_eq!(PropNode::get_all(&db, 0, 999)?.len(), 3);
-    assert_eq!(PropEdge::get_all(&db, 0, 999)?.len(), 8);       // 9 edges deleted by cascade on nodes
+    assert_eq!(PropNode::get_all(&db, DBPaging::default())?.len(), 3);
+    assert_eq!(PropEdge::get_all(&db, DBPaging::default())?.len(), 8);       // 9 edges deleted by cascade on nodes
     println!("Deleting video {}", videos[1].id);
 
     // delete a video and check that all edges from/to it and its comments are deleted
     Video::delete(&db, &videos[1].id)?;
-    assert_eq!(PropEdge::get_all(&db, 0, 999)?.len(), 5);  // 1 edge and 2 comments deleted by cascade on video, 2 more edges deleted by cascade on the 2 deleted comments
+    assert_eq!(PropEdge::get_all(&db, DBPaging::default())?.len(), 5);  // 1 edge and 2 comments deleted by cascade on video, 2 more edges deleted by cascade on the 2 deleted comments
 
     Ok(())
 }
@@ -398,7 +402,7 @@ fn test_fixture_state() -> anyhow::Result<()>
     // Read entries from database and check that they match definitions
     for v in videos.iter() {
         assert_eq!(Video::get(&db, &v.id)?.id, v.id);
-        let comments = Comment::get_by_video(&db, &v.id, 0, 999)?;
+        let comments = Comment::get_by_video(&db, &v.id, DBPaging::default())?;
         assert_eq!(comments.len(), match v.id.as_str() {
             "HASH0" => 5,
             "11111" => 2,
@@ -414,8 +418,8 @@ fn test_fixture_state() -> anyhow::Result<()>
     }
 
     // Check that we can get videos by user
-    assert_eq!(models::Video::get_by_user(&db, "user.num1", 0, 999)?.len(), 3);
-    assert_eq!(models::Video::get_by_user(&db, "user.num2", 0, 999)?.len(), 2);
+    assert_eq!(models::Video::get_by_user(&db, "user.num1", DBPaging::default())?.len(), 3);
+    assert_eq!(models::Video::get_by_user(&db, "user.num2", DBPaging::default())?.len(), 2);
     Ok(())
 }
 
@@ -425,7 +429,7 @@ fn test_fixture_state() -> anyhow::Result<()>
 fn test_comment_delete() -> anyhow::Result<()> {
     let (db, _data_dir, _vid, com, _nodes, _edges) = make_test_db();
 
-    assert_eq!(Comment::get_by_video(&db, &com[1].video_id, 0, 999)?.len(), 2, "Video should have 2 comments before deletion");
+    assert_eq!(Comment::get_by_video(&db, &com[1].video_id, DBPaging::default())?.len(), 2, "Video should have 2 comments before deletion");
 
     // Delete comment #2 and check that it was deleted, and nothing else
     models::Comment::delete(&db, &com[1].id)?;
@@ -438,7 +442,7 @@ fn test_comment_delete() -> anyhow::Result<()> {
     }
 
     // Check that video still has 1 comment
-    assert_eq!(Comment::get_by_video(&db, &com[1].video_id, 0, 999)?.len(), 1, "Video should have 1 comment left");
+    assert_eq!(Comment::get_by_video(&db, &com[1].video_id, DBPaging::default())?.len(), 1, "Video should have 1 comment left");
 
     // Delete last, add a new one and check for ID reuse
     models::Comment::delete(&db, &com[6].id)?;
@@ -528,8 +532,8 @@ fn test_user_messages() -> anyhow::Result<()> {
     }
 
     // Correctly count messages
-    assert_eq!(Message::get_by_user(&db, "user.num1", 0, 999)?.len(), 2);
-    assert_eq!(Message::get_by_user(&db, "user.num2", 0, 999)?.len(), 1);
+    assert_eq!(Message::get_by_user(&db, "user.num1", DBPaging::default())?.len(), 2);
+    assert_eq!(Message::get_by_user(&db, "user.num2", DBPaging::default())?.len(), 1);
 
     // Mark message #2 as seen
     Message::set_seen(&db, new_msgs[1].id, true)?;
@@ -538,8 +542,8 @@ fn test_user_messages() -> anyhow::Result<()> {
     // Delete & recount
     Message::delete(&db, &new_msgs[2].id)?;
     Message::delete(&db, &new_msgs[0].id)?;
-    assert_eq!(Message::get_by_user(&db, "user.num1", 0, 999)?.len(), 1);
-    assert_eq!(Message::get_by_user(&db, "user.num2", 0, 999)?.len(), 0);
+    assert_eq!(Message::get_by_user(&db, "user.num1", DBPaging::default())?.len(), 1);
+    assert_eq!(Message::get_by_user(&db, "user.num2", DBPaging::default())?.len(), 0);
 
     Ok(())
 }
