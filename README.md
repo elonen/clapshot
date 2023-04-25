@@ -49,6 +49,9 @@ docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data 
 The _basic auth_ version uses https://github.com/soster/htadmin as a simple user management tool.
 You can access it at http://127.0.0.1:8080/htadmin/ and create users there (username `htadmin`, password `admin`), or just use the default ones: `demo`/`demo`, `alice`/`alice123` and `admin`/`admin`.
 
+If you want to access the demo from a different host, you'll have to instruct the web client to connect to correct server address. E.g. for 192.168.1.123, add `-e CLAPSHOT_URL_BASE='192.168.1.123:8080/` to the `docker run` command.
+
+
 Note that each user only sees their own videos in their front page, but can still review and comment on videos uploaded by other users. Users are supposed to share the video URL with each other to collaborate,
 perhaps by using a chat tool such as Slack, issue tracker or email.
 
@@ -61,8 +64,8 @@ above does, too.
 
 Most modern real-world deployments will likely use some more advanced authentication mechanism, such as OAuth, Kerberos etc, but htadmin is a good starting point.
 
-See [/Dockerfile](Dockerfile), 
-[/test/docker-entry_htadmin.sh](test/docker-entry_htadmin.sh) and 
+See [/Dockerfile](Dockerfile),
+[/test/docker-entry_htadmin.sh](test/docker-entry_htadmin.sh) and
 [client/debian/additional_files/clapshot+htadmin.nginx.conf](client/debian/additional_files/clapshot+htadmin.nginx.conf) for details on how the integration works.
 
 Authorization is also supposed to be handled on web server, at least for now.
@@ -81,7 +84,7 @@ foreground, and should therefore be started by a process manager such as systemd
 
 Preferred deployment and upgrade method is to install server and client as Debian
 packages. Whereas `clapshot-server` is a foreground binary that is configured with command line options,
-the Debian package contains a systemd service file that demonizes it, and config file `/etc/clapshot-server.conf` that is translated into the appropriate CLI options automatically. 
+the Debian package contains a systemd service file that demonizes it, and config file `/etc/clapshot-server.conf` that is translated into the appropriate CLI options automatically.
 
 Server should be put behind a reverse proxy in production, but
 can be developed and tested without one. The server .deb package contains
