@@ -46,7 +46,7 @@ docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data 
   elonen/clapshot:latest-demo-htadmin
 ```
 
-The _basic auth_ version uses https://github.com/soster/htadmin as a simple user management tool.
+The _basic auth_ version uses https://github.com/soster/htadmin as a simple user management tool (arbitrary choice, just something for a demo).
 You can access it at http://127.0.0.1:8080/htadmin/ and create users there (username `htadmin`, password `admin`), or just use the default ones: `demo`/`demo`, `alice`/`alice123` and `admin`/`admin`.
 
 If you want to access the demo from a different host, you'll have to instruct the web client to connect to correct server address. E.g. for 192.168.1.123, add `-e CLAPSHOT_URL_BASE='192.168.1.123:8080/` to the `docker run` command.
