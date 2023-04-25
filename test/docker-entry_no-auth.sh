@@ -4,7 +4,7 @@
 # in a single Docker container for demo and testing purposes.
 
 DIR="/mnt/clapshot-data/data"
-URL_BASE="127.0.0.1:8080/"
+URL_BASE="${CLAPSHOT_URL_BASE:-127.0.0.1:8080/}"
 
 # Use same URL base as index.html for API server (as Nginx proxies localhost:8095/api to /api)
 cat > /etc/clapshot_client.conf << EOF
@@ -22,7 +22,7 @@ EOF
 sed -i "s/[$]remote_user/docker/g" /etc/nginx/sites-enabled/clapshot
 
 # Assume user accesses this at $URL_BASE
-sed -i "s/^url-base.*/url-base = http://${URL_BASE}/g" /etc/clapshot-server.conf
+sed -i "s@^url-base.*@url-base = http://${URL_BASE}@g" /etc/clapshot-server.conf
 echo "migrate = true" >> /etc/clapshot-server.conf
 
 
@@ -39,28 +39,23 @@ nginx
 export ENV PYTHONDONTWRITEBYTECODE=1
 export ENV PYTHONUNBUFFERED=1
 
-set -v
-
-echo <<- "EOF"
+cat <<- "EOF"
 ==============================================
-  _____                   _
- |  __ \                 (_)
- | |__) _   _ _ __  _ __  _ _ __   __ _
- |  _  | | | | '_ \| '_ \| | '_ \ / _` |
- | | \ | |_| | | | | | | | | | | | (_| |
- |_|  \_\__,_|_| |_|_| |_|_|_| |_|\__, |
-     _____ _                 _     __/ | _
-    / ____| |               | |   |___/ | |
+     _____ _                 _           _
+    / ____| |               | |         | |
    | |    | | __ _ _ __  ___| |__   ___ | |_
    | |    | |/ _` | '_ \/ __| '_ \ / _ \| __|
    | |____| | (_| | |_) \__ | | | | (_) | |_
     \_____|_|\__,_| .__/|___|_| |_|\___/ \__|
                   | |
                   |_|
-
----  Browse http://127.0.0.1:8080  ---
+EOF
+cat <<-EOF
+---  Browse http://${URL_BASE}  ---
 ==============================================
 EOF
+
+set -v
 
 # Dig up start command from systemd script and run it as docker user instead of www-data
 CMD=$(grep 'Exec' /lib/systemd/system/clapshot-server.service | sed 's/^.*=//')
