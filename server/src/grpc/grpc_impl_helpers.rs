@@ -56,13 +56,13 @@ impl<'a> TryInto<crate::database::GraphObjId<'a>> for &'a GraphObj
     type Error = Status;
     fn try_into(self) -> tonic::Result<crate::database::GraphObjId<'a>> {
         use crate::database::GraphObjId;
-        use org::graph_obj::Obj;
-        match &self.obj {
-            Some(obj) => match obj {
-                Obj::VideoId(id) => Ok(GraphObjId::Video(id)),
-                Obj::CommentId(id) => Ok(GraphObjId::Comment(
+        use org::graph_obj::Id;
+        match &self.id {
+            Some(id) => match id {
+                Id::VideoId(id) => Ok(GraphObjId::Video(id)),
+                Id::CommentId(id) => Ok(GraphObjId::Comment(
                     id.parse::<i32>().map_err(|_e| Status::invalid_argument("Failed to parse comment id"))?)),
-                Obj::NodeId(id) => Ok(GraphObjId::Node(
+                Id::NodeId(id) => Ok(GraphObjId::Node(
                     id.parse().map_err(|_e| Status::invalid_argument("Failed to parse prop node id"))?)),
             },
             None => Err(Status::invalid_argument("Missing 'obj' field from GraphObj")),

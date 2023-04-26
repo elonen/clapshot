@@ -174,11 +174,11 @@ pub (crate) fn db_prop_edge_to_proto3(e: &crate::database::models::PropEdge) -> 
         -> Option<proto::org::GraphObj>
     {
         Some(proto::org::GraphObj {
-            obj: Some(
+            id: Some(
                 match (video_id, comment_id, node_id) {
-                    (Some(v), None, None) => proto::org::graph_obj::Obj::VideoId(v),
-                    (None, Some(c), None) => proto::org::graph_obj::Obj::CommentId(c.to_string()),
-                    (None, None, Some(n)) => proto::org::graph_obj::Obj::NodeId(n.to_string()),
+                    (Some(v), None, None) => proto::org::graph_obj::Id::VideoId(v),
+                    (None, Some(c), None) => proto::org::graph_obj::Id::CommentId(c.to_string()),
+                    (None, None, Some(n)) => proto::org::graph_obj::Id::NodeId(n.to_string()),
                     _ => return None,
             })
         })

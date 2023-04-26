@@ -142,7 +142,7 @@ message PropNode {
 }
 
 message GraphObj {
-    oneof obj {
+    oneof id {
         string video_id = 1;
         string comment_id = 2;
         string node_id = 3;
