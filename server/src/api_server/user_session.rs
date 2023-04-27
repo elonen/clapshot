@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{database::models::{self, Video, Comment}, grpc::{grpc_client::OrganizerConnection, db_video_to_proto3, db_comment_to_proto3}, client_cmd};
+use crate::{database::models::{self, Video, Comment}, grpc::{grpc_client::OrganizerConnection}, client_cmd};
 
 use super::{WsMsgSender, server_state::ServerState, SendTo};
 use base64::{Engine as _, engine::general_purpose as Base64GP};
@@ -22,8 +22,9 @@ macro_rules! send_user_msg(
             Topic::Comment(comment_id) => (Some(comment_id.into()), None),
             Topic::None => (None, None)
         };
+        use crate::grpc::db_models::proto_msg_type_to_event_name;
         $server.push_notify_message(&models::MessageInsert {
-            event_name: crate::database::models::proto_msg_type_to_event_name($msg_type).to_string(),
+            event_name: proto_msg_type_to_event_name($msg_type).to_string(),
             user_id: $ses.user_id.clone(),
             comment_id,
             seen: false,
@@ -114,7 +115,7 @@ impl UserSession {
 
     pub async fn emit_new_comment(&self, server: &ServerState, mut c: models::Comment, send_to: SendTo<'_>) -> Res<()> {
         self.fetch_drawing_data_into_comment(server, &mut c).await?;
-        let cmd = client_cmd!(AddComments, {comments: vec![db_comment_to_proto3(&c)]});
+        let cmd = client_cmd!(AddComments, {comments: vec![c.to_proto3()]});
         server.emit_cmd(cmd, send_to).map(|_| ())
     }
 
@@ -159,11 +160,11 @@ impl UserSession {
             AuthzTopic::Video(v, op) => authz_op::Op::VideoOp(
                 authz_op::VideoOp {
                     op: op.into(),
-                    video: Some(db_video_to_proto3(v, &server.url_base)) }),
+                    video: Some(v.to_proto3(&server.url_base)) }),
             AuthzTopic::Comment(c, op) => authz_op::Op::CommentOp(
                 authz_op::CommentOp {
                     op: op.into(),
-                    comment: Some(db_comment_to_proto3(c)) }),
+                    comment: Some(c.to_proto3()) }),
             AuthzTopic::Other(subj, op) => authz_op::Op::OtherOp(
                 authz_op::OtherOp {
                     op: op.into(),

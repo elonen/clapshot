@@ -127,10 +127,10 @@ pub trait DbBasicQuery<P, I>: Sized
           I: Send + Sync,
 {
     /// Insert a new object into the database.
-    fn add(db: &DB, item: &I) -> DBResult<Self>;
+    fn insert(db: &DB, item: &I) -> DBResult<Self>;
 
     /// Insert multiple objects into the database.
-    fn add_many(db: &DB, items: &[I]) -> DBResult<Vec<Self>>;
+    fn insert_many(db: &DB, items: &[I]) -> DBResult<Vec<Self>>;
 
     /// Get a single object by its primary key.
     /// Returns None if no object with the given ID was found.
@@ -141,6 +141,9 @@ pub trait DbBasicQuery<P, I>: Sized
 
     /// Get all nodes of type Self, with no filtering, paginated.
     fn get_all(db: &DB, pg: DBPaging) -> DBResult<Vec<Self>>;
+
+    /// Update objects, replaces the entire object except for the primary key.
+    fn update_many(db: &DB, items: &[Self]) -> DBResult<Vec<Self>>;
 
     /// Delete a single object from the database.
     fn delete(db: &DB, id: &P) -> DBResult<bool>;

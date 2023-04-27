@@ -82,6 +82,7 @@ message UserMessage {
     }
 
     optional string id = 1;
+    optional string user_id = 2;
     optional google.protobuf.Timestamp created = 3;
     bool seen = 4;
     Type type = 5;

@@ -29,7 +29,6 @@ use crate::api_server::user_session::Topic;
 use crate::database::error::DBError;
 use crate::database::{models, DB, DbBasicQuery, DbQueryByUser, DbQueryByVideo, DBPaging};
 use crate::database::schema::comments::drawing;
-use crate::grpc::{db_comment_to_proto3, db_message_to_proto3, db_video_to_proto3};
 use crate::{send_user_error, send_user_ok, client_cmd};
 
 use lib_clapshot_grpc::proto;
@@ -79,7 +78,7 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, ser
 
             ses.video_session_guard = Some(server.link_session_to_video(video_id, ses.sender.clone()));
 
-            let v = db_video_to_proto3(&v, &server.url_base);
+            let v = v.to_proto3(&server.url_base);
             if v.playback_url.is_none() {
                 return Err(anyhow!("No video file"));
             }
@@ -91,7 +90,7 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, ser
             let mut cmts = vec![];
             for mut c in models::Comment::get_by_video(&server.db, video_id, DBPaging::default())? {
                 ses.fetch_drawing_data_into_comment(server, &mut c).await?;
-                cmts.push(db_comment_to_proto3(&c));
+                cmts.push(c.to_proto3());
             }
 
             server.emit_cmd(
@@ -262,7 +261,7 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, se
         timecode: data["timecode"].as_str().map(String::from),
         drawing: drwn,
     };
-    let c = models::Comment::add(&server.db, &c)
+    let c = models::Comment::insert(&server.db, &c)
         .map_err(|e| anyhow!("Failed to add comment: {:?}", e))?;
     // Send to all clients watching this video
     ses.emit_new_comment(server, c, super::SendTo::VideoId(&video_id)).await?;
@@ -333,7 +332,7 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
 pub async fn msg_list_my_messages(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let msgs = models::Message::get_by_user(&server.db, &ses.user_id, DBPaging::default())?;
     server.emit_cmd(
-        client_cmd!(ShowMessages, { msgs: (&msgs).into_iter().map(|m| db_message_to_proto3(&m)).collect() }),
+        client_cmd!(ShowMessages, { msgs: (&msgs).into_iter().map(|m| m.to_proto3()).collect() }),
         super::SendTo::UserSession(&ses.sid)
     )?;
     for m in msgs {

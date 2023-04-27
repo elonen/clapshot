@@ -13,10 +13,11 @@ use crate::database::DbBasicQuery;
 use crate::database::error::DBError;
 use crate::api_server::{UserMessage, UserMessageTopic, run_api_server_async};
 use crate::api_server::server_state::ServerState;
-use crate::database::models::{self, proto_msg_type_to_event_name};
+use crate::database::models::{self};
 use crate::database::tests::make_test_db;
 
 use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_no_msg, write, open_video, connect_client_ws};
+use crate::grpc::db_models::proto_msg_type_to_event_name;
 
 // ---------------------------------------------------------------------------------------------
 
@@ -330,7 +331,7 @@ async fn test_api_list_my_messages()
             models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "error".into(), video_id: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
             models::MessageInsert { user_id: "user.num2".into(), message: "message3".into(), event_name: "ok".into(), ..Default::default() },
         ];
-        let msgs = msgs.iter().map(|m| models::Message::add(&ts.db, &m).unwrap()).collect::<Vec<_>>();
+        let msgs = msgs.iter().map(|m| models::Message::insert(&ts.db, &m).unwrap()).collect::<Vec<_>>();
 
         write(&mut ws, r#"{"cmd":"list_my_messages","data":{}}"#).await;
         let sm = expect_client_cmd!(&mut ws, ShowMessages);

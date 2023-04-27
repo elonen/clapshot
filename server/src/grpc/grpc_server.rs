@@ -1,7 +1,8 @@
 use std::{sync::atomic::Ordering::Relaxed, path::Path};
 use anyhow::Context;
 use tonic::{Request, Response, Status};
-use crate::{api_server::{server_state::ServerState}, database::{models::proto_msg_type_to_event_name, DbBasicQuery, DbQueryByUser, DbGraphQuery, DbQueryByVideo}, grpc::{db_video_to_proto3, db_comment_to_proto3, db_message_to_proto3, grpc_impl_helpers::{rpc_expect_field, paged_vec}, db_prop_edge_to_proto3}};
+use crate::{api_server::{server_state::ServerState}, database::{DbBasicQuery, DbQueryByUser, DbGraphQuery, DbQueryByVideo}, grpc::{grpc_impl_helpers::{rpc_expect_field, paged_vec}}};
+use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::database::models;
 
 use lib_clapshot_grpc::{proto::{self}, RpcResult, GrpcBindAddr, run_grpc_server};
@@ -140,7 +141,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             },
         };
         Ok(Response::new(org::DbVideoList {
-            items: items.into_iter().map(|v| db_video_to_proto3(&v, &self.server.url_base)).collect(),
+            items: items.into_iter().map(|v| v.to_proto3(&self.server.url_base)).collect(),
             paging: req.paging,
         }))
     }
@@ -173,7 +174,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             },
         };
         Ok(Response::new(org::DbCommentList {
-            items: items.into_iter().map(|c| db_comment_to_proto3(&c)).collect(),
+            items: items.into_iter().map(|c| c.to_proto3()).collect(),
             paging: req.paging,
         }))
     }
@@ -202,7 +203,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             },
         };
         Ok(Response::new(org::DbUserMessageList {
-            items: items.into_iter().map(|m| db_message_to_proto3(&m)).collect(),
+            items: items.into_iter().map(|m| m.to_proto3()).collect(),
             paging: req.paging,
         }))
     }
@@ -272,21 +273,96 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             &ids, pg)?;
 
         Ok(Response::new(org::DbPropEdgeList {
-            items: items.into_iter().map(|o| db_prop_edge_to_proto3(&o)).collect(),
+            items: items.into_iter().map(|o| o.to_proto3()).collect(),
             paging: req.paging,
         }))
     }
 
     async fn db_upsert(&self, req: Request<org::DbUpsertRequest>) -> RpcResult<org::DbUpsertResponse>
     {
-        tracing::info!("Got a db_upsert req: {:?}", req);
-        Err(Status::unimplemented("Not implemented"))
+        let req = req.into_inner();
+        let db = self.server.db.clone();
+        macro_rules! upsert_type {
+            ([$db:expr, $input_items:expr, $model:ty, $ins_model:ty, $id_missing:expr, $to_proto:expr]) => {
+                {
+                    let inserts = $input_items.iter().filter(|it| $id_missing(it))
+                        .map(|it| <$ins_model>::from_proto3(it))
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    let updates = $input_items.iter().filter(|it| !$id_missing(it))
+                        .map(|it| <$model>::from_proto3(it))
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    // Perform database operations
+                    let ins_res = <$model>::insert_many($db, &inserts)?;
+                    let upd_res = <$model>::update_many($db, &updates)?;
+
+                    if ins_res.len() + upd_res.len() != $input_items.len() {
+                        return Err(Status::internal("Database upsert returned unexpected number of results"));
+                    }
+
+                    // Combine the results in the original order
+                    let mut ins_iter = ins_res.into_iter();
+                    let mut upd_iter = upd_res.into_iter();
+                    let res_comb_orig_order = $input_items.iter().map(|it| {
+                        if $id_missing(it) {
+                            ins_iter.next().expect("Insert result missing")
+                        } else {
+                            upd_iter.next().expect("Update result missing")
+                        }
+                    }).collect::<Vec<_>>();
+
+                    // Convert back to proto3
+                    res_comb_orig_order.iter().map(|it| $to_proto(it)).collect::<Vec<_>>()
+                }
+            }
+        }
+        Ok(Response::new(org::DbUpsertResponse {
+            videos: upsert_type!([
+                db.as_ref(), req.videos, models::Video, models::VideoInsert,
+                |it: &proto::Video| it.id.is_empty(),
+                |it: &models::Video| it.to_proto3(self.server.url_base.as_str())]),
+            comments: upsert_type!([
+                db.as_ref(), req.comments, models::Comment, models::CommentInsert,
+                |it: &proto::Comment| it.id.is_empty(),
+                |it: &models::Comment| it.to_proto3()]),
+            user_messages: upsert_type!([
+                db.as_ref(), req.user_messages, models::Message, models::MessageInsert,
+                |it: &proto::UserMessage| it.id.is_none(),
+                |it: &models::Message| it.to_proto3()]),
+            nodes: upsert_type!([
+                db.as_ref(), req.nodes, models::PropNode, models::PropNodeInsert,
+                |it: &org::PropNode| it.id.is_empty(),
+                |it: &models::PropNode| it.to_proto3()]),
+            edges: upsert_type!([
+                db.as_ref(), req.edges, models::PropEdge, models::PropEdgeInsert,
+                |it: &org::PropEdge| it.id.is_empty(),
+                |it: &models::PropEdge| it.to_proto3()]),
+        }))
     }
 
     async fn db_delete(&self, req: Request<org::DbDeleteRequest>) -> RpcResult<org::DbDeleteResponse>
     {
-        tracing::info!("Got a db_delete req: {:?}", req);
-        Err(Status::unimplemented("Not implemented"))
+        let req = req.into_inner();
+        let db = self.server.db.clone();
+        macro_rules! delete_type {
+            ([$db:expr, $input_ids:expr, $id_type:ty, $model:ty]) => {
+                {
+                    use std::str::FromStr;
+                    let ids = $input_ids.iter().map(|s| <$id_type>::from_str(&s)
+                            .map_err(|e| Status::invalid_argument(format!("Invalid ID: {}", e)))
+                        ).collect::<Result<Vec<_>, _>>()?;
+                    <$model>::delete_many($db, ids.as_slice())? as u32
+                }
+            }
+        }
+        Ok(Response::new(org::DbDeleteResponse {
+            videos_deleted: delete_type!([db.as_ref(), req.video_ids, String, models::Video]),
+            comments_deleted: delete_type!([db.as_ref(), req.comment_ids, i32, models::Comment]),
+            user_messages_deleted: delete_type!([db.as_ref(), req.user_message_ids, i32, models::Message]),
+            nodes_deleted: delete_type!([db.as_ref(), req.node_ids, i32, models::PropNode]),
+            edges_deleted: delete_type!([db.as_ref(), req.edge_ids, i32, models::PropEdge]),
+        }))
     }
 }
 

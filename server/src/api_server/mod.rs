@@ -40,9 +40,8 @@ use file_upload::handle_multipart_upload;
 use crate::api_server::user_session::AuthzTopic;
 use crate::client_cmd;
 use crate::database::DbBasicQuery;
-use crate::database::models::proto_msg_type_to_event_name;
 use crate::database::{models};
-use crate::grpc::db_message_insert_to_proto3;
+use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::grpc::grpc_client::OrganizerConnection;
 use crate::grpc::grpc_client::OrganizerURI;
 use crate::grpc::{grpc_server, make_video_popup_actions};
@@ -415,7 +414,7 @@ async fn run_api_server_async(
                 // Message to all watchers of a video
                 if let Some(vid) = m.video_id {
                     if let Err(_) = server_state.emit_cmd(
-                        client_cmd!(ShowMessages, { msgs: vec![db_message_insert_to_proto3(&msg)] }),
+                        client_cmd!(ShowMessages, { msgs: vec![msg.to_proto3()] }),
                         SendTo::VideoId(&vid)
                     ) {
                         tracing::error!(video=vid, "Failed to send notification to video watchers.");
@@ -427,7 +426,7 @@ async fn run_api_server_async(
                 if let Some(user_id) = m.user_id {
                     let mut user_was_online = false;
                     match server_state.emit_cmd(
-                        client_cmd!(ShowMessages, { msgs: vec![db_message_insert_to_proto3(&msg)] }),
+                        client_cmd!(ShowMessages, { msgs: vec![msg.to_proto3()] }),
                         SendTo::UserId(&user_id))
                     {
                         Ok(session_cnt) => { user_was_online = session_cnt>0 },
@@ -438,7 +437,7 @@ async fn run_api_server_async(
                             seen: msg.seen || user_was_online,
                             ..msg
                         };
-                        if let Err(e) = models::Message::add(&server_state.db, &msg) {
+                        if let Err(e) = models::Message::insert(&server_state.db, &msg) {
                             tracing::error!(details=%e, "Failed to save user notification in DB.");
                         }
                     }

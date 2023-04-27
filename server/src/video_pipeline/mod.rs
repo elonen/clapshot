@@ -156,7 +156,7 @@ fn ingest_video(
 
     // Add to DB
     tracing::info!("Adding video to DB.");
-    models::Video::add(&db, &models::VideoInsert {
+    models::Video::insert(&db, &models::VideoInsert {
         id: vid.to_string(),
         user_id: Some(md.user_id.clone()),
         user_name: Some(md.user_id.clone()),  // TODO: get username from somewhere

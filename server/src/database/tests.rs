@@ -1,11 +1,11 @@
 use tracing_test::traced_test;
-use crate::{database::*, grpc::db_message_to_proto3};
+use crate::{database::*};
 
 use models::{Video, VideoInsert, Message, MessageInsert, Comment, CommentInsert, PropNode, PropNodeInsert, PropEdge, PropEdgeInsert};
 
 macro_rules! test_insert_node {
     ($db:expr, $type:expr, $body:expr) => {
-        PropNode::add(&$db, &PropNodeInsert {
+        PropNode::insert(&$db, &PropNodeInsert {
             node_type: $type.to_string(),
             body: $body.map(|s: &str| s.to_string()),
         }).expect("Failed to insert test node")
@@ -14,7 +14,7 @@ macro_rules! test_insert_node {
 
 macro_rules! test_insert_edge {
     ($db:ident, $from_type:ident, $from_expr:expr, $to_type:ident, $to_expr:expr, $edge_type:expr, $sort_order:expr, $body:expr) => {
-        PropEdge::add(&$db, &PropEdgeInsert {
+        PropEdge::insert(&$db, &PropEdgeInsert {
             $from_type: Some($from_expr.clone()),
             $to_type: Some($to_expr.clone()),
             edge_type: $edge_type.to_string(),
@@ -94,7 +94,7 @@ println!("--- make_test_db");
             fps: Some(format!("{}", i * i)),
             raw_metadata_all: Some(format!("{{all: {{video: {}}}}}", i)),
         };
-        Video::add(&db, &v).unwrap();
+        Video::insert(&db, &v).unwrap();
         Video::get(&db, &v.id.into()).unwrap()
     };
     let videos = (0..5).map(mkvid).collect::<Vec<_>>();
@@ -110,7 +110,7 @@ println!("--- make_test_db");
             comment: format!("Comment {}", i),
             drawing: Some(format!("drawing_{}.webp", i)),
         };
-        let c = Comment::add(&db, &c).unwrap();
+        let c = Comment::insert(&db, &c).unwrap();
         let dp = data_dir.join("videos").join(vid).join("drawings");
         std::fs::create_dir_all(&dp).unwrap();
         std::fs::write(dp.join(&c.drawing.clone().unwrap()), "IMAGE_DATA").unwrap();
@@ -134,7 +134,7 @@ println!("--- make_test_db");
         comment: "Comment_with_empty_drawing".to_string(),
         drawing: Some("".into()),
     };
-    let cmt = models::Comment::add(&db, &c).unwrap();
+    let cmt = models::Comment::insert(&db, &c).unwrap();
     comments.push(cmt);
 
     // Make a test props graph
@@ -220,27 +220,27 @@ fn test_fail_invalid_edge_inserts() -> anyhow::Result<()> {
     let e = PropEdgeInsert {
         to_video: Some(videos[0].id.clone()), ..Default::default()
     };
-    assert!(PropEdge::add(&db, &e).is_err());
+    assert!(PropEdge::insert(&db, &e).is_err());
 
     // Insert an edge with no to_*
     let e = PropEdgeInsert {
         from_video: Some(videos[0].id.clone()), ..Default::default()
     };
-    assert!(PropEdge::add(&db, &e).is_err());
+    assert!(PropEdge::insert(&db, &e).is_err());
 
     // Insert an edge with multiple from_*
     let e = PropEdgeInsert {
         from_video: Some(videos[0].id.clone()),
         from_comment: Some(comments[0].id.clone()), ..Default::default()
     };
-    assert!(PropEdge::add(&db, &e).is_err());
+    assert!(PropEdge::insert(&db, &e).is_err());
 
     // Insert an edge with multiple to_*
     let e = PropEdgeInsert {
         to_node: Some(nodes[0].id.clone()),
         to_comment: Some(comments[0].id.clone()), ..Default::default()
     };
-    assert!(PropEdge::add(&db, &e).is_err());
+    assert!(PropEdge::insert(&db, &e).is_err());
 
     Ok(())
 }
@@ -455,7 +455,7 @@ fn test_comment_delete() -> anyhow::Result<()> {
         timecode: None,
         drawing: None,
     };
-    let new_id = models::Comment::add(&db, &c)?.id;
+    let new_id = models::Comment::insert(&db, &c)?.id;
     assert_ne!(new_id, com[6].id, "Comment ID was re-used after deletion. This would mix up comment threads in the UI.");
     Ok(())
 }
@@ -519,12 +519,12 @@ fn test_user_messages() -> anyhow::Result<()> {
 
     let mut new_msgs = vec![];
     for i in 0..msgs.len() {
-        let new_msg = Message::add(&db, &msgs[i])?;
+        let new_msg = Message::insert(&db, &msgs[i])?;
         assert_eq!(new_msg.user_id, msgs[i].user_id);
         assert_eq!(new_msg.message, msgs[i].message);
 
-        let a = serde_json::to_value(db_message_to_proto3(&Message::get(&db, &new_msg.id)?))?;
-        let b = serde_json::to_value(db_message_to_proto3(&new_msg))?;
+        let a = serde_json::to_value(Message::get(&db, &new_msg.id)?.to_proto3())?;
+        let b = serde_json::to_value(new_msg.to_proto3())?;
         assert_eq!(a,b);
 
         assert!(!Message::get(&db, &new_msg.id)?.seen);

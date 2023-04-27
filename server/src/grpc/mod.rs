@@ -2,11 +2,11 @@ pub mod grpc_client;
 pub mod caller;
 pub mod grpc_server;
 pub mod grpc_impl_helpers;
+pub mod db_models;
 
 use std::collections::HashMap;
 use lib_clapshot_grpc::proto;
 
-use crate::database::models::msg_event_name_to_proto_msg_type;
 
 // Helper macro to simplify creation of ServerToClientCmd messages.
 // Prost/Tonic syntax is a bit verbose.
@@ -28,172 +28,9 @@ pub fn datetime_to_proto3(dt: &chrono::NaiveDateTime) -> pbjson_types::Timestamp
     }
 }
 
-/// Convert database Video to protobuf3
-///
-pub (crate) fn db_video_to_proto3(
-    v: &crate::database::models::Video,
-    url_base: &str
-) -> proto::Video
-{
-    let duration = match (v.duration, v.total_frames, &v.fps) {
-        (Some(dur), Some(total_frames), Some(fps)) => Some(proto::VideoDuration {
-            duration: dur as f64,
-            total_frames: total_frames as i64,
-            fps: fps.clone(),
-        }),
-        _ => None,
-    };
-
-    let added_by = match (&v.user_id, &v.user_name) {
-        (Some(user_id), user_name) => Some(proto::UserInfo {
-            username: user_id.clone(),
-            displayname: user_name.clone(),
-        }),
-        _ => None,
-    };
-
-    let processing_metadata = match (&v.orig_filename, &v.recompression_done, &v.raw_metadata_all.clone()) {
-        (Some(orig_filename), recompression_done, ffprobe_metadata_all) => Some(proto::VideoProcessingMetadata {
-            orig_filename: orig_filename.clone(),
-            recompression_done: recompression_done.map(|t| datetime_to_proto3(&t)),
-            ffprobe_metadata_all: ffprobe_metadata_all.clone(),
-        }),
-        _ => None,
-    };
-
-    let preview_data = if let (Some(cols), Some(rows)) = (v.thumb_sheet_cols, v.thumb_sheet_rows) {
-        let thumb_sheet = Some(proto::video_preview_data::ThumbSheet {
-            url: format!("{}/videos/{}/thumbs/sheet-{}x{}.webp", url_base, &v.id, cols, rows),
-            rows: rows as u32,
-            cols: cols as u32,
-        });
-        Some(proto::VideoPreviewData {
-            thumb_url: Some(format!("{}/videos/{}/thumbs/thumb.webp", url_base, &v.id)),
-            thumb_sheet,
-        }
-        ) } else { None };
-
-    // Use transcoded or orig video?
-    let uri = match v.recompression_done {
-        Some(_) => Some("video.mp4".into()),
-        None => match &v.orig_filename {
-            Some(f) => Some(format!("orig/{}", urlencoding::encode(f))),
-            None => None
-        }};
-
-    let playback_url = uri.map(|uri|
-        format!("{}/videos/{}/{}", url_base, &v.id, uri));
-
-    proto::Video {
-        id: v.id.clone(),
-        title: v.title.clone(),
-        added_by,
-        duration,
-        added_time: Some(datetime_to_proto3(&v.added_time)),
-        preview_data: preview_data,
-        processing_metadata: processing_metadata,
-        playback_url
-    }
+pub fn proto3_to_datetime(ts: &pbjson_types::Timestamp) -> Option<chrono::NaiveDateTime> {
+    chrono::NaiveDateTime::from_timestamp_opt(ts.seconds, ts.nanos as u32)
 }
-
-
-
-/// Convert database Comment to protobuf3
-///
-/// Parent is denormalized only one level up
-pub(crate) fn db_comment_to_proto3(
-    comment: &crate::database::models::Comment
-) -> proto::Comment
-{
-    let user = proto::UserInfo {
-        username: comment.user_id.clone(),
-        displayname: Some(comment.user_name.clone()),
-    };
-
-    let created_timestamp = Some(datetime_to_proto3(&comment.created));
-    let edited_timestamp = comment.edited.map(|edited| datetime_to_proto3(&edited));
-
-    proto::Comment {
-        id: comment.id.to_string(),
-        video_id: comment.video_id.clone(),
-        user: Some(user),
-        comment: comment.comment.clone(),
-        timecode: comment.timecode.clone(),
-        parent_id: comment.parent_id.map(|id| id.to_string()),
-        created: created_timestamp,
-        edited: edited_timestamp,
-        drawing: comment.drawing.clone(),
-    }
-}
-
-pub (crate) fn db_message_to_proto3(
-    msg: &crate::database::models::Message
-) -> proto::UserMessage
-{
-    proto::UserMessage {
-        id: Some(msg.id.to_string()),
-        r#type: msg_event_name_to_proto_msg_type(&msg.event_name.as_str()).into(),
-        refs:Some(proto::user_message::Refs {
-            video_id: msg.video_id.clone(),
-            comment_id: msg.comment_id.map(|id| id.to_string()),
-        }),
-        message: msg.message.clone(),
-        details: if msg.details.is_empty() { None } else { Some(msg.details.clone()) },
-        created: Some(datetime_to_proto3(&msg.created)),
-        seen: msg.seen
-    }
-}
-
-pub (crate) fn db_message_insert_to_proto3(
-    msg: &crate::database::models::MessageInsert
-) -> proto::UserMessage
-{
-    proto::UserMessage {
-        id: None,
-        created: None,
-        seen: msg.seen,
-        r#type: match msg.event_name.as_str() {
-            "error" => proto::user_message::Type::Error,
-            "progress" => proto::user_message::Type::Progress,
-            "video_updated" => proto::user_message::Type::VideoUpdated,
-            _ => proto::user_message::Type::Ok,
-        }  as i32,
-        refs:Some(proto::user_message::Refs {
-            video_id: msg.video_id.clone(),
-            comment_id: msg.comment_id.map(|id| id.to_string()),
-        }),
-        message: msg.message.clone(),
-        details: if msg.details.is_empty() { None } else { Some(msg.details.clone()) },
-    }
-}
-
-
-pub (crate) fn db_prop_edge_to_proto3(e: &crate::database::models::PropEdge) -> proto::org::PropEdge {
-
-    fn row_to_graph_obj(video_id: Option<String>, comment_id: Option<i32>, node_id: Option<i32>)
-        -> Option<proto::org::GraphObj>
-    {
-        Some(proto::org::GraphObj {
-            id: Some(
-                match (video_id, comment_id, node_id) {
-                    (Some(v), None, None) => proto::org::graph_obj::Id::VideoId(v),
-                    (None, Some(c), None) => proto::org::graph_obj::Id::CommentId(c.to_string()),
-                    (None, None, Some(n)) => proto::org::graph_obj::Id::NodeId(n.to_string()),
-                    _ => return None,
-            })
-        })
-    }
-    proto::org::PropEdge {
-        id: e.id.to_string(),
-        edge_type: e.edge_type.clone(),
-        from: row_to_graph_obj(e.from_video.clone(), e.from_comment, e.from_node),
-        to: row_to_graph_obj(e.to_video.clone(), e.to_comment, e.to_node),
-        body: e.body.clone(),
-        sort_order: e.sort_order,
-        sibling_id: e.sibling_id,
-    }
-}
-
 
 pub (crate) fn make_video_popup_actions() -> HashMap<String, proto::ActionDef> {
     HashMap::from([
@@ -273,7 +110,7 @@ if (await confirm(msg)) {
 pub (crate) fn folder_listing_for_videos(videos: &[crate::database::models::Video], url_base: &str) -> proto::PageItem {
     let videos: Vec<proto::page_item::folder_listing::Item> = videos.iter().map(|v| {
             proto::page_item::folder_listing::Item {
-                item: Some(proto::page_item::folder_listing::item::Item::Video(db_video_to_proto3(v, url_base))),
+                item: Some(proto::page_item::folder_listing::item::Item::Video(v.to_proto3(url_base))),
                 open_action: Some(proto::ScriptCall {
                     lang: proto::script_call::Lang::Javascript.into(),
                     code: r#"await call_server("open_video", {id: items[0].video.id});"#.into()

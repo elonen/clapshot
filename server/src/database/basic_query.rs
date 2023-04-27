@@ -5,14 +5,14 @@ macro_rules! implement_basic_query_traits {
         impl DbBasicQuery<$pk_type, $insert_model> for $model {
 
             /// Insert a new object into the database.
-            fn add(db: &DB, item: &$insert_model) -> DBResult<Self> {
+            fn insert(db: &DB, item: &$insert_model) -> DBResult<Self> {
                 use schema::$table::dsl::*;
                 to_db_res(diesel::insert_into($table).values(item).get_result(&mut db.conn()?))
             }
 
             /// Insert multiple objects into the database.
-            fn add_many(db: &DB, items: &[$insert_model]) -> DBResult<Vec<Self>> {
-                items.iter().map(|i| Self::add(db, i)).collect()
+            fn insert_many(db: &DB, items: &[$insert_model]) -> DBResult<Vec<Self>> {
+                items.iter().map(|i| Self::insert(db, i)).collect()
             }
 
             /// Get a single object by its primary key.
@@ -38,6 +38,17 @@ macro_rules! implement_basic_query_traits {
                     .offset(pg.offset())
                     .limit(pg.limit())
                     .load::<$model>(&mut db.conn()?))
+            }
+
+            /// Update objects, replaces the entire object except for the primary key.
+            fn update_many(db: &DB, items: &[Self]) -> DBResult<Vec<Self>> {
+                use schema::$table::dsl::*;
+                let conn = &mut db.conn()?;
+                let mut res: Vec<Self> = Vec::with_capacity(items.len());
+                for it in items {
+                    res.push(diesel::update($table.filter(id.eq(&it.id))).set(it).get_result(conn)?);
+                }
+                Ok(res)
             }
 
             /// Delete a single object from the database.

@@ -1,5 +1,4 @@
 use diesel::{prelude::*, QueryId};
-use lib_clapshot_grpc::proto;
 use serde::{Deserialize, Serialize};
 use super::schema::*;
 use chrono;
@@ -7,8 +6,8 @@ use chrono::naive::serde::{ts_seconds, ts_seconds_option};
 use chrono::TimeZone;
 use timeago;
 
-
-#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, Clone)]
+#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
+#[diesel(treat_none_as_null = true)]
 #[diesel(table_name = videos)]
 pub struct Video {
     pub id: String,
@@ -47,8 +46,9 @@ pub struct VideoInsert {
 
 // -------------------------------------------------------
 
-#[derive(Serialize, Deserialize, Debug, Associations, Queryable, Selectable, Identifiable, QueryId, Clone)]
+#[derive(Serialize, Deserialize, Debug, Associations, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
 #[diesel(belongs_to(Video, foreign_key = video_id))]
+#[diesel(treat_none_as_null = true)]
 pub struct Comment {
     pub id: i32,
     pub video_id: String,
@@ -82,9 +82,10 @@ pub struct CommentInsert {
 
 // -------------------------------------------------------
 
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, Associations, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, Associations, AsChangeset, Clone)]
 #[diesel(belongs_to(Video, foreign_key = video_id))]
 #[diesel(belongs_to(Comment, foreign_key = comment_id))]
+#[diesel(treat_none_as_null = true)]
 pub struct Message {
     pub id: i32,
     pub user_id: String,
@@ -100,7 +101,7 @@ pub struct Message {
     pub details: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default, Insertable, Clone, Associations)]
+#[derive(Serialize, Deserialize, Debug, Default, Insertable, Clone, Associations, AsChangeset)]
 #[diesel(table_name = messages)]
 #[diesel(belongs_to(Video, foreign_key = video_id))]
 #[diesel(belongs_to(Comment, foreign_key = comment_id))]
@@ -117,8 +118,9 @@ pub struct MessageInsert {
 // -------------------------------------------------------
 // Graph structures
 // -------------------------------------------------------
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, QueryId, Clone)]
+#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
 #[diesel(table_name = prop_edges)]
+#[diesel(treat_none_as_null = true)]
 pub struct PropEdge {
     pub id: i32,
 
@@ -137,7 +139,7 @@ pub struct PropEdge {
     pub sibling_id: Option<i32>,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Insertable)]
+#[derive(Serialize, Deserialize, Default, Debug, Insertable, AsChangeset)]
 #[diesel(table_name = prop_edges)]
 pub struct PropEdgeInsert {
     pub from_video: Option<String>,
@@ -157,16 +159,17 @@ pub struct PropEdgeInsert {
 
 
 
-#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, Clone)]
+#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
 #[diesel(table_name = prop_nodes)]
 #[diesel(primary_key(id))]
+#[diesel(treat_none_as_null = true)]
 pub struct PropNode {
     pub id: i32,
     pub node_type: String,
     pub body: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Insertable)]
+#[derive(Serialize, Deserialize, Default, Debug, Insertable, AsChangeset)]
 #[diesel(table_name = prop_nodes)]
 pub struct PropNodeInsert {
     pub node_type: String,
@@ -181,25 +184,6 @@ pub fn humanize_utc_timestamp(timestamp: &chrono::NaiveDateTime) -> String {
     let added_time: chrono::DateTime<chrono::Utc> = chrono::Utc.from_utc_datetime(timestamp);
     let time_ago_str = timeago::Formatter::new().convert_chrono(added_time, chrono::Local::now());
     time_ago_str
-}
-
-pub fn proto_msg_type_to_event_name(t: proto::user_message::Type) -> &'static str {
-    match t {
-        proto::user_message::Type::Ok => "ok",
-        proto::user_message::Type::Error => "error",
-        proto::user_message::Type::Progress => "progress",
-        proto::user_message::Type::VideoUpdated => "video_updated",
-    }
-}
-
-pub fn msg_event_name_to_proto_msg_type(t: &str) -> proto::user_message::Type {
-    match t {
-        "ok" => proto::user_message::Type::Ok,
-        "error" => proto::user_message::Type::Error,
-        "progress" => proto::user_message::Type::Progress,
-        "video_updated" => proto::user_message::Type::VideoUpdated,
-        _ => proto::user_message::Type::Ok,
-    }
 }
 
 // -------------------------------------------------------

@@ -11,7 +11,6 @@ use super::user_session::OpaqueGuard;
 use super::{WsMsgSender, SenderList, SessionMap, SenderListMap, StringToStringMap, Res, UserSession, SendTo};
 use crate::client_cmd;
 use crate::database::{DB, models, DbBasicQuery};
-use crate::grpc::db_message_insert_to_proto3;
 use crate::grpc::grpc_client::OrganizerURI;
 use lib_clapshot_grpc::proto;
 
@@ -106,11 +105,11 @@ impl ServerState {
 
     /// Send a user message to given recipients.
     pub fn push_notify_message(&self, msg: &models::MessageInsert, send_to: SendTo, persist: bool) -> Res<()> {
-        let cmd = client_cmd!(ShowMessages, {msgs: vec![db_message_insert_to_proto3(&msg)]});
+        let cmd = client_cmd!(ShowMessages, {msgs: vec![msg.to_proto3()]});
         let send_res = self.emit_cmd(cmd, send_to);
         if let Ok(sent_count) = send_res {
             if persist {
-                models::Message::add(&self.db, &models::MessageInsert {
+                models::Message::insert(&self.db, &models::MessageInsert {
                     seen: msg.seen || sent_count > 0,
                     ..msg.clone()
                 })?;
