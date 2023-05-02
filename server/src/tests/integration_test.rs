@@ -128,13 +128,16 @@ mod integration_test
             crate::api_server::test_utils::wait_for_thumbnails(&mut ws).await;
 
             // Open video from server and check metadata
-            let cideo = open_video(&mut ws, &vid).await.video.unwrap();
-            assert_eq!(cideo.processing_metadata.unwrap().orig_filename.as_str(), mp4_file);
+            let video = open_video(&mut ws, &vid).await.video.unwrap();
+            assert_eq!(video.processing_metadata.unwrap().orig_filename.as_str(), mp4_file);
 
             // Double slashes in the path are an error (empty path component)
-            let video_url = cideo.playback_url.unwrap();
+            let video_url = video.playback_url.unwrap();
             let after_https = video_url.split("://").nth(1).unwrap();
             assert!(!after_https.contains("//"));
+
+            let orig_url = video.orig_url.unwrap();
+            assert!(orig_url == video_url);  // No transcoding, so should be the same
 
             // Check that video was moved to videos dir and symlinked
             assert!(data_dir.path().join("videos").join(&vid).join("orig").join(mp4_file).is_file());
@@ -257,6 +260,13 @@ mod integration_test
                             _ => panic!("Expected video"),
                         };
                         assert_eq!(v.id, vid);
+
+                        let playback_url = v.playback_url.unwrap();
+                        let orig_url = v.orig_url.unwrap();
+                        assert!(orig_url != playback_url);
+                        assert!(playback_url.contains("video.mp4"));
+                        assert!(!playback_url.contains("orig"));
+                        assert!(orig_url.contains("orig"));
 
                         if let Some(pd) = v.preview_data {
                             if let Some(pm) = v.processing_metadata {

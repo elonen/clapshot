@@ -83,13 +83,17 @@ impl crate::database::models::Video
                 thumb_sheet,
             }
             ) } else { None };
+
         // Use transcoded or orig video?
-        let uri = match self.recompression_done {
+        let orig_uri = match &self.orig_filename {
+            Some(f) => Some(format!("orig/{}", urlencoding::encode(f))),
+            None => None
+        };
+        let playback_uri = match self.recompression_done {
             Some(_) => Some("video.mp4".into()),
-            None => match &self.orig_filename {
-                Some(f) => Some(format!("orig/{}", urlencoding::encode(f))),
-                None => None
-            }};
+            None => orig_uri.clone()
+        };
+
         proto::Video {
             id: self.id.clone(),
             title: self.title.clone(),
@@ -98,7 +102,8 @@ impl crate::database::models::Video
             added_time: Some(datetime_to_proto3(&self.added_time)),
             preview_data: preview_data,
             processing_metadata: processing_metadata,
-            playback_url: uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri))
+            playback_url: playback_uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri)),
+            orig_url: orig_uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri))
         }
     }
 }

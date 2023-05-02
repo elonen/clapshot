@@ -4,7 +4,7 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, videoUrl, videoId, videoFps, videoTitle, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions} from '@/stores';
+import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, videoId, videoFps, videoTitle, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions} from '@/stores';
 import {IndentedComment, type UserMenuItem} from "@/types";
 
 import CommentCard from '@/lib/CommentCard.svelte'
@@ -109,7 +109,7 @@ function closeVideo() {
     wsEmit('leave_collab', {});
     $collabId = null;
     $videoId = null;
-    $videoUrl = null;
+    $videoPlaybackUrl = null;
     $videoFps = null;
     $videoTitle = null;
     $allComments = [];
@@ -430,12 +430,13 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             // openVideo
             else if (cmd.openVideo) {
                 try {
-                    const v = cmd.openVideo.video!;
+                    const v: Proto3.Video = cmd.openVideo.video!;
                     if (!v.playbackUrl) throw Error("No playback URL");
                     if (!v.duration) throw Error("No duration");
                     if (!v.title) throw Error("No title");
 
-                    $videoUrl = v.playbackUrl;
+                    $videoPlaybackUrl = v.playbackUrl;
+                    $videoOrigUrl = v.origUrl ?? null;
                     $videoId = v.id;
                     $videoFps = parseFloat(v.duration.fps);
                     if (isNaN($videoFps)) throw Error("Invalid FPS");
@@ -624,7 +625,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
             <div transition:slide class="flex-1 flex flex-col {debugLayout?'border-2 border-purple-600':''}">
                 <div class="flex-1 bg-cyan-900">
                     <VideoPlayer
-                    bind:this={videoPlayer} src={$videoUrl}
+                    bind:this={videoPlayer} src={$videoPlaybackUrl}
                     on:seeked={onVideoSeeked}
                     on:collabReport={onCollabReport}
                     on:commentPinClicked={onCommentPinClicked}

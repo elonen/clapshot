@@ -24,7 +24,8 @@ message Video {
     optional VideoPreviewData preview_data = 6;
     optional VideoProcessingMetadata processing_metadata = 7;
 
-    optional string playback_url = 100;  // e.g. "https://example.com/video.mp4"
+    optional string playback_url = 100;         // e.g. "https://example.com/video.mp4"
+    optional string orig_url = 101;             // URL to download the original video
 }
 
 message VideoDuration {
