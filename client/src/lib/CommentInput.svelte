@@ -43,6 +43,13 @@ function onUndoRedo(is_undo: boolean) {
     }
 }
 
+function onTextChange(e: any) {
+    if (e.target.value.length > 0) {
+        dispatch('button-clicked', {'action': 'text_input'});
+    }
+    return false;
+}
+
 // Picmo emoji picker
 let emojiPicker: any = null;
 function onEmojiPicker(e: any)
@@ -84,6 +91,7 @@ function onEmojiPicker(e: any)
 
         <input
             bind:value={inputText}
+            on:input={onTextChange}
             class="flex-1 p-2 bg-gray-700 rounded-lg" placeholder="Add a comment{timedComment ? ' - at current time' :''}..." />
 
         <button type="button"

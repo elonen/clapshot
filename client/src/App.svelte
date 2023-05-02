@@ -39,31 +39,52 @@ function logAbbrev(...strs: any[]) {
     console.log(...abbreviated);
 }
 
+
 // Messages from CommentInput component
 function onCommentInputButton(e: any) {
+
+    const PLAYBACK_REQ_SOURCE = "comment_input";
+    function resumeVideo() {
+        // Only resume if playback was paused by comment input
+        if (videoPlayer.getPlaybackState().request_source == PLAYBACK_REQ_SOURCE) {
+            videoPlayer.setPlayback(true, PLAYBACK_REQ_SOURCE);
+        }
+    }
+    function pauseVideo() {
+        videoPlayer.setPlayback(false, PLAYBACK_REQ_SOURCE);
+    }
+
     if (e.detail.action == "send")
     {
         if (e.detail.comment_text != "")
         {
             wsEmit('add_comment', {
                 video_id: $videoId,
-                parent_id: null,            // TODO: parent id here
+                parent_id: null,
                 comment: e.detail.comment_text,
                 drawing: videoPlayer.getScreenshot(),
                 timecode: e.detail.is_timed ? videoPlayer.getCurTimecode() : "",
             });
         }
+        resumeVideo();
+    }
+    else if (e.detail.action == "text_input") {
+        pauseVideo();   // auto-pause when typing a comment
     }
     else if (e.detail.action == "color_select") {
+        pauseVideo();
         videoPlayer.onColorSelect(e.detail.color);
     }
     else if (e.detail.action == "draw") {
+        if (e.detail.is_draw_mode) { pauseVideo(); }
         videoPlayer.onToggleDraw(e.detail.is_draw_mode);
     }
     else if (e.detail.action == "undo") {
+        pauseVideo();
         videoPlayer.onDrawUndo();
     }
     else if (e.detail.action == "redo") {
+        pauseVideo();
         videoPlayer.onDrawRedo();
     }
 }

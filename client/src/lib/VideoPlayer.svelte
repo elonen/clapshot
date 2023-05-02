@@ -116,13 +116,38 @@ function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) {
     send_collab_report();
 }
 
-function togglePlay() {
-    if (paused) {
+let playback_request_source: string|undefined = undefined;
+
+/// Start / stop playback
+///
+/// @param play  True to start, false to stop
+/// @param request_source  ID of the source of the request, or undefined
+/// @return  True if the playback state was changed
+export function setPlayback(play: boolean, request_source: string|undefined): boolean {
+    if (play == (!paused))
+        return false;       // "no change"
+
+    if (play) {
         seekSideEffects();
         video_elem.play();
     }
-    else video_elem.pause();
+    else
+        video_elem.pause();
     send_collab_report();
+
+    playback_request_source = request_source;
+    return true;
+}
+
+/// Get state of playback, and the source of the request that caused it
+export function getPlaybackState(): {playing: boolean, request_source: string|undefined} {
+    return {playing: !paused, request_source: playback_request_source};
+}
+
+
+function togglePlay() {
+    let should_play = paused;
+    setPlayback(should_play, "VideoPlayer");
 }
 
 function format_tc(seconds: number) : string {
