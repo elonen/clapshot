@@ -118,6 +118,7 @@ message PageItem {
             repeated string popup_actions = 120;    // References to actions defined in ClientDefineActionsRequest
         }
         repeated Item items = 1;
+        bool allow_reordering = 10;                 // Allow (drag-and-drop & kbd) reordering of items
     }
 
     oneof item {

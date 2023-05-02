@@ -15,10 +15,12 @@ import * as Proto3 from '@clapshot_protobuf/typescript';
 const dispatch = createEventDispatcher();
 
 export let items: VideoListDefItem[] = [];
-let dragging = false;
+export let dragDisabled: boolean = true;
+
+let isDragging = false;
 
 function handleConsider(e: CustomEvent<DndEvent>) {
-    dragging = true;
+    isDragging = true;
     const {items: newItems, info: {trigger, source, id}} = e.detail;
     if (source !== SOURCES.KEYBOARD) {
         if (Object.keys($selectedTiles).length && trigger === TRIGGERS.DRAG_STARTED) {
@@ -37,7 +39,7 @@ function handleConsider(e: CustomEvent<DndEvent>) {
     items = newItems as VideoListDefItem[];
 }
 function handleFinalize(e: CustomEvent<DndEvent>) {
-    dragging = false;
+    isDragging = false;
 
     // Handle multi-selected drop
     let {items: newItems, info: {trigger, source, id}} = e.detail;
@@ -76,7 +78,7 @@ function dispatchOpenItem(id: string) {
 }
 
 function handleMouseOrKeyDown(id: string, e: any) {
-    if (dragging) {
+    if (isDragging) {
         console.log("(dragging => videolist: ignore key/mouse down)");
         return;
     }
@@ -117,7 +119,7 @@ function transformDraggedElement(el: any) {
 
 function handleMouseUp(e: MouseEvent, item: VideoListDefItem) {
     if (e.button > 0) return; // ignore right click
-    if (!dragging && !e.ctrlKey) {
+    if (!isDragging && !e.ctrlKey) {
         $selectedTiles = {};
         $selectedTiles[item.id] = item;
     }
@@ -171,7 +173,8 @@ function isShadowItem(item: any) {
 <div>
     <section
         use:dndzone="{{
-            items, transformDraggedElement,
+            items, dragDisabled,
+            transformDraggedElement,
             centreDraggedOnCursor: true,
             dropTargetClasses: ['activeDropTarget'],
             dropTargetStyle: {},
@@ -217,7 +220,7 @@ function isShadowItem(item: any) {
 
 <svelte:window on:click={(_e) => {
     // Deselect all items if clicked outside of the list
-    if (!dragging) $selectedTiles = {};
+    if (!isDragging) $selectedTiles = {};
 }} />
 
 

@@ -678,6 +678,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
                 <VideoList items={item.folderListing.items.map((it)=>({
                     id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
                     obj: it }))}
+                    dragDisabled={item.folderListing.allowReordering ? false : true}
                     on:open-item={openVideoListItem}
                     on:reorder-items={onReorderItems}
                     on:move-to-folder={onMoveItemsToFolder}
