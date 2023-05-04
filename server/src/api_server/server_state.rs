@@ -7,6 +7,8 @@ use std::sync::atomic::{AtomicBool};
 use tokio::sync::Mutex;
 use anyhow::anyhow;
 
+use base64::{Engine as _, engine::general_purpose as Base64GP};
+
 use super::user_session::OpaqueGuard;
 use super::{WsMsgSender, SenderList, SessionMap, SenderListMap, StringToStringMap, Res, UserSession, SendTo};
 use crate::client_cmd;
@@ -147,8 +149,12 @@ impl ServerState {
     /// Register a new sender (API connection) as a viewer for a video.
     /// One video can have multiple viewers (including the same user, using different connections).
     /// Returns a guard that will remove the sender when dropped.
-    pub fn link_session_to_video(&self, video_id: &str, sender: WsMsgSender) -> OpaqueGuard {
-        self.add_sender_to_maplist(video_id, sender, &self.video_id_to_senders)
+    pub fn link_session_to_video(&self, session_id: &str, video_id: &str) -> Res<()> {
+        let mut map = self.sid_to_session.write();
+        let mut ses = map.get_mut(session_id).ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+        let grd: OpaqueGuard = self.add_sender_to_maplist(video_id, ses.sender.clone(), &self.video_id_to_senders);
+        ses.video_session_guard = Some(grd);
+        Ok(())
     }
 
     /// Remove video id mappings from all collabs that have no more viewers.
@@ -218,5 +224,29 @@ impl ServerState {
             }
         }
         Arc::new(Mutex::new(Guard { map: self.sid_to_session.clone(), sid: sid.to_string() }))
+    }
+
+    /// Reads the drawing data from disk and encodes it into a data URI, updating the comment's drawing field
+    pub async fn fetch_drawing_data_into_comment(&self, c: &mut models::Comment) -> Res<()> {
+        if let Some(drawing) = &mut c.drawing {
+            if drawing != "" {
+                // If drawing is present, read it from disk and encode it into a data URI.
+                if !drawing.starts_with("data:") {
+                    let path = self.videos_dir.join(&c.video_id).join("drawings").join(&drawing);
+                    if path.exists() {
+                        let data = tokio::fs::read(path).await?;
+                        *drawing = format!("data:image/webp;base64,{}", Base64GP::STANDARD_NO_PAD.encode(&data));
+                    } else {
+                        tracing::warn!("Drawing file not found for comment: {}", c.id);
+                        c.comment += " [DRAWING NOT FOUND]";
+                    }
+                } else {
+                    // If drawing is already a data URI, just use it as is.
+                    // This shouldn't happen anymore, but it's here just in case.
+                    tracing::warn!("Comment '{}' has data URI drawing stored in DB. Should be on disk.", c.id);
+                }
+            }
+        };
+        Ok(())
     }
 }

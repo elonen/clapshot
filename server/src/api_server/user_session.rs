@@ -2,7 +2,6 @@ use std::sync::Arc;
 use crate::{database::models::{self, Video, Comment}, grpc::{grpc_client::OrganizerConnection}, client_cmd};
 
 use super::{WsMsgSender, server_state::ServerState, SendTo};
-use base64::{Engine as _, engine::general_purpose as Base64GP};
 use lib_clapshot_grpc::proto;
 use tracing::{debug, error};
 
@@ -89,32 +88,8 @@ pub struct UserSession {
 
 impl UserSession {
 
-    /// Reads the drawing data from disk and encodes it into a data URI, updating the comment's drawing field
-    pub async fn fetch_drawing_data_into_comment(&self, server: &ServerState, c: &mut models::Comment) -> Res<()> {
-        if let Some(drawing) = &mut c.drawing {
-            if drawing != "" {
-                // If drawing is present, read it from disk and encode it into a data URI.
-                if !drawing.starts_with("data:") {
-                    let path = server.videos_dir.join(&c.video_id).join("drawings").join(&drawing);
-                    if path.exists() {
-                        let data = tokio::fs::read(path).await?;
-                        *drawing = format!("data:image/webp;base64,{}", Base64GP::STANDARD_NO_PAD.encode(&data));
-                    } else {
-                        tracing::warn!("Drawing file not found for comment: {}", c.id);
-                        c.comment += " [DRAWING NOT FOUND]";
-                    }
-                } else {
-                    // If drawing is already a data URI, just use it as is.
-                    // This shouldn't happen anymore, but it's here just in case.
-                    tracing::warn!("Comment '{}' has data URI drawing stored in DB. Should be on disk.", c.id);
-                }
-            }
-        };
-        Ok(())
-    }
-
     pub async fn emit_new_comment(&self, server: &ServerState, mut c: models::Comment, send_to: SendTo<'_>) -> Res<()> {
-        self.fetch_drawing_data_into_comment(server, &mut c).await?;
+        server.fetch_drawing_data_into_comment(&mut c).await?;
         let cmd = client_cmd!(AddComments, {comments: vec![c.to_proto3()]});
         server.emit_cmd(cmd, send_to).map(|_| ())
     }
