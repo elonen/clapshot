@@ -106,8 +106,8 @@ async fn handle_ws_session(
         org_session: proto::org::UserSessionData {
             sid: sid.clone(),
             user: Some(proto::UserInfo {
-                username: user_id.clone(),
-                displayname: Some(username.clone()),
+                id: user_id.clone(),
+                name: Some(username.clone()),
             }),
             cookies: Some(proto::Cookies { cookies }),
         }
@@ -119,7 +119,7 @@ async fn handle_ws_session(
     // Let the client know user's id and name
     if let Err(e) = server.emit_cmd(
         client_cmd!(Welcome, {
-            user: Some(proto::UserInfo { username: user_id, displayname: Some(username) }),
+            user: Some(proto::UserInfo { id: user_id, name: Some(username) }),
         }),
         SendTo::MsgSender(&ses.sender)
     ) {

@@ -32,8 +32,8 @@ impl crate::database::models::Video
     {
         Ok(Self {
             id: v.id.clone(),
-            user_id: v.added_by.as_ref().map(|u| u.username.clone()),
-            user_name: v.added_by.as_ref().map(|u| u.displayname.clone()).unwrap_or_default(),
+            user_id: v.added_by.as_ref().map(|u| u.id.clone()),
+            user_name: v.added_by.as_ref().map(|u| u.name.clone()).unwrap_or_default(),
             added_time: v.added_time.as_ref().map(|t| proto3_to_datetime(t)).flatten().ok_or(DBError::Other(anyhow::anyhow!("Bad added_time")))?,
             recompression_done: v.processing_metadata.as_ref().map(|m| m.recompression_done.as_ref().map(|x| proto3_to_datetime(x))).flatten().flatten(),
             thumb_sheet_cols: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.cols as i32)).flatten(),
@@ -59,8 +59,8 @@ impl crate::database::models::Video
         };
         let added_by = match (&self.user_id, &self.user_name) {
             (Some(user_id), user_name) => Some(proto::UserInfo {
-                username: user_id.clone(),
-                displayname: user_name.clone(),
+                id: user_id.clone(),
+                name: user_name.clone(),
             }),
             _ => None,
         };
@@ -114,8 +114,8 @@ impl crate::database::models::VideoInsert
     {
         Ok(Self {
             id: v.id.clone(),
-            user_id: v.added_by.as_ref().map(|u| u.username.clone()),
-            user_name: v.added_by.as_ref().map(|u| u.displayname.clone()).unwrap_or_default(),
+            user_id: v.added_by.as_ref().map(|u| u.id.clone()),
+            user_name: v.added_by.as_ref().map(|u| u.name.clone()).unwrap_or_default(),
             recompression_done: v.processing_metadata.as_ref().map(|m| m.recompression_done.as_ref().map(|x| proto3_to_datetime(x))).flatten().flatten(),
             thumb_sheet_cols: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.cols as i32)).flatten(),
             thumb_sheet_rows: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.rows as i32)).flatten(),
@@ -140,8 +140,8 @@ impl crate::database::models::Comment
         Ok(Self {
             id: v.id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid comment ID")))?,
             video_id: v.video_id.clone(),
-            user_id: user.username.clone(),
-            user_name: user.displayname.clone().unwrap_or(user.username.clone()).clone(),
+            user_id: user.id.clone(),
+            user_name: user.name.clone().unwrap_or(user.id.clone()).clone(),
             comment: v.comment.clone(),
             timecode: v.timecode.clone(),
             parent_id: v.parent_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid parent ID")))?,
@@ -154,8 +154,8 @@ impl crate::database::models::Comment
     pub fn to_proto3(&self) -> proto::Comment
     {
         let user = proto::UserInfo {
-            username: self.user_id.clone(),
-            displayname: Some(self.user_name.clone()),
+            id: self.user_id.clone(),
+            name: Some(self.user_name.clone()),
         };
 
         let created_timestamp = Some(datetime_to_proto3(&self.created));
@@ -185,8 +185,8 @@ impl crate::database::models::CommentInsert
         let user = v.user.as_ref().ok_or(anyhow::anyhow!("Missing user"))?;
         Ok(Self {
             video_id: v.video_id.clone(),
-            user_id: user.username.clone(),
-            user_name: user.displayname.clone().unwrap_or(user.username.clone()).clone(),
+            user_id: user.id.clone(),
+            user_name: user.name.clone().unwrap_or(user.id.clone()).clone(),
             comment: v.comment.clone(),
             timecode: v.timecode.clone(),
             parent_id: v.parent_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid parent ID")))?,

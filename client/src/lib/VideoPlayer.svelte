@@ -402,7 +402,7 @@ function onFrameEdited(e: Event) {
 			{#each commentsWithTc as item}
 				<CommentTimelinePin
 					id={item.id}
-					username={item.user?.displayname || item.user?.username || '?'}
+					username={item.user?.name || item.user?.id || '?'}
 					comment={item.comment}
 					x_loc={tcToDurationFract(item.timecode)}
 					on:click={(_e) => { dispatch('commentPinClicked', {id: item.id});}}

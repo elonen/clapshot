@@ -417,8 +417,8 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     acts.add({mode: 'danger', message: 'No user in welcome message', lifetime: 5});
                     return;
                 }
-                $curUsername = cmd.welcome.user.displayname ?? cmd.welcome.user.username;
-                $curUserId = cmd.welcome.user.username;
+                $curUsername = cmd.welcome.user.name ?? cmd.welcome.user.id;
+                $curUserId = cmd.welcome.user.id;
             }
             // error
             else if (cmd.error) {

@@ -125,8 +125,8 @@ async fn test_api_open_video()
         for vid in &ts.videos {
             let v = open_video(&mut ws, &vid.id).await.video.unwrap();
             assert_eq!(v.id, vid.id);
-            assert_eq!(v.added_by.clone().unwrap().username, vid.user_id.clone().unwrap());
-            assert_eq!(v.added_by.clone().unwrap().displayname.unwrap(), vid.user_name.clone().unwrap());
+            assert_eq!(v.added_by.clone().unwrap().id, vid.user_id.clone().unwrap());
+            assert_eq!(v.added_by.clone().unwrap().name.unwrap(), vid.user_name.clone().unwrap());
             assert_eq!(v.processing_metadata.unwrap().orig_filename, vid.orig_filename.clone().unwrap());
             assert_eq!(v.title.unwrap(), vid.orig_filename.clone().unwrap());
 

@@ -131,7 +131,7 @@ pub async fn org_authz<'a>(
 ) -> Option<bool>
 {
     let user_id = match &session.user {
-        Some(ui) => ui.username.clone(),
+        Some(ui) => ui.id.clone(),
         None => {
             tracing::error!(op=?op, desc, "No user ID in session. Cannot check authz -- denying by default");
             return Some(false);
@@ -209,7 +209,7 @@ pub async fn org_authz_with_default<'a>(
         if default { Ok(()) } else {
             if msg_on_deny {
                 if let Some(ui) = &session.user {
-                    try_send_error(&ui.username, &server, format!("Permission denied: {}", desc), Some(format!("{:?}", &op)), &op).ok();
+                    try_send_error(&ui.id, &server, format!("Permission denied: {}", desc), Some(format!("{:?}", &op)), &op).ok();
                 } else {
                     tracing::error!(desc, "No user ID in session. Couldn't send deny message from org_authz_with_default");
                 }

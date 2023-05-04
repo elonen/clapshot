@@ -49,7 +49,7 @@ pub async fn handle_multipart_upload(
 
             let org_session = proto::org::UserSessionData {
                 sid: "<upload--not-set>".to_string(),
-                user: Some(proto::UserInfo { username: user_id.clone(), displayname: Some(user_name.clone()) }),
+                user: Some(proto::UserInfo { id: user_id.clone(), name: Some(user_name.clone()) }),
                 cookies: Some(proto::Cookies { cookies }) };
 
             match org_authz_with_default(&org_session, "upload video", true, &server, &Some(organizer),

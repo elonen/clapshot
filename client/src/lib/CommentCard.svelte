@@ -74,8 +74,8 @@ function hasChildren(): boolean {
 >
 
     <div class="flex mx-2 pt-3">
-        <div class="flex-none w-9 h-9 block"><Avatar username="{comment.user?.username}"/></div>
-        <h5 class="flex-1 ml-3 text-gray-500 self-end">{comment.user?.displayname}</h5>
+        <div class="flex-none w-9 h-9 block"><Avatar username="{comment.user?.id}"/></div>
+        <h5 class="flex-1 ml-3 text-gray-500 self-end">{comment.user?.name}</h5>
         <span class="flex-none hidden text-xs font-mono">[{comment.id}@{comment.parentId}]</span>
         <span
             class="pl-2 flex-0 text-xs italic whitespace-nowrap text-yellow-700 hover:text-yellow-500 hover:underline cursor-pointer self-end">
@@ -99,7 +99,7 @@ function hasChildren(): boolean {
     {#if showActions}
     <div class="p-2 flex place-content-end" transition:slide="{{ duration: 200 }}">
         <button class="border rounded-lg px-1 placeholder: ml-2 text-sm border-cyan-500 text-cyan-500" on:click={()=>showReply=true}>Reply</button>
-        {#if comment.user?.username == $curUserId || $curUserId == "admin"}
+        {#if comment.user?.id == $curUserId || $curUserId == "admin"}
             <button class="border rounded-lg px-1 ml-2 text-sm border-cyan-600 text-cyan-600" on:click="{()=>{editing=true;}}">Edit</button>
             {#if !hasChildren()}
             <button class="border rounded-lg px-1 ml-2 text-sm border-red-300 text-red-300" on:click={onClickDeleteComment}>Del</button>
