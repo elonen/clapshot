@@ -27,5 +27,6 @@ clean:
 	rm -rf $(DIST_DIR)
 	rm -f src/*.ts
 	rm -rf src/google
+	rm -rf node_modules
 
 .PHONY: build clean
