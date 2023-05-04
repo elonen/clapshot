@@ -1,7 +1,7 @@
 use std::{sync::atomic::Ordering::Relaxed, path::Path};
 use anyhow::Context;
 use tonic::{Request, Response, Status};
-use crate::{api_server::{server_state::ServerState}, database::{DbBasicQuery, DbQueryByUser, DbGraphQuery, DbQueryByVideo}, grpc::{grpc_impl_helpers::{rpc_expect_field, paged_vec}}};
+use crate::{api_server::{server_state::ServerState, SendTo}, database::{DbBasicQuery, DbQueryByUser, DbGraphQuery, DbQueryByVideo}, grpc::{grpc_impl_helpers::{rpc_expect_field, paged_vec}}, client_cmd};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::database::models;
 
@@ -26,14 +26,14 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
 
     async fn client_define_actions(&self, req: Request<org::ClientDefineActionsRequest>) -> RpcResult<proto::Empty>
     {
-        tracing::info!("Got a request: {:?}", req);
-        Err(Status::unimplemented("Not implemented"))
+        let req = req.into_inner();
+        to_rpc_empty(self.server.emit_cmd(client_cmd!(DefineActions, {actions: req.actions}), SendTo::UserSession(&req.sid)))
     }
 
     async fn client_show_page(&self, req: Request<org::ClientShowPageRequest>) -> RpcResult<proto::Empty>
     {
-        tracing::info!("Got a request: {:?}", req);
-        Err(Status::unimplemented("Not implemented"))
+        let req = req.into_inner();
+        to_rpc_empty(self.server.emit_cmd(client_cmd!(ShowPage, {page_items: req.page_items}), SendTo::UserSession(&req.sid)))
     }
 
     /// Send a message to one or more user sessions.
@@ -87,30 +87,21 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             Recipient::CollabSession(csi) => { send_msg(&csi, SendTo::Collab(&csi), false) },
         };
 
-        match res {
-            Ok(_) => Ok(Response::new(proto::Empty {})),
-            Err(e) => Err(Status::internal(e.to_string())),
-        }
+        to_rpc_empty(res)
     }
 
     async fn client_open_video(&self, req: Request<org::ClientOpenVideoRequest>) -> RpcResult<proto::Empty>
     {
-        tracing::info!("Got a request: {:?}", req);
-        Err(Status::unimplemented("Not implemented"))
+        let req = req.into_inner();
+        to_rpc_empty(crate::api_server::ws_handers::send_open_video_cmd(&self.server, &req.sid, &req.id).await)
     }
 
     async fn client_set_cookies(&self, req: Request<org::ClientSetCookiesRequest>) -> RpcResult<proto::Empty>
     {
-        tracing::info!("Got a request: {:?}", req);
-        Err(Status::unimplemented("Not implemented"))
+        let req = req.into_inner();
+        rpc_expect_field(&req.cookies, "filter")?;
+        to_rpc_empty(self.server.emit_cmd(client_cmd!(SetCookies, {cookies: req.cookies, expire_time: req.expire_time}), SendTo::UserSession(&req.sid)))
     }
-
-    async fn client_open_external_url(&self, req: Request<org::ClientOpenExternalUrlRequest>) -> RpcResult<proto::Empty>
-    {
-        tracing::info!("Got a request: {:?}", req);
-        Err(Status::unimplemented("Not implemented"))
-    }
-
 
     // ========================================================================
     // Database functions
@@ -366,6 +357,15 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
     }
 }
 
+
+fn to_rpc_empty<T, E>(res: Result<T, E>) -> RpcResult<proto::Empty>
+    where E: std::fmt::Display,
+{
+    match res {
+        Ok(_) => Ok(Response::new(proto::Empty {})),
+        Err(e) => Err(Status::internal(e.to_string())),
+    }
+}
 
 
 pub async fn run_org_to_srv_grpc_server(bind: GrpcBindAddr, server: ServerState) -> anyhow::Result<()>

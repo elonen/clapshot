@@ -26,7 +26,7 @@ use server_state::ServerState;
 
 pub mod user_session;
 
-mod ws_handers;
+pub mod ws_handers;
 use ws_handers::msg_dispatch;
 
 #[macro_use]
@@ -38,6 +38,7 @@ pub mod tests;
 mod file_upload;
 use file_upload::handle_multipart_upload;
 use crate::api_server::user_session::AuthzTopic;
+use crate::api_server::user_session::org_authz;
 use crate::client_cmd;
 use crate::database::DbBasicQuery;
 use crate::database::{models};
@@ -87,9 +88,11 @@ async fn handle_ws_session(
         sid: String,
         user_id: String,
         username: String,
+        cookies: HashMap<String, String>,
         server: ServerState)
 {
     let (msgq_tx, mut msgq_rx) = tokio::sync::mpsc::unbounded_channel();
+
     let mut ses = UserSession {
         sid: sid.clone(),
         sender: msgq_tx,
@@ -106,7 +109,7 @@ async fn handle_ws_session(
                 username: user_id.clone(),
                 displayname: Some(username.clone()),
             }),
-            cookies: Some(proto::Cookies { cookies: HashMap::new() }),
+            cookies: Some(proto::Cookies { cookies }),
         }
     };
 
@@ -137,7 +140,7 @@ async fn handle_ws_session(
             Ok((c, res)) => {
                 ses.organizer = Some(tokio::sync::Mutex::new(c).into());
                 let op = AuthzTopic::Other(None, proto::org::authz_user_action_request::other_op::Op::Login);
-                if ses.org_authz("login", true, &server, op).await == Some(false) {
+                if org_authz(&ses.org_session, "login", true, &server, &ses.organizer, op).await == Some(false) {
                     tracing::info!("User '{}' not authorized to login. Closing session.", ses.user_id);
                     server.emit_cmd(
                         client_cmd!(Error, {msg: "Login permission denied.".into()}),
@@ -198,7 +201,7 @@ async fn handle_ws_session(
                     Ok(msg) => {
                         if msg.is_text() {
 
-                            fn parse_msg(msg: &Message) -> Res<(String, serde_json::Value)> {
+                            fn parse_msg(msg: &Message) -> Res<(String, serde_json::Value, HashMap<String, String>)> {
                                 let msg_str = msg.to_str().unwrap_or("!!msg was supposed to .is_text()!!");
                                 let json: serde_json::Value = serde_json::from_str(msg_str)?;
                                 let cmd = json["cmd"].as_str().ok_or(anyhow!("Missing cmd"))?.trim().to_string();
@@ -206,15 +209,26 @@ async fn handle_ws_session(
                                 if cmd.len() == 0 || cmd.len() > 64 { bail!("Bad cmd") }
                                 let data = json.get("data").unwrap_or(&serde_json::json!({})).clone();
 
+                                let mut cookies = HashMap::new();
+                                if let Some(cookies_json) = json.get("cookies") {
+                                    if let Some(cookies_json) = cookies_json.as_object() {
+                                        for (k, v) in cookies_json {
+                                            if let Some(v) = v.as_str() {
+                                                cookies.insert(k.clone(), v.to_string());
+                                            }}}}
+
                                 // Check data fields for length. Only "drawing" is allowed to be long.
                                 for (k, v) in data.as_object().unwrap_or(&serde_json::Map::new()) {
                                     if k != "drawing" && v.as_str().map(|s| s.len() > 2048).unwrap_or(false) { bail!("Field too long"); }
                                 }
-                                Ok((cmd, data))
+                                Ok((cmd, data, cookies))
                             }
 
                             let (cmd, data) = match parse_msg(&msg) {
-                                Ok((cmd, data)) => (cmd, data),
+                                Ok((cmd, data, cookies)) => {
+                                    ses.org_session.cookies = Some(lib_clapshot_grpc::proto::Cookies { cookies });
+                                    (cmd, data)
+                                },
                                 Err(e) => {
                                     tracing::warn!(details=%e, "Error parsing JSON message. Closing session.");
                                     #[cfg(not(test))] {
@@ -265,8 +279,8 @@ async fn handle_ws_session(
     }
 }
 
-/// Extract user id and name from HTTP headers (set by nginx)
-fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String)
+/// Extract user id, name and clapshot_cookies from HTTP headers (set by nginx)
+fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String, HashMap<String, String>)
 {
     fn try_get_first_named_hdr<T>(hdrs: &HeaderMap, names: T) -> Option<String>
         where T: IntoIterator<Item=&'static str> {
@@ -288,7 +302,26 @@ fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String)
     let user_name = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Name", "X_Remote_User_Name", "HTTP_X_REMOTE_USER_NAME"])
         .unwrap_or_else(|| user_id.clone());
 
-    (user_id, user_name)
+    let cookies_str = try_get_first_named_hdr(&hdrs, vec!["X-Clapshot-Cookies", "X_Clapshot_Cookies", "HTTP_X_CLAPSHOT_COOKIES"])
+        .unwrap_or_else(|| "{}".into());
+
+    let app_cookies = match cookies_str.parse::<serde_json::Value>() {
+        Ok(c) => {
+            match c.as_object() {
+                Some(c) => c.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                None => {
+                    tracing::error!("'clapshot_cookies' was not a JSON dict, ignoring.");
+                    HashMap::new()
+                }
+            }
+        },
+        Err(e) => {
+            tracing::error!("Error parsing 'clapshot_cookies' JSON: {}", e);
+            HashMap::new()
+        }
+    };
+
+    (user_id, user_name, app_cookies)
 }
 
 /// Handle HTTP requests, read authentication headers and dispatch to WebSocket handler.
@@ -303,6 +336,7 @@ async fn run_api_server_async(
     let session_counter = Arc::new(RwLock::new(0u64));
     let server_state_cln1 = server_state.clone();
     let server_state_cln2 = server_state.clone();
+    let server_state_cln3 = server_state.clone();
 
     // Start gRPC server.
     // At this point, we have already connected to the Organizer in the
@@ -344,6 +378,7 @@ async fn run_api_server_async(
         .and(warp::any().map(move || upload_results_tx.clone()))
         .and(warp::header::<mime::Mime>("content-type"))
         .and(warp::header::headers_cloned())
+        .and(warp::any().map(move || server_state_cln3.clone()))
         .and(warp::body::stream())
         .and_then(handle_multipart_upload);
 
@@ -357,7 +392,7 @@ async fn run_api_server_async(
         .map (move|hdrs: HeaderMap, ws: warp::ws::Ws| {
 
             // Get user ID and username (from reverse proxy)
-            let (user_id, user_name) = parse_auth_headers(&hdrs);
+            let (user_id, user_name, app_cookies) = parse_auth_headers(&hdrs);
 
             // Increment session counter
             let sid = {
@@ -372,7 +407,7 @@ async fn run_api_server_async(
                 // even though we're using async/await
                 tokio::task::spawn_blocking( move || {
                     let _span = tracing::info_span!("ws_session", sid=%sid, user=%user_id).entered();
-                    block_on(handle_ws_session(ws, sid, user_id, user_name, server_state));
+                    block_on(handle_ws_session(ws, sid, user_id, user_name, app_cookies, server_state));
                 }).await.unwrap_or_else(|e| {
                     tracing::error!(details=%e, "Error joining handle_ws_session thread."); });
             })

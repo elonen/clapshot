@@ -1,4 +1,5 @@
 <script lang="ts">
+import LocalStorageCookies from "@/cookies";
 import Dropzone from "svelte-file-dropzone/Dropzone.svelte";
 
 let dragActive: boolean = false;
@@ -63,6 +64,7 @@ function upload() {
         ajax.addEventListener("abort", abortHandler, false);
         ajax.open("POST", postUrl);
         ajax.setRequestHeader("X-FILE-NAME", file.name);
+        ajax.setRequestHeader("X-CLAPSHOT-COOKIES", JSON.stringify(LocalStorageCookies.getAllNonExpired()));
         ajax.send(formdata);
     }
     files.accepted = [];

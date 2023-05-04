@@ -3,6 +3,8 @@ package clapshot.client;
 
 import public "common.proto";
 
+import "google/protobuf/timestamp.proto";
+
 // ----------------------------------------
 // Server <-> client communication messages
 // ----------------------------------------
@@ -40,6 +42,10 @@ message ServerToClientCmd {
         double seek_time_sec = 3;       // From start of video
         optional string drawing = 4;    // data-uri of an image
     }
+    message SetCookies {
+        Cookies cookies = 1;        // Cookies to set. Use empty string to delete a cookie.
+        google.protobuf.Timestamp expire_time = 2;
+    }
 
     oneof cmd {
         Welcome welcome = 10;
@@ -51,5 +57,6 @@ message ServerToClientCmd {
         AddComments add_comments = 70;
         DelComment del_comment = 80;
         CollabEvent collab_event = 90;
+        SetCookies set_cookies = 100;
     }
 }

@@ -15,7 +15,7 @@ pub enum Topic<'a> {
 
 #[macro_export]
 macro_rules! send_user_msg(
-    ($msg_type:expr, $ses:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => {
+    ($msg_type:expr, $user_id:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => {
         let (comment_id, video_id) = match $topic {
             Topic::Video(video_id) => (None, Some(video_id.into())),
             Topic::Comment(comment_id) => (Some(comment_id.into()), None),
@@ -24,34 +24,34 @@ macro_rules! send_user_msg(
         use crate::grpc::db_models::proto_msg_type_to_event_name;
         $server.push_notify_message(&models::MessageInsert {
             event_name: proto_msg_type_to_event_name($msg_type).to_string(),
-            user_id: $ses.user_id.clone(),
+            user_id: $user_id.clone(),
             comment_id,
             seen: false,
             video_id,
             message: $msg.into(),
             details: $details.into()
-        }, crate::api_server::SendTo::UserId(&($ses.user_id)), $persist)?;
+        }, crate::api_server::SendTo::UserId(&$user_id), $persist)?;
     };
-    ($event_name:expr, $ses:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => {
-        send_user_error!($ses, $server, $topic, $msg, String::new(), $persist)
+    ($event_name:expr, $user_id:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => {
+        send_user_error!($user_id, $server, $topic, $msg, String::new(), $persist)
     };
-    ($event_name:expr, $ses:expr, $server:expr, $topic:expr, $msg:expr) => {
-        send_user_error!($ses, $server, $topic, $msg, String::new(), false)
+    ($event_name:expr, $user_id:expr, $server:expr, $topic:expr, $msg:expr) => {
+        send_user_error!($user_id, $server, $topic, $msg, String::new(), false)
     };
 );
 
 #[macro_export]
 macro_rules! send_user_error(
-    ($ses:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => { crate::send_user_msg!(proto::user_message::Type::Error, $ses, $server, $topic, $msg, $details, $persist); };
-    ($ses:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => { send_user_error!($ses, $server, $topic, $msg, String::new(), $persist); };
-    ($ses:expr, $server:expr, $topic:expr, $msg:expr) => { send_user_error!($ses, $server, $topic, $msg, String::new(), false); };
+    ($user_id:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => { crate::send_user_msg!(proto::user_message::Type::Error, $user_id, $server, $topic, $msg, $details, $persist); };
+    ($user_id:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => { send_user_error!($user_id, $server, $topic, $msg, String::new(), $persist); };
+    ($user_id:expr, $server:expr, $topic:expr, $msg:expr) => { send_user_error!($user_id, $server, $topic, $msg, String::new(), false); };
 );
 
 #[macro_export]
 macro_rules! send_user_ok(
-    ($ses:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => { crate::send_user_msg!(proto::user_message::Type::Ok, $ses, $server, $topic, $msg, $details, $persist); };
-    ($ses:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => { send_user_ok!($ses, $server, $topic, $msg, String::new(), $persist); };
-    ($ses:expr, $server:expr, $topic:expr, $msg:expr) => { send_user_ok!($ses, $server, $topic, $msg, String::new(), false); };
+    ($user_id:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => { crate::send_user_msg!(proto::user_message::Type::Ok, $user_id, $server, $topic, $msg, $details, $persist); };
+    ($user_id:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => { send_user_ok!($user_id, $server, $topic, $msg, String::new(), $persist); };
+    ($user_id:expr, $server:expr, $topic:expr, $msg:expr) => { send_user_ok!($user_id, $server, $topic, $msg, String::new(), false); };
 );
 
 #[derive (Debug, Clone)]
@@ -93,110 +93,129 @@ impl UserSession {
         let cmd = client_cmd!(AddComments, {comments: vec![c.to_proto3()]});
         server.emit_cmd(cmd, send_to).map(|_| ())
     }
+}
 
-    fn try_send_error<'a>(&self, server: &ServerState, msg: String, details: Option<String>, op: &AuthzTopic<'a>) -> anyhow::Result<()> {
-        let topic = match op {
-            AuthzTopic::Video(v, _op) => Topic::Video(&v.id),
-            AuthzTopic::Comment(c, _op) => Topic::Comment(c.id),
-            AuthzTopic::Other(_t, _op) => Topic::None,
-        };
-        if let Some(details) = details {
-            send_user_error!(self, server, topic, msg, details, true);
-        } else {
-            send_user_error!(self, server, topic, msg);
-        }
-        Ok(())
+
+fn try_send_error<'a>(user_id: &str, server: &ServerState, msg: String, details: Option<String>, op: &AuthzTopic<'a>) -> anyhow::Result<()> {
+    let topic = match op {
+        AuthzTopic::Video(v, _op) => Topic::Video(&v.id),
+        AuthzTopic::Comment(c, _op) => Topic::Comment(c.id),
+        AuthzTopic::Other(_t, _op) => Topic::None,
+    };
+    if let Some(details) = details {
+        send_user_error!(user_id.to_string(), server, topic, msg, details, true);
+    } else {
+        send_user_error!(user_id.to_string(), server, topic, msg);
     }
+    Ok(())
+}
 
-    /// Check from Organizer if the user is allowed to perform given action.
-    ///
-    /// Some(true) = allowed
-    /// Some(false) = denied
-    /// None = default, as determined by the server - no Organizer or it doesn't support authz
-    ///
-    /// If Organizer is not connected, returns None.
-    /// If check fails and Organizer is connected, logs an error and denies the action.
-    /// If the user is not allowed, an error message is sent to the user if `msg_on_deny` is true.
-    pub async fn org_authz<'a>(
-        &self,
-        desc: &str,
-        msg_on_deny: bool,
-        server: &ServerState,
-        op: AuthzTopic<'a>,
-    ) -> Option<bool> {
-        let org = match &self.organizer {
-            Some(org) => org,
-            None => { return None; }
-        };
-        tracing::debug!(op=?op, user=self.user_id, desc, "Checking authz from Organizer");
 
-        use proto::org::authz_user_action_request as authz_op;
-        let pop = match op {
-            AuthzTopic::Video(v, op) => authz_op::Op::VideoOp(
-                authz_op::VideoOp {
-                    op: op.into(),
-                    video: Some(v.to_proto3(&server.url_base)) }),
-            AuthzTopic::Comment(c, op) => authz_op::Op::CommentOp(
-                authz_op::CommentOp {
-                    op: op.into(),
-                    comment: Some(c.to_proto3()) }),
-            AuthzTopic::Other(subj, op) => authz_op::Op::OtherOp(
-                authz_op::OtherOp {
-                    op: op.into(),
-                    subject: subj.map(|s| s.into()) }),
-        };
-        let req = proto::org::AuthzUserActionRequest { ses: Some(self.org_session.clone()), op: Some(pop) };
-        let res = org.lock().await.authz_user_action(req).await;
-        match res {
-            Err(e) => {
-                if e.code() == tonic::Code::Unimplemented {
-                    tracing::debug!(desc, user=self.user_id, "Organizer doesn't support authz");
-                    None
-                } else {
-                    error!(desc, user=self.user_id, err=?e, "Error while authorizing user action");
-                    self.try_send_error(&server, format!("Internal error in authz: {}", desc), None, &op).ok();
-                    Some(false)
-                }
-            },
-            Ok(res) => {
-                match res.get_ref().is_authorized {
-                    Some(false) => {
-                        let msg = res.get_ref().message.clone().map(|s| s).unwrap_or_else(|| "Permission denied".to_string());
-                        let details = res.get_ref().details.clone();
-                        if msg_on_deny { self.try_send_error(&server, msg, details, &op).ok(); }
-                        debug!(desc, user=self.user_id, "Organizer said: Permission denied");
-                        Some(false)
-                    },
-                    Some(true) => {
-                        debug!(desc, user=self.user_id, "Organizer said: Authorized OK");
-                        Some(true)
-                    },
-                    None => {
-                        debug!(desc, user=self.user_id, "Organizer said: I don't authz, use defaults");
-                        None
-                    }
-                }
+
+/// Check from Organizer if the user is allowed to perform given action.
+///
+/// Some(true) = allowed
+/// Some(false) = denied
+/// None = default, as determined by the server - no Organizer or it doesn't support authz
+///
+/// If Organizer is not connected, returns None.
+/// If check fails and Organizer is connected, logs an error and denies the action.
+/// If the user is not allowed, an error message is sent to the user if `msg_on_deny` is true.
+pub async fn org_authz<'a>(
+    session: &proto::org::UserSessionData,
+    desc: &str,
+    msg_on_deny: bool,
+    server: &ServerState,
+    organizer: &Option<Arc<tokio::sync::Mutex<OrganizerConnection>>>,
+    op: AuthzTopic<'a>,
+) -> Option<bool>
+{
+    let user_id = match &session.user {
+        Some(ui) => ui.username.clone(),
+        None => {
+            tracing::error!(op=?op, desc, "No user ID in session. Cannot check authz -- denying by default");
+            return Some(false);
+        }
+    };
+
+    let org = match &organizer {
+        Some(org) => org,
+        None => { return None; }
+    };
+    tracing::debug!(op=?op, user=user_id, desc, "Checking authz from Organizer");
+
+    use proto::org::authz_user_action_request as authz_op;
+    let pop = match op {
+        AuthzTopic::Video(v, op) => authz_op::Op::VideoOp(
+            authz_op::VideoOp {
+                op: op.into(),
+                video: Some(v.to_proto3(&server.url_base)) }),
+        AuthzTopic::Comment(c, op) => authz_op::Op::CommentOp(
+            authz_op::CommentOp {
+                op: op.into(),
+                comment: Some(c.to_proto3()) }),
+        AuthzTopic::Other(subj, op) => authz_op::Op::OtherOp(
+            authz_op::OtherOp {
+                op: op.into(),
+                subject: subj.map(|s| s.into()) }),
+    };
+    let req = proto::org::AuthzUserActionRequest { ses: Some(session.clone()), op: Some(pop) };
+    let res = org.lock().await.authz_user_action(req).await;
+    match res {
+        Err(e) => {
+            if e.code() == tonic::Code::Unimplemented {
+                tracing::debug!(desc, user=user_id, "Organizer doesn't support authz");
+                None
+            } else {
+                error!(desc, user=&user_id, err=?e, "Error while authorizing user action");
+                try_send_error(&user_id, &server, format!("Internal error in authz: {}", desc), None, &op).ok();
+                Some(false)
             }
-        }
-    }
-
-    pub async fn org_authz_with_default<'a>(
-        &self,
-        desc: &str,
-        msg_on_deny: bool,
-        server: &ServerState,
-        default: bool,
-        op: AuthzTopic<'a>,
-    ) -> Result<(), AuthzError> {
-        if let Some(res) = self.org_authz(desc, msg_on_deny, server, op.clone()).await {
-            if res { Ok(()) } else { Err(AuthzError::Denied) }
-        } else {
-            if default { Ok(()) } else {
-                if msg_on_deny {
-                    self.try_send_error(&server, format!("Permission denied: {}", desc), Some(format!("{:?}", &op)), &op).ok();
-                };
-                Err(AuthzError::Denied)
+        },
+        Ok(res) => {
+            match res.get_ref().is_authorized {
+                Some(false) => {
+                    let msg = res.get_ref().message.clone().map(|s| s).unwrap_or_else(|| "Permission denied".to_string());
+                    let details = res.get_ref().details.clone();
+                    if msg_on_deny { try_send_error(&user_id, &server, msg, details, &op).ok(); }
+                    debug!(desc, user=user_id, "Organizer: Permission denied");
+                    Some(false)
+                },
+                Some(true) => {
+                    debug!(desc, user=user_id, "Organizer: Authorized OK");
+                    Some(true)
+                },
+                None => {
+                    debug!(desc, user=user_id, "Organizer: don't care, use defaults");
+                    None
+                }
             }
         }
     }
 }
+
+pub async fn org_authz_with_default<'a>(
+    session: &proto::org::UserSessionData,
+    desc: &str,
+    msg_on_deny: bool,
+    server: &ServerState,
+    organizer: &Option<Arc<tokio::sync::Mutex<OrganizerConnection>>>,
+    default: bool,
+    op: AuthzTopic<'a>,
+) -> Result<(), AuthzError> {
+    if let Some(res) = org_authz(session, desc, msg_on_deny, server, organizer, op.clone()).await {
+        if res { Ok(()) } else { Err(AuthzError::Denied) }
+    } else {
+        if default { Ok(()) } else {
+            if msg_on_deny {
+                if let Some(ui) = &session.user {
+                    try_send_error(&ui.username, &server, format!("Permission denied: {}", desc), Some(format!("{:?}", &op)), &op).ok();
+                } else {
+                    tracing::error!(desc, "No user ID in session. Couldn't send deny message from org_authz_with_default");
+                }
+            };
+            Err(AuthzError::Denied)
+        }
+    }
+}
+

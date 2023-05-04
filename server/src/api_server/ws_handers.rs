@@ -20,7 +20,7 @@ use data_url::{DataUrl, mime};
 use sha2::{Sha256, Digest};
 use hex;
 
-use super::user_session::{self, AuthzTopic};
+use super::user_session::{self, AuthzTopic, org_authz_with_default};
 
 use super::UserSession;
 
@@ -43,7 +43,7 @@ async fn get_video_or_send_error(video_id: Option<&str>, ses: &mut UserSession, 
 
     match models::Video::get(&server.db, &video_id.into()) {
         Err(DBError::NotFound()) => {
-            send_user_error!(ses, server, Topic::Video(video_id), "No such video.");
+            send_user_error!(&ses.user_id, server, Topic::Video(video_id), "No such video.");
             Ok(None)
         }
         Err(e) => { bail!(e); }
@@ -57,8 +57,8 @@ async fn get_video_or_send_error(video_id: Option<&str>, ses: &mut UserSession, 
 
 /// Send user a list of all videos they have.
 pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
-    ses.org_authz_with_default("list videos", true, server,
-        true, AuthzTopic::Other(None, authz_req::other_op::Op::ViewHome)).await?;
+    org_authz_with_default(&ses.org_session, "list videos", true, server,
+        &ses.organizer, true, AuthzTopic::Other(None, authz_req::other_op::Op::ViewHome)).await?;
 
     let videos = models::Video::get_by_user(&server.db, &ses.user_id, DBPaging::default())?;
 
@@ -82,20 +82,18 @@ pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession,
 /// Register the session as a viewer of the video (video_session_guard).
 pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     if let Some(v) = get_video_or_send_error(data["id"].as_str(), ses, server).await? {
-        ses.org_authz_with_default(
-            "open video", true, server,
+        org_authz_with_default(&ses.org_session,
+            "open video", true, server, &ses.organizer,
             true, AuthzTopic::Video(&v, authz_req::video_op::Op::View)).await?;
-        let vid = v.id.clone();
-        send_open_video_cmd(server, &ses.sid, &vid, v).await?;
-        ses.cur_video_id = Some(vid);
+        send_open_video_cmd(server, &ses.sid, &v.id).await?;
+        ses.cur_video_id = Some(v.id);
     }
     Ok(())
 }
 
-async fn send_open_video_cmd(server: &ServerState, session_id: &str, video_id: &str, v: models::Video) -> Res<()> {
+pub async fn send_open_video_cmd(server: &ServerState, session_id: &str, video_id: &str) -> Res<()> {
     server.link_session_to_video(session_id, video_id)?;
-
-    let v = v.to_proto3(&server.url_base);
+    let v = models::Video::get(&server.db, &video_id.into())?.to_proto3(&server.url_base);
     if v.playback_url.is_none() {
         return Err(anyhow!("No video file"));
     }
@@ -117,7 +115,7 @@ async fn send_open_video_cmd(server: &ServerState, session_id: &str, video_id: &
 pub async fn msg_del_video(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     if let Some(v) = get_video_or_send_error(data["id"].as_str(), ses, server).await? {
         let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
-        ses.org_authz_with_default("delete video", true, server,
+        org_authz_with_default(&ses.org_session, "delete video", true, server, &ses.organizer,
             default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Delete)).await?;
 
         models::Video::delete(&server.db, &v.id)?;
@@ -161,7 +159,7 @@ pub async fn msg_del_video(data: &serde_json::Value, ses: &mut UserSession, serv
             cleanup_errors = true;
         }
 
-        send_user_ok!(ses, &server, Topic::Video(&v.id),
+        send_user_ok!(&ses.user_id, &server, Topic::Video(&v.id),
             if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
             details, true);
     }
@@ -173,20 +171,20 @@ pub async fn msg_rename_video(data: &serde_json::Value, ses: &mut UserSession, s
 
     if let Some(v) = get_video_or_send_error(data["id"].as_str(), ses, server).await? {
         let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
-        ses.org_authz_with_default("rename video", true, server,
+        org_authz_with_default(&ses.org_session, "rename video", true, server, &ses.organizer,
             default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Rename)).await?;
 
         let new_name = new_name.trim();
         if new_name.is_empty() || !new_name.chars().any(|c| c.is_alphanumeric()) {
-            send_user_error!(ses, server, Topic::Video(&v.id), "Invalid video name (must have letters/numbers)");
+            send_user_error!(&ses.user_id, server, Topic::Video(&v.id), "Invalid video name (must have letters/numbers)");
             return Ok(());
         }
         if new_name.len() > 160 {
-            send_user_error!(ses, server, Topic::Video(&v.id), "Video name too long (max 160)");
+            send_user_error!(&ses.user_id, server, Topic::Video(&v.id), "Video name too long (max 160)");
             return Ok(());
         }
         models::Video::rename(&server.db, &v.id, new_name)?;
-        send_user_ok!(ses, server, Topic::Video(&v.id), "Video renamed.",
+        send_user_ok!(&ses.user_id, server, Topic::Video(&v.id), "Video renamed.",
             format!("New name: '{}'", new_name), true);
     }
     Ok(())
@@ -197,7 +195,7 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, se
     let video_id = match get_video_or_send_error(data["video_id"].as_str(), ses, server).await? {
         Some(v) => {
             let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
-            ses.org_authz_with_default("comment video", true, server,
+            org_authz_with_default(&ses.org_session, "comment video", true, server, &ses.organizer,
                 default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Comment)).await?;
             v.id
         },
@@ -269,7 +267,7 @@ pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut UserSession, s
     match models::Comment::get(&server.db, &id) {
         Ok(old) => {
             let default_perm = ses.user_id == old.user_id || ses.user_id == "admin";
-            ses.org_authz_with_default("edit comment", true, server,
+            org_authz_with_default(&ses.org_session, "edit comment", true, server, &ses.organizer,
                 default_perm, AuthzTopic::Comment(&old, authz_req::comment_op::Op::Edit)).await?;
 
             let vid = &old.video_id;
@@ -283,7 +281,7 @@ pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut UserSession, s
             ses.emit_new_comment(server, c, super::SendTo::VideoId(&vid)).await?;
         }
         Err(DBError::NotFound()) => {
-            send_user_error!(ses, server, Topic::None, "Failed to edit comment.", "No such comment. Cannot edit.", true);
+            send_user_error!(&ses.user_id, server, Topic::None, "Failed to edit comment.", "No such comment. Cannot edit.", true);
         }
         Err(e) => { bail!(e); }
     }
@@ -296,17 +294,17 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
     match models::Comment::get(&server.db, &id) {
         Ok(cmt) => {
             let default_perm = ses.user_id == cmt.user_id || ses.user_id == "admin";
-            ses.org_authz_with_default("delete comment", true, server,
+            org_authz_with_default(&ses.org_session, "delete comment", true, server, &ses.organizer,
                 default_perm, AuthzTopic::Comment(&cmt, authz_req::comment_op::Op::Delete)).await?;
 
             let vid = cmt.video_id;
             if ses.user_id != cmt.user_id && ses.user_id != "admin" {
-                send_user_error!(ses, server, Topic::Video(&vid), "Failed to delete comment.", "You can only delete your own comments", true);
+                send_user_error!(&ses.user_id, server, Topic::Video(&vid), "Failed to delete comment.", "You can only delete your own comments", true);
                 return Ok(());
             }
             let all_comm = models::Comment::get_by_video(&server.db, &vid, DBPaging::default())?;
             if all_comm.iter().any(|c| c.parent_id.map(|i| i.to_string()) == Some(id.to_string())) {
-                send_user_error!(ses, server, Topic::Video(&vid), "Failed to delete comment.", "Comment has replies. Cannot delete.", true);
+                send_user_error!(&ses.user_id, server, Topic::Video(&vid), "Failed to delete comment.", "Comment has replies. Cannot delete.", true);
                 return Ok(());
             }
             models::Comment::delete(&server.db, &id)?;
@@ -315,7 +313,7 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
                 super::SendTo::VideoId(&vid))?;
         }
         Err(DBError::NotFound()) => {
-            send_user_error!(ses, server, Topic::None, "Failed to delete comment.", "No such comment. Cannot delete.", true);
+            send_user_error!(&ses.user_id, server, Topic::None, "Failed to delete comment.", "No such comment. Cannot delete.", true);
         }
         Err(e) => { bail!(e); }
     }
@@ -346,7 +344,7 @@ pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut UserSession, se
     ses.cur_collab_id = None;
 
     if let Some(v) = get_video_or_send_error(data["video_id"].as_str(), ses, server).await? {
-        ses.org_authz_with_default("join collab", true, server,
+        org_authz_with_default(&ses.org_session, "join collab", true, server, &ses.organizer,
             true, AuthzTopic::Other(Some(collab_id.clone()), authz_req::other_op::Op::JoinCollabSession)).await?;
 
         match server.link_session_to_collab(collab_id, &v.id, ses.sender.clone()) {
@@ -365,7 +363,7 @@ pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut UserSession, se
                 )?;
             }
             Err(e) => {
-                send_user_error!(ses, server, Topic::Video(&v.id), format!("Failed to join collab session: {}", e));
+                send_user_error!(&ses.user_id, server, Topic::Video(&v.id), format!("Failed to join collab session: {}", e));
             }
         }
     }
@@ -412,7 +410,7 @@ pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut UserSession, 
         };
         server.emit_cmd(ce, super::SendTo::Collab(collab_id)).map(|_| ())
     } else {
-        send_user_error!(ses, server, Topic::None, "Report rejected: no active collab session.");
+        send_user_error!(&ses.user_id, server, Topic::None, "Report rejected: no active collab session.");
         return Ok(());
     }
 }
@@ -442,7 +440,7 @@ pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut UserSes
             Ok(())
         },
         _ => {
-            send_user_error!(ses, server, Topic::None, format!("Unknown command: '{}'", cmd));
+            send_user_error!(ses.user_id, server, Topic::None, format!("Unknown command: '{}'", cmd));
             Ok(())
         }
     };
@@ -451,7 +449,7 @@ pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut UserSes
         // Ignore authz errors, they are already logged
         if let None = e.downcast_ref::<user_session::AuthzError>() {
             tracing::warn!("[{}] '{cmd}' failed: {}", ses.sid, e);
-            send_user_error!(ses, server, Topic::None, format!("{cmd} failed: {e}"));
+            send_user_error!(&ses.user_id, server, Topic::None, format!("{cmd} failed: {e}"));
         }
     }
     Ok(true)

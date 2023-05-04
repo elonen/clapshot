@@ -15,7 +15,7 @@ import FileUpload from '@/lib/FileUpload.svelte';
 import VideoPlayer from '@/lib/VideoPlayer.svelte';
 import type {VideoListDefItem} from "@/lib/video_list/types";
 import VideoList from "@/lib/video_list/VideoList.svelte";
-
+import LocalStorageCookies from './cookies';
 
 let videoPlayer: VideoPlayer;
 let commentInput: CommentInput;
@@ -267,7 +267,8 @@ let sendQueue: any[] = [];
 // Send message to server. If not connected, queue it.
 function wsEmit(event_name: string, data: any)
 {
-    let raw_msg = JSON.stringify({cmd: event_name, data: data});
+    let cookies = LocalStorageCookies.getAllNonExpired();
+    let raw_msg = JSON.stringify({cmd: event_name, data: data, cookies: cookies});
     if (isConnected()) {
         logAbbrev("ws_emit(): Sending: " + raw_msg);
         wsSocket.send(raw_msg);
@@ -296,6 +297,14 @@ let reconnectDelay = 100;  // for exponential backoff
 
 function connectWebsocket(wsUrl: string) {
     const auth_url = wsUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/api\/.*$/, "/api/health");
+    let req_init: RequestInit = {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Clapshot-Cookies': JSON.stringify(LocalStorageCookies.getAllNonExpired()),
+        },
+    };
 
     function scheduleReconnect() {
         reconnectDelay = Math.round(Math.min(reconnectDelay * 1.5, 5000));
@@ -305,7 +314,7 @@ function connectWebsocket(wsUrl: string) {
     }
 
     try {
-        return fetch(auth_url)
+        return fetch(auth_url, req_init)
         .then(response => {
             if (response.ok) {
                 console.log("Authentication check OK. Connecting to WS API");
@@ -532,6 +541,18 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 if (lastCollabControllingUser != evt.fromUser) {
                     lastCollabControllingUser = evt.fromUser;
                     acts.add({mode: 'info', message: lastCollabControllingUser + " is controlling", lifetime: 5});
+                }
+            }
+            // setCookies
+            else if (cmd.setCookies) {
+                let cookie_dict = cmd.setCookies.cookies?.cookies;
+                if (!cookie_dict) {
+                    console.error("[SERVER] setCookies command with no cookies. Raw JSON:", msgJson);
+                } else {
+                    let expireTimestamp = cmd.setCookies.expireTime?.getTime() ?? null;
+                    for (let key in cookie_dict) {
+                        LocalStorageCookies.set(key, cookie_dict[key], expireTimestamp);
+                    }
                 }
             }
             else {

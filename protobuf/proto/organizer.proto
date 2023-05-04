@@ -4,6 +4,8 @@ package clapshot.organizer;
 import public "common.proto";
 import public "database.proto";
 
+import "google/protobuf/timestamp.proto";
+
 
 // This defines the gRPC API for Clapshot Organizer services.
 //
@@ -36,7 +38,6 @@ service OrganizerOutbound {
     rpc client_show_user_message (ClientShowUserMessageRequest) returns (Empty);
     rpc client_open_video (ClientOpenVideoRequest) returns (Empty);
     rpc client_set_cookies (ClientSetCookiesRequest) returns (Empty);
-    rpc client_open_external_url (ClientOpenExternalURLRequest) returns (Empty);
 
     // Database calls
 
@@ -188,9 +189,8 @@ message AuthzResult {
 // ---------------------------------------------------------
 
 message ClientShowPageRequest {
-    repeated PageItem items = 1;
+    repeated PageItem page_items = 1;
     string sid = 2;
-    string path = 3;    // e.g. "proj2/accepted/", used on client for breadcrumbs / hash navigation
 }
 
 message ClientShowUserMessageRequest {
@@ -216,14 +216,9 @@ message ClientOpenVideoRequest {
 }
 
 message ClientSetCookiesRequest {
-    Cookies replace = 1;
-    repeated string delete = 2;
+    Cookies cookies = 1;
+    optional google.protobuf.Timestamp expire_time = 2;
     string sid = 3;
-}
-
-message ClientOpenExternalURLRequest {
-    string url = 1;
-    string sid = 2;
 }
 
 message DeleteVideoRequest {
