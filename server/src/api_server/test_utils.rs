@@ -187,7 +187,7 @@ macro_rules! api_test {
 
             let bind_addr: std::net::IpAddr = "127.0.0.1".parse().unwrap();
             let $state = ApiTestState { db, user_msg_tx, upload_res_rx, videos_dir, upload_dir, terminate_flag, videos, comments, nodes, edges, url_base, port, ws_url };
-            let api = async move { run_api_server_async(bind_addr, server_state, user_msg_rx, upload_res_tx, None, port).await; Ok(()) };
+            let api = async move { run_api_server_async(bind_addr, vec![], server_state, user_msg_rx, upload_res_tx, None, port).await; Ok(()) };
 
             let tst = tokio::spawn(async move {
                 tracing::info!("TEST: Client connecting to {}", $state.ws_url);

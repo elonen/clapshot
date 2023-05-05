@@ -327,6 +327,7 @@ fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String, HashMap<String, Stri
 /// Handle HTTP requests, read authentication headers and dispatch to WebSocket handler.
 async fn run_api_server_async(
     bind_addr: std::net::IpAddr,
+    cors_origins: Vec<String>,
     server_state: ServerState,
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
     upload_results_tx: crossbeam_channel::Sender<IncomingFile>,
@@ -337,6 +338,8 @@ async fn run_api_server_async(
     let server_state_cln1 = server_state.clone();
     let server_state_cln2 = server_state.clone();
     let server_state_cln3 = server_state.clone();
+
+    let url_base = server_state.url_base.clone();
 
     // Start gRPC server.
     // At this point, we have already connected to the Organizer in the
@@ -413,14 +416,30 @@ async fn run_api_server_async(
             })
         });
 
-    let routes = rt_health.or(rt_api_ws).or(rt_upload).or(rt_videos);
+    let routes = rt_health.or(rt_api_ws).or(rt_upload).or(rt_videos)
+        .with(warp::log("api_server"));
 
-    let routes = routes.with(warp::log("api_server"))
-        .with(warp::cors()
-        .allow_any_origin()
-        .allow_methods(vec!["GET", "POST"])
-        .allow_headers(vec!["x-file-name"]));
 
+    let mut cors_origins: Vec<&str> = cors_origins.iter()
+        .map(|s| s.as_str())
+        .filter(|s| !s.is_empty())
+        .collect();
+    tracing::info!("Allowed CORS origins: {:?}", cors_origins);
+
+    let cors_methods = ["GET", "POST", "HEAD", "OPTIONS"];
+    let cors_headers = ["x-file-name", "x-clapshot-cookies", "content-type", "upgrade", "sec-websocket-protocol", "sec-websocket-version"];
+
+    let routes = if cors_origins.contains(&"*") {
+        tracing::warn!("CORS origin '*' is insecure, don't use in production!");
+        routes.with(warp::cors().allow_methods(cors_methods).allow_headers(cors_headers)
+            .allow_any_origin()).boxed()
+    } else {
+        if cors_origins.is_empty() {
+            cors_origins.push(url_base.as_str());
+        }
+        routes.with(warp::cors().allow_methods(cors_methods).allow_headers(cors_headers)
+            .allow_origins(cors_origins)).boxed()
+    };
 
     debug!("Binding Websocket API to {}:{}", bind_addr, port);
     let (_addr, server) = warp::serve(routes)
@@ -506,6 +525,7 @@ pub async fn run_forever(
     upload_res_tx: crossbeam_channel::Sender<IncomingFile>,
     bind_addr: String,
     url_base: String,
+    cors_origins: Vec<String>,
     state: ServerState,
     port: u16)
 {
@@ -520,5 +540,5 @@ pub async fn run_forever(
     };
 
     let _span = tracing::info_span!("API").entered();
-    run_api_server_async(bind_addr, state, user_msg_rx, upload_res_tx, grpc_server_bind, port).await;
+    run_api_server_async(bind_addr, cors_origins, state, user_msg_rx, upload_res_tx, grpc_server_bind, port).await;
 }

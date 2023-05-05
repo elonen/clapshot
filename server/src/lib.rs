@@ -16,6 +16,7 @@ pub fn run_clapshot(
     data_dir: std::path::PathBuf,
     migrate: bool,
     url_base: String,
+    cors_origins: Vec<String>,
     bind_api: String,
     port: u16,
     organizer_uri: Option<OrganizerURI>,
@@ -107,6 +108,7 @@ pub fn run_clapshot(
                     upload_tx,
                     bind_api.to_string(),
                     ub,
+                    cors_origins,
                     server,
                     port)
             })

@@ -39,6 +39,9 @@ Options:
  -b --bitrate <vbr>   Target (max) bitrate for transcoding, in Mbps [default: 2.5]
  --migrate            Migrate database to latest version. Make a backup first.
 
+ --cors <origins>     Allowed CORS origins, separated by commas.
+                      Defaults to allowing url-base only.
+
  -d --debug           Enable debug logging
  -h --help            Show this screen
  -v --version         Show version and exit
@@ -82,6 +85,7 @@ struct Args {
     flag_org_out_tcp: Option<String>,
     flag_url_base: String,
     flag_data_dir: PathBuf,
+    flag_cors: Option<String>,
     flag_debug: bool,
     flag_version: bool,
 }
@@ -120,11 +124,16 @@ fn main() -> anyhow::Result<()>
         &args.flag_org_cmd,
         &args.flag_data_dir)?;
 
+    let cors_origins: Vec<String> = args.flag_cors
+        .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
+        .unwrap_or_default();
+
     // Run the server (blocking)
     if let Err(e) =  run_clapshot(
         args.flag_data_dir.to_path_buf(),
         args.flag_migrate,
         url_base,
+        cors_origins,
         args.flag_host,
         args.flag_port,
         org_uri,
