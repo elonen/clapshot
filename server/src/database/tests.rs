@@ -547,3 +547,33 @@ fn test_user_messages() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+#[traced_test]
+fn test_transaction_rollback() -> anyhow::Result<()> {
+    let (db, _data_dir, vid, _com, _nodes, _edges) = make_test_db();
+
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len());
+    begin_transaction(&db.conn()?)?;
+    Video::delete(&db, &vid[0].id)?;
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len()-1);
+    rollback_transaction(&db.conn()?)?;
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len());
+
+    Ok(())
+}
+
+#[test]
+#[traced_test]
+fn test_transaction_commit() -> anyhow::Result<()> {
+    let (db, _data_dir, vid, _com, _nodes, _edges) = make_test_db();
+
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len());
+    begin_transaction(&db.conn()?)?;
+    Video::delete(&db, &vid[0].id)?;
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len()-1);
+    commit_transaction(&db.conn()?)?;
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len()-1);
+
+    Ok(())
+}

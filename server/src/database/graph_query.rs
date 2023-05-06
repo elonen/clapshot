@@ -30,7 +30,7 @@ macro_rules! implement_graph_query_traits {
                                 }.order(sort_order.asc()).then_order_by(id.asc());
 
                                 // We shouldn't get NULLs because of the filter above, but just in case...
-                                let res = q.load::<ResultType>(&mut $db.conn()?)?;
+                                let res = q.load::<ResultType>(&mut *$db.conn()?.lock())?;
                                 let res = res.into_iter().filter_map(|(e, o)| {
                                     if let Some(o) = o {
                                         Some(EdgeAndObj { edge: e, obj: o })
@@ -76,7 +76,7 @@ macro_rules! implement_graph_query_traits {
                                 }.order(sort_order.asc()).then_order_by(id.asc());
 
                                 // We shouldn't get NULLs because of the filter above, but just in case...
-                                let res = q.load::<ResultType>(&mut $db.conn()?)?;
+                                let res = q.load::<ResultType>(&mut *$db.conn()?.lock())?;
                                 let res = res.into_iter().filter_map(|(e, o)| {
                                     if let Some(o) = o {
                                         Some(EdgeAndObj { edge: e, obj: o })
@@ -111,13 +111,13 @@ macro_rules! implement_graph_query_traits {
                             .and(edge_type.eq(et))))
                         .filter($edge_from_col.is_null())
                         .select($table::all_columns())
-                        .load::<$model>(&mut db.conn()?)?
+                        .load::<$model>(&mut *db.conn()?.lock())?
                     } else {
                         $table.left_join(prop_edges.on($edge_from_col
                             .eq(self_id.nullable()))).into_boxed()
                         .filter($edge_from_col.is_null())
                         .select($table::all_columns())
-                        .load::<$model>(&mut db.conn()?)?
+                        .load::<$model>(&mut *db.conn()?.lock())?
                     })
                 }
             }
@@ -136,13 +136,13 @@ macro_rules! implement_graph_query_traits {
                             .and(edge_type.eq(et))))
                         .filter($edge_to_col.is_null())
                         .select($table::all_columns())
-                        .load::<$model>(&mut db.conn()?)?
+                        .load::<$model>(&mut *db.conn()?.lock())?
                     } else {
                         $table.left_join(prop_edges.on($edge_to_col
                             .eq(self_id.nullable()))).into_boxed()
                         .filter($edge_to_col.is_null())
                         .select($table::all_columns())
-                        .load::<$model>(&mut db.conn()?)?
+                        .load::<$model>(&mut *db.conn()?.lock())?
                     })
                 }
             }

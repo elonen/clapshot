@@ -1,7 +1,7 @@
 use diesel::prelude::*;
 use chrono::offset::Local;
 use crate::database::{models, schema, DB, DBError, DBResult, DBPaging, EmptyDBResult, to_db_res};
-use super::GraphObjId;
+use super::{GraphObjId};
 
 // ------------------- Model-specific custom operations -------------------
 
@@ -18,7 +18,7 @@ impl models::Video {
         use schema::videos::dsl::*;
         diesel::update(videos.filter(id.eq(vid)))
             .set(recompression_done.eq(Local::now().naive_local()))
-            .execute(&mut db.conn()?)?;
+            .execute(&mut *db.conn()?.lock())?;
         Ok(())
     }
 
@@ -34,7 +34,7 @@ impl models::Video {
         use schema::videos::dsl::*;
         diesel::update(videos.filter(id.eq(vid)))
             .set((thumb_sheet_cols.eq(cols as i32), thumb_sheet_rows.eq(rows as i32)))
-            .execute(&mut db.conn()?)?;
+            .execute(&mut *db.conn()?.lock())?;
         Ok(())
     }
 
@@ -54,7 +54,7 @@ impl models::Video {
         use schema::videos::dsl::*;
         diesel::update(videos.filter(id.eq(vid)))
             .set(title.eq(new_name))
-            .execute(&mut db.conn()?)?;
+            .execute(&mut *db.conn()?.lock())?;
         Ok(())
     }
 
@@ -69,7 +69,7 @@ impl models::Video {
         to_db_res(videos.filter(
                 thumb_sheet_cols.is_null().or(
                 thumb_sheet_rows.is_null()))
-            .order_by(added_time.desc()).load::<Video>(&mut db.conn()?))
+            .order_by(added_time.desc()).load::<Video>(&mut *db.conn()?.lock()))
     }
 }
 
@@ -88,7 +88,7 @@ impl models::Comment {
     {
         use schema::comments::dsl::*;
         let res = diesel::update(comments.filter(id.eq(comment_id)))
-            .set((comment.eq(new_comment), edited.eq(diesel::dsl::now))).execute(&mut db.conn()?)?;
+            .set((comment.eq(new_comment), edited.eq(diesel::dsl::now))).execute(&mut *db.conn()?.lock())?;
         Ok(res > 0)
     }
 }
@@ -109,7 +109,7 @@ impl models::Message {
     {
         use schema::messages::dsl::*;
         let res = diesel::update(messages.filter(id.eq(msg_id)))
-            .set(seen.eq(new_status)).execute(&mut db.conn()?)?;
+            .set(seen.eq(new_status)).execute(&mut *db.conn()?.lock())?;
         Ok(res > 0)
     }
 
@@ -124,7 +124,7 @@ impl models::Message {
     pub fn get_by_comment(db: &DB, cid: i32) -> DBResult<Vec<models::Message>>
     {
         use schema::messages::dsl::*;
-        to_db_res(messages.filter(comment_id.eq(cid)).load::<models::Message>(&mut db.conn()?))
+        to_db_res(messages.filter(comment_id.eq(cid)).load::<models::Message>(&mut *db.conn()?.lock()))
     }
 }
 
@@ -144,7 +144,7 @@ impl models::PropNode {
             use schema::prop_nodes::dsl::*;
             let q = prop_nodes.filter(node_type.eq(xnt)).into_boxed();
             let q = if let Some(node_ids) = node_ids { q.filter(id.eq_any(node_ids)) } else { q };
-            to_db_res(q.load::<models::PropNode>(&mut db.conn()?))
+            to_db_res(q.load::<models::PropNode>(&mut *db.conn()?.lock()))
         }
     }
 
@@ -179,7 +179,7 @@ impl models::PropEdge {
                 .then_order_by(id.asc())
                 .offset(pg.offset())
                 .limit(pg.limit())
-                .load::<models::PropEdge>(&mut db.conn()?))
+                .load::<models::PropEdge>(&mut *db.conn()?.lock()))
         }
     }
 

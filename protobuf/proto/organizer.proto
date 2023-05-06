@@ -49,6 +49,10 @@ service OrganizerOutbound {
 
     rpc DbUpsert(DbUpsertRequest) returns (DbUpsertResponse);
     rpc DbDelete(DbDeleteRequest) returns (DbDeleteResponse);
+
+    rpc DbBeginTransaction(DbBeginTransactionRequest) returns (Empty);
+    rpc DbCommitTransaction(DbCommitTransactionRequest) returns (Empty);
+    rpc DbRollbackTransaction(DbRollbackTransactionRequest) returns (Empty);
 }
 
 // Calls that Clapshot server makes to Organizer

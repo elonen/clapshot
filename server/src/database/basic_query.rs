@@ -7,7 +7,7 @@ macro_rules! implement_basic_query_traits {
             /// Insert a new object into the database.
             fn insert(db: &DB, item: &$insert_model) -> DBResult<Self> {
                 use schema::$table::dsl::*;
-                to_db_res(diesel::insert_into($table).values(item).get_result(&mut db.conn()?))
+                to_db_res(diesel::insert_into($table).values(item).get_result(&mut *db.conn()?.lock()))
             }
 
             /// Insert multiple objects into the database.
@@ -19,14 +19,14 @@ macro_rules! implement_basic_query_traits {
             fn get(db: &DB, pk: &$pk_type) -> DBResult<Self>
             {
                 use schema::$table::dsl::*;
-                to_db_res($table.filter(id.eq(pk)).first::<$model>(&mut db.conn()?))
+                to_db_res($table.filter(id.eq(pk)).first::<$model>(&mut *db.conn()?.lock()))
             }
 
             /// Get multiple objects by their primary keys.
             fn get_many(db: &DB, ids: &[$pk_type]) -> DBResult<Vec<Self>>
             {
                 use schema::$table::dsl::*;
-                to_db_res($table.filter(id.eq_any(ids)).load::<$model>(&mut db.conn()?))
+                to_db_res($table.filter(id.eq_any(ids)).load::<$model>(&mut *db.conn()?.lock()))
             }
 
             /// Get all nodes of type Self, with no filtering, paginated.
@@ -37,16 +37,15 @@ macro_rules! implement_basic_query_traits {
                     .then_order_by(id.asc())
                     .offset(pg.offset())
                     .limit(pg.limit())
-                    .load::<$model>(&mut db.conn()?))
+                    .load::<$model>(&mut *db.conn()?.lock()))
             }
 
             /// Update objects, replaces the entire object except for the primary key.
             fn update_many(db: &DB, items: &[Self]) -> DBResult<Vec<Self>> {
                 use schema::$table::dsl::*;
-                let conn = &mut db.conn()?;
                 let mut res: Vec<Self> = Vec::with_capacity(items.len());
                 for it in items {
-                    res.push(diesel::update($table.filter(id.eq(&it.id))).set(it).get_result(conn)?);
+                    res.push(diesel::update($table.filter(id.eq(&it.id))).set(it).get_result(&mut *db.conn()?.lock())?);
                 }
                 Ok(res)
             }
@@ -55,7 +54,7 @@ macro_rules! implement_basic_query_traits {
             fn delete(db: &DB, pk: &$pk_type) -> DBResult<bool>
             {
                 use schema::$table::dsl::*;
-                let res = diesel::delete($table.filter(id.eq(pk))).execute(&mut db.conn()?)?;
+                let res = diesel::delete($table.filter(id.eq(pk))).execute(&mut *db.conn()?.lock())?;
                 Ok(res > 0)
             }
 
@@ -64,7 +63,7 @@ macro_rules! implement_basic_query_traits {
             fn delete_many(db: &DB, ids: &[$pk_type]) -> DBResult<usize>
             {
                 use schema::$table::dsl::*;
-                Ok(diesel::delete($table.filter(id.eq_any(ids))).execute(&mut db.conn()?)?)
+                Ok(diesel::delete($table.filter(id.eq_any(ids))).execute(&mut *db.conn()?.lock())?)
             }
         }
     }
@@ -84,7 +83,7 @@ macro_rules! implement_query_by_user_traits {
                     .then_order_by(id.asc())
                     .offset(pg.offset())
                     .limit(pg.limit())
-                    .load::<$model>(&mut db.conn()?))
+                    .load::<$model>(&mut *db.conn()?.lock()))
             }
         }
     }
@@ -105,7 +104,7 @@ macro_rules! implement_query_by_video_traits {
                     .then_order_by(id.asc())
                     .offset(pg.offset())
                     .limit(pg.limit())
-                    .load::<$model>(&mut db.conn()?))
+                    .load::<$model>(&mut *db.conn()?.lock()))
             }
         }
     }

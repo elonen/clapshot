@@ -1,3 +1,4 @@
+use diesel::connection::TransactionManager;
 use diesel::prelude::*;
 use diesel::r2d2::{ConnectionManager};
 use diesel::SqliteConnection;
@@ -6,6 +7,7 @@ use anyhow::{Context, anyhow};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 use std::path::{Path};
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 pub mod schema;
@@ -18,9 +20,10 @@ pub mod tests;
 mod custom_ops;
 
 use error::{DBError, DBResult, EmptyDBResult};
+use parking_lot::Mutex;
 
 pub type Pool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
-type PooledConnection = r2d2::PooledConnection<ConnectionManager<SqliteConnection>>;
+type PooledConnection = Arc<Mutex<r2d2::PooledConnection<ConnectionManager<SqliteConnection>>>>;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
@@ -36,10 +39,10 @@ fn to_db_res<U>(res: QueryResult<U>) -> DBResult<U> {
     }
 }
 
-
 pub struct DB {
     pool: Pool,
     broken_for_test: AtomicBool,
+    connected: Arc<Mutex<Option<PooledConnection>>>
 }
 
 
@@ -50,10 +53,14 @@ impl DB {
         let manager = ConnectionManager::<SqliteConnection>::new(db_url);
         let pool = Pool::builder().max_size(1).build(manager).context("Failed to build DB pool")?;
 
-        let db = DB { pool: pool, broken_for_test: AtomicBool::new(false) };
+        let db = DB {
+            pool: pool,
+            broken_for_test: AtomicBool::new(false),
+            connected: Arc::new(Mutex::new(None))
+        };
 
         diesel::sql_query("PRAGMA foreign_keys = ON;")
-            .execute(&mut db.conn()?)
+            .execute(&mut *db.conn()?.lock())
             .context("Failed to enable foreign keys")?;
 
         Ok(db)
@@ -68,28 +75,43 @@ impl DB {
 
     /// Get a connection from the pool
     pub fn conn(&self) ->  DBResult<PooledConnection> {
+        // For testing
         if self.broken_for_test.load(std::sync::atomic::Ordering::Relaxed) {
             let bad_pool = Pool::builder().build(ConnectionManager::<SqliteConnection>::new("sqlite:///dev/urandom")).context("Failed to build 'broken' DB pool")?;
-            return bad_pool.get().map_err(|e| anyhow!("Failed to get connection from pool: {:?}", e).into());
+            return bad_pool.get()
+                .map(|v| Arc::new(Mutex::new(v)))
+                .map_err(|e| anyhow!("Failed to get connection from pool: {:?}", e).into());
         };
-        self.pool.get().map_err(|e| anyhow!("Failed to get connection from pool: {:?}", e).into())
+
+        // Use cached connection if available (e.g. for transactions)
+        if let Some(conn) = self.connected.lock().as_ref() {
+            return Ok(conn.clone());
+        }
+
+        // Otherwise get a new connection from the pool
+        let res = self.pool.get()
+            .map(|v| Arc::new(Mutex::new(v)))
+            .map_err(|e| DBError::Other(anyhow!("Failed to get connection from pool: {:?}", e)))?;
+        self.connected.lock().replace(res.clone());
+
+        Ok(res)
     }
 
     // Check if database is up-to-date compared to the embedded migrations
     pub fn migrations_needed(&self) -> DBResult<bool> {
-        let mut conn = self.conn()?;
-        MigrationHarness::has_pending_migration(&mut conn, MIGRATIONS)
+        MigrationHarness::has_pending_migration(&mut *self.conn()?.lock(), MIGRATIONS)
             .map_err(|e| anyhow!("Failed to check migrations: {:?}", e).into())
     }
 
     /// Run DB migrations (or create DB if empty)
     pub fn run_migrations(&self) -> EmptyDBResult
     {
-        let mut conn = self.conn()?;
-        diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(&mut conn)?;
-        let migr = conn.run_pending_migrations(MIGRATIONS).map_err(|e| anyhow!("Failed to apply migrations: {:?}", e))?;
+        let conn = self.conn()?;
+        let mut lock = conn.lock();
+        diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(&mut *lock)?;
+        let migr = lock.run_pending_migrations(MIGRATIONS).map_err(|e| anyhow!("Failed to apply migrations: {:?}", e))?;
         for m in migr { tracing::info!("Applied DB migration: {}", m); }
-        diesel::sql_query("PRAGMA foreign_keys = ON;").execute(&mut conn)?;
+        diesel::sql_query("PRAGMA foreign_keys = ON;").execute(&mut *lock)?;
         Ok(())
     }
 
@@ -97,6 +119,23 @@ impl DB {
     pub fn break_db(&self) {
         self.broken_for_test.store(true, std::sync::atomic::Ordering::Relaxed);
     }
+}
+
+// ---------------- Transactions ----------------
+
+pub fn begin_transaction(conn: &PooledConnection) -> DBResult<()> {
+    diesel::r2d2::PoolTransactionManager::begin_transaction(&mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to begin transaction: {:?}", e).into())
+}
+
+pub fn commit_transaction(conn: &PooledConnection) -> DBResult<()> {
+    diesel::r2d2::PoolTransactionManager::commit_transaction(&mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to commit transaction: {:?}", e).into())
+}
+
+pub fn rollback_transaction(conn: &PooledConnection) -> DBResult<()> {
+    diesel::r2d2::PoolTransactionManager::rollback_transaction(&mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to rollback transaction: {:?}", e).into())
 }
 
 // ---------------- Query traits ----------------

@@ -355,6 +355,21 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             edges_deleted: delete_type!([db.as_ref(), req.edge_ids, i32, models::PropEdge]),
         }))
     }
+
+    async fn db_begin_transaction(&self, _req: Request<org::DbBeginTransactionRequest>) -> RpcResult<proto::Empty>
+    {
+        to_rpc_empty(crate::database::begin_transaction(&self.server.db.conn()?))
+    }
+
+    async fn db_commit_transaction(&self, _req: Request<org::DbCommitTransactionRequest>) -> RpcResult<proto::Empty>
+    {
+        to_rpc_empty(crate::database::commit_transaction(&self.server.db.conn()?))
+    }
+
+    async fn db_rollback_transaction(&self, _req: Request<org::DbRollbackTransactionRequest>) -> RpcResult<proto::Empty>
+    {
+        to_rpc_empty(crate::database::rollback_transaction(&self.server.db.conn()?))
+    }
 }
 
 
