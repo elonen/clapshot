@@ -391,11 +391,13 @@ pub async fn msg_leave_collab(data: &serde_json::Value, ses: &mut UserSession, s
 pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     if let Some(collab_id ) = &ses.cur_collab_id {
         let paused = data["paused"].as_bool().ok_or(anyhow!("paused missing"))?;
+        let looping = data["loop"].as_bool().ok_or(anyhow!("loop missing"))?;
         let seek_time = data["seek_time"].as_f64().ok_or(anyhow!("seek_time missing"))?;
         let img_url = data["drawing"].as_str();
         let ce = if img_url.is_some() {
             client_cmd!(CollabEvent, {
                 paused: paused,
+                r#loop: looping,
                 seek_time_sec: seek_time,
                 from_user: ses.user_name.clone(),
                 drawing: img_url.map(|s| s.to_string()),
@@ -403,6 +405,7 @@ pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut UserSession, 
         } else {
             client_cmd!(CollabEvent, {
                 paused: paused,
+                r#loop: looping,
                 seek_time_sec: seek_time,
                 from_user: ses.user_name.clone(),
                 drawing: None,

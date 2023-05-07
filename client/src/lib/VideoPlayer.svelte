@@ -16,15 +16,15 @@ const dispatch = createEventDispatcher();
 export let src: any;
 
 // These are bound to properties of the video
-let video_elem: any;
+let videoElem: any;
 let time: number = 0;
 let duration: number;
 let paused: boolean = true;
-let video_canvas_container: any;
-let vframe_calc: VideoFrame;
+let loop: boolean = false;
+let videoCanvasContainer: any;
+let vframeCalc: VideoFrame;
 
 let debug_layout: boolean = false; // Set to true to show CSS layout boxes
-
 let commentsWithTc: Proto3.Comment[] = [];  // Will be populated by the store once video is ready (=frame rate is known)
 
 
@@ -43,7 +43,7 @@ function refreshCommentPins(): void {
 function send_collab_report(): void {
     if ($collabId) {
         let drawing = paused ? getScreenshot() : null;
-        dispatch('collabReport', {paused: video_elem.paused, seek_time: video_elem.currentTime, drawing: drawing});
+        dispatch('collabReport', {paused: videoElem.paused, loop: videoElem.loop, seek_time: videoElem.currentTime, drawing: drawing});
     }
 }
 
@@ -59,12 +59,12 @@ function setPenColor(c: string): void {
 
 function prepare_drawing(): void
 {
-    if (!draw_board && video_elem.videoWidth>0)
+    if (!draw_board && videoElem.videoWidth>0)
     {
         $videoIsReady = true;
 
-        vframe_calc = new VideoFrame({
-            video: video_elem,
+        vframeCalc = new VideoFrame({
+            video: videoElem,
             frameRate: $videoFps,
             callback: function(response: any) { console.log(response); } });
 
@@ -72,8 +72,8 @@ function prepare_drawing(): void
 
         // Create the drawing board
         draw_canvas = document.createElement('canvas');
-        draw_canvas.width = video_elem.videoWidth;
-        draw_canvas.height = video_elem.videoHeight;
+        draw_canvas.width = videoElem.videoWidth;
+        draw_canvas.height = videoElem.videoHeight;
         draw_canvas.classList.add("absolute", "max-h-full", "max-w-full", "z-[100]");
         draw_canvas.style.cssText = 'outline: 5px solid red; outline-offset: -5px; cursor:crosshair; left: 50%; top: 50%; transform: translate(-50%, -50%);';
 
@@ -84,10 +84,10 @@ function prepare_drawing(): void
             }
         });
 
-        video_canvas_container.appendChild(draw_canvas);
+        videoCanvasContainer.appendChild(draw_canvas);
 
         draw_board = sdb_create(draw_canvas);
-        draw_board.setLineSize(video_elem.videoWidth / 100);
+        draw_board.setLineSize(videoElem.videoWidth / 100);
         draw_board.setLineColor(draw_color);
         draw_canvas.style.visibility = "hidden"; // hide the canvas until the user clicks the draw button
     }
@@ -96,21 +96,25 @@ function prepare_drawing(): void
 
 onMount(async () => {
     // Force the video to load
-    if (!video_elem.videoWidth) { video_elem.load(); }
+    if (!videoElem.videoWidth) { videoElem.load(); }
     prepare_drawing();
     allComments.subscribe((_v) => { refreshCommentPins(); });
 });
+
+// Monitor video elem "loop" property in a timer.
+// Couldn't find a way to bind to it directly.
+setInterval(() => { loop = videoElem.loop }, 500);
 
 
 function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) {
     if (!target) throw new Error("progress bar missing");
     if (!duration) return; // video not loaded yet
     if (e instanceof MouseEvent && !(e.buttons & 1)) return; // mouse not down
-    video_elem.pause();
+    videoElem.pause();
     const clientX = e instanceof TouchEvent ? e.touches[0].clientX : e.clientX;
     const { left, right } = (target as HTMLProgressElement).getBoundingClientRect();
     time = duration * (clientX - left) / (right - left);
-    video_elem.currentTime = time;
+    videoElem.currentTime = time;
     seekSideEffects();
     paused = true;
     send_collab_report();
@@ -129,10 +133,10 @@ export function setPlayback(play: boolean, request_source: string|undefined): bo
 
     if (play) {
         seekSideEffects();
-        video_elem.play();
+        videoElem.play();
     }
     else
-        video_elem.pause();
+        videoElem.pause();
     send_collab_report();
 
     playback_request_source = request_source;
@@ -144,6 +148,9 @@ export function getPlaybackState(): {playing: boolean, request_source: string|un
     return {playing: !paused, request_source: playback_request_source};
 }
 
+export function isLooping(): boolean {
+    return loop;
+}
 
 function togglePlay() {
     let should_play = paused;
@@ -152,9 +159,9 @@ function togglePlay() {
 
 function format_tc(seconds: number) : string {
     if (isNaN(seconds)) return '...';
-    if (vframe_calc) {
-        const fr = Math.floor(seconds * vframe_calc.frameRate);
-        return `${vframe_calc.toSMPTE(fr)}`;
+    if (vframeCalc) {
+        const fr = Math.floor(seconds * vframeCalc.frameRate);
+        return `${vframeCalc.toSMPTE(fr)}`;
     }
     else if(seconds==0)
         return '--:--:--:--';
@@ -169,8 +176,8 @@ function format_tc(seconds: number) : string {
 
 function format_frames(seconds: number) : string {
     if (isNaN(seconds)) return '';
-    if (vframe_calc) {
-        const fr = Math.floor(seconds * vframe_calc.frameRate);
+    if (vframeCalc) {
+        const fr = Math.floor(seconds * vframeCalc.frameRate);
         return `${fr}`;
     }
     else
@@ -179,7 +186,7 @@ function format_frames(seconds: number) : string {
 
 
 export function getCurTime() {
-    return video_elem.currentTime;
+    return videoElem.currentTime;
 }
 
 export function getCurTimecode() {
@@ -187,18 +194,18 @@ export function getCurTimecode() {
 }
 
 export function getCurFrame() {
-    let fps = vframe_calc.fps ?? NaN;
+    let fps = vframeCalc.fps ?? NaN;
     if (isNaN(fps)) console.error("getCurFrame(): VideoFrame not initialized or invalid fps");
     return Math.floor(time * fps);
 }
 
 
 function step_video(frames: number) {
-    if (vframe_calc) {
+    if (vframeCalc) {
         if (frames < 0) {
-            vframe_calc.seekBackward(-frames, null);
+            vframeCalc.seekBackward(-frames, null);
         } else {
-            vframe_calc.seekForward(frames, null);
+            vframeCalc.seekForward(frames, null);
         }
         seekSideEffects();
         send_collab_report();
@@ -243,7 +250,7 @@ function seekSideEffects() {
 export function seekToSMPTE(smpte: string) {
     try {
         seekSideEffects();
-        vframe_calc.seekToSMPTE(smpte);
+        vframeCalc.seekToSMPTE(smpte);
     } catch(err) {
         acts.add({mode: 'warning', message: `Seek failed to: ${smpte}`, lifetime: 3});
     }
@@ -252,7 +259,7 @@ export function seekToSMPTE(smpte: string) {
 export function seekToFrame(frame: number) {
     try {
         seekSideEffects();
-        vframe_calc.seekToFrame(frame);
+        vframeCalc.seekToFrame(frame);
     } catch(err) {
         acts.add({mode: 'warning', message: `Seek failed to: ${frame}`, lifetime: 3});
     }
@@ -261,8 +268,8 @@ export function seekToFrame(frame: number) {
 // Audio control
 let audio_volume = 50;
 $:{
-    if (video_elem)
-        video_elem.volume = audio_volume/100; // Immediately changes video element volume
+    if (videoElem)
+        videoElem.volume = audio_volume/100; // Immediately changes video element volume
 }
 
 // These are called from PARENT component on user interaction
@@ -273,7 +280,7 @@ export function onToggleDraw(mode_on: boolean) {
             draw_canvas.style.outline = "5px solid " + draw_color;
             draw_canvas.style.cursor = "crosshair";
             var ctx = draw_canvas.getContext('2d');
-            ctx.drawImage(video_elem, 0, 0);
+            ctx.drawImage(videoElem, 0, 0);
             draw_canvas.style.visibility = "visible";
         } else {
             draw_canvas.style.visibility = "hidden";
@@ -299,25 +306,27 @@ export function onDrawRedo() {
 export function getScreenshot() : string
 {
         let comb = document.createElement('canvas');
-        comb.width  = video_elem.videoWidth;
-        comb.height = video_elem.videoHeight;
+        comb.width  = videoElem.videoWidth;
+        comb.height = videoElem.videoHeight;
         var ctx = comb.getContext('2d');
         if (!ctx) throw new Error("Cannot get canvas context");
-        // ctx.drawImage(video_elem, 0, 0);   // Removed, as bgr frame capture is now done when draw mode is entered
+        // ctx.drawImage(videoElem, 0, 0);   // Removed, as bgr frame capture is now done when draw mode is entered
         ctx.drawImage(draw_canvas, 0, 0);
         return comb.toDataURL("image/webp", 0.8);
 }
 
-export function collabPlay(seek_time: number) {
-    video_elem.pause();
+export function collabPlay(seek_time: number, looping: boolean) {
+    videoElem.loop = looping;
+    videoElem.pause();
     time = seek_time;
     seekSideEffects();
-    video_elem.play();
+    videoElem.play();
 }
 
-export function collabPause(seek_time: number, drawing: string|undefined) {
+export function collabPause(seek_time: number, looping: boolean, drawing: string|undefined) {
+    videoElem.loop = looping;
     if (!paused)
-        video_elem.pause();
+        videoElem.pause();
     if (time != seek_time) {
         time = seek_time;
         seekSideEffects();
@@ -341,8 +350,8 @@ export async function setDrawing(drawing: string) {
 function tcToDurationFract(timecode: string|undefined) {
     /// Convert SMPTE timecode to a fraction of the video duration (0-1)
     if (timecode === undefined) { throw new Error("Timecode is undefined"); }
-    if (!vframe_calc) { return 0; }
-    let pos = vframe_calc.toMilliseconds(timecode)/1000.0;
+    if (!vframeCalc) { return 0; }
+    let pos = vframeCalc.toMilliseconds(timecode)/1000.0;
     return pos / duration;
 }
 
@@ -364,7 +373,7 @@ function onFrameEdited(e: Event) {
 
 	<div  class="flex-1 grid place-items-center relative min-h-[12em]"
 			 style="{debug_layout?'border: 2px solid orange;':''}">
-		<div bind:this={video_canvas_container} class="absolute h-full {debug_layout?'border-4 border-x-zinc-50':''}">
+		<div bind:this={videoCanvasContainer} class="absolute h-full {debug_layout?'border-4 border-x-zinc-50':''}">
 			<video
 				transition:scale
 				src="{src}"
@@ -372,7 +381,7 @@ function onFrameEdited(e: Event) {
 				preload="auto"
 				class="h-full w-full"
 				style="opacity: {$videoIsReady ? 1.0 : 0}; transition-opacity: 1.0s;"
-				bind:this={video_elem}
+				bind:this={videoElem}
 				on:loadedmetadata={prepare_drawing}
 				on:click={togglePlay}
 				bind:currentTime={time}
@@ -416,7 +425,7 @@ function onFrameEdited(e: Event) {
 			<!-- Play/Pause -->
 			<span class="flex-1 text-left ml-8 space-x-3 text-l whitespace-nowrap">
 				<button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
-				<button class="w-4 fa-solid {paused ? 'fa-play' : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
+				<button class="w-4 fa-solid {paused ? (loop ? 'fa-repeat' : 'fa-play') : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
 				<button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
 
 				<!-- Timecode -->
@@ -424,7 +433,6 @@ function onFrameEdited(e: Event) {
 					<input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => onTimecodeEdited(e)}/>
 					FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => onFrameEdited(e)}/>
 				</span>
-
 			</span>
 
 			<!-- Audio volume -->
@@ -457,4 +465,5 @@ progress::-webkit-progress-bar {
 progress::-webkit-progress-value {
     background-color: rgba(255,255,255,0.6);
 }
+
 </style>

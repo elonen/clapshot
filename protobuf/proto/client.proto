@@ -39,8 +39,9 @@ message ServerToClientCmd {
     message CollabEvent {
         string from_user = 1;
         bool paused = 2;
-        double seek_time_sec = 3;       // From start of video
-        optional string drawing = 4;    // data-uri of an image
+        bool loop = 3;
+        double seek_time_sec = 4;       // From start of video
+        optional string drawing = 5;    // data-uri of an image
     }
     message SetCookies {
         Cookies cookies = 1;        // Cookies to set. Use empty string to delete a cookie.

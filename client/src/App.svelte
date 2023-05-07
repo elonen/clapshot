@@ -98,7 +98,7 @@ function onDisplayComment(e: any) {
     videoPlayer.setDrawing(e.detail.drawing);
     if ($collabId) {
         logAbbrev("Collab: onDisplayComment. collab_id: '" + $collabId + "'");
-        wsEmit('collab_report', {paused: true, seek_time: videoPlayer.getCurTime(), drawing: e.detail.drawing});
+        wsEmit('collab_report', {paused: true, loop: videoPlayer.isLooping(), seek_time: videoPlayer.getCurTime(), drawing: e.detail.drawing});
     }
 }
 
@@ -150,7 +150,7 @@ function onVideoSeeked(_e: any) {
 
 function onCollabReport(e: any) {
     if ($collabId)
-    wsEmit('collab_report', {paused: e.detail.paused, seek_time: e.detail.seek_time, drawing: e.detail.drawing});
+    wsEmit('collab_report', {paused: e.detail.paused, loop: e.detail.loop, seek_time: e.detail.seek_time, drawing: e.detail.drawing});
 }
 
 function onCommentPinClicked(e: any) {
@@ -534,9 +534,9 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             else if (cmd.collabEvent) {
                 const evt = cmd.collabEvent;
                 if (!evt.paused) {
-                    videoPlayer.collabPlay(evt.seekTimeSec);
+                    videoPlayer.collabPlay(evt.seekTimeSec, evt.loop);
                 } else {
-                    videoPlayer.collabPause(evt.seekTimeSec, evt.drawing);
+                    videoPlayer.collabPause(evt.seekTimeSec, evt.loop, evt.drawing);
                 }
                 if (lastCollabControllingUser != evt.fromUser) {
                     lastCollabControllingUser = evt.fromUser;
