@@ -33,7 +33,7 @@ service OrganizerOutbound {
 
     // Frontend commands
 
-    rpc client_define_actions (ClientDefineActionsRequest) returns (Empty);
+    rpc client_define_actions (ClientDefineActionsRequest) returns (Empty);  // Multiple calls will add/replace actions
     rpc client_show_page(ClientShowPageRequest) returns (Empty);
     rpc client_show_user_message (ClientShowUserMessageRequest) returns (Empty);
     rpc client_open_video (ClientOpenVideoRequest) returns (Empty);
@@ -61,6 +61,7 @@ service OrganizerInbound {
     rpc on_start_user_session (OnStartUserSessionRequest) returns (OnStartUserSessionResult);
     rpc navigate_page (NavigatePageRequest) returns (ClientShowPageRequest);
     rpc authz_user_action (AuthzUserActionRequest) returns (AuthzResult);
+    rpc cmd_from_client (CmdFromClientRequest) returns (Empty);
 }
 
 // ---------------------------------------------------------
@@ -132,13 +133,16 @@ message OnStartUserSessionRequest {
     UserSessionData ses = 1;
 }
 
-message OnStartUserSessionResult {
-    bool dont_send_default_actions = 10;     // If true, server will not send default action definitions (e.g. "rename_video")
-}
+message OnStartUserSessionResult {}
 
 message NavigatePageRequest {
     UserSessionData ses = 1;
-    string path = 2; // e.g. "/home"
+}
+
+message CmdFromClientRequest {
+    UserSessionData ses = 1;
+    string cmd = 2;
+    string args = 3;    // Arbitrary data from your own Action handler that is executed on the client
 }
 
 message AuthzUserActionRequest {
@@ -193,8 +197,8 @@ message AuthzResult {
 // ---------------------------------------------------------
 
 message ClientShowPageRequest {
-    repeated PageItem page_items = 1;
-    string sid = 2;
+    string sid = 1;
+    repeated PageItem page_items = 2;
 }
 
 message ClientShowUserMessageRequest {
@@ -209,20 +213,20 @@ message ClientShowUserMessageRequest {
 }
 
 message ClientDefineActionsRequest {
-    map<string, ActionDef> actions = 1; // e.g. "rename" -> {label: "Rename", icon: "edit"}
-    string sid = 2;
+    string sid = 1;
+    map<string, ActionDef> actions = 2; // e.g. "rename" -> {label: "Rename", icon: "edit"}
 }
 
 // Tell client of session `sid` to open video `id` in the video player
 message ClientOpenVideoRequest {
-    string id = 1;
-    string sid = 2;
+    string sid = 1;
+    string id = 2;
 }
 
 message ClientSetCookiesRequest {
-    Cookies cookies = 1;
-    optional google.protobuf.Timestamp expire_time = 2;
-    string sid = 3;
+    string sid = 1;
+    Cookies cookies = 2;
+    optional google.protobuf.Timestamp expire_time = 3;
 }
 
 message DeleteVideoRequest {
@@ -233,4 +237,3 @@ message ModifyVideoRequest {
     string id = 1;
     Video new_data = 2;
 }
-

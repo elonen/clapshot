@@ -16,6 +16,7 @@ const dispatch = createEventDispatcher();
 
 export let items: VideoListDefItem[] = [];
 export let dragDisabled: boolean = true;
+export let listPopupActions: string[] = [];
 
 let isDragging = false;
 
@@ -126,7 +127,7 @@ function handleMouseUp(e: MouseEvent, item: VideoListDefItem) {
 }
 
 // Show a popup menu when right-clicking on a video tile
-function onContextMenu(e: MouseEvent, item: VideoListDefItem)
+function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
 {
     let popupContainer = document.querySelector('#popup-container');
     if (!popupContainer) { alert("UI BUG: popup container missing"); return; }
@@ -137,20 +138,37 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem)
         child.hide();
     }
 
-    // Which tiles are we acting on?
-    let targetTiles: VideoListDefItem[] = Object.values($selectedTiles)
-        .concat(item)
-        .filter((item, index, self) => self.findIndex(t => t.id === item.id) === index); // unique
+    let actions: Proto3.ActionDef[] = [];
+    let targetTiles: VideoListDefItem[] = [];
+    if (item)
+    {
+        // Which tiles are we acting on?
+        targetTiles = Object.values($selectedTiles)
+            .concat(item)
+            .filter((item, index, self) => self.findIndex(t => t.id === item.id) === index); // unique
 
-    // Build the popup menu items (actions)
-    let actions: Proto3.ActionDef[] = targetTiles.map(tile => tile.obj.popupActions).flat()
-        .filter((actionId, index, self) => self.indexOf(actionId) === index)  // unique action ids
-        .map(aid => {   // convert ids to action objects
-            let a = $serverDefinedActions[aid];
+        // Build the popup menu items (actions)
+        actions = targetTiles.map(tile => tile.obj.popupActions).flat()
+            .filter((actionId, index, self) => self.indexOf(actionId) === index)  // unique action ids
+            .map(aid => {   // convert ids to action objects
+                    let a = $serverDefinedActions[aid];
+                    if (!a) { alert("UI / Organizer BUG: popup action '" + aid + "' not found"); }
+                    return a;
+                })
+            .filter(a => a !== undefined);
+    }
+    else
+    {
+        // No item => user right-clicked on empty space in the list
+        actions = listPopupActions.map(aid => {
+                let a = $serverDefinedActions[aid];
                 if (!a) { alert("UI / Organizer BUG: popup action '" + aid + "' not found"); }
                 return a;
-            })
-        .filter(a => a !== undefined);
+            });
+    }
+
+    if (actions.length === 0)
+        return;
 
     let popup = new VideoListPopup({
         target: popupContainer,
@@ -162,7 +180,7 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem)
     });
     popup.$on('action', (e) => dispatch("popup-action", {action: e.detail.action, items: targetTiles}));
     popup.$on('hide', () => popup.$destroy());
-
+    e.preventDefault(); // Prevent default browser context menu
 }
 
 function isShadowItem(item: any) {
@@ -181,6 +199,7 @@ function isShadowItem(item: any) {
             }}"
         on:consider={handleConsider}
         on:finalize={handleFinalize}
+        on:contextmenu={(e) => onContextMenu(e, null)}
         class="flex flex-wrap gap-4"
     >
         {#each items as item(item.id)}
@@ -193,7 +212,7 @@ function isShadowItem(item: any) {
                 on:mousedown={(e) => handleMouseOrKeyDown(item.id, e)}
                 on:mouseup={(e) => handleMouseUp(e, item)}
                 on:keydown={(e) => handleMouseOrKeyDown(item.id, e)}
-                on:contextmenu|preventDefault={(e) => onContextMenu(e, item)}
+                on:contextmenu|stopPropagation={(e) => onContextMenu(e, item)}
             >
                 {#if isShadowItem(item)}
                     <div in:fade={{duration:200}} class='custom-dnd-shadow-item'></div>

@@ -33,7 +33,9 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
     async fn client_show_page(&self, req: Request<org::ClientShowPageRequest>) -> RpcResult<proto::Empty>
     {
         let req = req.into_inner();
-        to_rpc_empty(self.server.emit_cmd(client_cmd!(ShowPage, {page_items: req.page_items}), SendTo::UserSession(&req.sid)))
+        to_rpc_empty(self.server.emit_cmd(client_cmd!(ShowPage, {
+            page_items: req.page_items,
+        }), SendTo::UserSession(&req.sid)))
     }
 
     /// Send a message to one or more user sessions.
@@ -125,9 +127,13 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             Filter::GraphRel(rel) => {
                 let et = rel.edge_type.as_ref().map(|s| s.as_str());
                 let vids = match rpc_expect_field(&rel.rel, "GraphObjRel.rel")? {
-                    Rel::ParentOf(id) => models::Video::graph_get_by_parent(&db, id.try_into()?, et)?,
+                    Rel::ParentOf(id) => models::Video::graph_get_by_parent(&db, id.try_into()?, et)?
+                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
                     Rel::ChildOf(id) => models::Video::graph_get_by_child(&db, id.try_into()?, et)?
-                }.into_iter().map(|v| v.obj).collect::<Vec<_>>();
+                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
+                    Rel::Parentless(_) => models::Video::graph_get_parentless(&db, et)?,
+                    Rel::Childless(_) => models::Video::graph_get_childless(&db, et)?,
+                };
                 paged_vec(vids, pg)
             },
         };
@@ -158,9 +164,13 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             Filter::GraphRel(rel) => {
                 let et = rel.edge_type.as_ref().map(|s| s.as_str());
                 let comms = match rpc_expect_field(&rel.rel, "GraphObjRel.rel")? {
-                    Rel::ParentOf(id) => models::Comment::graph_get_by_parent(&db, id.try_into()?, et)?,
+                    Rel::ParentOf(id) => models::Comment::graph_get_by_parent(&db, id.try_into()?, et)?
+                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
                     Rel::ChildOf(id) => models::Comment::graph_get_by_child(&db, id.try_into()?, et)?
-                }.into_iter().map(|c| c.obj).collect::<Vec<_>>();
+                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
+                    Rel::Parentless(_) => models::Comment::graph_get_parentless(&db, et)?,
+                    Rel::Childless(_) => models::Comment::graph_get_childless(&db, et)?,
+                };
                 paged_vec(comms, pg)
             },
         };
@@ -220,9 +230,13 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             (node_type, ids, Some(rel)) => {
                 let et = rel.edge_type.as_ref().map(|s| s.as_str());
                 let objs = match rpc_expect_field(&rel.rel, "GraphObjRel.rel")? {
-                    Rel::ParentOf(id) => models::PropNode::graph_get_by_parent(&db, id.try_into()?, et)?,
+                    Rel::ParentOf(id) => models::PropNode::graph_get_by_parent(&db, id.try_into()?, et)?
+                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
                     Rel::ChildOf(id) => models::PropNode::graph_get_by_child(&db, id.try_into()?, et)?
-                }.into_iter().map(|c| c.obj).collect::<Vec<_>>();
+                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
+                    Rel::Parentless(_) => models::PropNode::graph_get_parentless(&db, et)?,
+                    Rel::Childless(_) => models::PropNode::graph_get_childless(&db, et)?,
+                };
 
                 let objs = match node_type {
                     Some(node_type) => objs.into_iter().filter(|o| o.node_type == node_type).collect(),

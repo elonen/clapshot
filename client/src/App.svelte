@@ -431,7 +431,8 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             }
             // defineActions
             else if (cmd.defineActions) {
-                $serverDefinedActions = cmd.defineActions.actions;
+                for (var name in cmd.defineActions.actions)
+                    $serverDefinedActions[name] = cmd.defineActions.actions[name];
             }
             // messages
             else if (cmd.showMessages) {
@@ -609,7 +610,7 @@ function callOrganizerScript(code: string|undefined, items: any[]): void {
         return;
     }
     async function call_server(cmd: string, args: Object): Promise<void> { wsEmit(cmd, args); }
-    async function call_organizer(cmd: string, args: Object): Promise<void> { wsEmit("organizer", {cmd, args}); }
+    async function call_organizer(cmd: string, args: Object): Promise<void> { wsEmit("organizer_cmd", {cmd, args}); }
     async function alert(msg: string): Promise<void> { window.alert(msg); }
     async function prompt(msg: string, default_value: string): Promise<string|null> { return window.prompt(msg, default_value); }
     async function confirm(msg: string): Promise<boolean> { return window.confirm(msg); }
@@ -722,6 +723,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
                     id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
                     obj: it }))}
                     dragDisabled={item.folderListing.allowReordering ? false : true}
+                    listPopupActions={item.folderListing.popupActions}
                     on:open-item={openVideoListItem}
                     on:reorder-items={onReorderItems}
                     on:move-to-folder={onMoveItemsToFolder}

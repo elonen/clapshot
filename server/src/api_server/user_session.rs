@@ -2,7 +2,7 @@ use std::sync::Arc;
 use crate::{database::models::{self, Video, Comment}, grpc::{grpc_client::OrganizerConnection}, client_cmd};
 
 use super::{WsMsgSender, server_state::ServerState, SendTo};
-use lib_clapshot_grpc::proto;
+use lib_clapshot_grpc::{proto};
 use tracing::{debug, error};
 
 type Res<T> = anyhow::Result<T>;
@@ -218,4 +218,3 @@ pub async fn org_authz_with_default<'a>(
         }
     }
 }
-

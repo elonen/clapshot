@@ -134,10 +134,18 @@ async fn handle_ws_session(
         Ok((c, res))
     }
 
+    // Define default actions. Organizer may call DefineActions later to override these.
+    if let Err(e) = server.emit_cmd(
+            client_cmd!(DefineActions, {actions: make_video_popup_actions()}),
+            SendTo::MsgSender(&ses.sender)) {
+        tracing::error!(details=%e, "Error sending define_actions to client. Closing session.");
+        return;
+    }
+
     // Tell organizer about this new user session
-    let org_start_ses_res = if let Some(uri) = server.organizer_uri.clone() {
+    if let Some(uri) = server.organizer_uri.clone() {
         match connect_organizer(uri, &ses.org_session).await {
-            Ok((c, res)) => {
+            Ok((c, _res)) => {
                 ses.organizer = Some(tokio::sync::Mutex::new(c).into());
                 let op = AuthzTopic::Other(None, proto::org::authz_user_action_request::other_op::Op::Login);
                 if org_authz(&ses.org_session, "login", true, &server, &ses.organizer, op).await == Some(false) {
@@ -147,7 +155,6 @@ async fn handle_ws_session(
                         SendTo::MsgSender(&ses.sender)).ok();
                     return;
                 }
-                Some(res)
             },
             Err(e) => {
                 const MSG: &str = "Error connecting to Organizer. Closing session.";
@@ -158,18 +165,7 @@ async fn handle_ws_session(
                 return;
             }
         }
-    } else { None };
-
-    // Send default actions to client if organizer doesn't want to override them
-    if org_start_ses_res.map_or(true, |res| !res.dont_send_default_actions) {
-        debug!("Sending default action definitions (organizer didn't want to override them).");
-        if let Err(e) = server.emit_cmd(
-                client_cmd!(DefineActions, {actions: make_video_popup_actions()}),
-                SendTo::MsgSender(&ses.sender)) {
-            tracing::error!(details=%e, "Error sending define_actions to client. Closing session.");
-            return;
-        }
-    }
+    };
 
     loop
     {

@@ -60,8 +60,33 @@ pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession,
     org_authz_with_default(&ses.org_session, "list videos", true, server,
         &ses.organizer, true, AuthzTopic::Other(None, authz_req::other_op::Op::ViewHome)).await?;
 
-    let videos = models::Video::get_by_user(&server.db, &ses.user_id, DBPaging::default())?;
+    // Try to delegate request to Organizer.
+    if let Some(org) = &ses.organizer {
+        let req = proto::org::NavigatePageRequest {
+            ses: Some(ses.org_session.clone()),
+        };
+        match org.lock().await.navigate_page(req).await {
+            Err(e) => {
+                if e.code() == tonic::Code::Unimplemented {
+                    tracing::debug!("Organizer doesn't implement NavigatePageRequest. Using default.");
+                } else {
+                    tracing::error!(err=?e, "Error in organizer navigate_page() call");
+                    anyhow::bail!("Error in navigate_page() organizer call: {:?}", e);
+                }
+            },
+            Ok(res) => {
+                server.emit_cmd(
+                    client_cmd!(ShowPage, {
+                        page_items: res.into_inner().page_items,
+                    }),
+                    super::SendTo::UserSession(&ses.sid))?;
+                return Ok(());
+            }
+        }
+    }
 
+    // Organizer didn't handle this, so return a default listing.
+    let videos = models::Video::get_by_user(&server.db, &ses.user_id, DBPaging::default())?;
     let h_txt = if videos.is_empty() {
         "<h2>You have no videos yet.</h2>"
     } else {
@@ -72,10 +97,11 @@ pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut UserSession,
     let page = vec![heading, listing];
 
     server.emit_cmd(
-        client_cmd!(ShowPage, {page_items: page}),
+        client_cmd!(ShowPage, { page_items: page }),
         super::SendTo::UserSession(&ses.sid))?;
     Ok(())
 }
+
 
 /// User opens a video.
 /// Send them the video info and all comments related to it.
@@ -90,6 +116,7 @@ pub async fn msg_open_video(data: &serde_json::Value, ses: &mut UserSession, ser
     }
     Ok(())
 }
+
 
 pub async fn send_open_video_cmd(server: &ServerState, session_id: &str, video_id: &str) -> Res<()> {
     server.link_session_to_video(session_id, video_id)?;
@@ -166,6 +193,7 @@ pub async fn msg_del_video(data: &serde_json::Value, ses: &mut UserSession, serv
     Ok(())
 }
 
+
 pub async fn msg_rename_video(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let new_name = data["new_name"].as_str().ok_or(anyhow!("new_name missing"))?;
 
@@ -189,6 +217,7 @@ pub async fn msg_rename_video(data: &serde_json::Value, ses: &mut UserSession, s
     }
     Ok(())
 }
+
 
 pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
 
@@ -320,6 +349,7 @@ pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut UserSession, se
     Ok(())
 }
 
+
 pub async fn msg_list_my_messages(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let msgs = models::Message::get_by_user(&server.db, &ses.user_id, DBPaging::default())?;
     server.emit_cmd(
@@ -331,6 +361,7 @@ pub async fn msg_list_my_messages(data: &serde_json::Value, ses: &mut UserSessio
     }
     Ok(())
 }
+
 
 pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let collab_id = data["collab_id"].as_str().ok_or(anyhow!("collab_id missing"))?;
@@ -370,6 +401,7 @@ pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut UserSession, se
     Ok(())
 }
 
+
 pub async fn msg_leave_collab(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     if let Some(collab_id) = &ses.cur_collab_id {
         server.emit_cmd(
@@ -387,6 +419,7 @@ pub async fn msg_leave_collab(data: &serde_json::Value, ses: &mut UserSession, s
     }
     Ok(())
 }
+
 
 pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     if let Some(collab_id ) = &ses.cur_collab_id {
@@ -418,6 +451,34 @@ pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut UserSession, 
     }
 }
 
+
+pub async fn msg_organizer_cmd(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+
+println!("msg_organizer_cmd data: {:?}", data);
+
+    match (data["cmd"].as_str(), data["args"].clone()) {
+        (Some(cmd), args) => {
+            if let Some(org) = &ses.organizer {
+                let req = proto::org::CmdFromClientRequest {
+                    ses: Some(ses.org_session.clone()),
+                    cmd: cmd.to_string(),
+                    args: serde_json::to_string(&args)?,
+                };
+                match org.lock().await.cmd_from_client(req).await {
+                    Err(e) => {
+                        tracing::error!(err=?e, "Error in organizer navigate_page() call");
+                        anyhow::bail!("Error in cmd_from_client() organizer call: {:?}", e);
+                    },
+                    Ok(res) => { return Ok(()); }
+                }
+            }
+        },
+        _ => { send_user_error!(&ses.user_id, server, Topic::None, "Invalid organizer command."); }
+    }
+    Ok(())
+}
+
+
 /// Dispatch a message to the appropriate handler.
 /// Returns false if session should be closed.
 pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<bool> {
@@ -433,6 +494,7 @@ pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut UserSes
         "join_collab" => msg_join_collab(data, ses, server).await,
         "leave_collab" => msg_leave_collab(data, ses, server).await,
         "collab_report" => msg_collab_report(data, ses, server).await,
+        "organizer_cmd" => msg_organizer_cmd(data, ses, server).await,
         "logout" => {
             tracing::info!("logout: user={}", ses.user_id);
             return Ok(false);

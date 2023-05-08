@@ -159,8 +159,10 @@ message GraphObjRel {
     oneof rel {
         GraphObj parent_of = 1;
         GraphObj child_of = 2;
+        Empty parentless = 3;   // = no parents pointed to with any edge_type edges
+        Empty childless = 4;
     }
-    optional string edge_type = 3;
+    optional string edge_type = 10;
 }
 
 message PropEdge {
