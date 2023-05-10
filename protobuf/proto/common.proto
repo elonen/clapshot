@@ -149,7 +149,7 @@ message ActionDef {
 // ---------------------------------------------------------
 
 message UserInfo {
-    string id = 1;                   // e.g. "user:123", "alice.smith", "alice.smith@example.com" etc.
+    string id = 1;                   // e.g. "user:123", "alice.smith", "alice.smith@example.com" etc. depending on used authn backend.
     optional string name = 2;        // e.g. "Alice Smith"
 }
 

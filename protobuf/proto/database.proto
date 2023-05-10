@@ -55,6 +55,17 @@ message DbGetPropEdgesRequest {
     // Leave all fields empty to get all edges in the database (use paging)
 }
 
+
+message DbGetSingletonPropNodeRequest {
+    string node_type = 1;
+    string singleton_key = 2;
+}
+
+message DbGetSingletonPropNodeResponse {
+    optional PropNode node = 1;     // Null if no such node, i.e. "not found" is not an error
+}
+
+
 // ----------------------------------------
 
 // Add or replace objects in the database.
@@ -145,6 +156,7 @@ message PropNode {
     string id = 1;
     string node_type = 2;
     optional string body = 3;
+    optional string singleton_key = 4;  // If set, only one pair of [this + node_type] can exist in the database. Inserts will silently auto-replace old ones.
 }
 
 message GraphObj {
@@ -174,6 +186,12 @@ message PropEdge {
     string edge_type = 8;
     optional string body = 9;
 
-    optional float sort_order = 10;
+    optional float sort_order = 10;  // Sort order of edges between the same nodes. Lower values come first.
+
+    // Edges are unique on [from, to, edge_type, sibling_id], so if you need
+    // multiple edges of same type between the same nodes, use sibling_id to differentiate them.
+    //
+    // If not set, any new insert will silently replace existing edge; that is,
+    // the latest body and sort_order will be used.
     optional int32 sibling_id = 11;
 }

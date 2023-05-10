@@ -283,6 +283,7 @@ impl crate::database::models::PropNode
             id: v.id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid prop node ID")))?,
             node_type: v.node_type.clone(),
             body: v.body.clone(),
+            singleton_key: v.singleton_key.clone(),
         })
     }
 
@@ -292,6 +293,7 @@ impl crate::database::models::PropNode
             id: self.id.to_string(),
             node_type: self.node_type.clone(),
             body: self.body.clone(),
+            singleton_key: self.singleton_key.clone(),
         }
     }
 }
@@ -306,10 +308,10 @@ impl crate::database::models::PropNodeInsert
         Ok(Self {
             node_type: v.node_type.clone(),
             body: v.body.clone(),
+            singleton_key: v.singleton_key.clone(),
         })
     }
 }
-
 
 // ============================ PropEdge ============================
 

@@ -250,12 +250,19 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             },
         };
         Ok(Response::new(org::DbPropNodeList {
-            items: items.into_iter().map(|o| org::PropNode {
-                id: o.id.to_string(),
-                node_type: o.node_type,
-                body: o.body,
-            }).collect(),
+            items: items.into_iter().map(|o| o.to_proto3()).collect(),
             paging: req.paging,
+        }))
+    }
+
+//pub fn get_singleton(db: &DB, node_type: &str, singleton_key: &str) -> DBResult<Option<models::PropNode>>
+    async fn db_get_singleton_prop_node(&self, req: Request<org::DbGetSingletonPropNodeRequest>) -> RpcResult<org::DbGetSingletonPropNodeResponse>
+    {
+        let req = req.into_inner();
+        let db = self.server.db.clone();
+        let node = models::PropNode::get_singleton(&db, &req.node_type, &req.singleton_key)?;
+        Ok(Response::new(org::DbGetSingletonPropNodeResponse {
+            node: node.map(|n| n.to_proto3()),
         }))
     }
 

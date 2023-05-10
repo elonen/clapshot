@@ -45,6 +45,7 @@ service OrganizerOutbound {
     rpc DbGetComments(DbGetCommentsRequest) returns (DbCommentList);
     rpc DbGetUserMessages(DbGetUserMessagesRequest) returns (DbUserMessageList);
     rpc DbGetPropNodes(DbGetPropNodesRequest) returns (DbPropNodeList);
+    rpc DbGetSingletonPropNode(DbGetSingletonPropNodeRequest) returns (DbGetSingletonPropNodeResponse);
     rpc DbGetPropEdges(DbGetPropEdgesRequest) returns (DbPropEdgeList);
 
     rpc DbUpsert(DbUpsertRequest) returns (DbUpsertResponse);

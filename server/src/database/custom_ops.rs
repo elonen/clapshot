@@ -148,6 +148,16 @@ impl models::PropNode {
         }
     }
 
+    pub fn get_singleton(db: &DB, node_type: &str, singleton_key: &str) -> DBResult<Option<models::PropNode>>
+    {
+        let xnt = node_type;
+        let xsk = singleton_key;
+        {
+            use schema::prop_nodes::dsl::*;
+            let q = prop_nodes.filter(node_type.eq(xnt).and(singleton_key.eq(xsk)));
+            to_db_res(q.first::<models::PropNode>(&mut *db.conn()?.lock()).optional())
+        }
+    }
 }
 
 

@@ -167,6 +167,7 @@ pub struct PropNode {
     pub id: i32,
     pub node_type: String,
     pub body: Option<String>,
+    pub singleton_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, Insertable, AsChangeset)]
@@ -174,6 +175,7 @@ pub struct PropNode {
 pub struct PropNodeInsert {
     pub node_type: String,
     pub body: Option<String>,
+    pub singleton_key: Option<String>,
 }
 
 // -------------------------------------------------------
@@ -184,143 +186,4 @@ pub fn humanize_utc_timestamp(timestamp: &chrono::NaiveDateTime) -> String {
     let added_time: chrono::DateTime<chrono::Utc> = chrono::Utc.from_utc_datetime(timestamp);
     let time_ago_str = timeago::Formatter::new().convert_chrono(added_time, chrono::Local::now());
     time_ago_str
-}
-
-// -------------------------------------------------------
-// VIEW (stored statement) mappings for queries
-// -------------------------------------------------------
-
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Identifiable, Selectable, QueryId, Associations)]
-#[diesel(table_name = view_videos_pointing_to_node)]
-#[diesel(belongs_to(PropNode, foreign_key = node_id))]
-#[diesel(belongs_to(Video, foreign_key = video_id))]
-#[diesel(primary_key(node_id, video_id, edge_type, edge_sibling_id))]
-pub struct ViewVideosPointingToNode {
-    pub node_id: i32,
-    pub node_type: String,
-    pub node_body: Option<String>,
-
-    pub edge_type: String,
-    pub edge_body: Option<String>,
-    pub edge_sort_order: f32,
-    pub edge_sibling_id: i32,
-
-    pub video_id: String,
-    pub video_title: Option<String>,
-    pub video_duration: Option<f32>,
-    pub video_owner: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Identifiable, Selectable, QueryId, Associations)]
-#[diesel(table_name = view_nodes_pointing_to_video)]
-#[diesel(belongs_to(Video, foreign_key = video_id))]
-#[diesel(belongs_to(PropNode, foreign_key = node_id))]
-#[diesel(primary_key(video_id, node_id, edge_type, edge_sibling_id))]
-pub struct ViewNodesPointingToVideo {
-    pub video_id: String,
-    pub video_title: Option<String>,
-    pub video_duration: Option<f32>,
-    pub video_owner: Option<String>,
-
-    pub edge_type: String,
-    pub edge_body: Option<String>,
-    pub edge_sort_order: f32,
-    pub edge_sibling_id: i32,
-
-    pub node_id: i32,
-    pub node_type: String,
-    pub node_body: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Identifiable, Selectable, QueryId)]
-#[diesel(table_name = view_nodes_pointing_to_node)]
-#[diesel(primary_key(to_node_id, from_node_id, edge_type, edge_sibling_id))]
-pub struct ViewNodesPointingToNode {
-    pub to_node_id: i32,
-    pub to_node_type: String,
-    pub to_node_body: Option<String>,
-
-    pub edge_type: String,
-    pub edge_body: Option<String>,
-    pub edge_sort_order: f32,
-    pub edge_sibling_id: i32,
-
-    pub from_node_id: i32,
-    pub from_node_type: String,
-    pub from_node_body: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Identifiable, Selectable, QueryId, Associations)]
-#[diesel(table_name = view_nodes_without_outgoing_edges)]
-#[diesel(belongs_to(PropNode, foreign_key = id))]
-#[diesel(primary_key(id))]
-pub struct ViewNodesWithoutOutgoingEdges {
-    pub id: i32,
-    pub node_type: String,
-    pub node_body: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Identifiable, Selectable, QueryId, Associations)]
-#[diesel(table_name = view_videos_without_outgoing_edges)]
-#[diesel(belongs_to(Video, foreign_key = video_id))]
-#[diesel(primary_key(video_id))]
-pub struct ViewVideosWithoutOutgoingEdges {
-    pub video_id: String,
-    pub video_title: Option<String>,
-    pub video_duration: Option<f32>,
-    pub video_owner: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Identifiable, Selectable, QueryId, Associations)]
-#[diesel(table_name = view_node_count_outgoing_edges)]
-#[diesel(belongs_to(PropNode, foreign_key = node_id))]
-#[diesel(primary_key(node_id, edge_type))]
-pub struct ViewNodeCountOutgoingEdges {
-    pub node_id: i32,
-    pub node_body: Option<String>,
-    pub node_type: String,
-
-    pub edge_type: String,
-    pub edge_count: i32,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Identifiable, Selectable, QueryId, Associations)]
-#[diesel(table_name = view_video_count_outgoing_edges)]
-#[diesel(belongs_to(Video, foreign_key = video_id))]
-#[diesel(primary_key(video_id, edge_type))]
-pub struct ViewVideoCountOutgoingEdges {
-    pub video_id: String,
-    pub video_title: Option<String>,
-    pub video_duration: Option<f32>,
-    pub video_owner: Option<String>,
-
-    pub edge_type: String,
-    pub edge_count: i32,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Identifiable, Selectable, QueryId, Associations)]
-#[diesel(table_name = view_node_count_incoming_edges)]
-#[diesel(belongs_to(PropNode, foreign_key = node_id))]
-#[diesel(primary_key(node_id, edge_type))]
-pub struct ViewNodeCountIncomingEdges {
-    pub node_id: i32,
-    pub node_body: Option<String>,
-    pub node_type: String,
-
-    pub edge_type: String,
-    pub edge_count: i32,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Identifiable, Selectable, QueryId, Associations)]
-#[diesel(table_name = view_video_count_incoming_edges)]
-#[diesel(belongs_to(Video, foreign_key = video_id))]
-#[diesel(primary_key(video_id, edge_type))]
-pub struct ViewVideoCountIncomingEdges {
-    pub video_id: String,
-    pub video_title: Option<String>,
-    pub video_duration: Option<f32>,
-    pub video_owner: Option<String>,
-
-    pub edge_type: String,
-    pub edge_count: i32,
 }

@@ -6,7 +6,11 @@
 CREATE TABLE prop_nodes (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     node_type VARCHAR NOT NULL,
-    body TEXT
+    body TEXT,
+
+    -- If the node should be a singleton, set this key and node_type to identify it.
+    singleton_key VARCHAR DEFAULT NULL,
+    UNIQUE (node_type, singleton_key) ON CONFLICT REPLACE
 );
 
 CREATE TABLE prop_edges (
@@ -66,79 +70,3 @@ CREATE TRIGGER prop_edges_to_at_most_one BEFORE INSERT ON prop_edges
 BEGIN
     SELECT RAISE(ABORT, 'each edge can only point to one thing');
 END;
-
-------------------------------------------------------------------
------- Helper views for querying the graph
-------------------------------------------------------------------
-
--- -- All videos that point to a given node
--- CREATE VIEW view_videos_pointing_to_node AS
---     SELECT
---         to_node AS node_id, prop_nodes.node_type AS node_type, prop_nodes.body AS node_body,
---         edge_type, prop_edges.body AS edge_body, sort_order AS edge_sort_order, sibling_id AS edge_sibling_id,
---         from_video AS video_id, videos.title AS video_title, videos.duration AS video_duration, videos.added_by_userid AS video_owner
---     FROM prop_edges
---     LEFT JOIN prop_nodes ON prop_nodes.id = to_node
---     LEFT JOIN videos ON videos.id = from_video
---     WHERE from_video IS NOT NULL AND to_node IS NOT NULL;
---
--- -- (the other direction)
--- CREATE VIEW view_nodes_pointing_to_video AS
---     SELECT
---         to_video AS video_id, videos.title AS video_title, videos.duration AS video_duration, videos.added_by_userid AS video_owner,
---         edge_type, prop_edges.body AS edge_body, sort_order AS edge_sort_order, sibling_id AS edge_sibling_id,
---         from_node AS node_id, prop_nodes.node_type AS node_type, prop_nodes.body AS node_body
---     FROM prop_edges
---     LEFT JOIN prop_nodes ON prop_nodes.id = from_node
---     LEFT JOIN videos ON videos.id = to_video
---     WHERE to_video IS NOT NULL AND from_node IS NOT NULL;
---
--- -- All nodes that point to a given node
--- CREATE VIEW view_nodes_pointing_to_node AS
---     SELECT
---         to_node AS to_node_id, prop_nodes.node_type AS to_node_type, prop_nodes.body AS to_node_body,
---         edge_type, prop_edges.body AS edge_body, sort_order AS edge_sort_order, sibling_id AS edge_sibling_id,
---         from_node AS from_node_id, prop_nodes2.node_type AS from_node_type, prop_nodes2.body AS from_node_body
---     FROM prop_edges
---     LEFT JOIN prop_nodes ON prop_nodes.id = to_node
---     LEFT JOIN prop_nodes AS prop_nodes2 ON prop_nodes2.id = from_node
---     WHERE from_node IS NOT NULL AND to_node IS NOT NULL;
---
---
--- -- Fast listing of "root" nodes
---
--- CREATE VIEW view_nodes_without_outgoing_edges AS
---     SELECT id, node_type, body FROM prop_nodes WHERE
---         NOT EXISTS (SELECT 1 FROM prop_edges WHERE from_node = prop_nodes.id);
---
--- CREATE VIEW view_videos_without_outgoing_edges AS
---     SELECT id, title, duration, added_by_userid AS video_owner FROM videos WHERE
---         NOT EXISTS (SELECT 1 FROM prop_edges WHERE from_video = videos.id);
---
---
--- -- Counting per edge type and direction
---
--- CREATE VIEW view_node_count_outgoing_edges AS
---     SELECT from_node AS node_id, n.body AS node_body, node_type, edge_type, COUNT(*) AS edge_count
---         FROM prop_edges
---         LEFT JOIN prop_nodes AS n ON n.id = from_node
---         GROUP BY from_node, edge_type;
---
--- CREATE VIEW view_video_count_outgoing_edges AS
---     SELECT from_video AS video_id, v.title AS video_title, v.duration AS video_duration, v.added_by_userid AS video_owner, edge_type, COUNT(*) AS edge_count
---         FROM prop_edges
---         LEFT JOIN videos AS v ON v.id = from_video
---         GROUP BY from_video, edge_type;
---
--- CREATE VIEW view_node_count_incoming_edges AS
---     SELECT to_node AS node_id, n.body AS node_body, node_type, edge_type, COUNT(*) AS edge_count
---         FROM prop_edges
---         LEFT JOIN prop_nodes AS n ON n.id = to_node
---         GROUP BY to_node, edge_type;
---
--- CREATE VIEW view_video_count_incoming_edges AS
---     SELECT to_video AS video_id, v.title AS video_title, v.duration AS video_duration, v.added_by_userid AS video_owner, edge_type, COUNT(*) AS edge_count
---         FROM prop_edges
---         LEFT JOIN videos AS v ON v.id = to_video
---         GROUP BY to_video, edge_type;
-

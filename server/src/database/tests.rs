@@ -4,10 +4,11 @@ use crate::{database::*};
 use models::{Video, VideoInsert, Message, MessageInsert, Comment, CommentInsert, PropNode, PropNodeInsert, PropEdge, PropEdgeInsert};
 
 macro_rules! test_insert_node {
-    ($db:expr, $type:expr, $body:expr) => {
+    ($db:expr, $type:expr, $body:expr, $singleton_key:expr) => {
         PropNode::insert(&$db, &PropNodeInsert {
             node_type: $type.to_string(),
             body: $body.map(|s: &str| s.to_string()),
+            singleton_key: $singleton_key.map(|s: &str| s.to_string()),
         }).expect("Failed to insert test node")
     };
 }
@@ -140,11 +141,11 @@ println!("--- make_test_db");
     // Make a test props graph
 
     let nodes = vec![
-        test_insert_node!(&db, "node_type_a", Some("node_body0")),
-        test_insert_node!(&db, "node_type_b", Some("node_body1")),
-        test_insert_node!(&db, "node_type_c", Some("node_body2")),
-        test_insert_node!(&db, "node_type_c", None),
-        test_insert_node!(&db, "node_type_d", Some("node_body4")),
+        test_insert_node!(&db, "node_type_a", Some("node_body0"), None),
+        test_insert_node!(&db, "node_type_b", Some("node_body1"), None),
+        test_insert_node!(&db, "node_type_c", Some("node_body2"), None),
+        test_insert_node!(&db, "node_type_c", None, None),
+        test_insert_node!(&db, "node_type_d", Some("node_body4"), None),
     ];
 
     let edges = vec![
@@ -376,6 +377,33 @@ fn test_graph_db_delete_nodes() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+#[traced_test]
+fn test_singleton_prop_nodes() -> anyhow::Result<()> {
+    let (db, _data_dir, _videos, _comments, _nodes, _edges) = make_test_db();
+
+    // Test 1: Insert two rows with the same node_type and NULL singleton_key
+    test_insert_node!(&db, "A", Some("body1"), None);
+    test_insert_node!(&db, "A", Some("body2"), None);
+    assert_eq!(PropNode::get_by_type(&db, "A", &None)?.len(), 2);
+
+    // Test 2: Insert two rows with the same node_type and same non-NULL singleton_key
+
+    test_insert_node!(&db, "B", Some("body3"), Some("key1"));
+    assert_eq!(PropNode::get_by_type(&db, "B", &None)?.len(), 1);
+    assert_eq!(PropNode::get_by_type(&db, "B", &None)?[0].body, Some("body3".into()));
+    // This should replace the previous row due to the ON CONFLICT REPLACE clause
+    test_insert_node!(&db, "B", Some("body4"), Some("key1"));
+
+    assert_eq!(PropNode::get_by_type(&db, "B", &None)?.len(), 1);
+    assert_eq!(PropNode::get_by_type(&db, "B", &None)?[0].body, Some("body4".into()));
+
+    // Test 3: Insert another "B" type node but with a different singleton_key
+    test_insert_node!(&db, "B", Some("body5"), Some("key2"));
+    assert_eq!(PropNode::get_by_type(&db, "B", &None)?.len(), 2);
+
+    Ok(())
+}
 
 // ----------------------------------------------------------------------------
 
