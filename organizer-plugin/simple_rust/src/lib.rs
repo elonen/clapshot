@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use folder_ops::{make_folder_list_popup_actions, create_folder, construct_navi_page};
+use folder_ops::{make_folder_list_popup_actions, create_folder, construct_navi_page, construct_permission_page};
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use tonic::transport::Channel;
@@ -59,7 +59,8 @@ impl org::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
         let ses = proto3_get_field!(&req, ses, "No session data in request")?;
         let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
 
-        let page = construct_navi_page(&mut srv, &ses).await?;
+        //let page = construct_navi_page(&mut srv, &ses).await?;
+        let page = construct_permission_page(&mut srv, &ses).await?;
         Ok(Response::new(page))
     }
 

@@ -399,3 +399,23 @@ pub async fn construct_navi_page(srv: &mut GrpcServerConn, ses: &UserSessionData
         ],
     })
 }
+
+
+
+
+/// Build folder view page.
+/// Reads folder_path cookie and builds a list of folders and videos in the folder.
+pub async fn construct_permission_page(srv: &mut GrpcServerConn, ses: &UserSessionData)
+    -> RpcResult<org::ClientShowPageRequest>
+{
+    //     //let perms_html = include_str!("../html/permission_dlg.html");
+    let perms_html = std::fs::read_to_string("/home/jarno/clapshot/organizer-plugin/simple_rust/html/permission_dlg.html")
+        .expect("Failed to read html/permission_dlg.html");
+
+    Ok(org::ClientShowPageRequest {
+        sid: ses.sid.clone(),
+        page_items: vec![
+            proto::PageItem { item: Some(proto::page_item::Item::Html(perms_html.into())) },
+        ],
+    })
+}

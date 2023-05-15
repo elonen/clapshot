@@ -16,6 +16,7 @@ import VideoPlayer from '@/lib/VideoPlayer.svelte';
 import type {VideoListDefItem} from "@/lib/video_list/types";
 import VideoList from "@/lib/video_list/VideoList.svelte";
 import LocalStorageCookies from './cookies';
+    import RawHtmlItem from './lib/RawHtmlItem.svelte';
 
 let videoPlayer: VideoPlayer;
 let commentInput: CommentInput;
@@ -394,7 +395,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
     // Incoming messages
     wsSocket.addEventListener("message", function (event)
     {
-                                                            console.log("RAW WS MESSAGE: " + event.data);
+//                                                            console.log("RAW WS MESSAGE: " + event.data);
 
         const msgJson = JSON.parse(event.data);
         handleWithErrors(() =>
@@ -715,7 +716,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
             {#each $curPageItems as item}
             {#if item.html }
             <div>
-                {@html item.html}
+                <RawHtmlItem html={item.html} />
             </div>
             {:else if item.folderListing}
             <div class="my-6">
