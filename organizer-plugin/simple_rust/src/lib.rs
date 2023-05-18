@@ -1,5 +1,8 @@
 use std::sync::Arc;
-use folder_ops::{make_folder_list_popup_actions, create_folder, construct_navi_page, construct_permission_page};
+use db_check::ErrorsPerVideo;
+use folder_ops::create_folder;
+use ui_components::{make_folder_list_popup_actions, construct_navi_page, construct_permission_page};
+
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 use tonic::transport::Channel;
@@ -14,15 +17,20 @@ use lib_clapshot_grpc::{
     }
 };
 
+use crate::db_check::spawn_database_check;
 use crate::folder_ops::{get_current_folder_path, FolderData};
 
 mod folder_ops;
+mod db_check;
+mod ui_components;
+mod graph_utils;
 
 pub type GrpcServerConn = OrganizerOutboundClient<Channel>;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct SimpleOrganizer {
     client: Arc<Mutex<Option<GrpcServerConn>>>,
+    db_checker_res: Arc<Mutex<Option<anyhow::Result<ErrorsPerVideo>>>>,
 }
 pub type RpcResponseResult<T> = Result<Response<T>, Status>;
 pub type RpcResult<T> = Result<T, Status>;
@@ -48,8 +56,9 @@ impl org::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
 
         tracing::info!("Connecting back, org->srv");
         let client = connect_back_and_finish_handshake(&req).await?;
-        self.client.lock().await.replace(client);
+        self.client.lock().await.replace(client.clone());
 
+        spawn_database_check(Arc::new(Mutex::new(client)), self.db_checker_res.clone());
         Ok(Response::new(proto::Empty {}))
     }
 
@@ -59,8 +68,21 @@ impl org::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
         let ses = proto3_get_field!(&req, ses, "No session data in request")?;
         let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
 
-        //let page = construct_navi_page(&mut srv, &ses).await?;
-        let page = construct_permission_page(&mut srv, &ses).await?;
+        if self.check_db_setup_task().await? {
+            return Ok(Response::new(org::ClientShowPageRequest {
+                sid: ses.sid.clone(),
+                page_items: vec![
+                    proto::PageItem { item: Some(proto::page_item::Item::Html(r#"
+                        <h1>Organizer database setup...</h1>
+                        <p>Database check is still running, please wait...</p>
+                    "#.into())) },
+                ],
+            }));
+        }
+
+        let page = construct_navi_page(&mut srv, &ses).await?;
+
+        //let page = construct_permission_page(&mut srv, &ses).await?;
         Ok(Response::new(page))
     }
 
@@ -88,6 +110,7 @@ impl org::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
 
     async fn cmd_from_client(&self, req: Request<org::CmdFromClientRequest>) -> RpcResponseResult<proto::Empty>
     {
+        self.check_db_setup_task().await?;
         let req = req.into_inner();
         let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
         let ses = req.ses.ok_or(Status::invalid_argument("No session ID"))?;
@@ -123,6 +146,42 @@ impl org::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
             _ => {
                 Err(Status::invalid_argument(format!("Unknown command: {:?}", req.cmd)))
             },
+        }
+    }
+}
+
+
+impl SimpleOrganizer
+{
+    /// Check if database check is still running.
+    /// If it's done, send any error messages to clients.
+    /// Returns true if the check is still running, false if it is complete.
+    pub async fn check_db_setup_task(&self) -> RpcResult<bool> {
+        match self.db_checker_res.lock().await.as_ref() {
+            None => Ok(true), // Still running
+            Some(Ok(video_errs)) =>
+            {
+                // Database check is complete, send any error messages to clients
+                if !video_errs.is_empty() {
+                    let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
+                    for (video_id, err) in video_errs {
+                        tracing::warn!("Sending error message to client for video '{}': {}", video_id, err);
+                        srv.client_show_user_message(org::ClientShowUserMessageRequest {
+                            msg: Some(proto::UserMessage {
+                                message: format!("Organizer error: {}", err),
+                                r#type: proto::user_message::Type::Error.into(),
+                                ..Default::default()
+                            }),
+                            recipient: Some(org::client_show_user_message_request::Recipient::VideoId(video_id.clone())),
+                            ..Default::default()
+                        }).await?;
+                    }
+                    // Clear the error list to avoid resending them
+                    self.db_checker_res.lock().await.replace(Ok(ErrorsPerVideo::new()));
+                }
+                Ok(false)
+            },
+            Some(Err(e)) => Err(Status::internal(format!("Database check failed: {:?}", e))),
         }
     }
 }
