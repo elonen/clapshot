@@ -247,8 +247,7 @@ function refreshMyVideos()
 }
 
 
-
-let wsSocket: WebSocket;
+let wsSocket: WebSocket | undefined;
 
 function isConnected() {
     return wsSocket && wsSocket.readyState == wsSocket.OPEN;
@@ -272,7 +271,7 @@ function wsEmit(event_name: string, data: any)
     let raw_msg = JSON.stringify({cmd: event_name, data: data, cookies: cookies});
     if (isConnected()) {
         logAbbrev("ws_emit(): Sending: " + raw_msg);
-        wsSocket.send(raw_msg);
+        wsSocket?.send(raw_msg);
     }
     else {
         console.log("ws_emit(): Disconnected, so queuing: " + raw_msg);
@@ -284,7 +283,7 @@ function wsEmit(event_name: string, data: any)
 // This only ever sends anything if ws_emit() queues messages due to temporary disconnection.
 function sendQueueLoop()
 {
-    while (sendQueue.length > 0) {
+    while (wsSocket && sendQueue.length > 0) {
         let raw_msg = sendQueue.shift();
         wsSocket.send(raw_msg);
     }
