@@ -24,9 +24,8 @@ Required:
     <bind>              Unix socket or IP address to bind to.
                         e.g. '/tmp/organizer.sock' or '[::1]:50051'
 
-    --tcp               Bind to a TCP port instead of Unix socket.
-
 Options:
+ --tcp                  Bind to a TCP port instead of Unix socket.
  -j --json              Log in JSON format
  -d --debug             Enable debug logging
  -h --help              Show this screen

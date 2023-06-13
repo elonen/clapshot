@@ -17,7 +17,9 @@ impl OrganizerCaller {
     pub fn handshake_organizer(&self, data_dir: &Path, server_url: &str, db_file: &Path, backchannel: &GrpcBindAddr)
         -> anyhow::Result<()>
     {
-        async fn call_it(conn: &mut OrganizerConnection, backchannel: &GrpcBindAddr, data_dir: &Path, server_url: &str, db_file: &Path) -> anyhow::Result<()> {
+        async fn call_it(conn: &mut OrganizerConnection, backchannel: &GrpcBindAddr, data_dir: &Path, server_url: &str, db_file: &Path)
+         -> anyhow::Result<()>
+        {
             let v = semver::Version::parse(crate::PKG_VERSION)?;
             use lib_clapshot_grpc::proto::org::server_info;
             let req = proto::org::ServerInfo {
@@ -58,7 +60,7 @@ impl OrganizerCaller {
         for retry in 1..(MAX_TRIES+1) {
             match self.tokio_connect() {
                 Ok((rt, mut conn)) => {
-                    tracing::info!("Connected to organizer established (on attempt {retry}). Doing handshake.");
+                    tracing::info!("Connected to organizer (on attempt {retry}). Doing handshake.");
                     return rt.block_on(call_it(&mut conn, backchannel, data_dir, server_url, db_file));
                 },
                 Err(e) => {

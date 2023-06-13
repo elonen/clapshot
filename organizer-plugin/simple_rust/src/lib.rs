@@ -148,6 +148,35 @@ impl org::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
             },
         }
     }
+
+    async fn list_tests(&self, _req: Request<proto::Empty>) -> RpcResponseResult<org::ListTestsResult>
+    {
+        Ok(Response::new(org::ListTestsResult {
+            test_names: vec!["test1".into(), "test2".into()],
+        }))
+    }
+
+    async fn run_test(&self, req: Request<org::RunTestRequest>) -> RpcResponseResult<org::RunTestResult>
+    {
+        let req = req.into_inner();
+        match req.test_name.as_str() {
+            "test1" => {
+                Ok(Response::new(org::RunTestResult {
+                    output: "Test 1 output".into(),
+                    error: None,
+                }))
+            },
+            "test2" => {
+                Ok(Response::new(org::RunTestResult {
+                    output: "Test 2 output".into(),
+                    error: None,
+                }))
+            },
+            _ => {
+                Err(Status::invalid_argument(format!("Unknown test: {:?}", req.test_name)))
+            },
+        }
+    }
 }
 
 

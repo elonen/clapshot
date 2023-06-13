@@ -408,10 +408,13 @@ pub async fn run_org_to_srv_grpc_server(bind: GrpcBindAddr, server: ServerState)
 {
     let span = tracing::info_span!("gRPC server for org->srv");
     let terminate_flag = server.terminate_flag.clone();
+    let server_listening_flag = server.grpc_srv_listening_flag.clone();
+
     let service = org::organizer_outbound_server::OrganizerOutboundServer::new(OrganizerOutboundImpl {
         server,
     });
-    run_grpc_server(bind, service, span, terminate_flag).await
+
+    run_grpc_server(bind, service, span, server_listening_flag, terminate_flag).await
 }
 
 pub fn make_grpc_server_bind(tcp: &Option<String>, data_dir: &Path) -> anyhow::Result<GrpcBindAddr>

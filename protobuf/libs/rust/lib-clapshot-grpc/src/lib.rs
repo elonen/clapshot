@@ -62,11 +62,13 @@ impl Debug for GrpcBindAddr {
 /// * `bind` - The address to bind to.
 /// * `service` - The service to serve.
 /// * `span` - The tracing span to use for logging.
+/// * `server_listening_flag` - Set to true when the server is ready to accept connections.
 /// * `terminate_flag` - A flag that will be checked periodically. When set to true, the server will exit.
 pub async fn run_grpc_server<S>(
     bind: GrpcBindAddr,
     service: S,
     span: tracing::Span,
+    server_listening_flag: Arc<AtomicBool>,
     terminate_flag: Arc<AtomicBool>) -> anyhow::Result<()>
 where
     S: Service<http::Request<Body>, Response = http::Response<BoxBody>, Error = Infallible>
@@ -76,7 +78,7 @@ where
         + 'static,
     S::Future: Send + 'static,
 {
-    span.in_scope(|| { tracing::info!("Binding to '{}'", bind.to_uri()) });
+    span.in_scope(|| { tracing::info!("Binding to '{:?}'", bind) });
 
     let refl = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
@@ -92,17 +94,21 @@ where
 
     match bind {
         GrpcBindAddr::Tcp(addr) => {
-                srv.serve_with_shutdown(addr, wait_for_shutdown).await?;
+            let listener = tokio::net::TcpListener::bind(&addr).await?;
+            let server_stream = tokio_stream::wrappers::TcpListenerStream::new(listener);
+            span.in_scope(|| { tracing::debug!("Listening now - TCP on '{}'", addr) });
+            server_listening_flag.store(true, Relaxed);
+            srv.serve_with_incoming_shutdown(server_stream, wait_for_shutdown).await?;
         },
         GrpcBindAddr::Unix(path) => {
             if path.exists() {
                 std::fs::remove_file(&path).context("Failed to delete previous socket.")?;
             }
-            srv.serve_with_incoming_shutdown(
-                    tokio_stream::wrappers::UnixListenerStream::new(
-                        tokio::net::UnixListener::bind(&path)?),
-                    wait_for_shutdown
-                ).await?;
+            let listener = tokio::net::UnixListener::bind(&path)?;
+            let server_stream = tokio_stream::wrappers::UnixListenerStream::new(listener);
+            span.in_scope(|| { tracing::debug!("Listening now - Unix sock on '{}'", path.to_string_lossy()) });
+            server_listening_flag.store(true, Relaxed);
+            srv.serve_with_incoming_shutdown(server_stream, wait_for_shutdown).await?;
         }
     }
     span.in_scope(|| { tracing::info!("Exiting gracefully.") });

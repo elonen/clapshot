@@ -5,12 +5,15 @@
 #[cfg(test)]
 mod integration_test
 {
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{Mutex, Arc};
     use std::{error, any};
     use std::{path::PathBuf, str::FromStr};
     use std::{thread, time::Duration};
 
     use assert_fs::prelude::PathCopy;
     use futures::Future;
+    use lib_clapshot_grpc::proto::org;
     use rust_decimal::prelude::*;
 
     use crossbeam_channel;
@@ -19,6 +22,7 @@ mod integration_test
     use crate::api_server::tests::expect_user_msg;
     use crate::database::schema::videos::{thumb_sheet_cols, thumb_sheet_rows};
     use crate::expect_client_cmd;
+    use crate::grpc::grpc_client::prepare_organizer;
     use crate::video_pipeline::{metadata_reader, IncomingFile};
     use crate::api_server::test_utils::{connect_client_ws, open_video, write};
     use lib_clapshot_grpc::{GrpcBindAddr, proto};
@@ -74,9 +78,24 @@ mod integration_test
     }
 
 
+    /// Query API health endpoint until it returns 200 OK or timeout
+    fn wait_for_healthy(url_base: &str) -> bool {
+        const MAX_RETRIES: usize = 6;
+        let mut interval_ms: u64 = 10;
+        let url = format!("{}/api/health", url_base);
+        for i in 1..=MAX_RETRIES {
+            if i > 1 { thread::sleep(Duration::from_millis(interval_ms)); }
+            interval_ms = std::cmp::min(interval_ms * 2, 1000);
+            let resp_result = reqwest::blocking::get(&url);
+            if let Ok(resp) = resp_result {
+                if resp.status() == 200 { return true; }
+            }
+        }
+        false
+    }
 
     macro_rules! cs_main_test {
-        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $bitrate:expr] $($body:tt)*) => {
+        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr] $($body:tt)*) => {
             {
                 let $data_dir = assert_fs::TempDir::new().unwrap();
                 let $incoming_dir = $data_dir.join("incoming");
@@ -86,24 +105,29 @@ mod integration_test
                 let url_base = format!("http://127.0.0.1:{}", port);
                 let ws_url = format!("{}/api/ws", &url_base.replace("http", "ws"));
                 let target_bitrate = $bitrate;
-                let grpc_server_bind = GrpcBindAddr::Unix($data_dir.path().join("grpc-org-to-srv-TEST.sock").into());
+
+                let grpc_server_bind = crate::grpc::grpc_server::make_grpc_server_bind(&None, &$data_dir)?;
+                let (org_uri, _org_hdl) = prepare_organizer(&None, &$org_cmd, &$data_dir.path())?;
+
                 let th = {
                     let poll_interval = 0.1;
                     let data_dir = $data_dir.path().to_path_buf();
                     let url_base = url_base.clone();
+                    let org_uri = org_uri.clone();
                     thread::spawn(move || {
-                        crate::run_clapshot(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, None, grpc_server_bind, 4, target_bitrate, poll_interval, poll_interval*5.0).unwrap()
-                    })};
-                thread::sleep(Duration::from_secs_f32(0.25));
+                        crate::run_clapshot(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, poll_interval*5.0).unwrap()
+                })};
 
-                let resp = reqwest::blocking::get(&format!("{}/api/health", &url_base)).unwrap();
-                assert_eq!(resp.status(), 200);
+                assert!(wait_for_healthy(&url_base), "Server API never became healthy");
 
-                tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
+                tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async move {
                     // Connect client
                     let cur_process_user = whoami::username();
                     let mut $ws = connect_client_ws(&ws_url, &cur_process_user).await;
-
+                    let $org_conn = match org_uri.clone() {
+                        Some(org_uri) => Some(crate::grpc::grpc_client::connect(org_uri.clone()).await.expect("Failed to connect to organizer")),
+                        None => None,
+                    };
                     { $($body)* }
                 });
             }
@@ -114,7 +138,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_no_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, 2500_000]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None]
             // Copy test file to incoming dir
             let mp4_file = "60fps-example.mp4";
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
@@ -165,7 +189,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_corrupted_video() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, 500_000]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None]
             tracing::info!("WRITING CORRUPTED VIDEO");
 
             // Copy test file to incoming dir
@@ -190,7 +214,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_and_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, 500_000]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None]
             // Copy test file to incoming dir
             let mov_file = "NASA_Red_Lettuce_excerpt.mov";
             let dangerous_name = "  -fake-arg name; \"and some more'.txt 你 .mov";
@@ -212,28 +236,43 @@ mod integration_test
             let mut ts_cols = String::new();
             let mut ts_rows = String::new();
 
-            let mut got_video_updated = false;
+            let mut got_thumbnail_report = false;
+            let mut got_transcode_report = false;
 
             'waitloop: for _ in 0..(120*5)
             {
-                if !got_video_updated {
-                    got_video_updated |= match crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(&mut ws).await
-                        .map(|c| c.cmd).flatten() {
-                            Some(s2c::Cmd::ShowMessages(m)) => {
-                                got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
-                                // return true if we got a VideoUpdated message (which is sent when video is done transcoding)
-                                m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::VideoUpdated as i32)
-                            },
-                            _ => { false }
-                        };
-                    if !got_video_updated {
-                        println!("...still waiting for VideoUpdated...");
+                // Wait until server sends video updated messages about
+                // transcoding and thumbnail generation being done
+                // before we try to open and check metadata.
+                if !(got_thumbnail_report && got_transcode_report) {
+                    match crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(&mut ws).await.map(|c| c.cmd).flatten() {
+                        Some(s2c::Cmd::ShowMessages(m)) => {
+                            // Got progress report?
+                            got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
+
+                            if m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::VideoUpdated as i32) {
+                                // Got transcoding update message?
+                                if m.msgs.iter().any(|msg| msg.clone().message.to_ascii_lowercase().contains("transcod")) {
+                                    got_transcode_report = true;
+                                }
+                                // Got thumbnail update message?
+                                else if m.msgs.iter().any(|msg| msg.clone().message.to_ascii_lowercase().contains("thumbnail")) {
+                                    got_thumbnail_report = true;
+                                }
+                            }
+                        },
+                        _ => (),
+                    };
+
+                    if !(got_thumbnail_report && got_transcode_report) {
+                        if !got_thumbnail_report { println!("...still waiting for thumbnail..."); }
+                        if !got_transcode_report { println!("...still waiting for transcode..."); }
                         thread::sleep(Duration::from_millis(100));
                         continue;
                     }
                 }
 
-                println!("... doing list_my_videos ...");
+                println!("... doing list_my_videoos ...");
                 write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
 
                 match crate::api_server::test_utils::expect_parsed::<ServerToClientCmd>(&mut ws).await.cmd {
@@ -300,6 +339,77 @@ mod integration_test
             assert!(thumb_dir.join(format!("sheet-{ts_cols}x{ts_rows}.webp")).is_file());
             assert!(thumb_dir.join("stdout.txt").is_file());
             assert!(thumb_dir.join("stderr.txt").is_file());
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_organizer() -> anyhow::Result<()>
+    {
+        // Environment variable TEST_ORG_CMD can be used to specify a command
+        // to start organizer. If not specified, the test will be skipped.
+        match std::env::var("TEST_ORG_CMD").ok()
+        {
+            Some(cmd) => {
+
+                // Connect to organizer and list its test names
+                let test_names: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+                {
+                    let data_dir = assert_fs::TempDir::new()?;
+                    let test_names = test_names.clone();
+                    cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone())]
+                        match org_conn {
+                            Some(mut org_conn) => {
+                                test_names.lock().unwrap().extend(
+                                    org_conn.list_tests(proto::Empty {}).await
+                                        .expect("list_tests failed")
+                                        .into_inner().test_names
+                                );
+                            },
+                            None => { panic!("Organizer connection failed"); }
+                        }
+                    }
+                    data_dir.close().unwrap();
+                }
+
+                // Call gRPC run_test() for each test name
+                let had_errors = Arc::new(AtomicBool::new(false));
+                let test_names: Vec<String> = test_names.lock().unwrap().iter().map(|s| s.clone()).collect();
+                for (i, test_name) in test_names.iter().enumerate()
+                {
+                    tracing::info!("Running organizer test {}/{}: '{}'...", i+1, test_names.len()+1, test_name);
+                    let had_errors = had_errors.clone();
+
+                    cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone())]
+                        match org_conn {
+                            Some(mut org_conn) => {
+                                match org_conn.run_test(org::RunTestRequest { test_name: test_name.clone() }).await {
+                                    Ok(res) => {
+                                        let res = res.into_inner();
+                                        tracing::info!("output from organizer:\n------\n{}", res.output);
+                                        if let Some(err) = res.error {
+                                            tracing::error!("error output from organizer:\n------\n{}", err);
+                                            had_errors.store(true, std::sync::atomic::Ordering::Relaxed);
+                                        }
+                                    },
+                                    Err(e) => {
+                                        tracing::error!("run_test failed: {:?}", e);
+                                        had_errors.store(true, std::sync::atomic::Ordering::Relaxed);
+                                    }
+                                }
+                            }
+                            None => { panic!("Organizer connection failed"); }
+                        }
+                    }
+                }
+                if had_errors.load(std::sync::atomic::Ordering::Relaxed) {
+                    return Err(anyhow::anyhow!("Some organizer tests failed"));
+                }
+            },
+            None => {
+                tracing::info!("Organizer cmd not specified, skipping organizer test");
+            }
         }
         Ok(())
     }

@@ -29,15 +29,15 @@ import "google/protobuf/timestamp.proto";
 
 // Calls that Organizer makes to Clapshot server
 service OrganizerOutbound {
-    rpc handshake (OrganizerInfo) returns (Empty);
+    rpc handshake(OrganizerInfo) returns (Empty);
 
     // Frontend commands
 
-    rpc client_define_actions (ClientDefineActionsRequest) returns (Empty);  // Multiple calls will add/replace actions
+    rpc client_define_actions(ClientDefineActionsRequest) returns (Empty);  // Multiple calls will add/replace actions
     rpc client_show_page(ClientShowPageRequest) returns (Empty);
-    rpc client_show_user_message (ClientShowUserMessageRequest) returns (Empty);
-    rpc client_open_video (ClientOpenVideoRequest) returns (Empty);
-    rpc client_set_cookies (ClientSetCookiesRequest) returns (Empty);
+    rpc client_show_user_message(ClientShowUserMessageRequest) returns (Empty);
+    rpc client_open_video(ClientOpenVideoRequest) returns (Empty);
+    rpc client_set_cookies(ClientSetCookiesRequest) returns (Empty);
 
     // Database calls
 
@@ -58,11 +58,16 @@ service OrganizerOutbound {
 
 // Calls that Clapshot server makes to Organizer
 service OrganizerInbound {
-    rpc handshake (ServerInfo) returns (Empty);
-    rpc on_start_user_session (OnStartUserSessionRequest) returns (OnStartUserSessionResult);
-    rpc navigate_page (NavigatePageRequest) returns (ClientShowPageRequest);
-    rpc authz_user_action (AuthzUserActionRequest) returns (AuthzResult);
-    rpc cmd_from_client (CmdFromClientRequest) returns (Empty);
+    rpc handshake(ServerInfo) returns (Empty);
+
+    rpc on_start_user_session(OnStartUserSessionRequest) returns (OnStartUserSessionResult);
+    rpc navigate_page(NavigatePageRequest) returns (ClientShowPageRequest);
+    rpc authz_user_action(AuthzUserActionRequest) returns (AuthzResult);
+    rpc cmd_from_client(CmdFromClientRequest) returns (Empty);
+
+    // Unit / integration tests
+    rpc list_tests(Empty) returns (ListTestsResult);
+    rpc run_test(RunTestRequest) returns (RunTestResult);
 }
 
 // ---------------------------------------------------------
@@ -191,6 +196,21 @@ message AuthzResult {
     optional bool is_authorized = 1;     // If not set, leave authorization decision to server
     optional string message = 2;         // e.g. "You are not authorized to view this video"
     optional string details = 3;         // e.g. "You are not a member of the project"
+}
+
+// --- Unit / integration tests ---
+
+message ListTestsResult {
+    repeated string test_names = 1;
+}
+
+message RunTestRequest {
+    string test_name = 1;
+}
+
+message RunTestResult {
+    string output = 1;
+    optional string error = 2;
 }
 
 // ---------------------------------------------------------

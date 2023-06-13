@@ -172,6 +172,7 @@ macro_rules! api_test {
             let port = portpicker::pick_unused_port().expect("No TCP ports free");
             let (user_msg_tx, user_msg_rx) = crossbeam_channel::unbounded();
             let (upload_res_tx, upload_res_rx) = crossbeam_channel::unbounded();
+            let grpc_srv_listening_flag = Arc::new(AtomicBool::new(false));
             let terminate_flag = Arc::new(AtomicBool::new(false));
             let url_base = format!("http://127.0.0.1:{port}");
             let ws_url = url_base.replace("http", "ws") + "/api/ws";
@@ -183,6 +184,7 @@ macro_rules! api_test {
                 &upload_dir.clone(),
                 &url_base.clone(),
                 None,
+                grpc_srv_listening_flag.clone(),
                 terminate_flag.clone());
 
             let bind_addr: std::net::IpAddr = "127.0.0.1".parse().unwrap();

@@ -536,6 +536,9 @@ pub fn run_forever(
                                         return false;
                                     }
                                     if let Err(e) = models::Video::set_recompressed(&db, &vid) {
+                                        tracing::error!(details=%e, "Error marking video as recompressed in DB");
+                                        return false;
+                                    } else {
                                         utx.send(UserMessage {
                                             topic: UserMessageTopic::VideoUpdated,
                                             msg: "Transcoding done".into(),
@@ -543,9 +546,8 @@ pub fn run_forever(
                                             user_id: Some(user_id),
                                             video_id: Some(vid.clone())
                                         }).ok();
-                                        tracing::error!(details=%e, "Error marking video as recompressed in DB");
-                                        return false;
                                     }
+
                                     true
                                 })();
 

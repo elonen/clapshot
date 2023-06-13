@@ -129,7 +129,7 @@ fn main() -> anyhow::Result<()>
         .unwrap_or_default();
 
     // Run the server (blocking)
-    if let Err(e) =  run_clapshot(
+    if let Err(e) = run_clapshot(
         args.flag_data_dir.to_path_buf(),
         args.flag_migrate,
         url_base,

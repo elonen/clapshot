@@ -19,6 +19,7 @@ use lib_clapshot_grpc::proto;
 /// Lists of all active connections and other server state vars
 #[derive (Clone)]
 pub struct ServerState {
+    pub grpc_srv_listening_flag: Arc<AtomicBool>,
     pub terminate_flag: Arc<AtomicBool>,
     pub db: Arc<DB>,
     pub videos_dir: PathBuf,
@@ -43,12 +44,14 @@ impl ServerState {
          upload_dir: &Path,
          url_base: &str,
          organizer_uri: Option<OrganizerURI>,
+         grpc_srv_listening_flag: Arc<AtomicBool>,
          terminate_flag: Arc<AtomicBool>) -> ServerState
     {
         ServerState {
             db,
             videos_dir: videos_dir.to_path_buf(),
             upload_dir: upload_dir.to_path_buf(),
+            grpc_srv_listening_flag,
             terminate_flag,
             url_base: url_base.to_string(),
             sid_to_session: Arc::new(RwLock::new(HashMap::<String, UserSession>::new())),

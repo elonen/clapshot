@@ -1,4 +1,7 @@
+use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::{JoinHandle, self}};
+
 use anyhow::Context;
+use database::DB;
 use lib_clapshot_grpc::GrpcBindAddr;
 use crate::{grpc::{grpc_client::{OrganizerURI}, caller::OrganizerCaller}, api_server::server_state::ServerState};
 
@@ -12,52 +15,135 @@ pub const PKG_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const PKG_NAME: &'static str = env!("CARGO_PKG_NAME");
 
 
-pub fn run_clapshot(
-    data_dir: std::path::PathBuf,
-    migrate: bool,
-    url_base: String,
-    cors_origins: Vec<String>,
-    bind_api: String,
-    port: u16,
-    organizer_uri: Option<OrganizerURI>,
-    grpc_server_bind: GrpcBindAddr,
-    n_workers: usize,
-    target_bitrate: u32,
-    poll_interval: f32,
-    resubmit_delay: f32)
-        -> anyhow::Result<()>
+struct ClapshotInit {
+    terminate_flag: Arc<AtomicBool>,
+    api_thread: Option<JoinHandle<()>>,
+    vpp_thread: Option<JoinHandle<()>>,
+}
+
+impl ClapshotInit {
+
+    /// Initialize clapshot and spawn all worker threads.
+    pub fn init_and_spawn_workers(
+        data_dir: std::path::PathBuf,
+        migrate: bool,
+        url_base: String,
+        cors_origins: Vec<String>,
+        bind_api: String,
+        port: u16,
+        organizer_uri: Option<OrganizerURI>,
+        grpc_server_bind: GrpcBindAddr,
+        n_workers: usize,
+        target_bitrate: u32,
+        poll_interval: f32,
+        resubmit_delay: f32)
+        -> anyhow::Result<Self>
+    {
+        use signal_hook::consts::TERM_SIGNALS;
+        use signal_hook::flag;
+        use crossbeam_channel::unbounded;   // Work queue
+
+        let terminate_flag = Arc::new(AtomicBool::new(false));
+        for sig in TERM_SIGNALS {
+            flag::register_conditional_shutdown(*sig, 1, Arc::clone(&terminate_flag))?;
+            flag::register(*sig, Arc::clone(&terminate_flag))?;
+        }
+
+        // Create subdirectories
+        for d in &["videos", "incoming", "videos"] {
+            std::fs::create_dir_all(&data_dir.join(d))?;
+        }
+
+        // Initialize database
+        let db_file = data_dir.join("clapshot.sqlite");
+        let db = connect_and_migrate_db(db_file.clone(), migrate)?;
+
+        // Run API server
+        let grpc_srv_listening_flag = Arc::new(AtomicBool::new(false));
+        let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
+        let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
+        let api_thread = Some({
+            let server = ServerState::new( db.clone(),
+                &data_dir.join("videos"),
+                &data_dir.join("upload"),
+                &url_base,
+                organizer_uri.clone(),
+                grpc_srv_listening_flag.clone(),
+                terminate_flag.clone());
+            let grpc_srv = if (&organizer_uri).is_some() { Some(grpc_server_bind.clone()) } else { None };
+            let ub = url_base.clone();
+            thread::spawn(move || { api_server::run_forever(user_msg_rx, grpc_srv, upload_tx, bind_api.to_string(), ub, cors_origins, server, port) })
+        });
+
+        // Connect to organizer if configured
+        match organizer_uri.clone() {
+            Some(ouri) => {
+                // Wait for our gRPC server thread to bind before handshaking with organizer
+                let start_time = std::time::Instant::now();
+                while !grpc_srv_listening_flag.load(Ordering::Relaxed) {
+                    thread::sleep(std::time::Duration::from_millis(10));
+                    if start_time.elapsed().as_secs() > 3 {
+                        anyhow::bail!("gRPC server failed to start within 3 seconds.");
+                    }
+                }
+                // Ok, organizer should be able to connect back to us now, so handshake
+                tracing::info!("Connecting gRPC srv->org...");
+                OrganizerCaller::new(ouri).handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind)?;
+                tracing::info!("Bidirectional gRPC established.");
+            }
+            None => {
+                tracing::info!("No organizer URI provided, skipping gRPC.");
+            }
+        };
+
+        // Run video processing pipeline
+        let tf = Arc::clone(&terminate_flag);
+        let dd = data_dir.clone();
+        let vpp_thread = Some({
+            let db = db.clone();
+            thread::spawn(move || { video_pipeline::run_forever(
+                db, tf.clone(), dd, user_msg_tx, poll_interval, resubmit_delay, target_bitrate, upload_rx, n_workers)})
+        });
+
+
+        Ok(ClapshotInit {terminate_flag, api_thread, vpp_thread})
+    }
+
+
+    /// Block until the terminate flag is set
+    pub fn wait_for_termination(&mut self) -> anyhow::Result<()>
+    {
+        // Loop forever, abort on SIGINT/SIGTERM or if child threads die
+        while !self.terminate_flag.load(Ordering::Relaxed) {
+            thread::sleep(std::time::Duration::from_secs(1));
+            if self.vpp_thread.as_mut().map_or(true, |t| t.is_finished()) {
+                self.terminate_flag.store(true, Ordering::Relaxed);
+            }
+        }
+
+        tracing::info!("Got kill signal. Cleaning up.");
+        self.vpp_thread.take().unwrap().join().unwrap();
+        self.api_thread.take().unwrap().join().unwrap();
+
+        Ok(())
+    }
+}
+
+
+/// Connect to the database and run migrations if needed.
+///
+/// If `migrate` is true, run migrations automatically,
+/// otherwise bail with an error if migrations are needed.
+fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyhow::Result<Arc<DB>>
 {
-    use std::thread;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use signal_hook::consts::TERM_SIGNALS;
-    use signal_hook::flag;
-    use std::sync::Arc;
     use anyhow::bail;
 
-    use crossbeam_channel::unbounded;   // Work queue
-
-    // Setup SIGINT / SIGTERM handling
-    let terminate_flag = Arc::new(AtomicBool::new(false));
-    for sig in TERM_SIGNALS {
-        flag::register_conditional_shutdown(*sig, 1, Arc::clone(&terminate_flag))?;
-        flag::register(*sig, Arc::clone(&terminate_flag))?;
-    }
-
-    // Create subdirectories
-    for d in &["videos", "incoming", "videos"] {
-        std::fs::create_dir_all(&data_dir.join(d))?;
-    }
-
-    let db_file = data_dir.join("clapshot.sqlite");
-    let was_missing = !db_file.exists();
-    if was_missing {
-        eprintln!("Database file not found, running migrations to create it.");
-    }
+    let db_was_missing = !db_file.exists();
     let db = Arc::new(database::DB::connect_db_file(&db_file).unwrap());
 
     // Check & apply database migrations
-    if  (migrate || was_missing) && db.migrations_needed()? {
-        if !was_missing {
+    if  (migrate || db_was_missing) && db.migrations_needed()? {
+        if !db_was_missing {
             // Make a gzipped backup
             let now = chrono::Local::now();
             let backup_path = db_file.with_extension(format!("backup-{}.sqlite.gz", now.format("%Y-%m-%dT%H_%M_%S")));
@@ -84,65 +170,42 @@ pub fn run_clapshot(
             Err(e) => { bail!("Error checking database migrations: {:?}", e); },
         }
     }
+    Ok(db)
+}
 
-    // Run API server
-    let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
-    let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
-    let api_thread = {
-        let db = db.clone();
-        let data_dir = data_dir.clone();
 
-        let server = ServerState::new( db,
-            &data_dir.join("videos"),
-            &data_dir.join("upload"),
-            &url_base,
-            organizer_uri.clone(),
-            terminate_flag.clone());
 
-        let grpc_srv = if (&organizer_uri).is_some() { Some(grpc_server_bind.clone()) } else { None };
-        let ub = url_base.clone();
-        thread::spawn(move || {
-            api_server::run_forever(
-                    user_msg_rx,
-                    grpc_srv,
-                    upload_tx,
-                    bind_api.to_string(),
-                    ub,
-                    cors_origins,
-                    server,
-                    port)
-            })
-        };
+pub fn run_clapshot(
+    data_dir: std::path::PathBuf,
+    migrate: bool,
+    url_base: String,
+    cors_origins: Vec<String>,
+    bind_api: String,
+    port: u16,
+    organizer_uri: Option<OrganizerURI>,
+    grpc_server_bind: GrpcBindAddr,
+    n_workers: usize,
+    target_bitrate: u32,
+    poll_interval: f32,
+    resubmit_delay: f32
+) -> anyhow::Result<()> {
 
-    match organizer_uri.clone() {
-        Some(ouri) => {
-            tracing::info!("Connecting gRPC srv->org...");
-            OrganizerCaller::new(ouri).handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind)?;
-            tracing::info!("Bidirectional gRPC established.");
-        }
-        None => {
-            tracing::info!("No organizer URI provided, skipping gRPC.");
-        }
-    };
+    // Initialize clapshot
+    let mut clapshot = ClapshotInit::init_and_spawn_workers(
+        data_dir,
+        migrate,
+        url_base,
+        cors_origins,
+        bind_api,
+        port,
+        organizer_uri,
+        grpc_server_bind,
+        n_workers,
+        target_bitrate,
+        poll_interval,
+        resubmit_delay,
+    )?;
 
-    // Run video processing pipeline
-    let tf = Arc::clone(&terminate_flag);
-    let vpp_thread = {
-            let db = db.clone();
-            thread::spawn(move || { video_pipeline::run_forever(
-                db, tf.clone(), data_dir, user_msg_tx, poll_interval, resubmit_delay, target_bitrate, upload_rx, n_workers)})
-        };
-
-    // Loop forever, abort on SIGINT/SIGTERM or if child threads die
-    while !terminate_flag.load(Ordering::Relaxed) {
-        thread::sleep(std::time::Duration::from_secs(1));
-        if vpp_thread.is_finished() {
-            terminate_flag.store(true, Ordering::Relaxed);
-        }
-    }
-
-    tracing::info!("Got kill signal. Cleaning up.");
-    vpp_thread.join().unwrap();
-    api_thread.join().unwrap();
-    Ok(())
+    // Wait until termination
+    clapshot.wait_for_termination()
 }
