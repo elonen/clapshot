@@ -152,19 +152,40 @@ impl org::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
     async fn list_tests(&self, _req: Request<proto::Empty>) -> RpcResponseResult<org::ListTestsResult>
     {
         Ok(Response::new(org::ListTestsResult {
-            test_names: vec!["test1".into(), "test2".into()],
+            test_names: vec!["test_video_owners".into(), "test2".into()],
         }))
     }
 
     async fn run_test(&self, req: Request<org::RunTestRequest>) -> RpcResponseResult<org::RunTestResult>
     {
         let req = req.into_inner();
-        match req.test_name.as_str() {
-            "test1" => {
-                Ok(Response::new(org::RunTestResult {
-                    output: "Test 1 output".into(),
-                    error: None,
-                }))
+        let test_name = req.test_name.clone();
+        let span = tracing::info_span!("run_test", test_name = test_name.as_str());
+
+        span.in_scope(|| tracing::info!("Running organizer test '{}'", test_name));
+
+        let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
+
+        // Wait until database check task is done
+        let wait_start = chrono::Utc::now();
+        while self.check_db_setup_task().await? {
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            if chrono::Utc::now() - wait_start > chrono::Duration::seconds(10) {
+                return Err(Status::deadline_exceeded(format!("Database check timed out.")));
+            }
+        }
+        tracing::info!("Database check done, running test");
+        match test_name.as_str() {
+            "test_video_owners" => {
+                let res = db_check::assert_db_check_postconds(&mut srv, span.clone()).await;
+                match res {
+                    Ok(_) => {
+                        Ok(Response::new(org::RunTestResult { output: "OK".into(), error: None }))
+                    },
+                    Err(e) => {
+                        Ok(Response::new(org::RunTestResult { output: "FAIL".into(), error: Some(format!("{:?}", e)) }))
+                    }
+                }
             },
             "test2" => {
                 Ok(Response::new(org::RunTestResult {

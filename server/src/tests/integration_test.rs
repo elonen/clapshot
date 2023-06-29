@@ -95,9 +95,9 @@ mod integration_test
     }
 
     macro_rules! cs_main_test {
-        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr] $($body:tt)*) => {
+        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr] $($body:tt)*) => {
             {
-                let $data_dir = assert_fs::TempDir::new().unwrap();
+                let $data_dir = $custom_assertfs.unwrap_or(assert_fs::TempDir::new().unwrap());
                 let $incoming_dir = $data_dir.join("incoming");
 
                 // Run server
@@ -138,7 +138,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_no_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None]
             // Copy test file to incoming dir
             let mp4_file = "60fps-example.mp4";
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
@@ -189,7 +189,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_corrupted_video() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None]
             tracing::info!("WRITING CORRUPTED VIDEO");
 
             // Copy test file to incoming dir
@@ -214,7 +214,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_and_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None]
             // Copy test file to incoming dir
             let mov_file = "NASA_Red_Lettuce_excerpt.mov";
             let dangerous_name = "  -fake-arg name; \"and some more'.txt 你 .mov";
@@ -356,9 +356,8 @@ mod integration_test
                 // Connect to organizer and list its test names
                 let test_names: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
                 {
-                    let data_dir = assert_fs::TempDir::new()?;
                     let test_names = test_names.clone();
-                    cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone())]
+                    cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone()), None]
                         match org_conn {
                             Some(mut org_conn) => {
                                 test_names.lock().unwrap().extend(
@@ -370,7 +369,6 @@ mod integration_test
                             None => { panic!("Organizer connection failed"); }
                         }
                     }
-                    data_dir.close().unwrap();
                 }
 
                 // Call gRPC run_test() for each test name
@@ -378,18 +376,20 @@ mod integration_test
                 let test_names: Vec<String> = test_names.lock().unwrap().iter().map(|s| s.clone()).collect();
                 for (i, test_name) in test_names.iter().enumerate()
                 {
-                    tracing::info!("Running organizer test {}/{}: '{}'...", i+1, test_names.len()+1, test_name);
+                    tracing::info!("\n\n\n------------ Running organizer test {}/{}: '{}'... ------------\n\n\n", i+1, test_names.len()+1, test_name);
                     let had_errors = had_errors.clone();
 
-                    cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone())]
+                    let (_db, temp_dir, _videos, _comments, _nodes, _edges) = crate::database::tests::make_test_db();
+
+                    cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone()), Some(temp_dir)]
                         match org_conn {
                             Some(mut org_conn) => {
                                 match org_conn.run_test(org::RunTestRequest { test_name: test_name.clone() }).await {
                                     Ok(res) => {
                                         let res = res.into_inner();
-                                        tracing::info!("output from organizer:\n------\n{}", res.output);
+                                        tracing::info!("output from organizer:\n------\n{}\n------\n", res.output);
                                         if let Some(err) = res.error {
-                                            tracing::error!("error output from organizer:\n------\n{}", err);
+                                            tracing::error!("error output from organizer:\n------\n{}\n------\n", err);
                                             had_errors.store(true, std::sync::atomic::Ordering::Relaxed);
                                         }
                                     },

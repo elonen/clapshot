@@ -202,3 +202,33 @@ async fn fix_dangling_videos(srv: Arc<Mutex<GrpcServerConn>>, span: tracing::Spa
     span.in_scope(|| tracing::info!(errors=?owner_edge_errors, "DB check complete."));
     Ok(owner_edge_errors)
 }
+
+
+
+/// Test: verify results after a DB check task is complete
+pub async fn assert_db_check_postconds(srv: &mut crate::OrganizerOutboundClient<crate::Channel>, _span: tracing::Span) -> anyhow::Result<()>
+{
+    let all_videos = srv.db_get_videos(org::DbGetVideosRequest {
+        filter: Some(org::db_get_videos_request::Filter::All(proto::Empty {})),
+         ..default::Default::default()
+        }).await?.into_inner();
+
+    if all_videos.items.len() == 0 {
+        anyhow::bail!("No videos in test database");
+    }
+
+    for v in all_videos.items {
+        let owner_proplist = srv.db_get_prop_nodes(org::DbGetPropNodesRequest {
+            graph_rel: Some(org::GraphObjRel {
+                rel: Some(org::graph_obj_rel::Rel::ParentOf(
+                    org::GraphObj { id: Some(org::graph_obj::Id::VideoId(v.id.clone())) })),
+                edge_type: Some(crate::graph_utils::OWNER_EDGE_TYPE.into()),
+            }), ..Default::default() }).await?.into_inner();
+
+        if owner_proplist.items.len() != 1 {
+            anyhow::bail!("Video {} has {} owners, not 1", v.id, owner_proplist.items.len());
+        }
+    };
+
+    Ok(())
+}

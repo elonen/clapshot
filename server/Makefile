@@ -54,8 +54,8 @@ debian-docker:  ${RUST_DEPS} ${DEB_DEPS} ${ENV} docker
 
 
 test-local:
-	TEST_ORG_CMD="${PLUGIN_BIN}" cargo test
-	# test_organizer
+	(cd ../organizer-plugin; make)
+	TEST_ORG_CMD="${PLUGIN_BIN}" cargo test   test_organizer
 
 test-docker: docker
 	docker run --rm ${PACKAGE}:latest  cargo test

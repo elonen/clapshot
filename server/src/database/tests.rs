@@ -75,7 +75,7 @@ println!("--- make_test_db");
 
     let data_dir = assert_fs::TempDir::new().unwrap();
 
-    let db = DB::connect_db_url(":memory:").unwrap();
+    let db = std::sync::Arc::new(DB::connect_db_file(data_dir.join("clapshot.sqlite").as_path()).unwrap());
     db.run_migrations().unwrap();
 
     // Make some videos
@@ -87,9 +87,9 @@ println!("--- make_test_db");
             user_name: Some(format!("User Number{}", 1 + i % 2)),
             orig_filename: Some(format!("test{}.mp4", i)),
             title: Some(format!("test{}.mp4", i)),
-            recompression_done: None,
-            thumb_sheet_cols: None,
-            thumb_sheet_rows: None,
+            recompression_done: Some(chrono::NaiveDateTime::default()),
+            thumb_sheet_cols: Some(i as i32),
+            thumb_sheet_rows: Some(i as i32),
             total_frames: Some((i * 1000) as i32),
             duration: Some((i * 100) as f32),
             fps: Some(format!("{}", i * i)),
@@ -173,7 +173,7 @@ println!("--- make_test_db");
         test_insert_edge!(db, from_video,videos[3].id,     to_video,videos[3].id, "edge_type_loop", 16, None),
     ];
 
-    (std::sync::Arc::new(db), data_dir, videos, comments, nodes, edges)
+    (db, data_dir, videos, comments, nodes, edges)
 }
 
 
