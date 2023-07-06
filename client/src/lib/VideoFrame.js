@@ -134,7 +134,7 @@ VideoFrame.prototype.toSMPTE = function(frame) {
 	var fps = this.frameRate;
 	function wrap(n) { return ((n < 10) ? '0' + n : n); }
 	var _hour = ((fps * 60) * 60), _minute = (fps * 60);
-	var _hours = (frameNumber / _hour).toFixed(0);
+	var _hours = Math.floor(frameNumber / _hour).toString();
 	var _minutes = (Number((frameNumber / _minute).toString().split('.')[0]) % 60);
 	var _seconds = (Number((frameNumber / fps).toString().split('.')[0]) % 60);
 	var SMPTE = (wrap(_hours) + ':' + wrap(_minutes) + ':' + wrap(_seconds) + ':' + wrap(Math.round(frameNumber % fps)));
