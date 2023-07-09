@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use db_check::ErrorsPerVideo;
 use folder_ops::create_folder;
-use ui_components::{make_folder_list_popup_actions, construct_navi_page, construct_permission_page};
+use ui_components::{make_folder_list_popup_actions, construct_navi_page};
 
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
@@ -24,6 +24,7 @@ mod folder_ops;
 mod db_check;
 mod ui_components;
 mod graph_utils;
+mod srv_short;
 
 pub type GrpcServerConn = OrganizerOutboundClient<Channel>;
 

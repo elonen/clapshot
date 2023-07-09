@@ -3,7 +3,7 @@ use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::{JoinHandle, self
 use anyhow::Context;
 use database::DB;
 use lib_clapshot_grpc::GrpcBindAddr;
-use crate::{grpc::{grpc_client::{OrganizerURI}, caller::OrganizerCaller}, api_server::server_state::ServerState};
+use crate::{grpc::{grpc_client::OrganizerURI, caller::OrganizerCaller}, api_server::server_state::ServerState};
 
 pub mod video_pipeline;
 pub mod api_server;
@@ -15,7 +15,7 @@ pub const PKG_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const PKG_NAME: &'static str = env!("CARGO_PKG_NAME");
 
 
-struct ClapshotInit {
+pub struct ClapshotInit {
     terminate_flag: Arc<AtomicBool>,
     api_thread: Option<JoinHandle<()>>,
     vpp_thread: Option<JoinHandle<()>>,
@@ -36,14 +36,14 @@ impl ClapshotInit {
         n_workers: usize,
         target_bitrate: u32,
         poll_interval: f32,
-        resubmit_delay: f32)
+        resubmit_delay: f32,
+        terminate_flag: Arc<AtomicBool>)
         -> anyhow::Result<Self>
     {
         use signal_hook::consts::TERM_SIGNALS;
         use signal_hook::flag;
         use crossbeam_channel::unbounded;   // Work queue
 
-        let terminate_flag = Arc::new(AtomicBool::new(false));
         for sig in TERM_SIGNALS {
             flag::register_conditional_shutdown(*sig, 1, Arc::clone(&terminate_flag))?;
             flag::register(*sig, Arc::clone(&terminate_flag))?;
@@ -190,6 +190,8 @@ pub fn run_clapshot(
     resubmit_delay: f32
 ) -> anyhow::Result<()> {
 
+    let terminate_flag = Arc::new(AtomicBool::new(false));
+
     // Initialize clapshot
     let mut clapshot = ClapshotInit::init_and_spawn_workers(
         data_dir,
@@ -204,6 +206,7 @@ pub fn run_clapshot(
         target_bitrate,
         poll_interval,
         resubmit_delay,
+        terminate_flag.clone()
     )?;
 
     // Wait until termination

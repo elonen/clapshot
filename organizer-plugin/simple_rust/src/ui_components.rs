@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use lib_clapshot_grpc::proto::Icon;
-use lib_clapshot_grpc::proto::org::{UserSessionData};
+use lib_clapshot_grpc::proto::org::UserSessionData;
 
 use lib_clapshot_grpc::proto::page_item::folder_listing::item::Visualization;
 use lib_clapshot_grpc::proto::{self, org};
@@ -154,7 +154,7 @@ fn folder_node_to_page_item(folder: &org::PropNode) -> proto::page_item::folder_
 
 /// Build folder view page.
 /// Reads folder_path cookie and builds a list of folders and videos in the folder.
-pub async fn construct_permission_page(_srv: &mut GrpcServerConn, ses: &UserSessionData)
+pub async fn _construct_permission_page(_srv: &mut GrpcServerConn, ses: &UserSessionData)
     -> RpcResult<org::ClientShowPageRequest>
 {
     // !!! TEMP: read html from file every time for easy development

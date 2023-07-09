@@ -1,5 +1,5 @@
 use tracing_test::traced_test;
-use crate::{database::*};
+use crate::database::*;
 
 use models::{Video, VideoInsert, Message, MessageInsert, Comment, CommentInsert, PropNode, PropNodeInsert, PropEdge, PropEdgeInsert};
 
@@ -71,9 +71,10 @@ fn _dump_db(db: &DB) {
 /// ```
 pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Vec<Comment>, Vec<PropNode>, Vec<PropEdge>)
 {
-println!("--- make_test_db");
+    println!("--- make_test_db");
 
     let data_dir = assert_fs::TempDir::new().unwrap();
+    std::fs::create_dir(&data_dir.path().join("incoming")).ok();
 
     let db = std::sync::Arc::new(DB::connect_db_file(data_dir.join("clapshot.sqlite").as_path()).unwrap());
     db.run_migrations().unwrap();

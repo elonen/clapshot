@@ -1,12 +1,12 @@
 use diesel::connection::TransactionManager;
 use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager};
+use diesel::r2d2::ConnectionManager;
 use diesel::SqliteConnection;
 use anyhow::{Context, anyhow};
 
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
-use std::path::{Path};
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 

@@ -99,6 +99,7 @@ mod integration_test
             {
                 let $data_dir = $custom_assertfs.unwrap_or(assert_fs::TempDir::new().unwrap());
                 let $incoming_dir = $data_dir.join("incoming");
+                std::fs::create_dir($incoming_dir.as_path()).ok();
 
                 // Run server
                 let port = portpicker::pick_unused_port().expect("No TCP ports free");
@@ -109,13 +110,17 @@ mod integration_test
                 let grpc_server_bind = crate::grpc::grpc_server::make_grpc_server_bind(&None, &$data_dir)?;
                 let (org_uri, _org_hdl) = prepare_organizer(&None, &$org_cmd, &$data_dir.path())?;
 
+                let terminate_flag = Arc::new(AtomicBool::new(false));
+
                 let th = {
                     let poll_interval = 0.1;
                     let data_dir = $data_dir.path().to_path_buf();
                     let url_base = url_base.clone();
                     let org_uri = org_uri.clone();
+                    let tf = terminate_flag.clone();
                     thread::spawn(move || {
-                        crate::run_clapshot(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, poll_interval*5.0).unwrap()
+                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, poll_interval*5.0, tf)?;
+                        clapshot.wait_for_termination()
                 })};
 
                 assert!(wait_for_healthy(&url_base), "Server API never became healthy");
@@ -130,6 +135,10 @@ mod integration_test
                     };
                     { $($body)* }
                 });
+
+                terminate_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                tracing::info!("Waiting for run_clapshot() to terminate...");
+                let _ = th.join().unwrap();
             }
         }
     }
@@ -371,12 +380,14 @@ mod integration_test
                     }
                 }
 
+                println!("\n\n^^^ (that was just a call listing organizer tests, now running them...) ^^^");
+
                 // Call gRPC run_test() for each test name
                 let had_errors = Arc::new(AtomicBool::new(false));
                 let test_names: Vec<String> = test_names.lock().unwrap().iter().map(|s| s.clone()).collect();
                 for (i, test_name) in test_names.iter().enumerate()
                 {
-                    tracing::info!("\n\n\n------------ Running organizer test {}/{}: '{}'... ------------\n\n\n", i+1, test_names.len()+1, test_name);
+                    println!("\n\n\n------------ Running organizer test {}/{}: '{}'... ------------\n\n\n", i+1, test_names.len()+1, test_name);
                     let had_errors = had_errors.clone();
 
                     let (_db, temp_dir, _videos, _comments, _nodes, _edges) = crate::database::tests::make_test_db();

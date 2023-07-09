@@ -1,4 +1,4 @@
-use lib_clapshot_grpc::{proto::{self, org}};
+use lib_clapshot_grpc::proto::{self, org};
 use tonic::Status;
 
 use crate::{GrpcServerConn, folder_ops::UserNodeData, RpcResult};
@@ -36,7 +36,7 @@ pub fn validate_user_id_syntax(id: &str) -> Result<(), Status> {
 
 
 /// Get or create a singleton PropNode of the given type.
-/// 
+///
 /// Call this inside a transaction (does multiple dependent DB calls)
 async fn mkget_singleton_node(srv: &mut GrpcServerConn, node_type: &str, singleton_key: &str, body: Option<String>) -> RpcResult<org::PropNode>
 {

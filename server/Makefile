@@ -55,7 +55,7 @@ debian-docker:  ${RUST_DEPS} ${DEB_DEPS} ${ENV} docker
 
 test-local:
 	(cd ../organizer-plugin; make)
-	TEST_ORG_CMD="${PLUGIN_BIN}" cargo test   test_organizer
+	TEST_ORG_CMD="${PLUGIN_BIN}" cargo test   test_organizer  | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"
 
 test-docker: docker
 	docker run --rm ${PACKAGE}:latest  cargo test
