@@ -131,7 +131,7 @@ export class VideoFrame
 		var time = (typeof frames !== 'number' ? this.video.currentTime : frames), frameRate = this.frameRate;
 		var dt = (new Date()), format = 'hh:mm:ss' + (typeof frames === 'number' ? ':ff' : '');
 		dt.setHours(0); dt.setMinutes(0); dt.setSeconds(0); dt.setMilliseconds(time * 1000);
-		function pad(n: number) { return n.toFixed(0).padStart(2, "0"); }
+		function pad(n: number) { return Math.floor(n).toString().padStart(2, "0"); }
 		return format.replace(/hh|mm|ss|ff/g, function(format: string): string {
 			switch (format) {
 				case "hh": return pad(dt.getHours() < 13 ? dt.getHours() : (dt.getHours() - 12));
@@ -159,7 +159,7 @@ export class VideoFrame
 		let hours = frameNumber / HOUR;
 		let minutes = (Math.floor(frameNumber / MIN) % 60);
 		let seconds = (Math.floor(frameNumber / fps) % 60);
-		function pad(n: number) { return n.toFixed(0).padStart(2, "0"); }
+		function pad(n: number) { return Math.floor(n).toString().padStart(2, "0"); }
 		return (pad(hours) + ':' + pad(minutes) + ':' + pad(seconds) + ':' + pad(Math.round(frameNumber % fps)));
 	}
 
