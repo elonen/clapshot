@@ -79,7 +79,8 @@ macro_rules! send_user_ok(
 
 /// Send user a list of all videos they have.
 pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let videos = ses.server.db.get_all_user_videos(&ses.user_id)?;
+    let mut videos = ses.server.db.get_all_user_videos(&ses.user_id)?;
+    videos.sort_by_cached_key(|v| -v.added_time.timestamp_millis());    // newest first
     let videos = videos.into_iter().map(|v| {
             let mut fields = v.to_json()?;
             if let Some(sheet_dims) = v.thumb_sheet_dims {
@@ -91,6 +92,7 @@ pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut WsSessionArg
             };
             Ok(fields)
         }).collect::<Res<Vec<serde_json::Value>>>()?;
+
 
     ses.emit_cmd("user_videos", &json!({
             "username": ses.user_name.clone(),
@@ -182,7 +184,7 @@ pub async fn msg_del_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>
                     details.push_str(&format!(" WARNING: Move to trash failed: {:?}.", e));
                     cleanup_errors = true;
                 }
-                
+
                 send_user_ok!(ses, Topic::Video(video_hash),
                     if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
                     details, true);
@@ -215,7 +217,7 @@ pub async fn msg_rename_video(data: &serde_json::Value, ses: &mut WsSessionArgs<
                     return Ok(());
                 }
                 ses.server.db.rename_video(video_hash, new_name)?;
-                send_user_ok!(ses, Topic::Video(video_hash), "Video renamed.", 
+                send_user_ok!(ses, Topic::Video(video_hash), "Video renamed.",
                     format!("New name: '{}'", new_name), true);
             }
         }
@@ -242,7 +244,7 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
 
             // Convert data URI to bytes
             let img_uri = DataUrl::process(&d).map_err(|e| anyhow!("Invalid drawing data URI"))?;
-            
+
             if img_uri.mime_type().type_ != "image" || img_uri.mime_type().subtype != "webp" {
                 bail!("Invalid mimetype in drawing: {:?}", img_uri.mime_type())
             }
@@ -264,7 +266,7 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
                 .map_err(|e| anyhow!("Failed to create drawings dir: {:?}", e))?;
             async_std::fs::write(drawing_path, img_data.0).await.map_err(
                 |e| anyhow!("Failed to write drawing file: {:?}", e))?;
-            
+
             // Replace data URI with filename
             drwn = Some(fname);
         }
