@@ -34,6 +34,7 @@ pub mod tests;
 mod file_upload;
 use file_upload::handle_multipart_upload;
 
+use crate::api_server::ws_handers::SessionClose;
 use crate::database::{models, DB};
 use crate::video_pipeline::IncomingFile;
 
@@ -80,10 +81,10 @@ pub struct WsSessionArgs<'a> {
 impl WsSessionArgs<'_> {
 
     /// Send a command to client websocket(s).
-    /// 
+    ///
     /// If send_to is a string, it is interpreted either as a video hash or user id. Returns the
     /// number of sessions the message was sent to.
-    /// 
+    ///
     /// - If it turns out to be a video hash, the message is sent to all websocket
     ///     that are watching it.
     /// - If it's a user id, the message is sent to all websocket connections that user has open.
@@ -102,7 +103,7 @@ impl WsSessionArgs<'_> {
             SendTo::MsgSender(sender) => { sender.send(msg)?; Ok(1u32) },
         }
     }
-    
+
     pub fn push_notify_message(&self, msg: &models::MessageInsert, persist: bool) -> Res<()> {
         let send_res = self.emit_cmd("message", &msg.to_json()?, SendTo::UserId(&msg.user_id));
         if let Ok(sent_count) = send_res {
@@ -137,7 +138,7 @@ impl WsSessionArgs<'_> {
             }
         }
         let mut fields = c.to_json()?;
-        fields["comment_id"] = fields["id"].take();  // swap id with comment_id, because the client expects comment_id        
+        fields["comment_id"] = fields["id"].take();  // swap id with comment_id, because the client expects comment_id
         self.emit_cmd("new_comment", &fields , send_to).map(|_| ())
     }
 
@@ -175,8 +176,8 @@ async fn handle_ws_session(
     let (mut ws_tx, mut ws_rx) = ws.split();
 
     // Let the client know user's id and name
-    if let Err(e) = ses.emit_cmd("welcome", 
-            &serde_json::json!({ "user_id": user_id, "username": username }), 
+    if let Err(e) = ses.emit_cmd("welcome",
+            &serde_json::json!({ "user_id": user_id, "username": username }),
             SendTo::CurSession()) {
         tracing::error!(details=%e, "Error sending welcome message. Closing session.");
         return;
@@ -223,7 +224,7 @@ async fn handle_ws_session(
                                 // Check data fields for length. Only "drawing" is allowed to be long.
                                 for (k, v) in data.as_object().unwrap_or(&serde_json::Map::new()) {
                                     if k != "drawing" && v.as_str().map(|s| s.len() > 2048).unwrap_or(false) { bail!("Field too long"); }
-                                }                                
+                                }
                                 Ok((cmd, data))
                             }
 
@@ -242,7 +243,10 @@ async fn handle_ws_session(
                             tracing::debug!(cmd=%cmd, "Msg from client.");
 
                             if let Err(e) = msg_dispatch(&cmd, &data, &mut ses).await {
-                                    if let Some(e) = e.downcast_ref::<tokio::sync::mpsc::error::SendError<Message>>() {
+                                    if let Some(e) = e.downcast_ref::<SessionClose>() {
+                                        if !matches!(e, SessionClose::Logout) { tracing::info!("[{}] Closing session: {:?}", sid, e); }
+                                        break;
+                                    } else if let Some(e) = e.downcast_ref::<tokio::sync::mpsc::error::SendError<Message>>() {
                                         tracing::error!("[{}] Error sending message. Closing session. -- {}", sid, e);
                                         break;
                                     } else {
@@ -274,7 +278,7 @@ async fn handle_ws_session(
 }
 
 /// Extract user id and name from HTTP headers (set by nginx)
-fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String) 
+fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String)
 {
     fn try_get_first_named_hdr<T>(hdrs: &HeaderMap, names: T) -> Option<String>
         where T: IntoIterator<Item=&'static str> {
@@ -295,7 +299,7 @@ fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String)
         }};
     let user_name = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Name", "X_Remote_User_Name", "HTTP_X_REMOTE_USER_NAME"])
         .unwrap_or_else(|| user_id.clone());
-    
+
     (user_id, user_name)
 }
 
@@ -399,7 +403,7 @@ async fn run_api_server_async(
                         if let Err(_) = server_state.send_to_all_video_sessions(&vh, &msg) {
                             tracing::error!(video=vh, "Failed to send notification to video hash.");
                         }
-                    }        
+                    }
                 };
 
                 // Message to a single user

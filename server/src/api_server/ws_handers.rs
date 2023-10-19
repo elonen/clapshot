@@ -411,11 +411,12 @@ pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut WsSessionArgs
     ses.emit_cmd("collab_cmd", &msg, super::SendTo::CurCollab()).map(|_| ())
 }
 
+// custom logout error with thiserror
 
-pub async fn msg_logout(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    tracing::info!("logout: user={}", ses.user_id);
-    drop(ses.sender);
-    Ok(())
+#[derive(thiserror::Error, Debug)]
+pub enum SessionClose {
+    #[error("User logout")]
+    Logout,
 }
 
 
@@ -432,7 +433,10 @@ pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut WsSessi
         "join_collab" => msg_join_collab(data, ses).await,
         "leave_collab" => msg_leave_collab(data, ses).await,
         "collab_report" => msg_collab_report(data, ses).await,
-        "logout" => msg_logout(data, ses).await,
+        "logout" => {
+            tracing::info!("logout from client: user={}", ses.user_id);
+            return Err(SessionClose::Logout.into());
+        },
         "echo" => {
             let answ = format!("Echo: {}", data.as_str().ok_or(anyhow!("data not found"))?);
             ses.sender.send(WsMsg::text(answ))?;
