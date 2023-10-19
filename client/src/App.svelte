@@ -62,7 +62,7 @@
     // Close draw mode while showing (drawing from a saved) comment
     video_player.onToggleDraw(false);
     comment_input.forceDrawMode(false);
-    if (e.detail.drawing)    
+    if (e.detail.drawing)
       video_player.setDrawing(e.detail.drawing);
     if ($collab_id) {
       console.log("Collab: onDisplayComment. collab_id: '" + $collab_id + "'");
@@ -76,7 +76,7 @@
     });
   }
 
-  function onReplyComment(e) {    
+  function onReplyComment(e) {
     ws_emit('add_comment', {
         video_hash: $video_hash,
         parent_id: e.detail.parent_id,
@@ -101,7 +101,7 @@
     // This is called from onClearAll event and history.back()
     console.log("closeVideo");
     ws_emit('leave_collab', {});
-    $collab_id = null;   
+    $collab_id = null;
     $video_hash = null;
     $video_url = null;
     $video_fps = null;
@@ -225,7 +225,7 @@
   }
 
 
-  
+
   let ws_socket: WebSocket;
 
   function is_connected() {
@@ -244,7 +244,7 @@
   let send_queue: any[] = [];
 
   // Send message to server. If not connected, queue it.
-  function ws_emit(event_name: string, data: any) 
+  function ws_emit(event_name: string, data: any)
   {
     let raw_msg = JSON.stringify({cmd: event_name, data: data});
     if (is_connected()) {
@@ -256,7 +256,7 @@
       send_queue.push(raw_msg);
     }
   }
-  
+
   // Infinite loop that sends messages from the queue.
   // This only ever sends anything if ws_emit() queues messages due to temporary disconnection.
   function send_queue_loop()
@@ -376,17 +376,17 @@
     ws_socket.addEventListener("message", function (event)
     {
       const msg_json = JSON.parse(event.data);
-      handle_with_errors(() => 
+      handle_with_errors(() =>
       {
         const cmd = msg_json.cmd;
         const data = msg_json.data;
 
         log_abbreviated("[RAW SERVER] cmd: '" + cmd + "', data size = " + JSON.stringify(data).length);
 
-        if (Date.now() - last_video_progress_msg_ts > 5000) {          
+        if (Date.now() - last_video_progress_msg_ts > 5000) {
           $video_progress_msg = null; // timeout progress message after a while
         }
-        
+
         switch (cmd)
         {
           case 'welcome':
@@ -441,7 +441,7 @@
             if ($collab_id)
               ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
             break;
-            
+
           case 'new_comment':
             log_abbreviated("[SERVER] new_comment: " + JSON.stringify(data));
             {
@@ -541,7 +541,7 @@ function installThumbScrubber(e: MouseEvent, item: object)
   let sheet_cols = item.thumb_sheet_cols;
   let sheet_rows = item.thumb_sheet_rows;
   let bgImg =  new Image();
-  
+
   bgImg.onload = (le) => {
     // Total size of sprite sheet in pixels
     let sheet_w_px = le.target.naturalWidth;
@@ -618,7 +618,7 @@ function removeThumbScrubber(e: MouseEvent, item: object)
             </h1>
             <div class="fa-2x block">
               <i class="fas fa-spinner connecting-spinner"></i>
-            </div>            
+            </div>
 
           </div>
 
@@ -632,7 +632,7 @@ function removeThumbScrubber(e: MouseEvent, item: object)
                 <VideoPlayer
                   bind:this={video_player} src={$video_url}
                   on:seeked={onVideoSeeked}
-                  on:collabReport={onCollabReport} 
+                  on:collabReport={onCollabReport}
                   on:commentPinClicked={onCommentPinClicked}
                   />
               </div>
@@ -666,12 +666,16 @@ function removeThumbScrubber(e: MouseEvent, item: object)
 
         {:else}
 
-          <!-- ========== video listing ============= -->        
-          <div class="m-6 text">            
+          {#if upload_url }
+          <div class="m-6">
+            <FileUpload post_url={upload_url}/>
+          </div>
+          {/if}
+
+          <!-- ========== video listing ============= -->
+          <div class="m-6 text">
             <h1 class="text-4xl m-6">
-              {#if $all_my_videos.length>0}
-                All your videos
-              {:else}
+              {#if $all_my_videos.length==0}
                 You have no videos.
               {/if}
             </h1>
@@ -687,6 +691,7 @@ function removeThumbScrubber(e: MouseEvent, item: object)
                   <div class="w-[7.111rem] h-[4rem] float-left mr-2 bg-gray-900 rounded-md overflow-hidden"
                     style="background-image: url('{item.thumb_url}'); background-size: cover; background-position: 0 0;"
                     on:focus={()=>{}}
+                    on:blur={()=>{}}
                     on:mouseover={(e) => installThumbScrubber(e, item)}
                     on:mouseout={(e) => removeThumbScrubber(e, item)}
                   >
@@ -700,17 +705,8 @@ function removeThumbScrubber(e: MouseEvent, item: object)
                   onRename={() => { onClickRenameVideo(item.video_hash, item.title) }} />
                 <div class="leading-none"><a href="/?vid={item.video_hash}" title="{item.title}" class="break-all text-xs">{item.title}</a></div>
               </div>
-              {/each} 
-            </div> 
-
-            {#if upload_url }
-            <div class="m-6">
-              <h1 class="text-2xl mt-12 text-slate-500">
-                Upload video
-              </h1>
-              <FileUpload post_url={upload_url}/>
+              {/each}
             </div>
-            {/if}
 
             {#if $user_messages.length>0}
               <h1 class="text-2xl m-6 mt-12 text-slate-500">
@@ -719,8 +715,8 @@ function removeThumbScrubber(e: MouseEvent, item: object)
               <div class="gap-4 max-h-56 overflow-y-auto border-l px-2 border-gray-900">
                 {#each $user_messages as msg}
                   <UserMessage {msg} />
-                {/each} 
-              </div> 
+                {/each}
+              </div>
             {/if}
 
           </div>
@@ -733,11 +729,11 @@ function removeThumbScrubber(e: MouseEvent, item: object)
 <style>
 /* Animate "waiting for server" spinner */
 .connecting-spinner { animation: rotation 3s infinite steps(8); }
-@keyframes rotation { 
-    from { 
-        transform: rotate(0deg); 
-    } to { 
-        transform: rotate(360deg); 
+@keyframes rotation {
+    from {
+        transform: rotate(0deg);
+    } to {
+        transform: rotate(360deg);
     }
 }
 

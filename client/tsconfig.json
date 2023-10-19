@@ -5,6 +5,7 @@
     "useDefineForClassFields": true,
     "module": "ESNext",
     "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,  // to avoid "svelte 'mymodule.svelte' has no default export"
     "baseUrl": ".",
     /**
      * Typecheck JS in `.svelte` and `.js` files by default.
