@@ -32,7 +32,8 @@ RUN chown -R ${UID} /mnt/clapshot-data
 # Install Clapshot server & client
 COPY dist_deb/clapshot-client_*.deb /root/
 COPY dist_deb/clapshot-server_*.deb /root/
-RUN dpkg --path-include '/usr/share/doc/*' --refuse-downgrade -i /root/*.deb
+RUN echo "Current architecture: $(dpkg --print-architecture)"
+RUN dpkg --path-include '/usr/share/doc/*' --refuse-downgrade -i /root/*_$(dpkg --print-architecture).deb /root/*_all.deb
 
 RUN rm -f /etc/nginx/sites-enabled/*
 
