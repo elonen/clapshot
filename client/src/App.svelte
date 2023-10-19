@@ -679,9 +679,9 @@ function removeThumbScrubber(e: MouseEvent, item: object)
                 You have no videos.
               {/if}
             </h1>
-            <div class="gap-8">
+            <div class="flex flex-wrap gap-4">
               {#each $all_my_videos as item}
-              <div class="bg-slate-600 w-80 h-20 rounded-md p-2 m-1 mx-6 overflow-clip inline-block cursor-pointer"
+              <div class="bg-slate-600 w-80 h-20 rounded-md p-2 m-1 mx-1 overflow-clip cursor-pointer"
                   on:click|preventDefault={ () => onClickVideo(item.video_hash) }
                   on:keypress={(e) => { if (e.key === 'Enter') { onClickVideo(item.video_hash) }}}
                   >
