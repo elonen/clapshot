@@ -95,8 +95,8 @@ pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut WsSessionArg
 
 
     ses.emit_cmd("user_videos", &json!({
-            "username": ses.user_name.clone(),
-            "user_id": ses.user_id.clone(),
+            "username": ses.user_name,
+            "user_id": ses.user_id,
             "videos": videos }),
         super::SendTo::CurSession())?;
     Ok(())
