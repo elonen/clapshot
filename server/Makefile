@@ -5,7 +5,15 @@ PACKAGE_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo 
 UID=$(shell id -u)
 GID=$(shell id -g)
 
-PACKAGE=clapshot_server
+ifeq ($(TARGET_ARCH),)
+  ARCH=$(shell uname -m)
+  PLATFORM_STR =
+else
+  ARCH = $(TARGET_ARCH)
+  PLATFORM_STR = --platform linux/$(TARGET_ARCH)
+endif
+
+PACKAGE=clapshot_server_${ARCH}
 SERVER_CMD=target/release/clapshot-server
 DEV_DATADIR=DEV_DATADIR
 
@@ -32,7 +40,7 @@ docker: ${DEV_DATADIR}
 	@echo "Otherwise you wouldn't be able to access it without root privileges."
 	@echo "-------------------------------------------------------------------------------"
 
-	DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID} .
+	DOCKER_BUILDKIT=1 docker build $(PLATFORM_STR) -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID} .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
 
 
