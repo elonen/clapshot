@@ -9,13 +9,13 @@ use lib_clapshot_grpc::proto::org::OnStartUserSessionResult;
 use tracing::debug;
 use warp::Filter;
 use std::collections::HashMap;
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 use parking_lot::RwLock;
 use futures_util::stream::StreamExt;
 use futures_util::SinkExt;
-use warp::ws::{Message};
+use warp::ws::Message;
 use warp::http::HeaderMap;
 use std::sync::atomic::Ordering::Relaxed;
 
@@ -41,11 +41,12 @@ use crate::api_server::user_session::AuthzTopic;
 use crate::api_server::user_session::org_authz;
 use crate::client_cmd;
 use crate::database::DbBasicQuery;
-use crate::database::{models};
+use crate::database::models;
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::grpc::grpc_client::OrganizerConnection;
 use crate::grpc::grpc_client::OrganizerURI;
 use crate::grpc::{grpc_server, make_video_popup_actions};
+use crate::api_server::ws_handers::SessionClose;
 use crate::video_pipeline::IncomingFile;
 use self::user_session::UserSession;
 
@@ -241,7 +242,10 @@ async fn handle_ws_session(
                                 Ok(true) => {},
                                 Ok(false) => { break; }
                                 Err(e) => {
-                                    if let Some(e) = e.downcast_ref::<tokio::sync::mpsc::error::SendError<Message>>() {
+                                    if let Some(e) = e.downcast_ref::<SessionClose>() {
+                                        if !matches!(e, SessionClose::Logout) { tracing::info!("[{}] Closing session: {:?}", sid, e); }
+                                        break;
+                                    } else if let Some(e) = e.downcast_ref::<tokio::sync::mpsc::error::SendError<Message>>() {
                                         tracing::error!("[{}] Error sending message. Closing session. -- {}", sid, e);
                                         break;
                                     } else {

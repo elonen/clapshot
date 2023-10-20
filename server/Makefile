@@ -6,7 +6,15 @@ PLUGIN_BIN=../organizer-plugin/simple_rust/target/debug/clapshot-organizer_rust-
 UID=$(shell id -u)
 GID=$(shell id -g)
 
-PACKAGE=clapshot_server
+ifeq ($(TARGET_ARCH),)
+  ARCH=$(shell uname -m)
+  PLATFORM_STR =
+else
+  ARCH = $(TARGET_ARCH)
+  PLATFORM_STR = --platform linux/$(TARGET_ARCH)
+endif
+
+PACKAGE=clapshot_server_${ARCH}
 SERVER_CMD=target/debug/clapshot-server
 DEV_DATADIR=DEV_DATADIR
 
@@ -33,7 +41,7 @@ docker: ${DEV_DATADIR}
 	@echo "Otherwise you wouldn't be able to access it without root privileges."
 	@echo "-------------------------------------------------------------------------------"
 
-	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID}  -f Dockerfile.server .
+	cd .. && DOCKER_BUILDKIT=1 docker build $(PLATFORM_STR) -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID}  -f Dockerfile.server .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
 
 
@@ -55,7 +63,8 @@ debian-docker:  ${RUST_DEPS} ${DEB_DEPS} ${ENV} docker
 
 test-local:
 	(cd ../organizer-plugin; make)
-	TEST_ORG_CMD="${PLUGIN_BIN}" cargo test   test_organizer  | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"
+	TEST_ORG_CMD="${PLUGIN_BIN}" cargo test | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"
+	# TEST_ORG_CMD="${PLUGIN_BIN}" cargo test   test_organizer  | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"
 
 test-docker: docker
 	docker run --rm ${PACKAGE}:latest  cargo test

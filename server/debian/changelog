@@ -1,3 +1,10 @@
+clapshot-server (0.5.6) bullseye; urgency=low
+
+  * Sort videos from latest to oldest
+  * Update libraries, bump Rust to 1.73
+
+ -- Jarno Elonen <elonen@iki.fi>  Thu, 19 Oct 2023 21:04:00 +0200
+
 clapshot-server (0.5.4) bullseye; urgency=low
 
   * Run ffmpeg on nice 10

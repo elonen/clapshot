@@ -3,7 +3,7 @@
 #![allow(unused_imports)]
 
 use std::collections::HashMap;
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::str::FromStr;
 use parking_lot::RwLock;
 type WsMsg = warp::ws::Message;
@@ -376,7 +376,7 @@ pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut UserSession, se
 
     if let Some(v) = get_video_or_send_error(data["video_id"].as_str(), ses, server).await? {
         org_authz_with_default(&ses.org_session, "join collab", true, server, &ses.organizer,
-            true, AuthzTopic::Other(Some(collab_id.clone()), authz_req::other_op::Op::JoinCollabSession)).await?;
+            true, AuthzTopic::Other(Some(collab_id), authz_req::other_op::Op::JoinCollabSession)).await?;
 
         match server.link_session_to_collab(collab_id, &v.id, ses.sender.clone()) {
             Ok(csg) => {
@@ -451,6 +451,7 @@ pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut UserSession, 
     }
 }
 
+// custom logout error with thiserror
 
 pub async fn msg_organizer_cmd(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
 
@@ -478,6 +479,12 @@ println!("msg_organizer_cmd data: {:?}", data);
     Ok(())
 }
 
+#[derive(thiserror::Error, Debug)]
+pub enum SessionClose {
+    #[error("User logout")]
+    Logout,
+}
+
 
 /// Dispatch a message to the appropriate handler.
 /// Returns false if session should be closed.
@@ -496,8 +503,8 @@ pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut UserSes
         "collab_report" => msg_collab_report(data, ses, server).await,
         "organizer_cmd" => msg_organizer_cmd(data, ses, server).await,
         "logout" => {
-            tracing::info!("logout: user={}", ses.user_id);
-            return Ok(false);
+            tracing::info!("logout from client: user={}", ses.user_id);
+            return Err(SessionClose::Logout.into());
         },
         "echo" => {
             let answ = format!("Echo: {}", data.as_str().ok_or(anyhow!("data not found"))?);

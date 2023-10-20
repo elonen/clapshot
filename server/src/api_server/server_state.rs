@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc};
+use std::sync::Arc;
 use parking_lot::{RwLock, MappedRwLockReadGuard, RwLockReadGuard};
-use std::sync::atomic::{AtomicBool};
+use std::sync::atomic::AtomicBool;
 
 use tokio::sync::Mutex;
 use anyhow::anyhow;
@@ -154,7 +154,7 @@ impl ServerState {
     /// Returns a guard that will remove the sender when dropped.
     pub fn link_session_to_video(&self, session_id: &str, video_id: &str) -> Res<()> {
         let mut map = self.sid_to_session.write();
-        let mut ses = map.get_mut(session_id).ok_or_else(|| anyhow!("Session {} not found", session_id))?;
+        let ses = map.get_mut(session_id).ok_or_else(|| anyhow!("Session {} not found", session_id))?;
         let grd: OpaqueGuard = self.add_sender_to_maplist(video_id, ses.sender.clone(), &self.video_id_to_senders);
         ses.video_session_guard = Some(grd);
         Ok(())
