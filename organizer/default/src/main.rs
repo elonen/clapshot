@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use serde::Deserialize;
 use docopt::Docopt;
-use simple_organizer::{NAME, VERSION};
+use default_organizer::{NAME, VERSION};
 use lib_clapshot_grpc::proto;
 use tokio::sync::mpsc;
 use tracing::info;
@@ -78,7 +78,7 @@ async fn run_grpc_server(bind: BindAddr) -> anyhow::Result<()>
 
     use tonic::{transport::Server};
     use proto::org::organizer_inbound_server::OrganizerInboundServer;
-    use simple_organizer::SimpleOrganizer;
+    use default_organizer::DefaultOrganizer;
 
     let refl = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
@@ -86,7 +86,7 @@ async fn run_grpc_server(bind: BindAddr) -> anyhow::Result<()>
 
     let srv = Server::builder()
         .add_service(refl)
-        .add_service(OrganizerInboundServer::new(SimpleOrganizer::default()));
+        .add_service(OrganizerInboundServer::new(DefaultOrganizer::default()));
 
     let (shutdown_send, mut shutdown_recv) = mpsc::unbounded_channel();
     ctrlc::set_handler(move || { shutdown_send.send(()).unwrap(); })

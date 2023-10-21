@@ -159,7 +159,7 @@ pub async fn _construct_permission_page(_srv: &mut GrpcServerConn, ses: &UserSes
 {
     // !!! TEMP: read html from file every time for easy development
     // --> replace with include_str!() when done
-    let perms_html = std::fs::read_to_string("/home/jarno/clapshot/organizer-plugin/simple_rust/html/permission_dlg.html")
+    let perms_html = std::fs::read_to_string("/home/jarno/clapshot/organizer/default/html/permission_dlg.html")
         .expect("Failed to read html/permission_dlg.html");
     //     //let perms_html = include_str!("../html/permission_dlg.html");
 

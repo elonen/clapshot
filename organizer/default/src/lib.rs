@@ -29,7 +29,7 @@ mod srv_short;
 pub type GrpcServerConn = OrganizerOutboundClient<Channel>;
 
 #[derive(Default)]
-pub struct SimpleOrganizer {
+pub struct DefaultOrganizer {
     client: Arc<Mutex<Option<GrpcServerConn>>>,
     db_checker_res: Arc<Mutex<Option<anyhow::Result<ErrorsPerVideo>>>>,
 }
@@ -44,7 +44,7 @@ pub const NAME: &'static str = env!("CARGO_PKG_NAME");
 // Implement inbound RCP methods
 
 #[tonic::async_trait]
-impl org::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
+impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
 {
     async fn handshake(&self, req: Request<org::ServerInfo>) -> RpcResponseResult<proto::Empty>
     {
@@ -202,7 +202,7 @@ impl org::organizer_inbound_server::OrganizerInbound for SimpleOrganizer
 }
 
 
-impl SimpleOrganizer
+impl DefaultOrganizer
 {
     /// Check if database check is still running.
     /// If it's done, send any error messages to clients.

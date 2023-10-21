@@ -91,7 +91,7 @@ FROM chef AS builder
 
 # Copy sources & build
 COPY --chown=${UID}:${GID} server /app/server
-COPY --chown=${UID}:${GID} organizer-plugin /app/organizer-plugin
+COPY --chown=${UID}:${GID} organizer /app/organizer
 COPY --chown=${UID}:${GID} protobuf /app/protobuf
 RUN make
 

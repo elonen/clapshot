@@ -1,7 +1,7 @@
 .PHONY: deps clean test docker test run run-local run-docker docs default debian-local
 
 PACKAGE_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
-PLUGIN_BIN=../organizer-plugin/simple_rust/target/debug/clapshot-organizer_rust-simple
+PLUGIN_BIN=../organizer/default/target/debug/clapshot-default-organizer
 
 UID=$(shell id -u)
 GID=$(shell id -g)
@@ -62,7 +62,7 @@ debian-docker:  ${RUST_DEPS} ${DEB_DEPS} ${ENV} docker
 
 
 test-local:
-	(cd ../organizer-plugin; make)
+	(cd ../organizer; make)
 	TEST_ORG_CMD="${PLUGIN_BIN}" cargo test | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"
 	# TEST_ORG_CMD="${PLUGIN_BIN}" cargo test   test_organizer  | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"
 
@@ -79,7 +79,7 @@ docs:
 	@echo "Documentation generated. See docs/_build/"
 
 run-local: ${SERVER_CMD} ${DEV_DATADIR}
-	(cd ../organizer-plugin; make)
+	(cd ../organizer; make)
 	${SERVER_CMD} --url-base http://127.0.0.1:8095/ --port 8095 --data-dir ${DEV_DATADIR} --migrate --cors '*' --debug  --org-cmd "${PLUGIN_BIN}"
 
 run-docker: docker

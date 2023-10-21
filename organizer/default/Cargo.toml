@@ -1,5 +1,5 @@
 [package]
-name = "clapshot-organizer-simple-rust"
+name = "clapshot-default-organizer"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,11 +8,11 @@ edition = "2021"
 
 
 [[bin]]
-name = "clapshot-organizer_rust-simple"
+name = "clapshot-default-organizer"
 path = "src/main.rs"
 
 [lib]
-name = "simple_organizer"
+name = "default_organizer"
 path = "src/lib.rs"
 
 

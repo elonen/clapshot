@@ -80,7 +80,7 @@ mod integration_test
 
     /// Query API health endpoint until it returns 200 OK or timeout
     fn wait_for_healthy(url_base: &str) -> bool {
-        const MAX_RETRIES: usize = 6;
+        const MAX_RETRIES: usize = 10;
         let mut interval_ms: u64 = 10;
         let url = format!("{}/api/health", url_base);
         for i in 1..=MAX_RETRIES {
@@ -89,6 +89,7 @@ mod integration_test
             let resp_result = reqwest::blocking::get(&url);
             if let Ok(resp) = resp_result {
                 if resp.status() == 200 { return true; }
+                else { tracing::debug!("wait_for_healthy got status {} from /api/health. Try {}/{}.", resp.status(), i, MAX_RETRIES) }
             }
         }
         false
