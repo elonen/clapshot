@@ -1,0 +1,5 @@
+_venv
+*.pyc
+dist
+pkg_tmp
+
