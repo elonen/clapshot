@@ -1,7 +1,7 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::{path::PathBuf, env};
 
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../proto");
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../proto");
     let proto_files = vec![root.join("clapshot.proto")];
 
     let descriptor_path = PathBuf::from(env::var("OUT_DIR").unwrap())

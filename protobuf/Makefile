@@ -1,4 +1,4 @@
-SUBDIRS := $(wildcard */.)
+SUBDIRS := libs
 
 .PHONY: subdirs $(SUBDIRS) clean
 

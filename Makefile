@@ -26,6 +26,8 @@ debian-docker:
 clean:	clean-debian
 	(cd client; make clean)
 	(cd server; make clean)
+	(cd organizer; make clean)
+	(cd protobuf; make clean)
 
 docker:
 	(cd client; make docker)
