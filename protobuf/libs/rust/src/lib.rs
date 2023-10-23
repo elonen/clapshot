@@ -1,4 +1,4 @@
-use std::{path::{PathBuf}, sync::{Arc, atomic::AtomicBool}, fmt::Debug};
+use std::{path::PathBuf, sync::{Arc, atomic::AtomicBool}, fmt::Debug};
 use anyhow::Context;
 use tonic::{body::BoxBody, transport::NamedService};
 use warp::http;

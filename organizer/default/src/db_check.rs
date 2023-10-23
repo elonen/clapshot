@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use lib_clapshot_grpc::proto::org;
 use tokio::sync::Mutex;
-use crate::srv_short::{getcheck_video_owner, get_childless_videos, get_all_videos, mk_edge_video_to_node, commit_transaction, begin_transaction, db_upsert_edges, mkget_video_owner_node};
+use crate::srv_short::{getcheck_video_owner, get_childless_videos, get_all_videos, mk_edge_video_to_node, db_upsert_edges, mkget_video_owner_node, TransactionGuard};
 
 use crate::GrpcServerConn;
 use crate::graph_utils::OWNER_EDGE_TYPE;
@@ -39,14 +39,12 @@ async fn fix_dangling_videos(srv: Arc<Mutex<GrpcServerConn>>, span: tracing::Spa
     async fn check_owner_edges(srv: Arc<Mutex<GrpcServerConn>>, span: &tracing::Span)
         -> anyhow::Result<ErrorsPerVideo>
     {
-        begin_transaction(&srv).await?;
-
         let page_size = 8;
         let mut paging = org::DbPaging { page_size, page_num: 0, };
         let mut errors: ErrorsPerVideo = Vec::new();
 
         loop {
-            begin_transaction(&srv).await?;
+            let tx = TransactionGuard::begin(&srv, "fix_dangling: inner").await?;
             let mut edges = Vec::new();
 
             let vids = get_childless_videos(&srv, OWNER_EDGE_TYPE, &mut paging).await?;
@@ -69,11 +67,10 @@ async fn fix_dangling_videos(srv: Arc<Mutex<GrpcServerConn>>, span: tracing::Spa
             }
 
             db_upsert_edges(&srv, edges).await?;
-            commit_transaction(&srv).await?;
+            tx.commit().await?;
             paging.page_num += 1;
         }
 
-        commit_transaction(&srv).await?;
         Ok(errors)
     }
 

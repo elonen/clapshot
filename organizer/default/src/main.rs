@@ -76,7 +76,7 @@ async fn run_grpc_server(bind: BindAddr) -> anyhow::Result<()>
 {
     tracing::info!("srv->org gRPC server: Binding to '{:?}'", bind);
 
-    use tonic::{transport::Server};
+    use tonic::transport::Server;
     use proto::org::organizer_inbound_server::OrganizerInboundServer;
     use default_organizer::DefaultOrganizer;
 

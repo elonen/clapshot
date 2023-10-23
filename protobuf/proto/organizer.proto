@@ -51,6 +51,9 @@ service OrganizerOutbound {
     rpc DbUpsert(DbUpsertRequest) returns (DbUpsertResponse);
     rpc DbDelete(DbDeleteRequest) returns (DbDeleteResponse);
 
+    // Explicit transaction calls. You should probably wrap these in RAII guards in your program code.
+    // Don't expect nested transactions to work reliably.
+
     rpc DbBeginTransaction(DbBeginTransactionRequest) returns (Empty);
     rpc DbCommitTransaction(DbCommitTransactionRequest) returns (Empty);
     rpc DbRollbackTransaction(DbRollbackTransactionRequest) returns (Empty);

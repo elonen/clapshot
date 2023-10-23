@@ -6,20 +6,49 @@ use crate::{GrpcServerConn, graph_utils::{mkget_session_user, validate_user_id_s
 pub type SrvRef = crate::OrganizerOutboundClient<crate::Channel>;
 
 // =================================================================
-// Trivial helpers to shorten syntax
+// Transaction guard
 // =================================================================
 
-pub async fn begin_transaction(srv: &Arc<Mutex<GrpcServerConn>>) -> anyhow::Result<()> {
-    tracing::debug!("Beginning transaction");
-    srv.lock().await.db_begin_transaction(org::DbBeginTransactionRequest {}).await?;
-    Ok(())
+pub struct TransactionGuard<'a> {
+    srv: &'a Arc<Mutex<GrpcServerConn>>,
+    active: bool,
+    name: String,
 }
 
-pub async fn commit_transaction(srv: &Arc<Mutex<GrpcServerConn>>) -> anyhow::Result<()> {
-    tracing::debug!("Committing transaction");
-    srv.lock().await.db_commit_transaction(org::DbCommitTransactionRequest {}).await?;
-    Ok(())
+impl<'a> TransactionGuard<'a> {
+    pub async fn begin(srv: &'a Arc<Mutex<GrpcServerConn>>, name: &str) -> anyhow::Result<TransactionGuard<'a>> {
+        tracing::debug!("Beginning transaction '{}'", name);
+        srv.lock().await.db_begin_transaction(org::DbBeginTransactionRequest {}).await?;
+        Ok(TransactionGuard { srv, active: true, name: name.into() })
+    }
+
+    pub async fn commit(mut self) -> anyhow::Result<()> {
+        if !self.active { return Err(anyhow::anyhow!("TransactionGuard: commit() called twice")); }
+        tracing::debug!("Committing transaction '{}'", self.name);
+        self.srv.lock().await.db_commit_transaction(org::DbCommitTransactionRequest {}).await?;
+        self.active = false; // Ensure it doesn't rollback when dropped
+        Ok(())
+    }
 }
+
+impl<'a> Drop for TransactionGuard<'a> {
+    fn drop(&mut self) {
+        if self.active {
+            tracing::debug!("Rolling back transaction '{}'", self.name);
+            let srv_clone = self.srv.clone();
+            // Check if Tokio runtime is still active
+            if tokio::runtime::Handle::try_current().is_ok() {
+                tokio::spawn(async move {
+                    let _ = srv_clone.lock().await.db_rollback_transaction(org::DbRollbackTransactionRequest {}).await;
+                });
+            }
+        }
+    }
+}
+
+// =================================================================
+// Trivial helpers to shorten syntax
+// =================================================================
 
 pub async fn db_upsert_edges(srv: &Arc<Mutex<GrpcServerConn>>, edges: Vec<org::PropEdge>) -> anyhow::Result<()> {
     tracing::debug!("Upserting {} edges", edges.len());

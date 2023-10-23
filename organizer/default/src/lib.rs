@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use db_check::ErrorsPerVideo;
 use folder_ops::create_folder;
+use srv_short::TransactionGuard;
 use ui_components::{make_folder_list_popup_actions, construct_navi_page};
 
 use tokio::sync::Mutex;
@@ -125,23 +126,17 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
                 let path = get_current_folder_path(&mut srv, &ses).await?;
                 let parent_folder = path.last().cloned();
 
-                // Create folder in transaction
-                srv.db_begin_transaction(org::DbBeginTransactionRequest {}).await?;
-
-                match create_folder(&mut srv, &ses, parent_folder, args).await {
-                    Ok(_) => {
-                        srv.db_commit_transaction(org::DbCommitTransactionRequest {}).await?;
-
-                        tracing::debug!("Folder created & committed, refreshing client's page");
-                        let navi_page = construct_navi_page(&mut srv, &ses).await?;
-                        srv.client_show_page(navi_page).await?;
-
-                        Ok(Response::new(proto::Empty {}))
-                    },
-                    Err(e) => {
-                        srv.db_rollback_transaction(org::DbRollbackTransactionRequest {}).await?;
-                        Err(e)
-                    }
+                // Create folder (in transaction)
+                let srv_tmp = Arc::new(Mutex::new(srv.clone()));
+                let tx = TransactionGuard::begin(&srv_tmp, "new_folder").await.map_err(|e| Status::internal(format!("Failed to start transaction: {:?}", e)))?;
+                if let Err(e) = create_folder(&mut srv, &ses, parent_folder, args).await {
+                    Err(e)  // => rollback
+                } else {
+                    tx.commit().await.map_err(|e| Status::internal(format!("Failed to commit transaction: {:?}", e)))?;
+                    tracing::debug!("Folder created & committed, refreshing client's page");
+                    let navi_page = construct_navi_page(&mut srv, &ses).await?;
+                    srv.client_show_page(navi_page).await?;
+                    Ok(Response::new(proto::Empty {}))
                 }
             },
             _ => {
