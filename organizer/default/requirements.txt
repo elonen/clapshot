@@ -1,0 +1,4 @@
+docopt
+../../protobuf/libs/python/dist/clapshot_grpc-0.0.1.tar.gz
+grpclib
+betterproto==2.0.0b6

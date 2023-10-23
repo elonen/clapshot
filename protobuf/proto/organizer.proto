@@ -128,7 +128,7 @@ message SemanticVersionNumber {
 message UserSessionData {
     string sid = 1;
     UserInfo user = 2;
-    Cookies cookies = 3;
+    map<string, string> cookies = 3;
 }
 
 // ---------------------------------------------------------
@@ -246,7 +246,7 @@ message ClientOpenVideoRequest {
 
 message ClientSetCookiesRequest {
     string sid = 1;
-    Cookies cookies = 2;
+    map<string, string> cookies = 2;
     optional google.protobuf.Timestamp expire_time = 3;
 }
 

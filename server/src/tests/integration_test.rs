@@ -109,7 +109,7 @@ mod integration_test
                 let target_bitrate = $bitrate;
 
                 let grpc_server_bind = crate::grpc::grpc_server::make_grpc_server_bind(&None, &$data_dir)?;
-                let (org_uri, _org_hdl) = prepare_organizer(&None, &$org_cmd, &$data_dir.path())?;
+                let (org_uri, _org_hdl) = prepare_organizer(&None, &$org_cmd, true, false, &$data_dir.path())?;
 
                 let terminate_flag = Arc::new(AtomicBool::new(false));
 

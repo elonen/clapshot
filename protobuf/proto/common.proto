@@ -7,10 +7,6 @@ import "google/protobuf/struct.proto";
 
 message Empty {}
 
-message Cookies {
-    map<string, string> cookies = 1;
-}
-
 // ---------------------------------------------------------
 // Video metadata
 // ---------------------------------------------------------

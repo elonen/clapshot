@@ -44,7 +44,7 @@ message ServerToClientCmd {
         optional string drawing = 5;    // data-uri of an image
     }
     message SetCookies {
-        Cookies cookies = 1;        // Cookies to set. Use empty string to delete a cookie.
+        map<string, string> cookies = 1;        // Cookies to set. Use empty string to delete a cookie.
         google.protobuf.Timestamp expire_time = 2;
     }
 

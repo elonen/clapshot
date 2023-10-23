@@ -122,6 +122,8 @@ fn main() -> anyhow::Result<()>
     let (org_uri, _org_hdl) = prepare_organizer(
         &args.flag_org_in_uri,
         &args.flag_org_cmd,
+        args.flag_debug,
+        args.flag_json,
         &args.flag_data_dir)?;
 
     let cors_origins: Vec<String> = args.flag_cors

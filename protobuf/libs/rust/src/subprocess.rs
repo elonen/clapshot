@@ -12,7 +12,7 @@ pub struct ProcHandle {
 
 /// Execute a shell command (pass to 'sh') in a subprocess,
 /// and log its stdout and stderr.
-/// 
+///
 /// Returns a handle that will kill the subprocess when dropped.
 pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Result<ProcHandle>
 {
@@ -37,15 +37,36 @@ pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Re
         for line in reader.lines() {
             match line {
                 Ok(line) => {
-                    match level {
-                        tracing::Level::INFO => info!("[{}] {}", name, line),
-                        tracing::Level::ERROR => error!("[{}] {}", name, line),
-                        _ => panic!("Unsupported log level"),
-                    }}
+                    // If the line from organizer starts with a log level, use it.
+                    // Otherwise, use the default log level (INFO for stdout, ERROR for stderr).
+                    match line.split_once(" ") {
+                        Some((level_str, msg_str)) => {
+                            let level_override = match level_str {
+                                "DEBUG" => tracing::Level::DEBUG,
+                                "INFO" => tracing::Level::INFO,
+                                "WARN" | "WARNING" => tracing::Level::WARN,
+                                "ERROR" | "CRITICAL" | "FATAL" => tracing::Level::ERROR,
+                                _ => match level {
+                                    tracing::Level::INFO => tracing::Level::INFO,
+                                    tracing::Level::ERROR => tracing::Level::ERROR,
+                                    _ => panic!("Unsupported log level"),
+                                }
+                            };
+                            match level_override {
+                                tracing::Level::DEBUG => debug!("[{}] {}", name, msg_str),
+                                tracing::Level::INFO => info!("[{}] {}", name, msg_str),
+                                tracing::Level::WARN => warn!("[{}] {}", name, msg_str),
+                                tracing::Level::ERROR => error!("[{}] {}", name, msg_str),
+                                _ => panic!("Unsupported log level"),
+                            }
+                        }
+                        None => info!("[{}] {}", name, line),
+                    }
+                }
                 Err(e) => {
                     error!("Failed to read {}. Bailing. -- {:?}", name, e);
                     break;
-                }   
+                }
             }
         }
         debug!("Thread to read {}->log exiting", name);
@@ -68,7 +89,7 @@ pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Re
 }
 
 /// Terminate the subprocess when Handle is dropped.
-impl Drop for ProcHandle 
+impl Drop for ProcHandle
 {
     fn drop(&mut self) {
         self.span.in_scope(|| {
@@ -88,7 +109,7 @@ impl Drop for ProcHandle
                     Ok(status) => { info!("Shell exited with status: {}", status); }
                     Err(e) => { warn!("Failed to wait for shell: {:?}", e); }
                 }
-            }    
+            }
         });
     }
 }

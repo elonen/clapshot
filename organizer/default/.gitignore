@@ -2,3 +2,7 @@ Cargo.lock
 target
 dist_deb
 Dockerfile
+_venv
+.vscode
+__pycache__
+

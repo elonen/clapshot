@@ -46,6 +46,8 @@ pub async fn connect(uri: OrganizerURI) -> anyhow::Result<OrganizerConnection>
 pub fn prepare_organizer(
         org_uri: &Option<String>,
         cmd: &Option<String>,
+        debug: bool,
+        json: bool,
         data_dir: &Path)
     -> anyhow::Result<(Option<OrganizerURI>, Option<ProcHandle>)>
 {
@@ -67,7 +69,7 @@ pub fn prepare_organizer(
                     .join("grpc-srv-to-org.sock");
                 org_uri = Some(OrganizerURI::UnixSocket(unix_sock));
             };
-            Some(spawn_organizer(&cmd.as_str(), org_uri.clone().unwrap())?)
+            Some(spawn_organizer(&cmd.as_str(), org_uri.clone().unwrap(), debug, json)?)
         } else { None };
 
     Ok((org_uri, org_hdl))
@@ -75,12 +77,12 @@ pub fn prepare_organizer(
 
 /// Spawn organizer gRPC server as a subprocess.
 /// Dropping the returned handle will signal/kill the subprocess.
-fn spawn_organizer(cmd: &str, uri: OrganizerURI)
+fn spawn_organizer(cmd: &str, uri: OrganizerURI, debug: bool, json: bool)
     -> anyhow::Result<ProcHandle>
 {
     assert!(cmd != "", "Empty organizer command");
 
-    let cmd = match uri {
+    let mut cmd = match uri {
         OrganizerURI::UnixSocket(path) => {
             unix_socket::delete_old(&path)?;
             format!("{} {}", cmd, path.display())
@@ -90,5 +92,7 @@ fn spawn_organizer(cmd: &str, uri: OrganizerURI)
         },
     };
 
+    if debug { cmd += " --debug"; }
+    if json { cmd += " --json"; }
     spawn_shell(&cmd, "organizer", info_span!("ORG"))
 }

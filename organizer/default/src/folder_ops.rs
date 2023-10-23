@@ -57,54 +57,47 @@ pub (crate) async fn get_current_folder_path(srv: &mut GrpcServerConn, ses: &Use
     -> RpcResult<Vec<org::PropNode>>
 {
     let mut folder_path = vec![];
-    if let Some(ck) = &ses.cookies {
-        if let Some(fp_ids_json) = ck.cookies.get(PATH_COOKIE_NAME) {
-            match serde_json::from_str::<Vec<String>>(fp_ids_json) {
-                Ok(fp_ids) =>
-                {
-                    // Get PropNodes for the folder IDs
-                    let folders = srv.db_get_prop_nodes(org::DbGetPropNodesRequest {
-                            node_type: Some("folder".into()),
-                            ids: Some(org::IdList { ids: fp_ids.clone() }),
-                            ..Default::default()
-                        }).await?.into_inner();
+    if let Some(fp_ids_json) = ses.cookies.get(PATH_COOKIE_NAME) {
+        match serde_json::from_str::<Vec<String>>(fp_ids_json) {
+            Ok(fp_ids) =>
+            {
+                // Get PropNodes for the folder IDs
+                let folders = srv.db_get_prop_nodes(org::DbGetPropNodesRequest {
+                        node_type: Some("folder".into()),
+                        ids: Some(org::IdList { ids: fp_ids.clone() }),
+                        ..Default::default()
+                    }).await?.into_inner();
 
-                    if folders.items.len() == (&fp_ids).len()
-                    {
-                        // Ok, all folders found
-                        folder_path = fp_ids.into_iter().map(|id| {
-                            folders.items.iter().find(|n| n.id == id).cloned()
-                                .unwrap_or_else(|| org::PropNode { id: id.clone(), body: Some(serde_json::json!({ "name": "Unknown folder" }).to_string()), ..Default::default() })
-                        }).collect();
-                    } else {
-                        // Some folder weren't found in DB. Clear cookie.
-                        srv.client_set_cookies(org::ClientSetCookiesRequest {
-                                cookies: Some(proto::Cookies {
-                                    cookies: HashMap::from_iter(
-                                        vec![(PATH_COOKIE_NAME.into(), "".into())].into_iter() // empty value = remove cookie
-                                    ),
-                                    ..Default::default()
-                                }),
-                                sid: ses.sid.clone(),
-                                ..Default::default()
-                            }).await?;
-                        // Send warning to user
-                        srv.client_show_user_message(org::ClientShowUserMessageRequest {
-                            msg: Some(proto::UserMessage {
-                                message: "Some unknown folder IDs in folder_path cookie. Clearing it.".into(),
-                                user_id: ses.user.as_ref().map(|u| u.id.clone()),
-                                r#type: proto::user_message::Type::Error.into(),
-                                ..Default::default()
-                            }),
-                            recipient: Some(org::client_show_user_message_request::Recipient::Sid(ses.sid.clone())),
+                if folders.items.len() == (&fp_ids).len()
+                {
+                    // Ok, all folders found
+                    folder_path = fp_ids.into_iter().map(|id| {
+                        folders.items.iter().find(|n| n.id == id).cloned()
+                            .unwrap_or_else(|| org::PropNode { id: id.clone(), body: Some(serde_json::json!({ "name": "Unknown folder" }).to_string()), ..Default::default() })
+                    }).collect();
+                } else {
+                    // Some folder weren't found in DB. Clear cookie.
+                    srv.client_set_cookies(org::ClientSetCookiesRequest {
+                            cookies: HashMap::from_iter(vec![(PATH_COOKIE_NAME.into(), "".into())]),
+                            sid: ses.sid.clone(),
                             ..Default::default()
                         }).await?;
-                    }
-                },
-                Err(e) => {
-                    tracing::error!("Failed to parse folder_path cookie: {:?}", e);
-                },
-            }
+                    // Send warning to user
+                    srv.client_show_user_message(org::ClientShowUserMessageRequest {
+                        msg: Some(proto::UserMessage {
+                            message: "Some unknown folder IDs in folder_path cookie. Clearing it.".into(),
+                            user_id: ses.user.as_ref().map(|u| u.id.clone()),
+                            r#type: proto::user_message::Type::Error.into(),
+                            ..Default::default()
+                        }),
+                        recipient: Some(org::client_show_user_message_request::Recipient::Sid(ses.sid.clone())),
+                        ..Default::default()
+                    }).await?;
+                }
+            },
+            Err(e) => {
+                tracing::error!("Failed to parse folder_path cookie: {:?}", e);
+            },
         }
     }
     Ok(folder_path)
@@ -113,7 +106,7 @@ pub (crate) async fn get_current_folder_path(srv: &mut GrpcServerConn, ses: &Use
 
 /// Create a new folder (PropNode), link it to the parent folder and set owner.
 /// Returns the new folder node.
-/// 
+///
 /// Call this inside a transaction (does multiple dependent DB calls)
 pub async fn create_folder(srv: &mut GrpcServerConn, ses: &org::UserSessionData, parent_folder: Option<org::PropNode>, args: FolderData)
     -> RpcResult<org::PropNode>

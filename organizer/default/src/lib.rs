@@ -41,7 +41,7 @@ pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const NAME: &'static str = env!("CARGO_PKG_NAME");
 
 
-// Implement inbound RCP methods
+// Implement inbound RCP methods (from organizer.proto)
 
 #[tonic::async_trait]
 impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
@@ -149,6 +149,10 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
             },
         }
     }
+
+    // ------------------------------------------------------------------
+    // Unit / integration tests
+    // ------------------------------------------------------------------
 
     async fn list_tests(&self, _req: Request<proto::Empty>) -> RpcResponseResult<org::ListTestsResult>
     {

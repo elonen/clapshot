@@ -42,6 +42,7 @@ if (folder_name) {
     }
 }
 
+// ---------------------------------------------------------------------------
 
 /// Build folder view page.
 /// Reads folder_path cookie and builds a list of folders and videos in the folder.
@@ -150,6 +151,7 @@ fn folder_node_to_page_item(folder: &org::PropNode) -> proto::page_item::folder_
     }
 }
 
+// ---------------------------------------------------------------------------
 
 
 /// Build folder view page.

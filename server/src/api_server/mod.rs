@@ -110,7 +110,7 @@ async fn handle_ws_session(
                 id: user_id.clone(),
                 name: Some(username.clone()),
             }),
-            cookies: Some(proto::Cookies { cookies }),
+            cookies,
         }
     };
 
@@ -223,7 +223,7 @@ async fn handle_ws_session(
 
                             let (cmd, data) = match parse_msg(&msg) {
                                 Ok((cmd, data, cookies)) => {
-                                    ses.org_session.cookies = Some(lib_clapshot_grpc::proto::Cookies { cookies });
+                                    ses.org_session.cookies = cookies;
                                     (cmd, data)
                                 },
                                 Err(e) => {

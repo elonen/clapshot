@@ -36,7 +36,7 @@ generate:
 
 package: protobufs
 	echo "from setuptools import setup, find_packages" > $(DIST_DIR)/setup.py
-	echo "setup(name='$(PACKAGE_NAME)', version='$(PACKAGE_VERSION)', packages=find_packages(), install_requires=['betterproto>=2.0.0', 'grpclib'])" >> $(DIST_DIR)/setup.py
+	echo "setup(name='$(PACKAGE_NAME)', version='$(PACKAGE_VERSION)', packages=find_packages(), install_requires=[])" >> $(DIST_DIR)/setup.py
 	cd $(DIST_DIR) && $(VENV_PYTHON) setup.py sdist
 	cp $(DIST_DIR)/dist/*.tar.gz $(DIST_DIR)
 

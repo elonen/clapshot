@@ -16,7 +16,7 @@ pub fn setup_logging(time_offset: time::UtcOffset, debug: bool, log_file: &str, 
         };
 
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", if debug {"debug,clapshot_server=debug,h2=info"} else {"info,clapshot_server=info"});
+        std::env::set_var("RUST_LOG", if debug {"debug,clapshot_server=debug,h2=info,hyper::proto::h1=info"} else {"info,clapshot_server=info"});
     };
 
     let minute_offset = time_offset.whole_minutes() % 60;

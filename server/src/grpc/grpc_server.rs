@@ -101,7 +101,6 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
     async fn client_set_cookies(&self, req: Request<org::ClientSetCookiesRequest>) -> RpcResult<proto::Empty>
     {
         let req = req.into_inner();
-        rpc_expect_field(&req.cookies, "filter")?;
         to_rpc_empty(self.server.emit_cmd(client_cmd!(SetCookies, {cookies: req.cookies, expire_time: req.expire_time}), SendTo::UserSession(&req.sid)))
     }
 
