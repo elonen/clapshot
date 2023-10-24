@@ -1,6 +1,6 @@
 use anyhow::bail;
 use tracing::{info, warn, error, info_span, debug};
-
+use strip_ansi_escapes;
 
 /// A subprocess handle that will kill the subprocess when dropped.
 pub struct ProcHandle {
@@ -39,6 +39,7 @@ pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Re
                 Ok(line) => {
                     // If the line from organizer starts with a log level, use it.
                     // Otherwise, use the default log level (INFO for stdout, ERROR for stderr).
+                    let line = strip_ansi_escapes::strip_str(line); // Remove terminal colors from log lines (if any)
                     match line.split_once(" ") {
                         Some((level_str, msg_str)) => {
                             let level_override = match level_str {

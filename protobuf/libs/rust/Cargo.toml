@@ -28,6 +28,7 @@ tower = "0.4.13"
 pbjson = "0.5.1"
 pbjson-types = "0.5.1"
 libc = "0.2.142"
+strip-ansi-escapes = "0.2.0"
 
 [build-dependencies]
 tonic-build = "0.9.2"
