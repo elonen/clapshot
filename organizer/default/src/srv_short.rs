@@ -1,7 +1,8 @@
 use std::{default, sync::Arc};
 use lib_clapshot_grpc::proto::{org, self};
 use tokio::sync::Mutex;
-use crate::{GrpcServerConn, graph_utils::{mkget_session_user, validate_user_id_syntax}};
+use tonic::Status;
+use crate::{GrpcServerConn, RpcResult, folder_ops::FolderData};
 
 pub type SrvRef = crate::OrganizerOutboundClient<crate::Channel>;
 
@@ -9,21 +10,25 @@ pub type SrvRef = crate::OrganizerOutboundClient<crate::Channel>;
 // Transaction guard
 // =================================================================
 
-pub struct TransactionGuard<'a> {
-    srv: &'a Arc<Mutex<GrpcServerConn>>,
+pub struct TransactionGuard {
+    srv: Arc<Mutex<GrpcServerConn>>,
     active: bool,
     name: String,
 }
 
-impl<'a> TransactionGuard<'a> {
-    pub async fn begin(srv: &'a Arc<Mutex<GrpcServerConn>>, name: &str) -> anyhow::Result<TransactionGuard<'a>> {
+impl<'a> TransactionGuard {
+    pub async fn begin(srv: &mut GrpcServerConn, name: &str) -> RpcResult<TransactionGuard> {
+        TransactionGuard::begin_from_arc(Arc::new(Mutex::new(srv.clone())), name).await
+    }
+
+    pub async fn begin_from_arc(srv: Arc<Mutex<GrpcServerConn>>, name: &str) -> RpcResult<TransactionGuard> {
         tracing::debug!("Beginning transaction '{}'", name);
         srv.lock().await.db_begin_transaction(org::DbBeginTransactionRequest {}).await?;
         Ok(TransactionGuard { srv, active: true, name: name.into() })
     }
 
-    pub async fn commit(mut self) -> anyhow::Result<()> {
-        if !self.active { return Err(anyhow::anyhow!("TransactionGuard: commit() called twice")); }
+    pub async fn commit(mut self) -> RpcResult<()> {
+        if !self.active { return Err(Status::internal("Transaction already committed")); }
         tracing::debug!("Committing transaction '{}'", self.name);
         self.srv.lock().await.db_commit_transaction(org::DbCommitTransactionRequest {}).await?;
         self.active = false; // Ensure it doesn't rollback when dropped
@@ -31,7 +36,7 @@ impl<'a> TransactionGuard<'a> {
     }
 }
 
-impl<'a> Drop for TransactionGuard<'a> {
+impl<'a> Drop for TransactionGuard {
     fn drop(&mut self) {
         if self.active {
             tracing::debug!("Rolling back transaction '{}'", self.name);
@@ -50,16 +55,31 @@ impl<'a> Drop for TransactionGuard<'a> {
 // Trivial helpers to shorten syntax
 // =================================================================
 
-pub async fn db_upsert_edges(srv: &Arc<Mutex<GrpcServerConn>>, edges: Vec<org::PropEdge>) -> anyhow::Result<()> {
+pub async fn db_upsert_edges(srv: &mut GrpcServerConn, edges: Vec<org::PropEdge>) -> anyhow::Result<()> {
     tracing::debug!("Upserting {} edges", edges.len());
-    srv.lock().await.db_upsert(org::DbUpsertRequest { edges, ..default::Default::default() } ).await?;
+    srv.db_upsert(org::DbUpsertRequest { edges, ..default::Default::default() } ).await?;
     Ok(())
 }
 
-pub async fn get_childless_videos(srv: &Arc<Mutex<GrpcServerConn>>, edge_type: &str, paging: &mut org::DbPaging)
+pub async fn get_parentless_videos(srv: &mut GrpcServerConn, edge_type: &str, paging: &mut org::DbPaging)
     -> anyhow::Result<Vec<proto::Video>>
 {
-    let vids = srv.lock().await.db_get_videos(org::DbGetVideosRequest {
+    let vids = srv.db_get_videos(org::DbGetVideosRequest {
+        filter: Some(org::db_get_videos_request::Filter::GraphRel(
+            org::GraphObjRel {
+                rel: Some(org::graph_obj_rel::Rel::Parentless(proto::Empty {})),
+                edge_type: Some(edge_type.into()),
+            })),
+        paging: Some(paging.clone()),
+    }).await?.into_inner().items;
+    Ok(vids)
+}
+
+/*
+pub async fn get_childless_videos(srv: &mut GrpcServerConn, edge_type: &str, paging: &mut org::DbPaging)
+    -> anyhow::Result<Vec<proto::Video>>
+{
+    let vids = srv.db_get_videos(org::DbGetVideosRequest {
         filter: Some(org::db_get_videos_request::Filter::GraphRel(
             org::GraphObjRel {
                 rel: Some(org::graph_obj_rel::Rel::Childless(proto::Empty {})),
@@ -69,6 +89,7 @@ pub async fn get_childless_videos(srv: &Arc<Mutex<GrpcServerConn>>, edge_type: &
     }).await?.into_inner().items;
     Ok(vids)
 }
+*/
 
 pub fn mk_edge_video_to_node(edge_type: &str, video_id: &str, node_id: &str) -> org::PropEdge
 {
@@ -91,6 +112,7 @@ pub async fn get_all_videos(srv: &mut SrvRef)
     Ok(vids.items)
 }
 
+/*
 pub async fn getcheck_video_owner(srv: &mut SrvRef, video_id: &str)
     -> anyhow::Result<org::PropNode>
 {
@@ -106,7 +128,10 @@ pub async fn getcheck_video_owner(srv: &mut SrvRef, video_id: &str)
     }
     Ok(owner_proplist.items[0].clone())
 }
+*/
 
+
+/*
 pub async fn mkget_video_owner_node(srv: &Arc<Mutex<GrpcServerConn>>, video: &proto::Video)
 -> anyhow::Result<org::PropNode>
 {
@@ -117,11 +142,46 @@ pub async fn mkget_video_owner_node(srv: &Arc<Mutex<GrpcServerConn>>, video: &pr
                 anyhow::bail!("Invalid user ID '{}': {}", user.id, e);
             }
             match mkget_session_user(&mut *srv.lock().await, &user).await {
-                Ok(unode) => Ok(unode),
+                Ok(unode) => {
+                    tracing::debug!("User node for video {}: {:?}", video.id, unode);
+                    Ok(unode)
+                },
                 Err(e) => {
                     anyhow::bail!("Failed to add user node '{}': {}", user.id, e);
                 }
             }
+        }
+    }
+}
+*/
+
+pub async fn mkget_user_root_folder(srv: &mut GrpcServerConn, user: &proto::UserInfo)
+    -> RpcResult<org::PropNode>
+{
+    //let user_node = mkget_session_user(srv, &user).await?;
+    let root_key = format!("|root|{}", user.id);
+
+    match srv.db_get_singleton_prop_node(org::DbGetSingletonPropNodeRequest {
+            node_type: crate::graph_utils::FOLDER_NODE_TYPE.into(),
+            singleton_key: root_key.clone()
+        }).await?.into_inner().node
+    {
+        Some(root_node) => {
+            Ok(root_node)
+        },
+        None => {
+            let root_folder = srv.db_upsert(org::DbUpsertRequest {
+                nodes: vec![
+                    org::PropNode {
+                        id: "".into(),  // empty = insert
+                        body: Some(serde_json::to_string(&FolderData { name: "root".into(), ..Default::default() }).unwrap()),
+                        node_type: crate::graph_utils::FOLDER_NODE_TYPE.into(),
+                        singleton_key: Some(root_key),
+                    }
+                ],
+                ..Default::default()
+            }).await?.into_inner();
+            Ok(root_folder.nodes[0].clone())
         }
     }
 }

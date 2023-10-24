@@ -126,9 +126,9 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             Filter::GraphRel(rel) => {
                 let et = rel.edge_type.as_ref().map(|s| s.as_str());
                 let vids = match rpc_expect_field(&rel.rel, "GraphObjRel.rel")? {
-                    Rel::ParentOf(id) => models::Video::graph_get_by_parent(&db, id.try_into()?, et)?
+                    Rel::ParentIs(id) => models::Video::graph_get_by_parent(&db, id.try_into()?, et)?
                         .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
-                    Rel::ChildOf(id) => models::Video::graph_get_by_child(&db, id.try_into()?, et)?
+                    Rel::ChildIs(id) => models::Video::graph_get_by_child(&db, id.try_into()?, et)?
                         .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
                     Rel::Parentless(_) => models::Video::graph_get_parentless(&db, et)?,
                     Rel::Childless(_) => models::Video::graph_get_childless(&db, et)?,
@@ -163,9 +163,9 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             Filter::GraphRel(rel) => {
                 let et = rel.edge_type.as_ref().map(|s| s.as_str());
                 let comms = match rpc_expect_field(&rel.rel, "GraphObjRel.rel")? {
-                    Rel::ParentOf(id) => models::Comment::graph_get_by_parent(&db, id.try_into()?, et)?
+                    Rel::ParentIs(id) => models::Comment::graph_get_by_parent(&db, id.try_into()?, et)?
                         .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
-                    Rel::ChildOf(id) => models::Comment::graph_get_by_child(&db, id.try_into()?, et)?
+                    Rel::ChildIs(id) => models::Comment::graph_get_by_child(&db, id.try_into()?, et)?
                         .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
                     Rel::Parentless(_) => models::Comment::graph_get_parentless(&db, et)?,
                     Rel::Childless(_) => models::Comment::graph_get_childless(&db, et)?,
@@ -229,9 +229,9 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             (node_type, ids, Some(rel)) => {
                 let et = rel.edge_type.as_ref().map(|s| s.as_str());
                 let objs = match rpc_expect_field(&rel.rel, "GraphObjRel.rel")? {
-                    Rel::ParentOf(id) => models::PropNode::graph_get_by_parent(&db, id.try_into()?, et)?
+                    Rel::ParentIs(id) => models::PropNode::graph_get_by_parent(&db, id.try_into()?, et)?
                         .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
-                    Rel::ChildOf(id) => models::PropNode::graph_get_by_child(&db, id.try_into()?, et)?
+                    Rel::ChildIs(id) => models::PropNode::graph_get_by_child(&db, id.try_into()?, et)?
                         .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
                     Rel::Parentless(_) => models::PropNode::graph_get_parentless(&db, et)?,
                     Rel::Childless(_) => models::PropNode::graph_get_childless(&db, et)?,

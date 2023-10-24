@@ -123,16 +123,14 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
                 let args = serde_json::from_str::<FolderData>(&req.args)
                     .map_err(|e| Status::invalid_argument(format!("Failed to parse args: {:?}", e)))?;
 
-                let path = get_current_folder_path(&mut srv, &ses).await?;
-                let parent_folder = path.last().cloned();
+                let parent_folder = get_current_folder_path(&mut srv, &ses).await?.last().cloned();
 
                 // Create folder (in transaction)
-                let srv_tmp = Arc::new(Mutex::new(srv.clone()));
-                let tx = TransactionGuard::begin(&srv_tmp, "new_folder").await.map_err(|e| Status::internal(format!("Failed to start transaction: {:?}", e)))?;
+                let tx = TransactionGuard::begin(&mut srv, "new_folder").await?;
                 if let Err(e) = create_folder(&mut srv, &ses, parent_folder, args).await {
                     Err(e)  // => rollback
                 } else {
-                    tx.commit().await.map_err(|e| Status::internal(format!("Failed to commit transaction: {:?}", e)))?;
+                    tx.commit().await?;
                     tracing::debug!("Folder created & committed, refreshing client's page");
                     let navi_page = construct_navi_page(&mut srv, &ses).await?;
                     srv.client_show_page(navi_page).await?;
@@ -183,7 +181,7 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
                         Ok(Response::new(org::RunTestResult { output: "OK".into(), error: None }))
                     },
                     Err(e) => {
-                        Ok(Response::new(org::RunTestResult { output: "FAIL".into(), error: Some(format!("{:?}", e)) }))
+                        Ok(Response::new(org::RunTestResult { output: "FAIL".into(), error: Some(format!("assert_db_check_postconds FAILED: {:?}", e)) }))
                     }
                 }
             },

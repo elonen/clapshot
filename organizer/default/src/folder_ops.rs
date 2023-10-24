@@ -1,10 +1,12 @@
 use std::collections::HashMap;
-use lib_clapshot_grpc::proto::org::{UserSessionData, PropNode};
+use lib_clapshot_grpc::proto::org::UserSessionData;
 
 use lib_clapshot_grpc::proto::{self, org};
 use tonic::Status;
 
-use crate::graph_utils::{USER_ID_NODE_TYPE, OWNER_EDGE_TYPE, PATH_COOKIE_NAME, FOLDER_NODE_TYPE, PARENT_FOLDER_EDGE_TYPE, mkget_session_user};
+use crate::graph_utils::{PATH_COOKIE_NAME, FOLDER_NODE_TYPE, PARENT_FOLDER_EDGE_TYPE};
+use org::graph_obj_rel::Rel::ParentIs;
+use crate::srv_short::{TransactionGuard, mkget_user_root_folder};
 use crate::{GrpcServerConn, RpcResult};
 
 
@@ -17,37 +19,9 @@ pub struct UserNodeData {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
 pub struct FolderData {
     pub name: String,
+
+    #[serde(default)]
     pub preview_cache: Vec<proto::page_item::folder_listing::Item>
-}
-
-
-
-/// Return a PropNode that represents the user that owns the given folder.
-pub (crate) async fn get_folder_owner(srv: &mut GrpcServerConn, folder: &PropNode)
-    -> RpcResult<PropNode>
-{
-    // Owner = PropNode of type USER_ID_NODE_TYPE that is pointed from
-    // the folder node via FOLDER_OWNER_EDGE_TYPE
-    let res = srv.db_get_prop_nodes(org::DbGetPropNodesRequest {
-        graph_rel: Some(org::GraphObjRel {
-            rel: Some(org::graph_obj_rel::Rel::ParentOf(
-                org::GraphObj { id: Some(org::graph_obj::Id::NodeId(folder.id.clone())) })),
-            edge_type: Some(OWNER_EDGE_TYPE.into()),
-        }),
-        ..Default::default()
-    }).await?.into_inner();
-
-    if res.items.len() > 1 {
-        return Err(Status::internal(format!("DB consistency: folder #{} has {} (>1) owners", folder.id, res.items.len())))
-    }
-    if let Some(owner) = res.items.first() {
-        if owner.node_type != USER_ID_NODE_TYPE {
-            return Err(Status::internal(format!("DB consistency: folder #{} has owner of type '{}' (!= '{}')", folder.id, owner.node_type, USER_ID_NODE_TYPE)));
-        }
-        Ok(owner.clone())
-    } else {
-        Err(Status::internal(format!("DB consistency: folder #{} has no owner", folder.id)))
-    }
 }
 
 
@@ -63,7 +37,7 @@ pub (crate) async fn get_current_folder_path(srv: &mut GrpcServerConn, ses: &Use
             {
                 // Get PropNodes for the folder IDs
                 let folders = srv.db_get_prop_nodes(org::DbGetPropNodesRequest {
-                        node_type: Some("folder".into()),
+                        node_type: Some(FOLDER_NODE_TYPE.into()),
                         ids: Some(org::IdList { ids: fp_ids.clone() }),
                         ..Default::default()
                     }).await?.into_inner();
@@ -114,58 +88,63 @@ pub async fn create_folder(srv: &mut GrpcServerConn, ses: &org::UserSessionData,
     use org::graph_obj::Id::NodeId;
     let user = ses.user.clone().ok_or(Status::internal("No user in session"))?;
 
+    let tx = TransactionGuard::begin(srv, "create_folder").await?;
+
+    let parent_folder = match parent_folder {
+        Some(f) => f,
+        None => mkget_user_root_folder(srv, &user).await?
+    };
+
+    // Check if folder with same name already exists
+    let siblings = srv.db_get_prop_nodes(org::DbGetPropNodesRequest {
+        graph_rel: Some(org::GraphObjRel {
+            rel: Some(ParentIs(org::GraphObj { id: Some(NodeId(parent_folder.id.clone())) })),
+            edge_type: Some(PARENT_FOLDER_EDGE_TYPE.into()),
+        }),
+        ..Default::default()
+    }).await?.into_inner();
+
+    for fld in siblings.items.iter() {
+        if let Some(b) = &fld.body {
+            if let Ok(folder_data) = serde_json::from_str::<FolderData>(b) {
+                if folder_data.name == args.name {
+                    return Err(Status::already_exists(format!("Folder '{}' already exists", args.name)));
+                }
+            } else {
+                return Err(Status::internal(format!("Corrupted DB: bad FolderData JSON in folder (id={}) body: {:?}", fld.id, b)));
+            }
+        } else {
+            return Err(Status::internal(format!("Corrupted DB: folder (id={}) has no body", fld.id)));
+        }
+    }
+
     // Create folder node
-    let new_folder = srv.db_upsert(
+    let folder = srv.db_upsert(
         org::DbUpsertRequest {
             nodes: vec![ org::PropNode {
-                id: "".into(),
                 body: Some(serde_json::to_string(&args).unwrap()),
                 node_type: FOLDER_NODE_TYPE.into(),
-                singleton_key: None
+                ..Default::default()
             }],
             ..Default::default()
         }).await?.into_inner().nodes.first().cloned().ok_or(Status::internal("Failed to create folder node"))?;
 
-    // Link folder to (possible) parent
-    if let Some(parent_folder) = parent_folder.clone() {
-        srv.db_upsert(org::DbUpsertRequest {
-            edges: vec![
-                org::PropEdge {
-                    id: "".into(),
-                    body: None,
-                    edge_type: PARENT_FOLDER_EDGE_TYPE.into(),
-                    from: Some(org::GraphObj { id: Some(NodeId(new_folder.id.clone())) }),
-                    to: Some(org::GraphObj { id: Some(NodeId(parent_folder.id.clone())) }),
-                    ..Default::default()
-                }
-            ],
-            ..Default::default()
-        }).await?;
-    }
-
-    // Link folder to user (either parent folder owner or session user if no parent folder)
-    let owner_node = match parent_folder.clone() {
-        Some(parent) => get_folder_owner(srv, &parent).await?,
-        None => mkget_session_user(srv, &user).await?
-    };
+    // Link it to parent
     srv.db_upsert(org::DbUpsertRequest {
         edges: vec![
             org::PropEdge {
-                id: "".into(),
-                body: None,
-                edge_type: OWNER_EDGE_TYPE.into(),
-                from: Some(org::GraphObj { id: Some(org::graph_obj::Id::NodeId(new_folder.id.clone())) }),
-                to: Some(org::GraphObj { id: Some(org::graph_obj::Id::NodeId(owner_node.id.clone())) }),
+                edge_type: PARENT_FOLDER_EDGE_TYPE.into(),
+                from: Some(org::GraphObj { id: Some(NodeId(folder.id.clone())) }),
+                to: Some(org::GraphObj { id: Some(NodeId(parent_folder.id.clone())) }),
                 ..Default::default()
             }
         ],
         ..Default::default()
     }).await?;
 
-    Ok(new_folder)
+    tx.commit().await?;
+    Ok(folder)
 }
-
-
 
 
 /// Query database for subfolders and videos in given folder. Returns (subfolders, videos).
@@ -174,8 +153,7 @@ pub async fn fetch_folder_contents(srv: &mut GrpcServerConn, folder: &org::PropN
 {
     let sub_folders_res = srv.db_get_prop_nodes(org::DbGetPropNodesRequest {
         graph_rel: Some(org::GraphObjRel {
-            rel: Some(org::graph_obj_rel::Rel::ChildOf(
-                org::GraphObj { id: Some(org::graph_obj::Id::NodeId(folder.id.clone())) })),
+            rel: Some(ParentIs(org::GraphObj { id: Some(org::graph_obj::Id::NodeId(folder.id.clone())) })),
             edge_type: Some(PARENT_FOLDER_EDGE_TYPE.into()),
         }),
         ..Default::default()
@@ -184,8 +162,7 @@ pub async fn fetch_folder_contents(srv: &mut GrpcServerConn, folder: &org::PropN
     let videos_res = srv.db_get_videos(org::DbGetVideosRequest {
         filter: Some(org::db_get_videos_request::Filter::GraphRel(
             org::GraphObjRel {
-                rel: Some(org::graph_obj_rel::Rel::ChildOf(
-                    org::GraphObj { id: Some(org::graph_obj::Id::NodeId(folder.id.clone())) })),
+                rel: Some(ParentIs(org::GraphObj { id: Some(org::graph_obj::Id::NodeId(folder.id.clone())) })),
                 edge_type: Some(PARENT_FOLDER_EDGE_TYPE.into()),
             })),
         ..Default::default()

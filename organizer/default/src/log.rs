@@ -15,6 +15,7 @@ pub(crate) fn setup_logging(json_log: bool, debug: bool) -> anyhow::Result<()>
     // to be really bare-bones here. No timestamps, no target etc.
     let log_sbsc = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_level(true)
         .with_file(false)
         .with_line_number(false)
         .with_thread_ids(false)
