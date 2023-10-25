@@ -68,6 +68,9 @@ service OrganizerInbound {
     rpc authz_user_action(AuthzUserActionRequest) returns (AuthzResult);
     rpc cmd_from_client(CmdFromClientRequest) returns (Empty);
 
+    rpc move_to_folder(MoveToFolderRequest) returns (Empty);
+    rpc reorder_items(ReorderItemsRequest) returns (Empty);
+
     // Unit / integration tests
     rpc list_tests(Empty) returns (ListTestsResult);
     rpc run_test(RunTestRequest) returns (RunTestResult);
@@ -152,6 +155,18 @@ message CmdFromClientRequest {
     UserSessionData ses = 1;
     string cmd = 2;
     string args = 3;    // Arbitrary data from your own Action handler that is executed on the client
+}
+
+message MoveToFolderRequest {
+    UserSessionData ses = 1;
+    string dst_folder_id = 2;
+    repeated FolderItemID ids = 3;
+}
+
+message ReorderItemsRequest {
+    UserSessionData ses = 1;
+    string listing_id = 2;
+    repeated FolderItemID ids = 3;
 }
 
 message AuthzUserActionRequest {

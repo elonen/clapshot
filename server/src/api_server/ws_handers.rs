@@ -451,12 +451,66 @@ pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut UserSession, 
     }
 }
 
-// custom logout error with thiserror
+
+pub async fn msg_move_to_folder(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    #[derive(serde::Deserialize)]
+    struct MoveToFolderArgs {
+        listing_id: String,
+        dst_folder_id: String,
+        ids: Vec<proto::FolderItemId>,
+    }
+    if let Some(org) = &ses.organizer {
+        match serde_json::from_value::<MoveToFolderArgs>(data.clone()) {
+            Ok(args) => {
+                let req = proto::org::MoveToFolderRequest {
+                    ses: Some(ses.org_session.clone()),
+                    dst_folder_id: args.dst_folder_id,
+                    ids: args.ids,
+                };
+                if let Err(e) = org.lock().await.move_to_folder(req).await {
+                    tracing::error!(err=?e, "Error in organizer move_to_folder() call");
+                    anyhow::bail!("Error in move_to_folder() organizer call: {:?}", e);
+                }
+            },
+            Err(e) => {
+                send_user_error!(&ses.user_id, server, Topic::None, format!("Invalid move_to_folder args: {:?}", e));
+                return Ok(());
+            }
+        }
+    } else { send_user_error!(&ses.user_id, server, Topic::None, "No organizer session."); }
+    Ok(())
+}
+
+pub async fn msg_reorder_items(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    #[derive(serde::Deserialize)]
+    struct ReorderItemsArgs {
+        listing_id: String,
+        ids: Vec<proto::FolderItemId>,
+    }
+    if let Some(org) = &ses.organizer {
+        match serde_json::from_value::<ReorderItemsArgs>(data.clone()) {
+            Ok(args) => {
+                let req = proto::org::ReorderItemsRequest {
+                    ses: Some(ses.org_session.clone()),
+                    listing_id: args.listing_id,
+                    ids: args.ids,
+                };
+                if let Err(e) = org.lock().await.reorder_items(req).await {
+                    tracing::error!(err=?e, "Error in organizer reorder_items() call");
+                    anyhow::bail!("Error in reorder_items() organizer call: {:?}", e);
+                }
+            },
+            Err(e) => {
+                send_user_error!(&ses.user_id, server, Topic::None, format!("Invalid reorder_items args: {:?}", e));
+                return Ok(());
+            }
+        }
+    } else { send_user_error!(&ses.user_id, server, Topic::None, "No organizer session."); }
+    Ok(())
+}
+
 
 pub async fn msg_organizer_cmd(data: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<()> {
-
-println!("msg_organizer_cmd data: {:?}", data);
-
     match (data["cmd"].as_str(), data["args"].clone()) {
         (Some(cmd), args) => {
             if let Some(org) = &ses.organizer {
@@ -478,6 +532,8 @@ println!("msg_organizer_cmd data: {:?}", data);
     }
     Ok(())
 }
+
+
 
 #[derive(thiserror::Error, Debug)]
 pub enum SessionClose {
@@ -502,6 +558,8 @@ pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut UserSes
         "leave_collab" => msg_leave_collab(data, ses, server).await,
         "collab_report" => msg_collab_report(data, ses, server).await,
         "organizer_cmd" => msg_organizer_cmd(data, ses, server).await,
+        "move_to_folder" => msg_move_to_folder(data, ses, server).await,
+        "reorder_items" => msg_reorder_items(data, ses, server).await,
         "logout" => {
             tracing::info!("logout from client: user={}", ses.user_id);
             return Err(SessionClose::Logout.into());

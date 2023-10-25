@@ -103,7 +103,7 @@ onMount(async () => {
 
 // Monitor video elem "loop" property in a timer.
 // Couldn't find a way to bind to it directly.
-setInterval(() => { loop = videoElem.loop }, 500);
+setInterval(() => { loop = videoElem?.loop }, 500);
 
 
 function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) {

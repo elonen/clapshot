@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use db_check::ErrorsPerVideo;
 use folder_ops::create_folder;
 use srv_short::TransactionGuard;
-use ui_components::{make_folder_list_popup_actions, construct_navi_page};
+use ui_components::{make_folder_list_popup_actions, construct_navi_page, OpenFolderArgs};
 
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
@@ -70,6 +71,7 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
         let ses = proto3_get_field!(&req, ses, "No session data in request")?;
         let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
 
+        // Return please wait page if database check is still running
         if self.check_db_setup_task().await? {
             return Ok(Response::new(org::ClientShowPageRequest {
                 sid: ses.sid.clone(),
@@ -82,9 +84,7 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
             }));
         }
 
-        let page = construct_navi_page(&mut srv, &ses).await?;
-
-        //let page = construct_permission_page(&mut srv, &ses).await?;
+        let page = construct_navi_page(&mut srv, &ses, None).await?;
         Ok(Response::new(page))
     }
 
@@ -101,12 +101,9 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
     {
         let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
         let sid = req.into_inner().ses.ok_or(Status::invalid_argument("No session ID"))?.sid;
-
         srv.client_define_actions(org::ClientDefineActionsRequest {
-                actions: make_folder_list_popup_actions(),
-                sid,
-            }).await?;
-
+            actions: make_folder_list_popup_actions(),
+            sid }).await?;
         Ok(Response::new(org::OnStartUserSessionResult {}))
     }
 
@@ -118,12 +115,13 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
         let ses = req.ses.ok_or(Status::invalid_argument("No session ID"))?;
 
         match req.cmd.as_str() {
-            "new_folder" => {
+            "new_folder" =>
+            {
                 // Read args from JSON
                 let args = serde_json::from_str::<FolderData>(&req.args)
                     .map_err(|e| Status::invalid_argument(format!("Failed to parse args: {:?}", e)))?;
 
-                let parent_folder = get_current_folder_path(&mut srv, &ses).await?.last().cloned();
+                let parent_folder = get_current_folder_path(&mut srv, &ses, None).await?.last().cloned();
 
                 // Create folder (in transaction)
                 let tx = TransactionGuard::begin(&mut srv, "new_folder").await?;
@@ -132,15 +130,55 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
                 } else {
                     tx.commit().await?;
                     tracing::debug!("Folder created & committed, refreshing client's page");
-                    let navi_page = construct_navi_page(&mut srv, &ses).await?;
+                    let navi_page = construct_navi_page(&mut srv, &ses, None).await?;
                     srv.client_show_page(navi_page).await?;
                     Ok(Response::new(proto::Empty {}))
                 }
             },
+            "open_folder" =>
+            {
+                let folder_to_open = serde_json::from_str::<OpenFolderArgs>(&req.args)
+                    .map_err(|e| Status::invalid_argument(format!("Invalid OpenFolderArgs: {:?}", e)))?;
+                let mut cwd: Vec<String> = get_current_folder_path(&mut srv, &ses, None).await?.iter().map(|f| f.id.clone()).collect();
+
+                // If given folder ID is in cwd, remove all folders after it; otherwise, append it
+                if let Some(idx) = cwd.iter().position(|fid| *fid == folder_to_open.id) {
+                    cwd.truncate(idx + 1);
+                } else {
+                    cwd.push(folder_to_open.id.clone());
+                }
+
+                // Update folder path cookie
+                let new_cookie = serde_json::to_string(&cwd).unwrap();
+                tracing::debug!("Setting new folder_path cookie: {}", new_cookie);
+
+                srv.client_set_cookies(org::ClientSetCookiesRequest {
+                        cookies: HashMap::from_iter(vec![(crate::graph_utils::PATH_COOKIE_NAME.into(), new_cookie.clone())]),
+                        sid: ses.sid.clone(),
+                        expire_time: None
+                    }).await?;
+
+                // Update page to view the opened folder
+                let page = construct_navi_page(&mut srv, &ses, Some(new_cookie)).await?;
+                srv.client_show_page(page).await?;
+
+                Ok(Response::new(proto::Empty {}))
+            },
+
             _ => {
-                Err(Status::invalid_argument(format!("Unknown command: {:?}", req.cmd)))
+                Err(Status::invalid_argument(format!("Unknown organizer command: {:?}", req.cmd)))
             },
         }
+    }
+
+    async fn move_to_folder(&self, _req: Request<org::MoveToFolderRequest>) -> RpcResponseResult<proto::Empty>
+    {
+        Err(Status::unimplemented("move_to_folder"))
+    }
+
+    async fn reorder_items(&self, _req: Request<org::ReorderItemsRequest>) -> RpcResponseResult<proto::Empty>
+    {
+        Err(Status::unimplemented("reorder_items"))
     }
 
     // ------------------------------------------------------------------

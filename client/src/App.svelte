@@ -427,7 +427,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             }
             // showPage
             else if (cmd.showPage) {
-                $curPageItems = cmd.showPage.pageItems;
+                $curPageItems = [...cmd.showPage.pageItems];  // force svelte to re-render
             }
             // defineActions
             else if (cmd.defineActions) {
@@ -546,13 +546,13 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             }
             // setCookies
             else if (cmd.setCookies) {
-                let cookie_dict = cmd.setCookies.cookies?.cookies;
+                let cookie_dict = cmd.setCookies.cookies;
                 if (!cookie_dict) {
                     console.error("[SERVER] setCookies command with no cookies. Raw JSON:", msgJson);
                 } else {
                     let expireTimestamp = cmd.setCookies.expireTime?.getTime() ?? null;
-                    for (let key in cookie_dict) {
-                        LocalStorageCookies.set(key, cookie_dict[key], expireTimestamp);
+                    for (const [key, value] of Object.entries(cookie_dict)) {
+                        LocalStorageCookies.set(key, value, expireTimestamp);
                     }
                 }
             }
@@ -578,12 +578,12 @@ function onRequestVideoRename(videoId: string, videoName: string) {
     }
 }
 
-function onMoveItemsToFolder(_e: {detail: {folder_id: any; items: any[]}}) {
-    console.error("NOT IMPLEMENTED! onMoveItemsToFolder: " + _e.detail.folder_id, "items:", _e.detail.items);
+function onMoveItemsToFolder(e: {detail: {dst_folder_id: string; ids: Proto3.FolderItemID[], listing_id: string}}) {
+    wsEmit("move_to_folder", e.detail)
 }
 
-function onReorderItems(e: any) {
-    console.error("NOT IMPLEMENTED! onReorderItems: ", e.detail);
+function onReorderItems(e: {detail: {ids: Proto3.FolderItemID[], listing_id: string}}) {
+    wsEmit("reorder_items", e.detail)
 }
 
 function openVideoListItem(e: { detail: Proto3.PageItem_FolderListing_Item}): void {
@@ -603,7 +603,14 @@ function openVideoListItem(e: { detail: Proto3.PageItem_FolderListing_Item}): vo
 
 // ------------
 
-/// Execute a script from Organizer (or server, if Organizer is not connected)
+// Expose some API functions to any HTML elements. These can be called from <a onclick="..."> etc,
+// that come as raw HTML from organizer.
+(window as any).clapshot = {
+    call_server: wsEmit,
+    call_organizer: (cmd: string, args: Object) => { wsEmit("organizer_cmd", {cmd, args}); },
+};
+
+/// Evalute a string as Javascript from Organizer or Server
 function callOrganizerScript(code: string|undefined, items: any[]): void {
     if (!code) {
         console.log("callOrganizerScript called with empty code. Ignoring.");
@@ -712,27 +719,29 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
 
         <!-- ========== page components ============= -->
         <div class="organizer_page">
-            {#each $curPageItems as item}
-            {#if item.html }
-            <div>
-                <RawHtmlItem html={item.html} />
-            </div>
-            {:else if item.folderListing}
-            <div class="my-6">
-                <VideoList items={item.folderListing.items.map((it)=>({
-                    id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
-                    obj: it }))}
-                    dragDisabled={item.folderListing.allowReordering ? false : true}
-                    listPopupActions={item.folderListing.popupActions}
-                    on:open-item={openVideoListItem}
-                    on:reorder-items={onReorderItems}
-                    on:move-to-folder={onMoveItemsToFolder}
-                    on:popup-action={onVideoListPopupAction}
-                    />
-                </div>
+            {#each $curPageItems as pit}
+                {#if pit.html }
+                    <div>
+                        <RawHtmlItem html={pit.html} />
+                    </div>
+                {:else if pit.folderListing}
+                    <div class="my-6">
+                        <VideoList
+                            listing_id={pit.folderListing.listingId}
+                            items={pit.folderListing.items.map((it)=>({
+                                id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
+                                obj: it }))}
+                            dragDisabled = {pit.folderListing.allowReordering ? false : true}
+                            listPopupActions = {pit.folderListing.popupActions}
+                            on:open-item = {openVideoListItem}
+                            on:reorder-items = {onReorderItems}
+                            on:move-to-folder = {onMoveItemsToFolder}
+                            on:popup-action = {onVideoListPopupAction}
+                        />
+                    </div>
                 {/if}
-                {/each}
-            </div>
+            {/each}
+        </div>
 
             <!-- ========== upload widget ============= -->
             <div class="m-6 h-24 border-4 border-dashed border-gray-700">

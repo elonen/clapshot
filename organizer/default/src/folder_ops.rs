@@ -26,13 +26,22 @@ pub struct FolderData {
 
 
 /// Get current folder path from cookies.
-/// Returns empty vector if no folder path is set or if the path is invalid.
-pub (crate) async fn get_current_folder_path(srv: &mut GrpcServerConn, ses: &UserSessionData)
+///
+/// If the cookie is malformed, it will be replaced with an empty one.
+/// Returned list will always contain at least one item (root folder).
+///
+/// If cookie_override is Some, it will be used instead of the cookie from session.
+pub (crate) async fn get_current_folder_path(srv: &mut GrpcServerConn, ses: &UserSessionData, cookie_override: Option<String>)
     -> RpcResult<Vec<org::PropNode>>
 {
+    let user = ses.user.clone().ok_or(Status::internal("No user in session"))?;
+    let root_folder = mkget_user_root_folder(srv, &user).await?;
+
     let mut folder_path = vec![];
-    if let Some(fp_ids_json) = ses.cookies.get(PATH_COOKIE_NAME) {
-        match serde_json::from_str::<Vec<String>>(fp_ids_json) {
+    let cookie = if cookie_override.is_some() { cookie_override } else { ses.cookies.get(PATH_COOKIE_NAME).cloned() };
+
+    if let Some(fp_ids_json) = cookie {
+        match serde_json::from_str::<Vec<String>>(fp_ids_json.as_str()) {
             Ok(fp_ids) =>
             {
                 // Get PropNodes for the folder IDs
@@ -50,13 +59,13 @@ pub (crate) async fn get_current_folder_path(srv: &mut GrpcServerConn, ses: &Use
                             .unwrap_or_else(|| org::PropNode { id: id.clone(), body: Some(serde_json::json!({ "name": "Unknown folder" }).to_string()), ..Default::default() })
                     }).collect();
                 } else {
-                    // Some folder weren't found in DB. Clear cookie.
+                    // Some folder weren't found in DB. Clear cookie...
                     srv.client_set_cookies(org::ClientSetCookiesRequest {
                             cookies: HashMap::from_iter(vec![(PATH_COOKIE_NAME.into(), "".into())]),
                             sid: ses.sid.clone(),
                             ..Default::default()
                         }).await?;
-                    // Send warning to user
+                    // ...and send warning to user:
                     srv.client_show_user_message(org::ClientShowUserMessageRequest {
                         msg: Some(proto::UserMessage {
                             message: "Some unknown folder IDs in folder_path cookie. Clearing it.".into(),
@@ -73,6 +82,11 @@ pub (crate) async fn get_current_folder_path(srv: &mut GrpcServerConn, ses: &Use
                 tracing::error!("Failed to parse folder_path cookie: {:?}", e);
             },
         }
+    }
+
+    // Make sure root folder is first in the path
+    if root_folder.id != folder_path.first().map(|f| f.id.clone()).unwrap_or_default() {
+        folder_path.insert(0, root_folder);
     }
     Ok(folder_path)
 }

@@ -111,7 +111,7 @@ function onDropFiles(e: any) {
 <style>
 :global(.custom-dropzone) {
     text-align: center;
-    background-color: rgb(17,24,39);
+    background-color: rgb(15, 23, 42);
     color: #64748b;
     width: 100%;
     height: 100%;
@@ -119,8 +119,8 @@ function onDropFiles(e: any) {
 }
 :global(.custom-dropzone.drag-active) {
     border-color: #90cdf4;
-    color: #90cdf4;
-    background-color: rgb(38, 52, 86);
+    color: #9fd0ee;
+    background-color: rgb(25, 33, 52);
     transition: background-color 0.1s ease-in-out
 }
 </style>

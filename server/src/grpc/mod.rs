@@ -138,7 +138,8 @@ pub (crate) fn folder_listing_for_videos(videos: &[crate::database::models::Vide
             proto::page_item::FolderListing {
                 items: videos,
                 popup_actions: vec![],
-                allow_reordering: false
+                allow_reordering: false,
+                listing_id: "".into(),
         })),
     }
 }

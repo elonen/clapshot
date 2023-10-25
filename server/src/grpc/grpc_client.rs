@@ -1,4 +1,4 @@
-use std::{path::{Path, PathBuf}};
+use std::path::{Path, PathBuf};
 
 use lib_clapshot_grpc::{unix_socket, subprocess::spawn_shell, subprocess::ProcHandle};
 use lib_clapshot_grpc::proto::org::organizer_inbound_client::OrganizerInboundClient;
@@ -7,7 +7,7 @@ use anyhow::{Context, bail};
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri, Channel};
 use tower::service_fn;
-use tracing::{info_span};
+use tracing::info_span;
 
 
 pub type OrganizerConnection = OrganizerInboundClient<Channel>;

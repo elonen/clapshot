@@ -14,6 +14,7 @@ import * as Proto3 from '@clapshot_protobuf/typescript';
 
 const dispatch = createEventDispatcher();
 
+export let listing_id: string;
 export let items: VideoListDefItem[] = [];
 export let dragDisabled: boolean = true;
 export let listPopupActions: string[] = [];
@@ -61,7 +62,19 @@ function handleFinalize(e: CustomEvent<DndEvent>) {
     } else {
         items = newItems as VideoListDefItem[];
     }
-    dispatch("reorder-items", {items});
+    dispatch("reorder-items", {
+        listing_id: listing_id,
+        ids: mapToFolderItemIDs(items) });
+}
+
+// Convert UI folder items to a protobuf FolderItemID array
+function mapToFolderItemIDs(items: VideoListDefItem[]): Proto3.FolderItemID[] {
+    function conv(it: VideoListDefItem): Proto3.FolderItemID {
+        if (it.obj.video) { return {videoId: it.obj.video.id}; }
+        else if (it.obj.folder) { return {folderId: it.obj.folder.id}; } else
+        { alert("UI BUG: unknown item type"); return {videoId: ""}; }
+    }
+    return items.map(conv);
 }
 
 function dispatchOpenItem(id: string) {
@@ -200,7 +213,7 @@ function isShadowItem(item: any) {
         on:consider={handleConsider}
         on:finalize={handleFinalize}
         on:contextmenu={(e) => onContextMenu(e, null)}
-        class="flex flex-wrap gap-4"
+        class="flex flex-wrap gap-4 p-4 bg-slate-900"
     >
         {#each items as item(item.id)}
             <div
@@ -225,7 +238,10 @@ function isShadowItem(item: any) {
                             name={item.obj.folder['title']}
                             preview_items={item.obj.folder['previewItems'] }
                             on:drop-items-into={(e) => {
-                                dispatch("move-to-folder", {folder_id: e.detail.folder_id, items: e.detail.items});
+                                dispatch("move-to-folder", {
+                                    listing_id: listing_id,
+                                    dst_folder_id: e.detail.folder_id,
+                                    ids: mapToFolderItemIDs(e.detail.items) });
                             }}
                         />
                     {:else}
