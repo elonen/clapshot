@@ -35,10 +35,8 @@ fn make_new_folder_action() -> proto::ActionDef {
         action: Some(proto::ScriptCall {
             lang: proto::script_call::Lang::Javascript.into(),
             code: r#"
-var folder_name = (await prompt("Name for the new folder", ""))?.trim();
-if (folder_name) {
-    await call_organizer("new_folder", {name: folder_name});
-}
+var folder_name = (prompt("Name for the new folder", ""))?.trim();
+if (folder_name) { clapshot.call_organizer("new_folder", {name: folder_name}); }
                 "#.into()
         })
     }
@@ -64,7 +62,7 @@ pub async fn construct_navi_page(srv: &mut GrpcServerConn, ses: &UserSessionData
             item: Some(proto::page_item::folder_listing::item::Item::Video(v.clone())),
             open_action: Some(proto::ScriptCall {
                 lang: proto::script_call::Lang::Javascript.into(),
-                code: r#"await call_server("open_video", {id: items[0].video.id});"#.into()
+                code: r#"clapshot.open_video(items[0].video.id);"#.into()
             }),
             popup_actions: vec!["popup_rename".into(), "popup_trash".into()],
             vis: None,
@@ -104,7 +102,7 @@ fn folder_node_to_page_item(folder: &org::PropNode) -> proto::page_item::folder_
         item: Some(proto::page_item::folder_listing::item::Item::Folder(f.clone())),
         open_action: Some(proto::ScriptCall {
             lang: proto::script_call::Lang::Javascript.into(),
-            code: format!(r#"await call_organizer("open_folder", {{id: "{}"}});"#, f.id),
+            code: format!(r#"clapshot.call_organizer("open_folder", {{id: "{}"}});"#, f.id),
         }),
         ..Default::default()
     }

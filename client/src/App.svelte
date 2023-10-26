@@ -17,6 +17,7 @@ import type {VideoListDefItem} from "@/lib/video_list/types";
 import VideoList from "@/lib/video_list/VideoList.svelte";
 import LocalStorageCookies from './cookies';
     import RawHtmlItem from './lib/RawHtmlItem.svelte';
+    import { ClientToServerCmd_AddComment, ClientToServerCmd, ClientToServerCmd_CollabReport, ClientToServerCmd_DelComment, ClientToServerCmd_EditComment, ClientToServerCmd_LeaveCollab, ClientToServerCmd_ListMyVideos, ClientToServerCmd_ListMyMessages, ClientToServerCmd_OpenVideo, ClientToServerCmd_JoinCollab, ClientToServerCmd_DelVideo, ClientToServerCmd_RenameVideo, ClientToServerCmd_MoveToFolder, ClientToServerCmd_ReorderItems, ClientToServerCmd_OrganizerCmd } from '@clapshot_protobuf/typescript/dist/src/client';
 
 let videoPlayer: VideoPlayer;
 let commentInput: CommentInput;
@@ -35,7 +36,7 @@ function logAbbrev(...strs: any[]) {
         let str = (typeof strs[i] == "string" || typeof strs[i] == "number" || typeof strs[i] == "boolean")
         ? String(strs[i])
         : JSON.stringify(strs[i]);
-        abbreviated[i] = (str.length > maxLen) ? (str.slice(0, maxLen) + "(...)") : str;
+        abbreviated[i] = (str.length > maxLen) ? (str.slice(0, maxLen) + " ……") : str;
     }
     console.log(...abbreviated);
 }
@@ -59,13 +60,12 @@ function onCommentInputButton(e: any) {
     {
         if (e.detail.comment_text != "")
         {
-            wsEmit('add_comment', {
-                video_id: $videoId,
-                parent_id: null,
+            wsEmit({addComment: {
+                videoId: $videoId!,
                 comment: e.detail.comment_text,
                 drawing: videoPlayer.getScreenshot(),
                 timecode: e.detail.is_timed ? videoPlayer.getCurTimecode() : "",
-            });
+            }});
         }
         resumeVideo();
     }
@@ -99,36 +99,40 @@ function onDisplayComment(e: any) {
     videoPlayer.setDrawing(e.detail.drawing);
     if ($collabId) {
         logAbbrev("Collab: onDisplayComment. collab_id: '" + $collabId + "'");
-        wsEmit('collab_report', {paused: true, loop: videoPlayer.isLooping(), seek_time: videoPlayer.getCurTime(), drawing: e.detail.drawing});
+        wsEmit({collabReport: {
+            paused: true,
+            loop: videoPlayer.isLooping(),
+            seekTimeSec: videoPlayer.getCurTime(),
+            drawing: e.detail.drawing,
+        }});
     }
 }
 
 function onDeleteComment(e: any) {
-    wsEmit('del_comment', {
-        id: e.detail.id,
-    });
+    wsEmit({delComment: { commentId: e.detail.id }});
 }
 
-function onReplyComment(e: any) {
-    wsEmit('add_comment', {
-        video_id: $videoId,
-        parent_id: e.detail.parent_id,
+function onReplyComment(e: { detail: { parent_id: string; comment_text: string; }}) {
+    console.log("onReplyComment: ", e.detail);
+    wsEmit({addComment: {
+        videoId: $videoId!,
+        parentId: e.detail.parent_id,
         comment: e.detail.comment_text,
-    });
+    }});
 }
 
 function onEditComment(e: any) {
-    wsEmit('edit_comment', {
-        id: e.detail.id,
-        comment: e.detail.comment_text,
-    });
+    wsEmit({editComment: {
+        commentId: e.detail.id,
+        newComment: e.detail.comment_text,
+    }});
 }
 
 function closeVideo() {
     // Close current video, list all user's own videos.
     // This is called from onClearAll event and history.back()
     console.log("closeVideo");
-    wsEmit('leave_collab', {});
+    wsEmit({leaveCollab: {}});
     $collabId = null;
     $videoId = null;
     $videoPlaybackUrl = null;
@@ -136,8 +140,8 @@ function closeVideo() {
     $videoTitle = null;
     $allComments = [];
     $videoIsReady = false;
-    wsEmit('list_my_videos', {});
-    wsEmit('list_my_messages', {});
+    wsEmit({listMyVideos: {}});
+    wsEmit({listMyMessages: {}});
 }
 
 function onClearAll(_e: any) {
@@ -151,7 +155,12 @@ function onVideoSeeked(_e: any) {
 
 function onCollabReport(e: any) {
     if ($collabId)
-    wsEmit('collab_report', {paused: e.detail.paused, loop: e.detail.loop, seek_time: e.detail.seek_time, drawing: e.detail.drawing});
+        wsEmit({collabReport: {
+            paused: e.detail.paused,
+            loop: e.detail.loop,
+            seekTimeSec: e.detail.seek_time,
+            drawing: e.detail.drawing,
+        }});
 }
 
 function onCommentPinClicked(e: any) {
@@ -171,9 +180,9 @@ function onCommentPinClicked(e: any) {
 
 function popHistoryState(e: any) {
     if (e.state && e.state !== '/')
-    wsEmit('open_video', {id: e.state});
+        wsEmit({openVideo: { videoId: e.state }});
     else
-    closeVideo();
+        closeVideo();
 }
 
 // Parse URL to see if we have a video to open
@@ -241,7 +250,7 @@ function refreshMyVideos()
         videoListRefreshScheduled = true;
         setTimeout(() => {
             videoListRefreshScheduled = false;
-            wsEmit('list_my_videos', {});
+            wsEmit({listMyVideos: {}});
         }, 500);
     }
 }
@@ -265,19 +274,20 @@ function disconnect() {
 let sendQueue: any[] = [];
 
 // Send message to server. If not connected, queue it.
-function wsEmit(event_name: string, data: any)
+function wsEmit(cmd: ClientToServerCmd)
 {
     let cookies = LocalStorageCookies.getAllNonExpired();
-    let raw_msg = JSON.stringify({cmd: event_name, data: data, cookies: cookies});
+    let raw_msg = JSON.stringify({ ...cmd, cookies });
     if (isConnected()) {
-        logAbbrev("ws_emit(): Sending: " + raw_msg);
+        logAbbrev("[SEND] " + raw_msg);
         wsSocket?.send(raw_msg);
     }
     else {
-        console.log("ws_emit(): Disconnected, so queuing: " + raw_msg);
+        logAbbrev("[SEND] (Disconnected, so queuing:) " + raw_msg);
         sendQueue.push(raw_msg);
     }
 }
+
 
 // Infinite loop that sends messages from the queue.
 // This only ever sends anything if ws_emit() queues messages due to temporary disconnection.
@@ -357,10 +367,10 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
         console.log("Socket connected");
         //acts.add({mode: 'info', message: 'Connected.', lifetime: 1.5});
         if ($videoId) {
-            wsEmit('open_video', {id: $videoId});
+            wsEmit({openVideo: { videoId: $videoId }});
         } else {
-            wsEmit('list_my_videos', {});
-            wsEmit('list_my_messages', {});
+            wsEmit({listMyVideos: {}});
+            wsEmit({listMyMessages: {}});
         }
     });
 
@@ -386,16 +396,15 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
     if (prevCollabId != $collabId) {
         // We have a new collab id. Close old and open new one.
         if (prevCollabId)
-        wsEmit('leave_collab', {});
+            wsEmit({leaveCollab: {}});
         if ($collabId)
-        wsEmit('join_collab', {collab_id: $collabId, video_id: $videoId});
+            wsEmit({joinCollab: { collabId: $collabId, videoId: $videoId! }});
     }
 
     // Incoming messages
     wsSocket.addEventListener("message", function (event)
     {
-//                                                            console.log("RAW WS MESSAGE: " + event.data);
-
+        logAbbrev("[RECV] " + event.data);
         const msgJson = JSON.parse(event.data);
         handleWithErrors(() =>
         {
@@ -404,7 +413,6 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 console.error("Got INVALID message: ", msgJson);
                 return;
             }
-            console.log("Got '" + Object.keys(msgJson)[0] + "'");
 
             if (Date.now() - lastVideoProgressMsgTime > 5000) {
                 $videoProgressMsg = null; // timeout progress message after a while
@@ -475,7 +483,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     $allComments = [];
 
                     if ($collabId)
-                        wsEmit('join_collab', {collab_id: $collabId, video_id: $videoId});
+                        wsEmit({joinCollab: { collabId: $collabId, videoId: $videoId! }});
                     else
                         history.pushState($videoId, '', '/?vid=' + $videoId);  // Point URL to video
                 } catch(error) {
@@ -565,25 +573,31 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
 
 function onRequestVideoDelete(videoId: string, videoName: string) {
     logAbbrev("onRequestVideoDelete: " + videoId + " / " + videoName);
-    wsEmit('del_video', {id: videoId});
-    wsEmit('list_my_videos', {});
+    wsEmit({delVideo: { videoId }});
+    wsEmit({listMyVideos: {}});
 }
 
 function onRequestVideoRename(videoId: string, videoName: string) {
     logAbbrev("onRequestVideoRename: " + videoId + " / " + videoName);
     let newName = prompt("Rename video to:", videoName);
     if (newName) {
-        wsEmit('rename_video', {id: videoId, new_name: newName});
-        wsEmit('list_my_videos', {});
+        wsEmit({renameVideo: { videoId, newName }});
+        wsEmit({listMyVideos: {}});
     }
 }
 
 function onMoveItemsToFolder(e: {detail: {dst_folder_id: string; ids: Proto3.FolderItemID[], listing_id: string}}) {
-    wsEmit("move_to_folder", e.detail)
+    wsEmit({moveToFolder: {
+        dstFolderId: e.detail.dst_folder_id,
+        ids: e.detail.ids
+    }});
 }
 
 function onReorderItems(e: {detail: {ids: Proto3.FolderItemID[], listing_id: string}}) {
-    wsEmit("reorder_items", e.detail)
+    wsEmit({reorderItems: {
+        listingId: e.detail.listing_id,
+        ids: e.detail.ids
+    }});
 }
 
 function openVideoListItem(e: { detail: Proto3.PageItem_FolderListing_Item}): void {
@@ -603,11 +617,12 @@ function openVideoListItem(e: { detail: Proto3.PageItem_FolderListing_Item}): vo
 
 // ------------
 
-// Expose some API functions to any HTML elements. These can be called from <a onclick="..."> etc,
-// that come as raw HTML from organizer.
+// Expose some API functions to any browser Javascript (e.g. Organizer scripts)
 (window as any).clapshot = {
-    call_server: wsEmit,
-    call_organizer: (cmd: string, args: Object) => { wsEmit("organizer_cmd", {cmd, args}); },
+    open_video: (video_id: string) => { wsEmit({openVideo: { videoId: video_id }}); },
+    rename_video: (video_id: string, new_name: string) => { wsEmit({renameVideo: { videoId: video_id, newName: new_name }}); },
+    del_video: (video_id: string) => { wsEmit({delVideo: { videoId: video_id }}); },
+    call_organizer: (cmd: string, args: Object) => { wsEmit({organizerCmd: { cmd, args: JSON.stringify(args) }}); },
 };
 
 /// Evalute a string as Javascript from Organizer or Server
@@ -616,23 +631,16 @@ function callOrganizerScript(code: string|undefined, items: any[]): void {
         console.log("callOrganizerScript called with empty code. Ignoring.");
         return;
     }
-    async function call_server(cmd: string, args: Object): Promise<void> { wsEmit(cmd, args); }
-    async function call_organizer(cmd: string, args: Object): Promise<void> { wsEmit("organizer_cmd", {cmd, args}); }
-    async function alert(msg: string): Promise<void> { window.alert(msg); }
-    async function prompt(msg: string, default_value: string): Promise<string|null> { return window.prompt(msg, default_value); }
-    async function confirm(msg: string): Promise<boolean> { return window.confirm(msg); }
-
-    const AsyncFunction = async function () {}.constructor;
+    const Function = function () {}.constructor;
     // @ts-ignore
-    let scriptFn = new AsyncFunction("call_server", "call_organizer", "alert", "prompt", "confirm", "items", code);
-
+    let scriptFn = new Function("items", code);
     console.log("Calling organizer script. Code = ", code, "items=", items);
-
-    scriptFn(call_server, call_organizer, alert, prompt, confirm, items)
-    .catch((e: any) => {
+    try {
+        scriptFn(items);
+    } catch (e: any) {
         console.error("Error in organizer script:", e);
         acts.add({mode: 'error', message: "Organizer script error. See log.", lifetime: 5});
-    });
+    }
 }
 
 function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: VideoListDefItem[] }})
@@ -691,12 +699,13 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
             <div id="comment_list" transition:fade class="flex-none w-72 basis-128 bg-gray-900 py-2 px-2 space-y-2 ml-2 overflow-y-auto">
                 {#each $allComments as it}
                 <CommentCard
-                indent={it.indent}
-                comment={it.comment}
-                on:display-comment={onDisplayComment}
-                on:delete-comment={onDeleteComment}
-                on:reply-to-comment={onReplyComment}
-                on:edit-comment={onEditComment}/>
+                    indent={it.indent}
+                    comment={it.comment}
+                    on:display-comment={onDisplayComment}
+                    on:delete-comment={onDeleteComment}
+                    on:reply-to-comment={onReplyComment}
+                    on:edit-comment={onEditComment}
+                />
                 {/each}
             </div>
             {/if}

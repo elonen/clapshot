@@ -2,7 +2,7 @@ use std::path::Path;
 use lib_clapshot_grpc::GrpcBindAddr;
 
 use crate::grpc::grpc_client::{connect, OrganizerConnection};
-use super::{grpc_client::OrganizerURI};
+use super::grpc_client::OrganizerURI;
 use super::proto;
 
 pub struct OrganizerCaller {

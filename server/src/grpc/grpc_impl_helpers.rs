@@ -1,6 +1,6 @@
-use std::{num::NonZeroU32};
-use tonic::{Status};
-use crate::{database::{error::DBError}};
+use std::num::NonZeroU32;
+use tonic::Status;
+use crate::database::error::DBError;
 
 use lib_clapshot_grpc::proto::org::GraphObj;
 use lib_clapshot_grpc::proto::org;

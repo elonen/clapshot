@@ -57,14 +57,12 @@ fn make_rename_action() -> proto::ActionDef {
             code: r#"
 var it = items[0];
 if (!it.video) {
-    await alert("Non-video rename not implemented (no Organizer).");
+    alert("Non-video rename not implemented (no Organizer).");
     return;
 }
 var old_name = it.video.title;
-var new_name = (await prompt("Rename item", old_name))?.trim();
-if (new_name && new_name != old_name) {
-    await call_server("rename_video", {id: it.video.id, new_name: new_name});
-}
+var new_name = (prompt("Rename item", old_name))?.trim();
+if (new_name && new_name != old_name) { clapshot.rename_video(it.video.id, new_name); }
                 "#.into()
         })
     }
@@ -89,13 +87,13 @@ fn make_trash_action() -> proto::ActionDef {
 var msg = (items.length == 1)
     ? "Are you sure you want to trash '" + items[0].video?.title + "'?"
     : "Are you sure you want to trash ALL selected items?";
-if (await confirm(msg)) {
+if (confirm(msg)) {
     for (var i = 0; i < items.length; i++) {
         var it = items[i];
         if (it.video) {
-            await call_server("del_video", {id: it.video.id});
+            clapshot.del_video(it.video.id);
         } else {
-            await alert("Non-video trash not implemented (no Organizer).");
+            alert("Non-video trash not implemented (no Organizer).");
         }
     }
 }
@@ -113,7 +111,7 @@ pub (crate) fn folder_listing_for_videos(videos: &[crate::database::models::Vide
                 item: Some(proto::page_item::folder_listing::item::Item::Video(v.to_proto3(url_base))),
                 open_action: Some(proto::ScriptCall {
                     lang: proto::script_call::Lang::Javascript.into(),
-                    code: r#"await call_server("open_video", {id: items[0].video.id});"#.into()
+                    code: r#"clapshot.open_video(items[0].video.id);"#.into()
                 }),
                 popup_actions: vec!["popup_rename".into(), "popup_trash".into()],
                 vis: None,

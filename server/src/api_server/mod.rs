@@ -200,31 +200,33 @@ async fn handle_ws_session(
 
                             fn parse_msg(msg: &Message) -> Res<(String, serde_json::Value, HashMap<String, String>)> {
                                 let msg_str = msg.to_str().unwrap_or("!!msg was supposed to .is_text()!!");
-                                let json: serde_json::Value = serde_json::from_str(msg_str)?;
-                                let cmd = json["cmd"].as_str().ok_or(anyhow!("Missing cmd"))?.trim().to_string();
 
-                                if cmd.len() == 0 || cmd.len() > 64 { bail!("Bad cmd") }
-                                let data = json.get("data").unwrap_or(&serde_json::json!({})).clone();
-
+                                let mut json: serde_json::Value = serde_json::from_str(msg_str)?;
                                 let mut cookies = HashMap::new();
-                                if let Some(cookies_json) = json.get("cookies") {
-                                    if let Some(cookies_json) = cookies_json.as_object() {
-                                        for (k, v) in cookies_json {
-                                            if let Some(v) = v.as_str() {
-                                                cookies.insert(k.clone(), v.to_string());
-                                            }}}}
 
-                                // Check data fields for length. Only "drawing" is allowed to be long.
-                                for (k, v) in data.as_object().unwrap_or(&serde_json::Map::new()) {
-                                    if k != "drawing" && v.as_str().map(|s| s.len() > 2048).unwrap_or(false) { bail!("Field too long"); }
+                                if let serde_json::Value::Object(map) = &mut json {
+                                    if let Some(cookies_json) = map.get("cookies") {
+                                        if let Some(cookies_json) = cookies_json.as_object() {
+                                            for (k, v) in cookies_json {
+                                                if let Some(v) = v.as_str() {
+                                                    cookies.insert(k.clone(), v.to_string());
+                                                }}}
+                                        map.remove("cookies");
+                                        assert!(json.get("cookies").is_none());
+                                    }
+                                } else {
+                                    bail!("JSON message was not a dict.");
                                 }
-                                Ok((cmd, data, cookies))
+                                let cmd_str = json.as_object().unwrap().keys().next().ok_or(anyhow!("JSON message had no command."))?.clone();
+                                Ok((cmd_str, json, cookies))
                             }
 
-                            let (cmd, data) = match parse_msg(&msg) {
-                                Ok((cmd, data, cookies)) => {
+                            tracing::debug!("Msg from client. Raw text: {}", abbrv(msg.to_str().unwrap_or("<msg.to_str() failed>")));
+
+                            let (cmd_str, json) = match parse_msg(&msg) {
+                                Ok((cmd, json, cookies)) => {
                                     ses.org_session.cookies = cookies;
-                                    (cmd, data)
+                                    (cmd, json)
                                 },
                                 Err(e) => {
                                     tracing::warn!(details=%e, "Error parsing JSON message. Closing session.");
@@ -237,10 +239,10 @@ async fn handle_ws_session(
                                     break;
                                 }
                             };
-                            tracing::debug!(cmd=%cmd, "Msg from client.");
-                            match msg_dispatch(&cmd, &data, &mut ses, &server, ).await {
-                                Ok(true) => {},
-                                Ok(false) => { break; }
+                            tracing::debug!(cmd=%cmd_str, "Msg from client");
+                            match msg_dispatch(&cmd_str, &json, &mut ses, &server, ).await {
+                                Ok(true) => {},             // Continues serving
+                                Ok(false) => { break; }     // Session closed
                                 Err(e) => {
                                     if let Some(e) = e.downcast_ref::<SessionClose>() {
                                         if !matches!(e, SessionClose::Logout) { tracing::info!("[{}] Closing session: {:?}", sid, e); }
@@ -249,7 +251,7 @@ async fn handle_ws_session(
                                         tracing::error!("[{}] Error sending message. Closing session. -- {}", sid, e);
                                         break;
                                     } else {
-                                        let answ = format!("Error handling command '{}'.", cmd);
+                                        let answ = format!("Error handling command '{}'.", cmd_str);
                                         tracing::warn!("[{}] {}: {}", sid, answ, e);
                                         let err_msg = proto::client::server_to_client_cmd::Error { msg: answ };
                                         let json_txt = serde_json::to_string(&err_msg).expect("Error serializing error message");

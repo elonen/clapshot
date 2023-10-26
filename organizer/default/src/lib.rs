@@ -117,7 +117,6 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
         match req.cmd.as_str() {
             "new_folder" =>
             {
-                // Read args from JSON
                 let args = serde_json::from_str::<FolderData>(&req.args)
                     .map_err(|e| Status::invalid_argument(format!("Failed to parse args: {:?}", e)))?;
 

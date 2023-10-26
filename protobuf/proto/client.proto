@@ -61,3 +61,78 @@ message ServerToClientCmd {
         SetCookies set_cookies = 100;
     }
 }
+
+message ClientToServerCmd {
+    message ListMyVideos {
+    }
+    message OpenVideo {
+        string video_id = 1;
+    }
+    message DelVideo {
+        string video_id = 1;
+    }
+    message RenameVideo {
+        string video_id = 1;
+        string new_name = 2;
+    }
+    message AddComment {
+        string video_id = 1;
+        string comment = 2;
+        optional string timecode = 3;
+        optional string parent_id = 4;
+        optional string drawing = 5;
+    }
+    message EditComment {
+        string comment_id = 1;
+        string new_comment = 2;
+    }
+    message DelComment {
+        string comment_id = 1;
+    }
+    message ListMyMessages {
+    }
+    message JoinCollab {
+        string collab_id = 1;
+        string video_id = 2;
+    }
+    message LeaveCollab {
+    }
+    message CollabReport {
+        bool paused = 1;
+        bool loop = 2;
+        double seek_time_sec = 3;
+        optional string drawing = 4;
+    }
+    message OrganizerCmd {
+        string cmd = 1;
+        string args = 2;
+    }
+    message MoveToFolder {
+        string dst_folder_id = 1;
+        repeated FolderItemID ids = 2;
+    }
+    message ReorderItems {
+        string listing_id = 1;
+        repeated FolderItemID ids = 2;
+    }
+    message Logout {
+    }
+
+    oneof cmd {
+        ListMyVideos list_my_videos = 10;
+        OpenVideo open_video = 20;
+        DelVideo del_video = 30;
+        RenameVideo rename_video = 40;
+        AddComment add_comment = 50;
+        EditComment edit_comment = 60;
+        DelComment del_comment = 70;
+        ListMyMessages list_my_messages = 80;
+        JoinCollab join_collab = 90;
+        LeaveCollab leave_collab = 100;
+        CollabReport collab_report = 110;
+        OrganizerCmd organizer_cmd = 120;
+        MoveToFolder move_to_folder = 130;
+        ReorderItems reorder_items = 140;
+        Logout logout = 150;
+    }
+}
