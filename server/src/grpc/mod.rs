@@ -62,8 +62,8 @@ if (!it.video) {
 }
 var old_name = it.video.title;
 var new_name = (prompt("Rename item", old_name))?.trim();
-if (new_name && new_name != old_name) { clapshot.rename_video(it.video.id, new_name); }
-                "#.into()
+if (new_name && new_name != old_name) { clapshot.renameVideo(it.video.id, new_name); }
+                "#.trim().into()
         })
     }
 }
@@ -91,13 +91,13 @@ if (confirm(msg)) {
     for (var i = 0; i < items.length; i++) {
         var it = items[i];
         if (it.video) {
-            clapshot.del_video(it.video.id);
+            clapshot.delVideo(it.video.id);
         } else {
             alert("Non-video trash not implemented (no Organizer).");
         }
     }
 }
-                    "#.into()
+                    "#.trim().into()
             })
     }
 }
@@ -111,33 +111,19 @@ pub (crate) fn folder_listing_for_videos(videos: &[crate::database::models::Vide
                 item: Some(proto::page_item::folder_listing::item::Item::Video(v.to_proto3(url_base))),
                 open_action: Some(proto::ScriptCall {
                     lang: proto::script_call::Lang::Javascript.into(),
-                    code: r#"clapshot.open_video(items[0].video.id);"#.into()
+                    code: r#"clapshot.openVideo(items[0].video.id);"#.into()
                 }),
                 popup_actions: vec!["popup_rename".into(), "popup_trash".into()],
                 vis: None,
             }
         }).collect();
-    /*
-    let folders = vec![
-        proto::page_item::folder_listing::Item {
-            item: Some(proto::page_item::folder_listing::item::Item::Folder(
-                proto::page_item::folder_listing::Folder {
-                    id: "12345".into(),
-                    title: "Test Folder".into(),
-                    preview_items: videos.clone() })),
-            ..Default::default()
-        },
-    ];
-    let items = folders.into_iter().chain(videos.into_iter()).collect();
-    */
 
     proto::PageItem {
         item: Some(proto::page_item::Item::FolderListing(
             proto::page_item::FolderListing {
                 items: videos,
-                popup_actions: vec![],
                 allow_reordering: false,
-                listing_id: "".into(),
+                ..Default::default()
         })),
     }
 }

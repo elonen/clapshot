@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use lib_clapshot_grpc::proto::org::UserSessionData;
+use lib_clapshot_grpc::proto::org::{UserSessionData, GraphObj};
 
 use lib_clapshot_grpc::proto::{self, org};
 use tonic::Status;
@@ -17,11 +17,11 @@ pub struct UserNodeData {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
-pub struct FolderData {
+pub struct FoldeBodyData {
     pub name: String,
 
-    #[serde(default)]
-    pub preview_cache: Vec<proto::page_item::folder_listing::Item>
+    //#[serde(default)]
+    //pub preview_cache: Option<Vec<proto::page_item::folder_listing::Item>>
 }
 
 
@@ -61,7 +61,7 @@ pub (crate) async fn get_current_folder_path(srv: &mut GrpcServerConn, ses: &Use
                 } else {
                     // Some folder weren't found in DB. Clear cookie...
                     srv.client_set_cookies(org::ClientSetCookiesRequest {
-                            cookies: HashMap::from_iter(vec![(PATH_COOKIE_NAME.into(), "".into())]),
+                            cookies: HashMap::from([ (PATH_COOKIE_NAME.into(), "".into() )]),
                             sid: ses.sid.clone(),
                             ..Default::default()
                         }).await?;
@@ -96,7 +96,7 @@ pub (crate) async fn get_current_folder_path(srv: &mut GrpcServerConn, ses: &Use
 /// Returns the new folder node.
 ///
 /// Call this inside a transaction (does multiple dependent DB calls)
-pub async fn create_folder(srv: &mut GrpcServerConn, ses: &org::UserSessionData, parent_folder: Option<org::PropNode>, args: FolderData)
+pub async fn create_folder(srv: &mut GrpcServerConn, ses: &org::UserSessionData, parent_folder: Option<org::PropNode>, args: FoldeBodyData)
     -> RpcResult<org::PropNode>
 {
     use org::graph_obj::Id::NodeId;
@@ -120,7 +120,7 @@ pub async fn create_folder(srv: &mut GrpcServerConn, ses: &org::UserSessionData,
 
     for fld in siblings.items.iter() {
         if let Some(b) = &fld.body {
-            if let Ok(folder_data) = serde_json::from_str::<FolderData>(b) {
+            if let Ok(folder_data) = serde_json::from_str::<FoldeBodyData>(b) {
                 if folder_data.name == args.name {
                     return Err(Status::already_exists(format!("Folder '{}' already exists", args.name)));
                 }
@@ -161,17 +161,17 @@ pub async fn create_folder(srv: &mut GrpcServerConn, ses: &org::UserSessionData,
 }
 
 
-/// Query database for subfolders and videos in given folder. Returns (subfolders, videos).
+/// Query database for subfolders and videos in given folder.
+/// Returned edges are sorted by edge.sort_order
 pub async fn fetch_folder_contents(srv: &mut GrpcServerConn, folder: &org::PropNode)
-    -> RpcResult<(Vec<org::PropNode>, Vec<proto::Video>)>
+    -> RpcResult<(Vec<org::PropNode>, Vec<proto::Video>, Vec<org::PropEdge>)>
 {
     let sub_folders_res = srv.db_get_prop_nodes(org::DbGetPropNodesRequest {
         graph_rel: Some(org::GraphObjRel {
             rel: Some(ParentIs(org::GraphObj { id: Some(org::graph_obj::Id::NodeId(folder.id.clone())) })),
             edge_type: Some(PARENT_FOLDER_EDGE_TYPE.into()),
         }),
-        ..Default::default()
-    }).await?.into_inner();
+        ..Default::default() }).await?.into_inner();
 
     let videos_res = srv.db_get_videos(org::DbGetVideosRequest {
         filter: Some(org::db_get_videos_request::Filter::GraphRel(
@@ -179,9 +179,18 @@ pub async fn fetch_folder_contents(srv: &mut GrpcServerConn, folder: &org::PropN
                 rel: Some(ParentIs(org::GraphObj { id: Some(org::graph_obj::Id::NodeId(folder.id.clone())) })),
                 edge_type: Some(PARENT_FOLDER_EDGE_TYPE.into()),
             })),
-        ..Default::default()
-    }).await?.into_inner();
+        ..Default::default() }).await?.into_inner();
 
-    Ok((sub_folders_res.items, videos_res.items))
+    let mut edges = srv.db_get_prop_edges(org::DbGetPropEdgesRequest {
+            edge_type: Some(PARENT_FOLDER_EDGE_TYPE.into()),
+            to: Some(GraphObj { id: Some(org::graph_obj::Id::NodeId(folder.id.clone())), ..Default::default() }),
+            ..Default::default()
+        }).await?.into_inner().items;
+    edges.sort_by(|a, b| {
+            let a = a.sort_order.unwrap_or(f32::NAN);
+            let b = b.sort_order.unwrap_or(f32::NAN);
+            a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Less)
+        });
+
+    Ok((sub_folders_res.items, videos_res.items, edges))
 }
-

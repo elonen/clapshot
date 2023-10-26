@@ -10,3 +10,5 @@ export interface UserMenuItem {
     label: string;
     data: string;
 }
+
+export type StringMap = { [key: string]: string };

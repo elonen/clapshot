@@ -5,7 +5,7 @@ import VideoListPopup from './VideoListPopup.svelte';
 import VideoListVideoTile from "./VideoListVideoTile.svelte";
 import VideoListFolder from "./VideoListFolder.svelte";
 
-import type { VideoListDefItem } from "./types";
+import { folderItemsToIDs, type VideoListDefItem } from "./types";
 import { createEventDispatcher, tick } from "svelte";
 import { fade } from "svelte/transition";
 
@@ -14,12 +14,16 @@ import * as Proto3 from '@clapshot_protobuf/typescript';
 
 const dispatch = createEventDispatcher();
 
-export let listing_id: string;
+export let listingData: { [key: string]: string };
 export let items: VideoListDefItem[] = [];
 export let dragDisabled: boolean = true;
 export let listPopupActions: string[] = [];
 
 let isDragging = false;
+
+function mapDefItems(items: VideoListDefItem[]) {
+    return folderItemsToIDs(items.map((it)=>it.obj));
+}
 
 function handleConsider(e: CustomEvent<DndEvent>) {
     isDragging = true;
@@ -62,19 +66,7 @@ function handleFinalize(e: CustomEvent<DndEvent>) {
     } else {
         items = newItems as VideoListDefItem[];
     }
-    dispatch("reorder-items", {
-        listing_id: listing_id,
-        ids: mapToFolderItemIDs(items) });
-}
-
-// Convert UI folder items to a protobuf FolderItemID array
-function mapToFolderItemIDs(items: VideoListDefItem[]): Proto3.FolderItemID[] {
-    function conv(it: VideoListDefItem): Proto3.FolderItemID {
-        if (it.obj.video) { return {videoId: it.obj.video.id}; }
-        else if (it.obj.folder) { return {folderId: it.obj.folder.id}; } else
-        { alert("UI BUG: unknown item type"); return {videoId: ""}; }
-    }
-    return items.map(conv);
+    dispatch("reorder-items", { listingData, ids: mapDefItems(items) });
 }
 
 function dispatchOpenItem(id: string) {
@@ -85,7 +77,7 @@ function dispatchOpenItem(id: string) {
             el.classList.add("videolist_item_pump_anim");
             setTimeout(() => { el?.classList.remove("videolist_item_pump_anim"); }, 1000);
         }
-        dispatch("open-item", it.obj);
+        dispatch("open-item", { item: it.obj, listingData });
     } else {
         alert("UI BUG: item not found or missing openAction");
     }
@@ -191,7 +183,7 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
             y: e.clientY - 16, // Offset a bit to make it look better
         },
     });
-    popup.$on('action', (e) => dispatch("popup-action", {action: e.detail.action, items: targetTiles}));
+    popup.$on('action', (e) => dispatch("popup-action", {action: e.detail.action, items: targetTiles, listingData}));
     popup.$on('hide', () => popup.$destroy());
     e.preventDefault(); // Prevent default browser context menu
 }
@@ -239,9 +231,8 @@ function isShadowItem(item: any) {
                             preview_items={item.obj.folder['previewItems'] }
                             on:drop-items-into={(e) => {
                                 dispatch("move-to-folder", {
-                                    listing_id: listing_id,
-                                    dst_folder_id: e.detail.folder_id,
-                                    ids: mapToFolderItemIDs(e.detail.items) });
+                                    dstFolderId: e.detail.folderId,
+                                    ids: mapDefItems(e.detail.items) });
                             }}
                         />
                     {:else}

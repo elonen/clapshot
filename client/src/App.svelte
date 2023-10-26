@@ -5,7 +5,7 @@ import {fade, slide} from "svelte/transition";
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
 import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, videoId, videoFps, videoTitle, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions} from '@/stores';
-import {IndentedComment, type UserMenuItem} from "@/types";
+import {IndentedComment, type UserMenuItem, type StringMap} from "@/types";
 
 import CommentCard from '@/lib/CommentCard.svelte'
 import NavBar from '@/lib/NavBar.svelte'
@@ -13,11 +13,11 @@ import CommentInput from '@/lib/CommentInput.svelte';
 import UserMessage from '@/lib/UserMessage.svelte';
 import FileUpload from '@/lib/FileUpload.svelte';
 import VideoPlayer from '@/lib/VideoPlayer.svelte';
-import type {VideoListDefItem} from "@/lib/video_list/types";
+import {folderItemsToIDs, type VideoListDefItem} from "@/lib/video_list/types";
 import VideoList from "@/lib/video_list/VideoList.svelte";
 import LocalStorageCookies from './cookies';
-    import RawHtmlItem from './lib/RawHtmlItem.svelte';
-    import { ClientToServerCmd_AddComment, ClientToServerCmd, ClientToServerCmd_CollabReport, ClientToServerCmd_DelComment, ClientToServerCmd_EditComment, ClientToServerCmd_LeaveCollab, ClientToServerCmd_ListMyVideos, ClientToServerCmd_ListMyMessages, ClientToServerCmd_OpenVideo, ClientToServerCmd_JoinCollab, ClientToServerCmd_DelVideo, ClientToServerCmd_RenameVideo, ClientToServerCmd_MoveToFolder, ClientToServerCmd_ReorderItems, ClientToServerCmd_OrganizerCmd } from '@clapshot_protobuf/typescript/dist/src/client';
+import RawHtmlItem from './lib/RawHtmlItem.svelte';
+import { ClientToServerCmd } from '@clapshot_protobuf/typescript/dist/src/client';
 
 let videoPlayer: VideoPlayer;
 let commentInput: CommentInput;
@@ -571,84 +571,75 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
     });
 }
 
-function onRequestVideoDelete(videoId: string, videoName: string) {
-    logAbbrev("onRequestVideoDelete: " + videoId + " / " + videoName);
-    wsEmit({delVideo: { videoId }});
-    wsEmit({listMyVideos: {}});
+function onMoveItemsToFolder(e: {detail: {dstFolderId: string; ids: Proto3.FolderItemID[], listingData: StringMap}}) {
+    let {dstFolderId, ids, listingData} = e.detail;
+    wsEmit({moveToFolder: { dstFolderId, ids, listingData }});
 }
 
-function onRequestVideoRename(videoId: string, videoName: string) {
-    logAbbrev("onRequestVideoRename: " + videoId + " / " + videoName);
-    let newName = prompt("Rename video to:", videoName);
-    if (newName) {
-        wsEmit({renameVideo: { videoId, newName }});
-        wsEmit({listMyVideos: {}});
-    }
+function onReorderItems(e: {detail: {ids: Proto3.FolderItemID[], listingData: StringMap}}) {
+    let {ids, listingData} = e.detail;
+    wsEmit({reorderItems: { listingData, ids }});
 }
 
-function onMoveItemsToFolder(e: {detail: {dst_folder_id: string; ids: Proto3.FolderItemID[], listing_id: string}}) {
-    wsEmit({moveToFolder: {
-        dstFolderId: e.detail.dst_folder_id,
-        ids: e.detail.ids
-    }});
-}
-
-function onReorderItems(e: {detail: {ids: Proto3.FolderItemID[], listing_id: string}}) {
-    wsEmit({reorderItems: {
-        listingId: e.detail.listing_id,
-        ids: e.detail.ids
-    }});
-}
-
-function openVideoListItem(e: { detail: Proto3.PageItem_FolderListing_Item}): void {
-    let it = e.detail;
-    if (it.openAction) {
-        if ( it.openAction.lang == Proto3.ScriptCall_Lang.JAVASCRIPT )
-        callOrganizerScript(it.openAction.code, [it]);
+function openVideoListItem(e: { detail: { item: Proto3.PageItem_FolderListing_Item, listingData: StringMap }}): void {
+    let {item, listingData} = e.detail;
+    if (item.openAction) {
+        if ( item.openAction.lang == Proto3.ScriptCall_Lang.JAVASCRIPT )
+        callOrganizerScript(item.openAction.code, [item], listingData);
         else {
-            console.error("BUG: Unsupported Organizer script language: " + it.openAction.lang);
+            console.error("BUG: Unsupported Organizer script language: " + item.openAction.lang);
             acts.add({mode: 'error', message: "BUG: Unsupported script lang. See log.", lifetime: 5});
         }
     } else {
-        console.error("No openAction script for item: " + it);
+        console.error("No openAction script for item: " + item);
         acts.add({mode: 'error', message: "No open action for item. See log.", lifetime: 5});
     }
 }
 
 // ------------
 
-// Expose some API functions to any browser Javascript (e.g. Organizer scripts)
+// Expose some API functions to browser JS (=scripts from Server and Organizer)
+
 (window as any).clapshot = {
-    open_video: (video_id: string) => { wsEmit({openVideo: { videoId: video_id }}); },
-    rename_video: (video_id: string, new_name: string) => { wsEmit({renameVideo: { videoId: video_id, newName: new_name }}); },
-    del_video: (video_id: string) => { wsEmit({delVideo: { videoId: video_id }}); },
-    call_organizer: (cmd: string, args: Object) => { wsEmit({organizerCmd: { cmd, args: JSON.stringify(args) }}); },
+    openVideo: (videoId: string) => { wsEmit({ openVideo: { videoId } }) },
+    renameVideo: (videoId: string, newName: string) => { wsEmit({ renameVideo: { videoId, newName } }) },
+    delVideo: (videoId: string) => { wsEmit({ delVideo: { videoId } }) },
+
+    callOrganizer: (cmd: string, args: Object) => { wsEmit({ organizerCmd: { cmd, args: JSON.stringify(args) } }) },
+    itemsToIDs: (items: Proto3.PageItem_FolderListing_Item[]): Proto3.FolderItemID[] => { return folderItemsToIDs(items) },
+    moveToFolder: (
+        dstFolderId: string,
+        ids: Proto3.FolderItemID[],
+        listingData: StringMap) => { wsEmit({ moveToFolder: { dstFolderId, ids, listingData } }) },
+    reorderItems: (
+        ids: Proto3.FolderItemID[],
+        listingData: StringMap) => { wsEmit({ reorderItems: { ids, listingData } }) },
 };
 
-/// Evalute a string as Javascript from Organizer or Server
-function callOrganizerScript(code: string|undefined, items: any[]): void {
+/// Evalute a string as Javascript from Organizer (or Server)
+function callOrganizerScript(code: string|undefined, items: any[], listingData: StringMap): void {
     if (!code) {
         console.log("callOrganizerScript called with empty code. Ignoring.");
         return;
     }
     const Function = function () {}.constructor;
     // @ts-ignore
-    let scriptFn = new Function("items", code);
-    console.log("Calling organizer script. Code = ", code, "items=", items);
+    let scriptFn = new Function("items", "listingData", code);
+    console.log("Calling organizer script:", {listingData, items, code});
     try {
-        scriptFn(items);
+        scriptFn(items, listingData);
     } catch (e: any) {
         console.error("Error in organizer script:", e);
         acts.add({mode: 'error', message: "Organizer script error. See log.", lifetime: 5});
     }
 }
 
-function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: VideoListDefItem[] }})
+function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: VideoListDefItem[], listingData: StringMap }})
 {
-    let {action, items} = e.detail;
+    let {action, items, listingData} = e.detail;
     let itemsObjs = items.map((it) => it.obj);
-    console.log("onVideoListPopupAction: ", action, itemsObjs);
-    callOrganizerScript(action.action?.code, itemsObjs);
+    console.log("onVideoListPopupAction():", {action, itemsObjs, listingData});
+    callOrganizerScript(action.action?.code, itemsObjs, listingData);
 }
 </script>
 
@@ -736,7 +727,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
                 {:else if pit.folderListing}
                     <div class="my-6">
                         <VideoList
-                            listing_id={pit.folderListing.listingId}
+                            listingData={pit.folderListing.listingData}
                             items={pit.folderListing.items.map((it)=>({
                                 id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
                                 obj: it }))}

@@ -2,7 +2,7 @@ use std::{default, sync::Arc};
 use lib_clapshot_grpc::proto::{org, self};
 use tokio::sync::Mutex;
 use tonic::Status;
-use crate::{GrpcServerConn, RpcResult, folder_ops::FolderData};
+use crate::{GrpcServerConn, RpcResult, folder_ops::FoldeBodyData};
 
 pub type SrvRef = crate::OrganizerOutboundClient<crate::Channel>;
 
@@ -155,6 +155,20 @@ pub async fn mkget_video_owner_node(srv: &Arc<Mutex<GrpcServerConn>>, video: &pr
 }
 */
 
+
+/// Helper: convert a folder item ID to a graph object ID (for database queries).
+pub fn map_ids_folderitem_to_graphobj(ids: &[proto::FolderItemId]) -> Result<Vec<org::graph_obj::Id>, Status> {
+    let ids_to_move = ids.iter().map(|id| {
+        match &id.item {
+            Some(proto::folder_item_id::Item::VideoId(id)) => Ok(org::graph_obj::Id::VideoId(id.clone())),
+            Some(proto::folder_item_id::Item::FolderId(id)) => Ok(org::graph_obj::Id::NodeId(id.clone())),
+            None => Err(Status::invalid_argument("No item ID")),
+        }
+    }).collect::<Result<Vec<_>, _>>()?;
+    Ok(ids_to_move)
+}
+
+
 pub async fn mkget_user_root_folder(srv: &mut GrpcServerConn, user: &proto::UserInfo)
     -> RpcResult<org::PropNode>
 {
@@ -174,7 +188,7 @@ pub async fn mkget_user_root_folder(srv: &mut GrpcServerConn, user: &proto::User
                 nodes: vec![
                     org::PropNode {
                         id: "".into(),  // empty = insert
-                        body: Some(serde_json::to_string(&FolderData { name: "root".into(), ..Default::default() }).unwrap()),
+                        body: Some(serde_json::to_string(&FoldeBodyData { name: "root".into(), ..Default::default() }).unwrap()),
                         node_type: crate::graph_utils::FOLDER_NODE_TYPE.into(),
                         singleton_key: Some(root_key),
                     }

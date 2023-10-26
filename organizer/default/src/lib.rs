@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use db_check::ErrorsPerVideo;
 use folder_ops::create_folder;
+use lib_clapshot_grpc::proto::org::GraphObj;
 use srv_short::TransactionGuard;
-use ui_components::{make_folder_list_popup_actions, construct_navi_page, OpenFolderArgs};
+use ui_components::{make_custom_actions_map, construct_navi_page, OpenFolderArgs};
 
 use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
@@ -20,7 +21,9 @@ use lib_clapshot_grpc::{
 };
 
 use crate::db_check::spawn_database_check;
-use crate::folder_ops::{get_current_folder_path, FolderData};
+use crate::folder_ops::{get_current_folder_path, FoldeBodyData};
+use crate::graph_utils::PARENT_FOLDER_EDGE_TYPE;
+use crate::srv_short::map_ids_folderitem_to_graphobj;
 
 mod folder_ops;
 mod db_check;
@@ -102,7 +105,7 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
         let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
         let sid = req.into_inner().ses.ok_or(Status::invalid_argument("No session ID"))?.sid;
         srv.client_define_actions(org::ClientDefineActionsRequest {
-            actions: make_folder_list_popup_actions(),
+            actions: make_custom_actions_map(),
             sid }).await?;
         Ok(Response::new(org::OnStartUserSessionResult {}))
     }
@@ -117,7 +120,7 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
         match req.cmd.as_str() {
             "new_folder" =>
             {
-                let args = serde_json::from_str::<FolderData>(&req.args)
+                let args = serde_json::from_str::<FoldeBodyData>(&req.args)
                     .map_err(|e| Status::invalid_argument(format!("Failed to parse args: {:?}", e)))?;
 
                 let parent_folder = get_current_folder_path(&mut srv, &ses, None).await?.last().cloned();
@@ -152,7 +155,7 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
                 tracing::debug!("Setting new folder_path cookie: {}", new_cookie);
 
                 srv.client_set_cookies(org::ClientSetCookiesRequest {
-                        cookies: HashMap::from_iter(vec![(crate::graph_utils::PATH_COOKIE_NAME.into(), new_cookie.clone())]),
+                        cookies: HashMap::from([(crate::graph_utils::PATH_COOKIE_NAME.into(), new_cookie.clone())]),
                         sid: ses.sid.clone(),
                         expire_time: None
                     }).await?;
@@ -170,15 +173,74 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
         }
     }
 
-    async fn move_to_folder(&self, _req: Request<org::MoveToFolderRequest>) -> RpcResponseResult<proto::Empty>
+
+    async fn move_to_folder(&self, req: Request<org::MoveToFolderRequest>) -> RpcResponseResult<proto::Empty>
     {
-        Err(Status::unimplemented("move_to_folder"))
+        let req = req.into_inner();
+        let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
+        let tx = TransactionGuard::begin(&mut srv, "move_to_folder").await?;
+
+        let dst_folder = Some(GraphObj { id: Some(org::graph_obj::Id::NodeId( req.dst_folder_id  )), ..Default::default() });
+        let (mut to_delete, mut to_add) = (vec![], vec![]);
+        for id in map_ids_folderitem_to_graphobj(&req.ids)? {
+            to_delete.extend(
+                srv.db_get_prop_edges(org::DbGetPropEdgesRequest {
+                        edge_type: Some(PARENT_FOLDER_EDGE_TYPE.into()),
+                        from: Some(GraphObj { id: Some(id.clone()), ..Default::default() }),
+                        ..Default::default()
+                    }).await?.into_inner().items.into_iter().map(|e| e.id));
+            to_add.push(org::PropEdge {
+                    edge_type: PARENT_FOLDER_EDGE_TYPE.into(),
+                    from: Some(GraphObj { id: Some(id), ..Default::default() }),
+                    to: dst_folder.clone(),
+                    ..Default::default()
+                });
+        }
+
+        srv.db_delete(org::DbDeleteRequest { edge_ids: to_delete, ..Default::default() }).await?;
+        srv.db_upsert(org::DbUpsertRequest { edges: to_add, ..Default::default() }).await?;
+        tx.commit().await?;
+
+        let ses = req.ses.ok_or(Status::invalid_argument("No session ID"))?;
+        let navi_page = construct_navi_page(&mut srv, &ses, None).await?;
+        srv.client_show_page(navi_page).await?;
+
+        Ok(Response::new(proto::Empty {}))
     }
 
-    async fn reorder_items(&self, _req: Request<org::ReorderItemsRequest>) -> RpcResponseResult<proto::Empty>
+
+    async fn reorder_items(&self, req: Request<org::ReorderItemsRequest>) -> RpcResponseResult<proto::Empty>
     {
-        Err(Status::unimplemented("reorder_items"))
+        let req = req.into_inner();
+        let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
+        let tx = TransactionGuard::begin(&mut srv, "move_to_folder").await?;
+
+        // Get edges to folder
+        let folder_id = req.listing_data.get("folder_id").ok_or(Status::invalid_argument("No folder ID in listing, cannot reorder"))?.clone();
+        let mut edges = srv.db_get_prop_edges(org::DbGetPropEdgesRequest {
+                edge_type: Some(PARENT_FOLDER_EDGE_TYPE.into()),
+                to: Some(GraphObj { id: Some(org::graph_obj::Id::NodeId(folder_id)), ..Default::default() }),
+                ..Default::default()
+            }).await?.into_inner().items;
+
+        // Assign new sort_order values to them
+        let len = req.ids.len() as f32;
+        for (i, id) in map_ids_folderitem_to_graphobj(&req.ids)?.iter().enumerate() {
+            if let Some(e) = edges.iter_mut().find(|e| e.from.as_ref().map(|x| &x.id) == Some(&Some(id.clone())) ) {
+                e.sort_order = Some(i as f32 / len);
+            }
+        }
+
+        srv.db_upsert(org::DbUpsertRequest { edges, ..Default::default() }).await?;
+        tx.commit().await?;
+
+        let ses = req.ses.ok_or(Status::invalid_argument("No session ID"))?;
+        let navi_page = construct_navi_page(&mut srv, &ses, None).await?;
+        srv.client_show_page(navi_page).await?;
+
+        Ok(Response::new(proto::Empty {}))
     }
+
 
     // ------------------------------------------------------------------
     // Unit / integration tests

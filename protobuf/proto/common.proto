@@ -114,9 +114,9 @@ message PageItem {
             optional ScriptCall open_action = 110;  // Omit to disable "open" action
             repeated string popup_actions = 120;    // References to actions defined in ClientDefineActionsRequest
         }
-        string listing_id = 1;
-        repeated Item items = 2;
-        repeated string popup_actions = 3;          // Popups for the whole folder listing (e.g. "new_folder")
+        repeated Item items = 1;
+        repeated string popup_actions = 2;          // Popups for the whole folder listing (e.g. "new_folder")
+        map<string, string> listing_data = 3;       // Custom data from organizer to itself
         bool allow_reordering = 10;                 // Allow (drag-and-drop & kbd) reordering of items
     }
 

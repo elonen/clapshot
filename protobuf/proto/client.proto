@@ -110,10 +110,11 @@ message ClientToServerCmd {
     message MoveToFolder {
         string dst_folder_id = 1;
         repeated FolderItemID ids = 2;
+        map<string, string> listing_data = 3;
     }
     message ReorderItems {
-        string listing_id = 1;
-        repeated FolderItemID ids = 2;
+        repeated FolderItemID ids = 1;
+        map<string, string> listing_data = 2;
     }
     message Logout {
     }

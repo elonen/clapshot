@@ -442,6 +442,7 @@ pub async fn msg_move_to_folder(data: &proto::client::client_to_server_cmd::Move
             ses: Some(ses.org_session.clone()),
             dst_folder_id: data.dst_folder_id.clone(),
             ids: data.ids.clone(),
+            listing_data: data.listing_data.clone(),
         };
         if let Err(e) = org.lock().await.move_to_folder(req).await {
             tracing::error!(err=?e, "Error in organizer move_to_folder() call");
@@ -455,8 +456,8 @@ pub async fn msg_reorder_items(data: &ReorderItems, ses: &mut UserSession, serve
     if let Some(org) = &ses.organizer {
         let req = proto::org::ReorderItemsRequest {
             ses: Some(ses.org_session.clone()),
-            listing_id: data.listing_id.clone(),
             ids: data.ids.clone(),
+            listing_data: data.listing_data.clone(),
         };
         if let Err(e) = org.lock().await.reorder_items(req).await {
             tracing::error!(err=?e, "Error in organizer reorder_items() call");

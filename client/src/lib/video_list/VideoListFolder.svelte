@@ -26,13 +26,13 @@ function onSink(e: any) {
 	console.log("Sunk #" + e.detail.items[0].id + " into #" + id)
 
     // Add multiselected items
-    let new_items = [...e.detail.items].concat(
+    let newItems = [...e.detail.items].concat(
         Object.keys($selectedTiles).length ? [...Object.values($selectedTiles)] : []);
     // Remove duplicates
-    new_items = new_items.filter((item, pos) =>
-        new_items.map((mi) => mi['id']).indexOf(item['id']) === pos );
+    newItems = newItems.filter((item, pos) =>
+        newItems.map((mi) => mi['id']).indexOf(item['id']) === pos );
 
-    dispatch("drop-items-into", {'folder_id': id, 'items': new_items});
+    dispatch("drop-items-into", {'folderId': id, 'items': newItems});
 
     dndItems = [];
 }
@@ -75,23 +75,25 @@ function finalize(e: any) {
         <div class="w-full flex-shrink whitespace-nowrap overflow-hidden text-xs mt-2 mb-1.5">
             <span class="text-slate-400 text-xs font-semibold my-1">{name}</span>
         </div>
-        <div class="flex-1 bg-[#0002] p-0.5 rounded-md shadow-inner overflow-clip leading-none text-[0px]">
-            <div class="grid grid-cols-2 gap-1">
-            {#each contentPreviewItems(preview_items) as prev, _i}
-                {#if prev.video?.previewData?.thumbUrl }
-                    <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md">
-                    <ScrubbableVideoThumb
-                        extra_styles="border-radius: 0rem; height: 100%; width: auto; transform: translate(-50%, -50%); left: 50%; top: 50%; position: absolute; filter: opacity(66%);"
-                        thumbPosterUrl={prev.video.previewData?.thumbUrl}
-                        thumbSheetUrl={prev.video.previewData?.thumbSheet?.url}
-                        thumbSheetRows={prev.video.previewData?.thumbSheet?.rows}
-                        thumbSheetCols={prev.video.previewData?.thumbSheet?.cols}
-                    />
-                    </div>
-                {/if}
-            {/each}
+        {#if preview_items.length > 0}
+            <div class="flex-1 bg-[#0002] p-0.5 rounded-md shadow-inner overflow-clip leading-none text-[0px]">
+                <div class="grid grid-cols-2 gap-1">
+                {#each contentPreviewItems(preview_items) as prev, _i}
+                    {#if prev.video?.previewData?.thumbUrl }
+                        <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md">
+                        <ScrubbableVideoThumb
+                            extra_styles="border-radius: 0rem; height: 100%; width: auto; transform: translate(-50%, -50%); left: 50%; top: 50%; position: absolute; filter: opacity(66%);"
+                            thumbPosterUrl={prev.video.previewData?.thumbUrl}
+                            thumbSheetUrl={prev.video.previewData?.thumbSheet?.url}
+                            thumbSheetRows={prev.video.previewData?.thumbSheet?.rows}
+                            thumbSheetCols={prev.video.previewData?.thumbSheet?.cols}
+                        />
+                        </div>
+                    {/if}
+                {/each}
+                </div>
             </div>
-        </div>
+        {/if}
     </div>
 
 </div>
