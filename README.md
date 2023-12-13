@@ -8,6 +8,8 @@
 Clapshot is a self-hosted, web-based, open source video review/annotation tool.
 It consists of an API server (written in Rust) and a web UI (written in Svelte).
 
+DISCLAIMER: This is primarily meant for cases where you have to host videos **locally for policy reasons**. Otherwise you'll **likely prefer commercially offered cloud services**. You'll need networking experience to get it running.
+
 ![Review UI screenshot](doc/video-commenting.webp)
 
 Users can submit videos by HTTP upload or by copying them to `incoming` directory (e.g. via Samba).
