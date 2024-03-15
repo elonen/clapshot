@@ -73,5 +73,5 @@ Contributions are welcome, especially for features and improvements that benefit
 
 ## License and Copyrights
 
-Clapshot is licensed under the GPL v3.
-Copyright 2022, 2023 by Jarno Elonen
+Clapshot is licensed under the GPL v2.
+Copyright 2022-2024 by Jarno Elonen
