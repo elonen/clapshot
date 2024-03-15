@@ -80,7 +80,7 @@ macro_rules! send_user_ok(
 /// Send user a list of all videos they have.
 pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
     let mut videos = ses.server.db.get_all_user_videos(&ses.user_id)?;
-    videos.sort_by_cached_key(|v| -v.added_time.timestamp_millis());    // newest first
+    videos.sort_by_cached_key(|v| -v.added_time.and_utc().timestamp_millis());    // newest first
     let videos = videos.into_iter().map(|v| {
             let mut fields = v.to_json()?;
             if let Some(sheet_dims) = v.thumb_sheet_dims {

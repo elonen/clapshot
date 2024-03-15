@@ -72,7 +72,7 @@ pub(crate) async fn connect_client_ws(ws_url: &str, user_id: &str) -> WsClient {
     use tokio_tungstenite::connect_async;
     
     let request = http::Request::builder()
-    .uri(ws_url.clone())
+    .uri(ws_url)
     .header("Host", "127.0.0.1")
     .header("HTTP_X_REMOTE_USER_ID", user_id)
     .header("HTTP_X_REMOTE_USER_NAME", "User Num1")

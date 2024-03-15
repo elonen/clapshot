@@ -3,7 +3,7 @@ FROM debian:bookworm-slim AS rust-bookworm-slim
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
-    RUST_VERSION=1.73.0
+    RUST_VERSION=1.76.0
 
 RUN set -eux; \
     apt-get update; \
