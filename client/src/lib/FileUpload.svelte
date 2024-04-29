@@ -1,6 +1,6 @@
 <script lang="ts">
 import LocalStorageCookies from "@/cookies";
-import Dropzone from "svelte-file-dropzone/Dropzone.svelte";
+import Dropzone from "svelte-file-dropzone" 
 
 let dragActive: boolean = false;
 let files = {
