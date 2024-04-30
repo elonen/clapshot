@@ -3,7 +3,6 @@ package clapshot.organizer;
 
 import public "common.proto";
 
-
 message DbGetVideosRequest {
     optional DbPaging paging = 1;
     oneof filter {
@@ -121,7 +120,7 @@ message IdList {
     repeated string ids = 1;
 }
 
-// ---- result messages ---
+// ---- Response messages ---
 
 message DbVideoList {
     repeated Video items = 1;

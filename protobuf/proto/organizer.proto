@@ -39,11 +39,10 @@ service OrganizerOutbound {
     rpc client_open_video(ClientOpenVideoRequest) returns (Empty);
     rpc client_set_cookies(ClientSetCookiesRequest) returns (Empty);
 
-    // Database calls
-
     rpc DbGetVideos(DbGetVideosRequest) returns (DbVideoList);
     rpc DbGetComments(DbGetCommentsRequest) returns (DbCommentList);
     rpc DbGetUserMessages(DbGetUserMessagesRequest) returns (DbUserMessageList);
+
     rpc DbGetPropNodes(DbGetPropNodesRequest) returns (DbPropNodeList);
     rpc DbGetSingletonPropNode(DbGetSingletonPropNodeRequest) returns (DbGetSingletonPropNodeResponse);
     rpc DbGetPropEdges(DbGetPropEdgesRequest) returns (DbPropEdgeList);
@@ -63,17 +62,20 @@ service OrganizerOutbound {
 service OrganizerInbound {
     rpc handshake(ServerInfo) returns (Empty);
 
-    rpc on_start_user_session(OnStartUserSessionRequest) returns (OnStartUserSessionResult);
+    rpc check_migrations(CheckMigrationsRequest) returns (CheckMigrationsResponse); // This is called on startup, after handshake
+    rpc apply_migrations(ApplyMigrationsRequest) returns (ApplyMigrationsResponse); // Called if check_migrations returns any pending migrations
+
+    rpc on_start_user_session(OnStartUserSessionRequest) returns (OnStartUserSessionResponse);
     rpc navigate_page(NavigatePageRequest) returns (ClientShowPageRequest);
-    rpc authz_user_action(AuthzUserActionRequest) returns (AuthzResult);
+    rpc authz_user_action(AuthzUserActionRequest) returns (AuthzResponse);
     rpc cmd_from_client(CmdFromClientRequest) returns (Empty);
 
     rpc move_to_folder(MoveToFolderRequest) returns (Empty);
     rpc reorder_items(ReorderItemsRequest) returns (Empty);
 
     // Unit / integration tests
-    rpc list_tests(Empty) returns (ListTestsResult);
-    rpc run_test(RunTestRequest) returns (RunTestResult);
+    rpc list_tests(Empty) returns (ListTestsResponse);
+    rpc run_test(RunTestRequest) returns (RunTestResponse);
 }
 
 // ---------------------------------------------------------
@@ -120,7 +122,18 @@ message ServerInfo {
     GrpcEndpoint backchannel = 6;
 }
 
+
 message OrganizerInfo {
+    SemanticVersionNumber version = 1;
+    string name = 2;                        // Make sure this is (globally) unique, e.g. "com.example.myorganizer", to avoid conflicts
+    string description = 3;                 // Human-readable description of the organizer plugin
+
+    repeated OrganizerDependency hard_dependencies = 4;  // List of any other modules that must be present for this module to work
+}
+
+message OrganizerDependency {
+    string name = 1;                        // e.g. "com.example.someotherorganizer", or "clapshot.server" for the core server
+    SemanticVersionNumber version = 2;
 }
 
 message SemanticVersionNumber {
@@ -128,6 +141,38 @@ message SemanticVersionNumber {
     uint64 minor = 2;
     uint64 patch = 3;
 }
+
+// ---------------------------------------------------------
+
+message Migration {
+    string uuid = 1;                        // Unique identifier for this migration
+    string version = 2;                     // Schema version this migration will result in. (must be sortable (e.g. "1.2.3", "2024-01-02_b" etc)
+    repeated Dependency dependencies = 3;   // Note: remember to include the plugin itself in the list, if needed
+    string description = 4;                 // Human-readable description of the migration, for logging
+
+    message Dependency {
+        string name = 1;                    // Plugin/module whose schema version to check
+        optional string min_ver = 2;        // "Name"'s schema version must be at least this for this migration to be applicable. (not set = any)
+        optional string max_ver = 3;        // --||-- at most --||--
+    }
+}
+
+message CheckMigrationsRequest {
+}
+message CheckMigrationsResponse {
+    string current_schema_ver = 1;               // Current (last applied) migration version
+    repeated Migration pending_migrations = 2;   // List of pending (alternative) migrations.
+    // Note that multiple migrations can advertise the same resulting version, but with different dependencies.
+    // The algorithm will try to find a "path" of migrations that satisfies all dependencies and achieves the highest version
+    // advertised by any of pending_migrations. If no such path exists, the server will refuse to start.
+}
+
+message ApplyMigrationsRequest {
+    string uuid = 1;    // UUID of the migration to apply (from CheckMigrationsResponse)
+}
+message ApplyMigrationsResponse {
+}
+
 
 // ---------------------------------------------------------
 
@@ -145,7 +190,7 @@ message OnStartUserSessionRequest {
     UserSessionData ses = 1;
 }
 
-message OnStartUserSessionResult {}
+message OnStartUserSessionResponse {}
 
 message NavigatePageRequest {
     UserSessionData ses = 1;
@@ -211,7 +256,7 @@ message AuthzUserActionRequest {
     }
 }
 
-message AuthzResult {
+message AuthzResponse {
     optional bool is_authorized = 1;     // If not set, leave authorization decision to server
     optional string message = 2;         // e.g. "You are not authorized to view this video"
     optional string details = 3;         // e.g. "You are not a member of the project"
@@ -219,7 +264,7 @@ message AuthzResult {
 
 // --- Unit / integration tests ---
 
-message ListTestsResult {
+message ListTestsResponse {
     repeated string test_names = 1;
 }
 
@@ -227,7 +272,7 @@ message RunTestRequest {
     string test_name = 1;
 }
 
-message RunTestResult {
+message RunTestResponse {
     string output = 1;
     optional string error = 2;
 }

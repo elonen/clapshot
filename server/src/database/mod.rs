@@ -1,4 +1,4 @@
-use diesel::connection::TransactionManager;
+use diesel::{connection::TransactionManager, migration::Migration};
 use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use diesel::SqliteConnection;
@@ -97,22 +97,28 @@ impl DB {
         Ok(res)
     }
 
-    // Check if database is up-to-date compared to the embedded migrations
-    pub fn migrations_needed(&self) -> DBResult<bool> {
-        MigrationHarness::has_pending_migration(&mut *self.conn()?.lock(), MIGRATIONS)
-            .map_err(|e| anyhow!("Failed to check migrations: {:?}", e).into())
+    /// Return list of any pending migrations
+    pub fn pending_migration_names(&self) -> DBResult<Vec<String>> {
+        Ok(MigrationHarness::pending_migrations(&mut *self.conn()?.lock(), MIGRATIONS)
+            .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?
+            .iter().map(|m| m.name().to_string()).collect())
     }
 
-    /// Run DB migrations (or create DB if empty)
-    pub fn run_migrations(&self) -> EmptyDBResult
-    {
-        let conn = self.conn()?;
-        let mut lock = conn.lock();
-        diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(&mut *lock)?;
-        let migr = lock.run_pending_migrations(MIGRATIONS).map_err(|e| anyhow!("Failed to apply migrations: {:?}", e))?;
-        for m in migr { tracing::info!("Applied DB migration: {}", m); }
-        diesel::sql_query("PRAGMA foreign_keys = ON;").execute(&mut *lock)?;
-        Ok(())
+    /// Run a named migration
+    pub fn apply_migration(&self, migration_name: &str) -> EmptyDBResult {
+        self.conn()?.lock().transaction(|lock| {
+            let pending = MigrationHarness::pending_migrations(&mut *lock, MIGRATIONS)
+                .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?;
+            let migration = pending.iter().find(|m| m.name().to_string() == migration_name)
+                .ok_or_else(|| anyhow!("Migration not found: {}", migration_name))?;
+
+            tracing::info!("Applying migration: {}", migration.name());
+            diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(&mut *lock)?;
+            MigrationHarness::run_migration(&mut *lock, &**migration)
+                .map_err(|e| anyhow!("Failed to apply migration: {:?}", e))?;
+            diesel::sql_query("PRAGMA foreign_keys = ON;").execute(&mut *lock)?;
+            Ok(())
+        })
     }
 
     /// "Corrupt" the connection for testing so that subsequent queries fail
@@ -136,6 +142,29 @@ pub fn commit_transaction(conn: &PooledConnection) -> DBResult<()> {
 pub fn rollback_transaction(conn: &PooledConnection) -> DBResult<()> {
     diesel::r2d2::PoolTransactionManager::rollback_transaction(&mut *conn.lock())
         .map_err(|e| anyhow!("Failed to rollback transaction: {:?}", e).into())
+}
+
+// ---------------- Savepoints ----------------
+
+/// Start a new named savepoint
+pub fn create_savepoint(conn: &PooledConnection, name: &str) -> DBResult<()> {
+    diesel::RunQueryDsl::execute(diesel::sql_query(&format!("SAVEPOINT {};", name)), &mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to create savepoint: {:?}", e).into())
+        .map(|_| ())    // discard row count
+}
+
+// Release (commit if not explicitly rolled back) a savepoint
+pub fn release_savepoint(conn: &PooledConnection, name: &str) -> DBResult<()> {
+    diesel::RunQueryDsl::execute(diesel::sql_query(&format!("RELEASE SAVEPOINT {};", name)), &mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to release savepoint: {:?}", e).into())
+        .map(|_| ())
+}
+
+/// Rollback to a savepoint. Remember to release the savepoint afterwards!
+pub fn rollback_to_savepoint(conn: &PooledConnection, name: &str) -> DBResult<()> {
+    diesel::RunQueryDsl::execute(diesel::sql_query(&format!("ROLLBACK TO SAVEPOINT {};", name)), &mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to rollback to savepoint: {:?}", e).into())
+        .map(|_| ())
 }
 
 // ---------------- Query traits ----------------

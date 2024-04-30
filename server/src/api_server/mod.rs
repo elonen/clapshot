@@ -5,7 +5,7 @@
 use async_std::task::block_on;
 use lib_clapshot_grpc::GrpcBindAddr;
 use lib_clapshot_grpc::proto;
-use lib_clapshot_grpc::proto::org::OnStartUserSessionResult;
+use lib_clapshot_grpc::proto::org::OnStartUserSessionResponse;
 use tracing::debug;
 use warp::Filter;
 use std::collections::HashMap;
@@ -128,7 +128,7 @@ async fn handle_ws_session(
         return;
     }
 
-    async fn connect_organizer(uri: OrganizerURI, ses: &proto::org::UserSessionData) -> Res<(OrganizerConnection, OnStartUserSessionResult)> {
+    async fn connect_organizer(uri: OrganizerURI, ses: &proto::org::UserSessionData) -> Res<(OrganizerConnection, OnStartUserSessionResponse)> {
         let mut c = crate::grpc::grpc_client::connect(uri).await?;
         let start_ses_req = proto::org::OnStartUserSessionRequest { ses: Some(ses.clone()) };
         let res = c.on_start_user_session(start_ses_req).await?.into_inner();

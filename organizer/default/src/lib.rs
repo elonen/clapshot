@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use db_check::ErrorsPerVideo;
 use folder_ops::create_folder;
-use lib_clapshot_grpc::proto::org::GraphObj;
+use lib_clapshot_grpc::proto::org::{GraphObj, OrganizerInfo, SemanticVersionNumber};
 use srv_short::TransactionGuard;
 use ui_components::{make_custom_actions_map, construct_navi_page, OpenFolderArgs};
 
@@ -61,11 +61,33 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
         }
 
         tracing::info!("Connecting back, org->srv");
-        let client = connect_back_and_finish_handshake(&req).await?;
+        let client = connect_back_and_finish_handshake(&req, OrganizerInfo {
+            version: Some(SemanticVersionNumber { major: my_ver.major, minor: my_ver.minor, patch: my_ver.patch }),
+            name: "clapshot.organizer.default".into(),
+            description: "Default (in-progress) Organizer plugin".into(),
+            hard_dependencies: [].into()
+        }).await?;
         self.client.lock().await.replace(client.clone());
 
         spawn_database_check(Arc::new(Mutex::new(client)), self.db_checker_res.clone());
         Ok(Response::new(proto::Empty {}))
+    }
+
+    // rpc check_migrations(CheckMigrationsRequest) returns (CheckMigrationsResponse); // This is called on startup, after handshake
+    // rpc apply_migrations(ApplyMigrationsRequest) returns (ApplyMigrationsResponse); // Called if check_migrations returns any pending migrations
+
+    async fn check_migrations(&self, _req: Request<org::CheckMigrationsRequest>) -> RpcResponseResult<org::CheckMigrationsResponse>
+    {
+        Ok(Response::new(org::CheckMigrationsResponse {
+            current_schema_ver: "<TODO!>".into(),
+            pending_migrations: vec![],
+        }))
+    }
+
+    async fn apply_migrations(&self, _req: Request<org::ApplyMigrationsRequest>) -> RpcResponseResult<org::ApplyMigrationsResponse>
+    {
+        assert!(false, "apply_migrations not implemented");
+        Ok(Response::new(org::ApplyMigrationsResponse {}))
     }
 
     async fn navigate_page(&self, req: Request<org::NavigatePageRequest>) -> RpcResponseResult<org::ClientShowPageRequest>
@@ -91,23 +113,23 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
         Ok(Response::new(page))
     }
 
-    async fn authz_user_action(&self, _req: Request<org::AuthzUserActionRequest>) -> RpcResponseResult<org::AuthzResult>
+    async fn authz_user_action(&self, _req: Request<org::AuthzUserActionRequest>) -> RpcResponseResult<org::AuthzResponse>
     {
-        Ok(Response::new(org::AuthzResult {
+        Ok(Response::new(org::AuthzResponse {
             is_authorized: None,
             message: Some("NOT IMPLEMENTED".into()),
             details: Some("NOT IMPLEMENTED".into()),
         }))
     }
 
-    async fn on_start_user_session(&self, req: Request<org::OnStartUserSessionRequest>) -> RpcResponseResult<org::OnStartUserSessionResult>
+    async fn on_start_user_session(&self, req: Request<org::OnStartUserSessionRequest>) -> RpcResponseResult<org::OnStartUserSessionResponse>
     {
         let mut srv = self.client.lock().await.clone().ok_or(Status::internal("No server connection"))?;
         let sid = req.into_inner().ses.ok_or(Status::invalid_argument("No session ID"))?.sid;
         srv.client_define_actions(org::ClientDefineActionsRequest {
             actions: make_custom_actions_map(),
             sid }).await?;
-        Ok(Response::new(org::OnStartUserSessionResult {}))
+        Ok(Response::new(org::OnStartUserSessionResponse {}))
     }
 
     async fn cmd_from_client(&self, req: Request<org::CmdFromClientRequest>) -> RpcResponseResult<proto::Empty>
@@ -246,14 +268,14 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
     // Unit / integration tests
     // ------------------------------------------------------------------
 
-    async fn list_tests(&self, _req: Request<proto::Empty>) -> RpcResponseResult<org::ListTestsResult>
+    async fn list_tests(&self, _req: Request<proto::Empty>) -> RpcResponseResult<org::ListTestsResponse>
     {
-        Ok(Response::new(org::ListTestsResult {
+        Ok(Response::new(org::ListTestsResponse {
             test_names: vec!["test_video_owners".into(), "test2".into()],
         }))
     }
 
-    async fn run_test(&self, req: Request<org::RunTestRequest>) -> RpcResponseResult<org::RunTestResult>
+    async fn run_test(&self, req: Request<org::RunTestRequest>) -> RpcResponseResult<org::RunTestResponse>
     {
         let req = req.into_inner();
         let test_name = req.test_name.clone();
@@ -277,15 +299,15 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
                 let res = db_check::assert_db_check_postconds(&mut srv, span.clone()).await;
                 match res {
                     Ok(_) => {
-                        Ok(Response::new(org::RunTestResult { output: "OK".into(), error: None }))
+                        Ok(Response::new(org::RunTestResponse { output: "OK".into(), error: None }))
                     },
                     Err(e) => {
-                        Ok(Response::new(org::RunTestResult { output: "FAIL".into(), error: Some(format!("assert_db_check_postconds FAILED: {:?}", e)) }))
+                        Ok(Response::new(org::RunTestResponse { output: "FAIL".into(), error: Some(format!("assert_db_check_postconds FAILED: {:?}", e)) }))
                     }
                 }
             },
             "test2" => {
-                Ok(Response::new(org::RunTestResult {
+                Ok(Response::new(org::RunTestResponse {
                     output: "Test 2 output".into(),
                     error: None,
                 }))

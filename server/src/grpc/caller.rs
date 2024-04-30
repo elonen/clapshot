@@ -1,4 +1,5 @@
 use std::path::Path;
+use lib_clapshot_grpc::proto::org::CheckMigrationsRequest;
 use lib_clapshot_grpc::GrpcBindAddr;
 
 use crate::grpc::grpc_client::{connect, OrganizerConnection};
@@ -53,6 +54,14 @@ impl OrganizerCaller {
                 version: Some(proto::org::SemanticVersionNumber { major: v.major, minor: v.minor, patch: v.patch }),
             };
             conn.handshake(req).await?;
+
+            // TODO: Handle organizer migrations properly
+            tracing::info!("Calling check_migrations on organizer.");
+            let cm_res = conn.check_migrations(CheckMigrationsRequest {}).await?;
+            if cm_res.get_ref().pending_migrations.len() > 0 {
+                unimplemented!("Organizer reported pending migrations, but server logic to apply them is NOT YET IMPLEMENTED. Migrations: {:?}", cm_res.get_ref().pending_migrations);
+            }
+
             Ok(())
         }
 

@@ -3,7 +3,7 @@ use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::{JoinHandle, self
 use anyhow::Context;
 use database::DB;
 use lib_clapshot_grpc::GrpcBindAddr;
-use crate::{grpc::{grpc_client::OrganizerURI, caller::OrganizerCaller}, api_server::server_state::ServerState};
+use crate::{api_server::server_state::ServerState, database::{begin_transaction, commit_transaction, create_savepoint, release_savepoint, rollback_to_savepoint, rollback_transaction}, grpc::{caller::OrganizerCaller, grpc_client::OrganizerURI}};
 
 pub mod video_pipeline;
 pub mod api_server;
@@ -87,8 +87,9 @@ impl ClapshotInit {
                     }
                 }
                 // Ok, organizer should be able to connect back to us now, so handshake
+                let org = OrganizerCaller::new(ouri);
                 tracing::info!("Connecting gRPC srv->org...");
-                OrganizerCaller::new(ouri).handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind)?;
+                org.handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind)?;
                 tracing::info!("Bidirectional gRPC established.");
             }
             None => {
@@ -141,8 +142,10 @@ fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyho
     let db_was_missing = !db_file.exists();
     let db = Arc::new(database::DB::connect_db_file(&db_file).unwrap());
 
+    let pending_migrations = db.pending_migration_names()?;
+
     // Check & apply database migrations
-    if  (migrate || db_was_missing) && db.migrations_needed()? {
+    if  (migrate || db_was_missing) && !pending_migrations.is_empty() {
         if !db_was_missing {
             // Make a gzipped backup
             let now = chrono::Local::now();
@@ -153,21 +156,32 @@ fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyho
             let mut fh = std::fs::File::open(&db_file).context("Error reading current DB file for backup")?;
             std::io::copy(&mut fh, &mut gzip_writer).context("Error copying DB file to backup")?;
         }
-        match db.run_migrations() {
-            Ok(_) => {
-                assert!(!db.migrations_needed()?);
-                tracing::warn!(file=%db_file.display(), "Database migrated Ok. Continuing.");
-            },
-            Err(e) => { bail!("Error migrating database: {:?}", e); },
+
+        begin_transaction(&db.conn()?)?;
+        create_savepoint(&db.conn()?, "before_any_migrations")?;
+        for m in &pending_migrations {
+            match db.apply_migration(m) {
+                Ok(_) => {
+                    tracing::info!(file=%db_file.display(), "Applied migration {}", m);
+                },
+                Err(e) => {
+                    tracing::error!(file=%db_file.display(), "Error applying migration. Rolling back everything.");
+                    rollback_to_savepoint(&db.conn()?, "before_any_migrations")?;
+                    release_savepoint(&db.conn()?, "before_any_migrations")?;
+                    rollback_transaction(&db.conn()?)?;
+                    bail!("Error applying migration {}: {:?}", m, e);
+                },
+            }
         }
+        tracing::info!(file=%db_file.display(), "All migrations applied. Committing.");
+        release_savepoint(&db.conn()?, "before_any_migrations")?;
+        commit_transaction(&db.conn()?)?;
     } else {
-        match db.migrations_needed() {
-            Ok(false) => {},
-            Ok(true) => {
-                eprintln!("Database migrations needed. Run `clapshot-server --migrate`");
-                std::process::exit(1);
-            },
-            Err(e) => { bail!("Error checking database migrations: {:?}", e); },
+        if !pending_migrations.is_empty() {
+            eprintln!("Database migrations needed. Run `clapshot-server --migrate`");
+            std::process::exit(1);
+        } else {
+            tracing::info!(file=%db_file.display(), "No database migrations needed.");
         }
     }
     Ok(db)

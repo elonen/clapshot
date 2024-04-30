@@ -137,8 +137,10 @@ macro_rules! proto3_get_field {
 pub type OrganizerOutboundConnection = proto::org::organizer_outbound_client::OrganizerOutboundClient<tonic::transport::Channel>;
 
 /// Connect to a gRPC server at endpoint given in another `Endpoint` message.
-pub async fn connect_back_and_finish_handshake(req: &tonic::Request<proto::org::ServerInfo>)
-    -> Result<OrganizerOutboundConnection, tonic::Status>
+pub async fn connect_back_and_finish_handshake(
+    req: &tonic::Request<proto::org::ServerInfo>,
+    org_info: crate::proto::org::OrganizerInfo)
+        -> Result<OrganizerOutboundConnection, tonic::Status>
 {
     use proto::org::server_info::grpc_endpoint;
     use tonic::transport::{Channel, Uri};
@@ -195,7 +197,7 @@ pub async fn connect_back_and_finish_handshake(req: &tonic::Request<proto::org::
     };
 
     let mut client = OrganizerOutboundConnection::new(channel);
-    client.handshake(crate::proto::org::OrganizerInfo {}).await?;
+    client.handshake(org_info).await?;
 
     Ok(client)
 }

@@ -77,7 +77,9 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Ve
     std::fs::create_dir(&data_dir.path().join("incoming")).ok();
 
     let db = std::sync::Arc::new(DB::connect_db_file(data_dir.join("clapshot.sqlite").as_path()).unwrap());
-    db.run_migrations().unwrap();
+    for m in db.pending_migration_names().unwrap() {
+        db.apply_migration(&m).unwrap();
+    }
 
     // Make some videos
     let hashes = vec!["HASH0", "11111", "22222", "HASH3", "HASH4"];
