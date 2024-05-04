@@ -27,7 +27,7 @@ CREATE TABLE messages_new (
     user_id VARCHAR NOT NULL,
     created DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
     seen BOOLEAN NOT NULL,
-    video_id VARCHAR REFERENCES videos (id) ON UPDATE CASCADE,  -- keep messages about videos even if it's deleted, so no ON DELETE CASCADE
+    video_id VARCHAR,  -- keep messages about videos even if it's deleted, so no foreign key
     comment_id INTEGER REFERENCES comments (id) ON UPDATE CASCADE ON DELETE CASCADE,
     event_name VARCHAR NOT NULL,
     message VARCHAR NOT NULL,
@@ -40,3 +40,12 @@ ALTER TABLE messages_new RENAME TO messages;
 -- videos table
 ALTER TABLE videos RENAME COLUMN added_by_userid TO user_id;
 ALTER TABLE videos RENAME COLUMN added_by_username TO user_name;
+
+
+-- add indexes
+CREATE INDEX 'comments_video_id' ON 'comments'('video_id');
+CREATE INDEX 'comments_parent_id' ON 'comments'('parent_id');
+
+CREATE INDEX 'messages_user_id' ON 'messages'('user_id');
+CREATE INDEX 'messages_comment_id' ON 'messages'('comment_id');
+CREATE INDEX 'messages_video_id' ON 'messages'('video_id');
