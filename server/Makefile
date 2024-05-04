@@ -2,9 +2,7 @@
 
 PACKAGE_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
 
-PLUGIN_BIN=../organizer/default/run-py-org.sh
-#PLUGIN_BIN=../organizer/default/target/debug/clapshot-default-organizer
-#PLUGIN_BIN="../organizer/basic_folders/run-in-venv.sh"
+PLUGIN_BIN=../organizer/basic_folders/run-py-org.sh
 #../organizer/basic_folders/_venv/bin/clapshot-organizer-basic-folders
 
 UID=$(shell id -u)

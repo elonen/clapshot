@@ -29,8 +29,8 @@ except ImportError:
     def override(func):  # type: ignore
         return func
 
-from database import db_check_and_fix_integrity, db_check_pending_migrations, db_apply_migration, db_test_orm_mappings, db_get_or_create_user_root_folder
-from database import DbFolder, DbFolderItems, DbVideo
+from database.operations import db_check_and_fix_integrity, db_check_pending_migrations, db_apply_migration, db_test_orm_mappings, db_get_or_create_user_root_folder
+from database.models import DbFolder, DbFolderItems, DbVideo
 
 
 VERSION = "0.6.0"

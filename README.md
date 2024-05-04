@@ -71,5 +71,9 @@ Contributions are welcome, especially for features and improvements that benefit
 
 ## License and Copyrights
 
-Clapshot is licensed under the GPL v2.
 Copyright 2022-2024 by Jarno Elonen
+
+Main app code is copyleft, libraries and plugins are permissive (to allow non-free proprietary workflow and auth plugins):
+
+- Clapshot Server and Client are licensed under the **GNU General Public License, GPLv2**.
+- gRPC/proto3 libraries and example organizer plugins are under the **MIT License**.
