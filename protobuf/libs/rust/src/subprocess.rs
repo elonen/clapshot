@@ -42,22 +42,22 @@ pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Re
                     let line = strip_ansi_escapes::strip_str(line); // Remove terminal colors from log lines (if any)
                     match line.split_once(" ") {
                         Some((level_str, msg_str)) => {
-                            let level_override = match level_str {
-                                "DEBUG" => tracing::Level::DEBUG,
-                                "INFO" => tracing::Level::INFO,
-                                "WARN" | "WARNING" => tracing::Level::WARN,
-                                "ERROR" | "CRITICAL" | "FATAL" => tracing::Level::ERROR,
+                            let (level_override, prepend) = match level_str {
+                                "DEBUG" => (tracing::Level::DEBUG, std::string::String::new()),
+                                "INFO" => (tracing::Level::INFO, std::string::String::new()),
+                                "WARN" | "WARNING" => (tracing::Level::WARN, std::string::String::new()),
+                                "ERROR" | "CRITICAL" | "FATAL" => (tracing::Level::ERROR, std::string::String::new()),
                                 _ => match level {
-                                    tracing::Level::INFO => tracing::Level::INFO,
-                                    tracing::Level::ERROR => tracing::Level::ERROR,
+                                    tracing::Level::INFO => (tracing::Level::INFO, " ".to_string() + level_str),
+                                    tracing::Level::ERROR => (tracing::Level::ERROR, " ".to_string() + level_str),
                                     _ => panic!("Unsupported log level"),
                                 }
                             };
                             match level_override {
-                                tracing::Level::DEBUG => debug!("[{}] {}", name, msg_str),
-                                tracing::Level::INFO => info!("[{}] {}", name, msg_str),
-                                tracing::Level::WARN => warn!("[{}] {}", name, msg_str),
-                                tracing::Level::ERROR => error!("[{}] {}", name, msg_str),
+                                tracing::Level::DEBUG => debug!("[{}] {}{}", name, prepend, msg_str),
+                                tracing::Level::INFO => info!("[{}] {}{}", name, prepend, msg_str),
+                                tracing::Level::WARN => warn!("[{}] {}{}", name, prepend, msg_str),
+                                tracing::Level::ERROR => error!("[{}] {}{}", name, prepend, msg_str),
                                 _ => panic!("Unsupported log level"),
                             }
                         }

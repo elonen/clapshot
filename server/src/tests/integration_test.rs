@@ -5,6 +5,7 @@
 #[cfg(test)]
 mod integration_test
 {
+    use std::collections::HashMap;
     use std::sync::atomic::AtomicBool;
     use std::sync::{Mutex, Arc};
     use std::{error, any};
@@ -56,6 +57,7 @@ mod integration_test
         let args = IncomingFile {
             file_path: PathBuf::from_str(data_dir.join("NASA_Red_Lettuce_excerpt.mov").to_str().unwrap())?,
             user_id: "nobody".to_string(),
+            cookies: HashMap::new(),
         };
         arg_sender.send(args.clone())?;
 
@@ -370,11 +372,12 @@ mod integration_test
                     cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone()), None]
                         match org_conn {
                             Some(mut org_conn) => {
-                                test_names.lock().unwrap().extend(
-                                    org_conn.list_tests(proto::Empty {}).await
-                                        .expect("list_tests failed")
-                                        .into_inner().test_names
-                                );
+                                match org_conn.list_tests(proto::Empty {}).await {
+                                    Ok(res) => { test_names.lock().unwrap().extend(res.into_inner().test_names); },
+                                    Err(e) => match e.code() {
+                                        tonic::Code::Unimplemented | tonic::Code::NotFound => {} ,
+                                        _ => panic!("Organizer list_tests failed: {:?}", e),
+                                    }};
                             },
                             None => { panic!("Organizer connection failed"); }
                         }

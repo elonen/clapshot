@@ -40,12 +40,14 @@ use proto::org::authz_user_action_request as authz_req;
 
 /// Get video by ID from DB, or send user error.
 /// Return None if video not found and error was sent, or Some(video) if found.
-async fn get_video_or_send_error(video_id: Option<&str>, ses: &mut UserSession, server: &ServerState) -> Res<Option<models::Video>> {
+async fn get_video_or_send_error(video_id: Option<&str>, ses: &Option<&mut UserSession>, server: &ServerState) -> Res<Option<models::Video>> {
     let video_id = video_id.ok_or(anyhow!("video id missing"))?;
 
     match models::Video::get(&server.db, &video_id.into()) {
         Err(DBError::NotFound()) => {
-            send_user_error!(&ses.user_id, server, Topic::Video(video_id), "No such video.");
+            if let Some(ses) = ses {
+                send_user_error!(ses.user_id, server, Topic::Video(video_id), "No such video.");
+            };
             Ok(None)
         }
         Err(e) => { bail!(e); }
@@ -70,7 +72,7 @@ pub async fn msg_list_my_videos(data: &ListMyVideos , ses: &mut UserSession, ser
         match org.lock().await.navigate_page(req).await {
             Err(e) => {
                 if e.code() == tonic::Code::Unimplemented {
-                    tracing::debug!("Organizer doesn't implement NavigatePageRequest. Using default.");
+                    tracing::debug!("Organizer doesn't implement navigate_page(). Using default.");
                 } else {
                     tracing::error!(err=?e, "Error in organizer navigate_page() call");
                     anyhow::bail!("Error in navigate_page() organizer call: {:?}", e);
@@ -109,7 +111,7 @@ pub async fn msg_list_my_videos(data: &ListMyVideos , ses: &mut UserSession, ser
 /// Send them the video info and all comments related to it.
 /// Register the session as a viewer of the video (video_session_guard).
 pub async fn msg_open_video(data: &OpenVideo, ses: &mut UserSession, server: &ServerState) -> Res<()> {
-    if let Some(v) = get_video_or_send_error(Some(&data.video_id), ses, server).await? {
+    if let Some(v) = get_video_or_send_error(Some(&data.video_id), &Some(ses), server).await? {
         org_authz_with_default(&ses.org_session,
             "open video", true, server, &ses.organizer,
             true, AuthzTopic::Video(&v, authz_req::video_op::Op::View)).await?;
@@ -141,11 +143,15 @@ pub async fn send_open_video_cmd(server: &ServerState, session_id: &str, video_i
 }
 
 
-pub async fn msg_del_video(data: &DelVideo, ses: &mut UserSession, server: &ServerState) -> Res<()> {
-    if let Some(v) = get_video_or_send_error(Some(&data.video_id), ses, server).await? {
-        let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
-        org_authz_with_default(&ses.org_session, "delete video", true, server, &ses.organizer,
-            default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Delete)).await?;
+pub async fn del_video_and_cleanup(video_id: &str, ses: Option<&mut UserSession>, server: &ServerState) -> Res<()> {
+    if let Some(v) = get_video_or_send_error(Some(video_id), &ses, server).await? {
+
+        // Check authorization against user session, if provided
+        if let Some(ses) = &ses {
+            let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
+            org_authz_with_default(&ses.org_session, "delete video", true, server, &ses.organizer,
+                default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Delete)).await?;
+        }
 
         models::Video::delete(&server.db, &v.id)?;
         let mut details = format!("Added by '{}' ({}) on {}. Filename was {}.",
@@ -188,16 +194,23 @@ pub async fn msg_del_video(data: &DelVideo, ses: &mut UserSession, server: &Serv
             cleanup_errors = true;
         }
 
-        send_user_ok!(&ses.user_id, &server, Topic::Video(&v.id),
-            if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
-            details, true);
+        if let Some(user_id) = ses.as_ref().map(|s| &s.user_id).or(v.user_id.as_ref()) {
+            send_user_ok!(&user_id.clone(), &server, Topic::Video(&v.id),
+                if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
+                details, true);
+        }
     }
     Ok(())
 }
 
 
+pub async fn msg_del_video(data: &DelVideo, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    del_video_and_cleanup(&data.video_id, Some(ses), server).await
+}
+
+
 pub async fn msg_rename_video(data: &RenameVideo, ses: &mut UserSession, server: &ServerState) -> Res<()> {
-    if let Some(v) = get_video_or_send_error(Some(&data.video_id), ses, server).await? {
+    if let Some(v) = get_video_or_send_error(Some(&data.video_id), &Some(ses), server).await? {
         let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
         org_authz_with_default(&ses.org_session, "rename video", true, server, &ses.organizer,
             default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Rename)).await?;
@@ -221,7 +234,7 @@ pub async fn msg_rename_video(data: &RenameVideo, ses: &mut UserSession, server:
 
 pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComment, ses: &mut UserSession, server: &ServerState) -> Res<()> {
 
-    let video_id = match get_video_or_send_error(Some(&data.video_id), ses, server).await? {
+    let video_id = match get_video_or_send_error(Some(&data.video_id), &Some(ses), server).await? {
         Some(v) => {
             let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
             org_authz_with_default(&ses.org_session, "comment video", true, server, &ses.organizer,
@@ -372,7 +385,7 @@ pub async fn msg_join_collab(data: &JoinCollab, ses: &mut UserSession, server: &
     ses.collab_session_guard = None;
     ses.cur_collab_id = None;
 
-    if let Some(v) = get_video_or_send_error(Some(&data.video_id), ses, server).await? {
+    if let Some(v) = get_video_or_send_error(Some(&data.video_id), &Some(ses), server).await? {
         org_authz_with_default(&ses.org_session, "join collab", true, server, &ses.organizer,
             true, AuthzTopic::Other(Some(&data.collab_id), authz_req::other_op::Op::JoinCollabSession)).await?;
 
@@ -445,8 +458,12 @@ pub async fn msg_move_to_folder(data: &proto::client::client_to_server_cmd::Move
             listing_data: data.listing_data.clone(),
         };
         if let Err(e) = org.lock().await.move_to_folder(req).await {
-            tracing::error!(err=?e, "Error in organizer move_to_folder() call");
-            anyhow::bail!("Error in move_to_folder() organizer call: {:?}", e);
+            if e.code() == tonic::Code::Unimplemented {
+                tracing::debug!("Organizer doesn't implement move_to_folder(). Ignoring.");
+            } else {
+                tracing::error!(err=?e, "Error in organizer move_to_folder() call");
+                anyhow::bail!("Error in move_to_folder() organizer call: {:?}", e);
+            }
         }
     } else { send_user_error!(&ses.user_id, server, Topic::None, "No organizer session."); }
     Ok(())
@@ -460,8 +477,12 @@ pub async fn msg_reorder_items(data: &ReorderItems, ses: &mut UserSession, serve
             listing_data: data.listing_data.clone(),
         };
         if let Err(e) = org.lock().await.reorder_items(req).await {
-            tracing::error!(err=?e, "Error in organizer reorder_items() call");
-            anyhow::bail!("Error in reorder_items() organizer call: {:?}", e);
+            if e.code() == tonic::Code::Unimplemented {
+                tracing::debug!("Organizer doesn't implement reorder_items(). Ignoring.");
+            } else {
+                tracing::error!(err=?e, "Error in organizer reorder_items() call");
+                anyhow::bail!("Error in reorder_items() organizer call: {:?}", e);
+            }
         }
     } else { send_user_error!(&ses.user_id, server, Topic::None, "No organizer session."); }
     Ok(())
@@ -494,18 +515,11 @@ pub enum SessionClose {
     Logout,
 }
 
-
-
-pub async fn msg_dispatch(cmd_name: &str, json: &serde_json::Value, ses: &mut UserSession, server: &ServerState) -> Res<bool> {
-    let req: ClientToServerCmd = match serde_json::from_value(json.clone()) {
-        Ok(c) => c,
-        Err(e) => {
-            send_user_error!(&ses.user_id, server, Topic::None, format!("Invalid command from client: {:?}", e));
-            return Ok(true);
-        }
-    };
+/// Dispatch a message from client to appropriate handler.
+/// Return true if the session should be kept open, or false if it should be closed.
+pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server: &ServerState) -> Res<bool> {
     use proto::client::client_to_server_cmd::Cmd;
-    let res = match req.cmd {
+    let res = match req.cmd.as_ref() {
         None => {
             send_user_error!(&ses.user_id, server, Topic::None, format!("Missing command from client: {:?}", req));
             Ok(())
@@ -534,6 +548,7 @@ pub async fn msg_dispatch(cmd_name: &str, json: &serde_json::Value, ses: &mut Us
     if let Err(e) = res {
         // Ignore authz errors, they are already logged
         if let None = e.downcast_ref::<user_session::AuthzError>() {
+            let cmd_name = req.cmd.as_ref().map(|c| format!("{:?}", c)).unwrap_or_default();
             tracing::warn!("[{}] '{cmd_name}' failed: {}", ses.sid, e);
             send_user_error!(&ses.user_id, server, Topic::None, format!("{cmd_name} failed: {e}"));
         }

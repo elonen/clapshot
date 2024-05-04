@@ -1,11 +1,11 @@
 use std::{sync::atomic::Ordering::Relaxed, path::Path};
 use anyhow::Context;
 use tonic::{Request, Response, Status};
-use crate::{api_server::{server_state::ServerState, SendTo}, database::{DbBasicQuery, DbQueryByUser, DbGraphQuery, DbQueryByVideo}, grpc::grpc_impl_helpers::{rpc_expect_field, paged_vec}, client_cmd};
+use crate::{api_server::{server_state::ServerState, ws_handers::del_video_and_cleanup, SendTo}, client_cmd, database::{DbBasicQuery, DbGraphQuery, DbQueryByUser, DbQueryByVideo}, grpc::grpc_impl_helpers::{paged_vec, rpc_expect_field}};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::database::models;
 
-use lib_clapshot_grpc::{proto::{self}, RpcResult, GrpcBindAddr, run_grpc_server};
+use lib_clapshot_grpc::{proto, run_grpc_server, GrpcBindAddr, RpcResult};
 use lib_clapshot_grpc::proto::org;
 
 pub struct OrganizerOutboundImpl {
@@ -102,6 +102,12 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
     {
         let req = req.into_inner();
         to_rpc_empty(self.server.emit_cmd(client_cmd!(SetCookies, {cookies: req.cookies, expire_time: req.expire_time}), SendTo::UserSession(&req.sid)))
+    }
+
+    async fn delete_video(&self, req: Request<org::DeleteVideoRequest>) -> RpcResult<proto::Empty>
+    {
+        let req = req.into_inner();
+        to_rpc_empty(del_video_and_cleanup(req.id.as_str(), None, &self.server).await)
     }
 
     // ========================================================================

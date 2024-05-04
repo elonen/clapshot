@@ -50,7 +50,7 @@ pub async fn handle_multipart_upload(
             let org_session = proto::org::UserSessionData {
                 sid: "<upload--not-set>".to_string(),
                 user: Some(proto::UserInfo { id: user_id.clone(), name: Some(user_name.clone()) }),
-                cookies
+                cookies: cookies.clone()
             };
 
             match org_authz_with_default(&org_session, "upload video", true, &server, &Some(organizer),
@@ -155,7 +155,7 @@ pub async fn handle_multipart_upload(
         }
     }
 
-    if let Err(e) = upload_done.send(IncomingFile{ file_path: uploaded_file, user_id: user_id }) {
+    if let Err(e) = upload_done.send(IncomingFile{ file_path: uploaded_file, user_id: user_id, cookies }) {
         tracing::error!("Failed to send upload ok signal: {:?}", e);
         return Ok(warp::reply::with_status("Internal error: failed to send upload ok signal".into(), warp::http::StatusCode::INTERNAL_SERVER_ERROR));
     }

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use parking_lot::{RwLock, MappedRwLockReadGuard, RwLockReadGuard};
+use parking_lot::{RwLock, MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::atomic::AtomicBool;
 
 use tokio::sync::Mutex;
@@ -74,6 +74,14 @@ impl ServerState {
         }
     }
 
+    pub fn get_session_write<'a>(&'a self, sid: &str) -> Option<MappedRwLockWriteGuard<'a, UserSession>> {
+        let lock = self.sid_to_session.write();
+        if lock.contains_key(sid) {
+            Some(RwLockWriteGuard::map(lock, |map| map.get_mut(sid).unwrap()))
+        } else {
+            None
+        }
+    }
     /// Register a new sender (API connection) for a user_id. One user can have multiple connections.
     /// Returns a guard that will remove the sender when dropped.
     pub fn register_user_session(&self, sid: &str, user_id: &str, ses: UserSession) -> OpaqueGuard {

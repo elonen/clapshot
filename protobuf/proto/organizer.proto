@@ -3,6 +3,7 @@ package clapshot.organizer;
 
 import public "common.proto";
 import public "database.proto";
+import public "client.proto";
 
 import "google/protobuf/timestamp.proto";
 
@@ -31,13 +32,13 @@ import "google/protobuf/timestamp.proto";
 service OrganizerOutbound {
     rpc handshake(OrganizerInfo) returns (Empty);
 
-    // Frontend commands
-
     rpc client_define_actions(ClientDefineActionsRequest) returns (Empty);  // Multiple calls will add/replace actions
     rpc client_show_page(ClientShowPageRequest) returns (Empty);
     rpc client_show_user_message(ClientShowUserMessageRequest) returns (Empty);
     rpc client_open_video(ClientOpenVideoRequest) returns (Empty);
     rpc client_set_cookies(ClientSetCookiesRequest) returns (Empty);
+
+    rpc delete_video(DeleteVideoRequest) returns (Empty);   // Delete (trash) video cleanly (db, filesystem, etc)
 
     rpc DbGetVideos(DbGetVideosRequest) returns (DbVideoList);
     rpc DbGetComments(DbGetCommentsRequest) returns (DbCommentList);
@@ -63,13 +64,15 @@ service OrganizerInbound {
     rpc handshake(ServerInfo) returns (Empty);
 
     rpc check_migrations(CheckMigrationsRequest) returns (CheckMigrationsResponse); // This is called on startup, after handshake
-    rpc apply_migrations(ApplyMigrationsRequest) returns (ApplyMigrationsResponse); // Called if check_migrations returns any pending migrations
+    rpc apply_migration(ApplyMigrationRequest) returns (ApplyMigrationResponse); // Called if check_migrations returns any pending migrations
+    rpc after_migrations(AfterMigrationsRequest) returns (Empty); // Called after all migrations to all modules have been applied
 
     rpc on_start_user_session(OnStartUserSessionRequest) returns (OnStartUserSessionResponse);
     rpc navigate_page(NavigatePageRequest) returns (ClientShowPageRequest);
     rpc authz_user_action(AuthzUserActionRequest) returns (AuthzResponse);
     rpc cmd_from_client(CmdFromClientRequest) returns (Empty);
 
+    // Calls from client when user interacts with the folder UI
     rpc move_to_folder(MoveToFolderRequest) returns (Empty);
     rpc reorder_items(ReorderItemsRequest) returns (Empty);
 
@@ -133,7 +136,7 @@ message OrganizerInfo {
 
 message OrganizerDependency {
     string name = 1;                        // e.g. "com.example.someotherorganizer", or "clapshot.server" for the core server
-    SemanticVersionNumber version = 2;
+    SemanticVersionNumber min_ver = 2;
 }
 
 message SemanticVersionNumber {
@@ -157,8 +160,7 @@ message Migration {
     }
 }
 
-message CheckMigrationsRequest {
-}
+message CheckMigrationsRequest {}
 message CheckMigrationsResponse {
     string current_schema_ver = 1;               // Current (last applied) migration version
     repeated Migration pending_migrations = 2;   // List of pending (alternative) migrations.
@@ -167,11 +169,11 @@ message CheckMigrationsResponse {
     // advertised by any of pending_migrations. If no such path exists, the server will refuse to start.
 }
 
-message ApplyMigrationsRequest {
-    string uuid = 1;    // UUID of the migration to apply (from CheckMigrationsResponse)
+message ApplyMigrationRequest {
+    string uuid = 1;    // UUID of the migration to apply (from CheckMigrationResponse)
 }
-message ApplyMigrationsResponse {
-}
+message ApplyMigrationResponse {}
+message AfterMigrationsRequest {}
 
 
 // ---------------------------------------------------------
@@ -316,9 +318,4 @@ message ClientSetCookiesRequest {
 
 message DeleteVideoRequest {
     string id = 1;
-}
-
-message ModifyVideoRequest {
-    string id = 1;
-    Video new_data = 2;
 }

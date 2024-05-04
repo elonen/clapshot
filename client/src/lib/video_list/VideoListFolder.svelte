@@ -89,6 +89,12 @@ function finalize(e: any) {
                             thumbSheetCols={prev.video.previewData?.thumbSheet?.cols}
                         />
                         </div>
+                    {:else if prev.folder }
+                        <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md">
+                            <div class="w-full h-full video-list-folder flex items-center justify-center">
+                                <span class="text-xs text-slate-500 text-center leading-none italic">{prev.folder?.title}</span>
+                            </div>
+                        </div>
                     {/if}
                 {/each}
                 </div>

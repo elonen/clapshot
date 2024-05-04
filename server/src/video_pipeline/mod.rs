@@ -4,6 +4,7 @@
 
 #![allow(unused_parens)]
 
+use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -41,6 +42,7 @@ pub const THUMB_H: u32 = 90;
 pub struct IncomingFile {
     pub file_path: PathBuf,
     pub user_id: String,
+    pub cookies: HashMap<String, String>  // Cookies from client, if this was an HTTP upload
 }
 
 #[derive(Debug, Clone)]
@@ -230,10 +232,19 @@ fn ingest_video(
     // Format results to user readable message
     match transcode_req {
         Ok((do_transcode, reason)) => {
+            // Notify client about the new video
+            user_msg_tx.send(UserMessage {
+                topic: UserMessageTopic::VideoAdded,
+                msg: String::new(),
+                details: Some(serde_json::to_string(&md.upload_cookies).map_err(|e| anyhow!("Error serializing cookies: {}", e))?),
+                user_id: Some(md.user_id.clone()),
+                video_id: Some(vid.to_string())
+            })?;
+            // Tell user in text also
             tracing::info!(transcode=do_transcode, reason=reason, "Video added to DB. Transcode");
             user_msg_tx.send(UserMessage {
                 topic: UserMessageTopic::Ok,
-                msg: "Video added".to_string() + if do_transcode {". Transcoding..."} else {""},
+                msg: "Video added.".to_string() + if do_transcode {" Transcoding..."} else {""},
                 details: if do_transcode { Some(format!("Transcoding because {reason}")) } else { None },
                 user_id: Some(md.user_id.clone()),
                 video_id: Some(vid.to_string())
@@ -370,14 +381,13 @@ pub fn run_forever(
                 match msg {
                     Ok(msg) => {
                         tracing::info!("Got upload result. Submitting it for processing. {:?}", msg);
-                        to_md.send(IncomingFile {
-                            file_path: msg.file_path.clone(),
-                            user_id: msg.user_id}).unwrap_or_else(|e| {
+                        to_md.send(IncomingFile {file_path: msg.file_path.clone(),user_id: msg.user_id, cookies: msg.cookies }).unwrap_or_else(|e| {
                                 tracing::error!("Error sending file to metadata reader: {:?}", e);
                                 clean_up_rejected_file(&data_dir, &msg.file_path, None).unwrap_or_else(|e| {
                                     tracing::error!("Cleanup of '{:?}' failed: {:?}", &msg.file_path, e);
                                 });
-                            });
+                            },
+                        );
                     },
                     Err(_) => { break; }
                 }

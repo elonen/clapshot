@@ -9,6 +9,8 @@ use timeago;
 #[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
 #[diesel(treat_none_as_null = true)]
 #[diesel(table_name = videos)]
+#[diesel(primary_key(id))]
+
 pub struct Video {
     pub id: String,
     pub user_id: Option<String>,

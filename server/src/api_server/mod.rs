@@ -131,7 +131,18 @@ async fn handle_ws_session(
     async fn connect_organizer(uri: OrganizerURI, ses: &proto::org::UserSessionData) -> Res<(OrganizerConnection, OnStartUserSessionResponse)> {
         let mut c = crate::grpc::grpc_client::connect(uri).await?;
         let start_ses_req = proto::org::OnStartUserSessionRequest { ses: Some(ses.clone()) };
-        let res = c.on_start_user_session(start_ses_req).await?.into_inner();
+
+        let res = match c.on_start_user_session(start_ses_req).await {
+            Ok(res) => res.into_inner(),
+            Err(e) => {
+                if e.code() == tonic::Code::Unimplemented {
+                    tracing::debug!("Organizer does not implement on_start_user_session. Ignoring.",);
+                    OnStartUserSessionResponse::default()
+                } else {
+                    return Err(e.into())
+                }
+            }
+        };
         Ok((c, res))
     }
 
@@ -240,25 +251,35 @@ async fn handle_ws_session(
                                 }
                             };
                             tracing::debug!(cmd=%cmd_str, "Msg from client");
-                            match msg_dispatch(&cmd_str, &json, &mut ses, &server, ).await {
-                                Ok(true) => {},             // Continues serving
-                                Ok(false) => { break; }     // Session closed
-                                Err(e) => {
-                                    if let Some(e) = e.downcast_ref::<SessionClose>() {
-                                        if !matches!(e, SessionClose::Logout) { tracing::info!("[{}] Closing session: {:?}", sid, e); }
-                                        break;
-                                    } else if let Some(e) = e.downcast_ref::<tokio::sync::mpsc::error::SendError<Message>>() {
-                                        tracing::error!("[{}] Error sending message. Closing session. -- {}", sid, e);
-                                        break;
-                                    } else {
-                                        let answ = format!("Error handling command '{}'.", cmd_str);
-                                        tracing::warn!("[{}] {}: {}", sid, answ, e);
-                                        let err_msg = proto::client::server_to_client_cmd::Error { msg: answ };
-                                        let json_txt = serde_json::to_string(&err_msg).expect("Error serializing error message");
-                                        if ws_tx.send(Message::text(json_txt)).await.is_err() { break; };
-                                    }
-                                }
 
+                            match serde_json::from_value::<proto::client::ClientToServerCmd>(json.clone()) {
+                                Ok(req) => {
+                                    match msg_dispatch(&req, &mut ses, &server, ).await {
+                                        Ok(true) => {},             // Continues serving
+                                        Ok(false) => { break; }     // Session closed
+                                        Err(e) => {
+                                            if let Some(e) = e.downcast_ref::<SessionClose>() {
+                                                if !matches!(e, SessionClose::Logout) { tracing::info!("[{}] Closing session: {:?}", sid, e); }
+                                                break;
+                                            } else if let Some(e) = e.downcast_ref::<tokio::sync::mpsc::error::SendError<Message>>() {
+                                                tracing::error!("[{}] Error sending message. Closing session. -- {}", sid, e);
+                                                break;
+                                            } else {
+                                                let answ = format!("Error handling command '{}'.", cmd_str);
+                                                tracing::warn!("[{}] {}: {}", sid, answ, e);
+                                                let err_msg = proto::client::server_to_client_cmd::Error { msg: answ };
+                                                let json_txt = serde_json::to_string(&err_msg).expect("Error serializing error message");
+                                                if ws_tx.send(Message::text(json_txt)).await.is_err() { break; };
+                                            }
+                                        }
+                                    };
+                                },
+                                Err(e) => {
+                                    tracing::warn!(details=%e, "Invalid command from client: {:?}", cmd_str);
+                                    let err_msg = proto::client::server_to_client_cmd::Error { msg: format!("Invalid command from client: {:?}", e) };
+                                    let json_txt = serde_json::to_string(&err_msg).expect("Error serializing error message");
+                                    ws_tx.send(Message::text(json_txt)).await.ok();
+                                }
                             };
                         } else if msg.is_close() {
                             tracing::info!("Got websocket close message.");
@@ -310,7 +331,7 @@ fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String, HashMap<String, Stri
     let app_cookies = match cookies_str.parse::<serde_json::Value>() {
         Ok(c) => {
             match c.as_object() {
-                Some(c) => c.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+                Some(c) => c.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("<!ERROR: NON-STRING COOKIE VALUE!>").to_string())).collect(),
                 None => {
                     tracing::error!("'clapshot_cookies' was not a JSON dict, ignoring.");
                     HashMap::new()
@@ -488,7 +509,7 @@ async fn run_api_server_async(
                         Ok(session_cnt) => { user_was_online = session_cnt>0 },
                         Err(e) => tracing::error!(user=user_id, details=%e, "Failed to send user notification."),
                     }
-                    if !matches!(m.topic, UserMessageTopic::Progress) {
+                    if !(matches!(m.topic, UserMessageTopic::Progress | UserMessageTopic::VideoAdded | UserMessageTopic::VideoUpdated))                    {
                         let msg = models::MessageInsert {
                             seen: msg.seen || user_was_online,
                             ..msg

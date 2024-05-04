@@ -4,7 +4,7 @@ import logging
 import sys
 
 
-def make_logger(name: str, debug: bool = False, json: bool = False):
+def make_logger(name: str, debug: bool = False, json: bool = False) -> logging.Logger:
     """
     Create a logger with the given name.
     :param name: Name of the logger

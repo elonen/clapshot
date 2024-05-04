@@ -453,7 +453,34 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     }
                     else if ( msg.type === Proto3.UserMessage_Type.VIDEO_UPDATED ) {
                         refreshMyVideos();
-                    } else {
+                    }
+                    else if ( msg.type === Proto3.UserMessage_Type.VIDEO_ADDED ) {
+                        console.log("Handling VIDEO_ADDED: ", msg);
+                        if (!msg.refs?.videoId) { console.error("VIDEO_ADDED message with no videoId. This is a bug."); }
+
+                        // Parse details and extract JSON data (added by FileUpload) from msg
+                        const uploadCookies = JSON.parse(msg.details ?? '{}');
+                        const listingData = JSON.parse(uploadCookies.listing_data_json ?? '{}');
+                        const videoAddedAction = uploadCookies.video_added_action;
+
+                        // Call organizer script if defined, otherwise refresh video list
+                        if (videoAddedAction) {
+                            const action = $serverDefinedActions[videoAddedAction];
+                            if (!action) {
+                                const errorMsg = `Undefined video_added_action: '${videoAddedAction}'`;
+                                acts.add({ mode: 'error', message: errorMsg, lifetime: 5 });
+                                console.error(errorMsg);
+                            } else {
+                                callOrganizerScript(action.action, {
+                                    video_id: msg.refs?.videoId,
+                                    listing_data: listingData,
+                                });
+                            }
+                        } else {
+                            refreshMyVideos();
+                        }
+                    }
+                    else {
                         $userMessages = $userMessages.filter((m) => m.id != msg.id);
                         if (msg.created) { $userMessages.push(msg); }
                         if (!msg.seen) {
@@ -584,12 +611,10 @@ function onReorderItems(e: {detail: {ids: Proto3.FolderItemID[], listingData: St
 function openVideoListItem(e: { detail: { item: Proto3.PageItem_FolderListing_Item, listingData: StringMap }}): void {
     let {item, listingData} = e.detail;
     if (item.openAction) {
-        if ( item.openAction.lang == Proto3.ScriptCall_Lang.JAVASCRIPT )
-        callOrganizerScript(item.openAction.code, [item], listingData);
-        else {
-            console.error("BUG: Unsupported Organizer script language: " + item.openAction.lang);
-            acts.add({mode: 'error', message: "BUG: Unsupported script lang. See log.", lifetime: 5});
-        }
+        callOrganizerScript(item.openAction, {
+            listing_data: listingData,
+            item_to_open: item
+        });
     } else {
         console.error("No openAction script for item: " + item);
         acts.add({mode: 'error', message: "No open action for item. See log.", lifetime: 5});
@@ -617,17 +642,22 @@ function openVideoListItem(e: { detail: { item: Proto3.PageItem_FolderListing_It
 };
 
 /// Evalute a string as Javascript from Organizer (or Server)
-function callOrganizerScript(code: string|undefined, items: any[], listingData: StringMap): void {
-    if (!code) {
+function callOrganizerScript(script: Proto3.ScriptCall|undefined, action_args: Object): void {
+    if (!script || !script.code ) {
         console.log("callOrganizerScript called with empty code. Ignoring.");
+        return;
+    }
+    if (script.lang != Proto3.ScriptCall_Lang.JAVASCRIPT ) {
+        console.error("BUG: Unsupported Organizer script language: " + script.lang);
+        acts.add({mode: 'error', message: "BUG: Unsupported script lang. See log.", lifetime: 5});
         return;
     }
     const Function = function () {}.constructor;
     // @ts-ignore
-    let scriptFn = new Function("items", "listingData", code);
-    console.log("Calling organizer script:", {listingData, items, code});
+    let scriptFn = new Function("_action_args", script.code);
+    console.log("Calling organizer script:", {action_args, code: script.code});
     try {
-        scriptFn(items, listingData);
+        scriptFn(action_args);
     } catch (e: any) {
         console.error("Error in organizer script:", e);
         acts.add({mode: 'error', message: "Organizer script error. See log.", lifetime: 5});
@@ -639,7 +669,10 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
     let {action, items, listingData} = e.detail;
     let itemsObjs = items.map((it) => it.obj);
     console.log("onVideoListPopupAction():", {action, itemsObjs, listingData});
-    callOrganizerScript(action.action?.code, itemsObjs, listingData);
+    callOrganizerScript(action.action, {
+                listing_data: listingData,
+                selected_items: itemsObjs
+            });
 }
 </script>
 
@@ -717,45 +750,51 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
 
         {:else}
 
-        <!-- ========== page components ============= -->
-        <div class="organizer_page">
-            {#each $curPageItems as pit}
-                {#if pit.html }
-                    <div>
-                        <RawHtmlItem html={pit.html} />
-                    </div>
-                {:else if pit.folderListing}
-                    <div class="my-6">
-                        <VideoList
-                            listingData={pit.folderListing.listingData}
-                            items={pit.folderListing.items.map((it)=>({
-                                id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
-                                obj: it }))}
-                            dragDisabled = {pit.folderListing.allowReordering ? false : true}
-                            listPopupActions = {pit.folderListing.popupActions}
-                            on:open-item = {openVideoListItem}
-                            on:reorder-items = {onReorderItems}
-                            on:move-to-folder = {onMoveItemsToFolder}
-                            on:popup-action = {onVideoListPopupAction}
-                        />
-                    </div>
-                {/if}
-            {/each}
-        </div>
-
-            <!-- ========== upload widget ============= -->
-            <div class="m-6 h-24 border-4 border-dashed border-gray-700">
-                <FileUpload postUrl={uploadUrl}>
-                    <div class="flex flex-col justify-center items-center h-full">
-                        <div class="text-2xl text-gray-700">
-                            <i class="fas fa-upload"></i>
+            <!-- ========== page components ============= -->
+            <div class="organizer_page">
+                {#each $curPageItems as pit}
+                    {#if pit.html }
+                        <div>
+                            <RawHtmlItem html={pit.html} />
                         </div>
-                        <div class="text-xl text-gray-700">
-                            Drop video files here to upload
+                    {:else if pit.folderListing}
+                        <div class="my-6">
+                            <VideoList
+                                listingData={pit.folderListing.listingData}
+                                items={pit.folderListing.items.map((it)=>({
+                                    id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
+                                    obj: it }))}
+                                dragDisabled = {pit.folderListing.allowReordering ? false : true}
+                                listPopupActions = {pit.folderListing.popupActions}
+                                on:open-item = {openVideoListItem}
+                                on:reorder-items = {onReorderItems}
+                                on:move-to-folder = {onMoveItemsToFolder}
+                                on:popup-action = {onVideoListPopupAction}
+                            />
                         </div>
-                    </div>
-                </FileUpload>
+                        <!-- ========== upload widget ============= -->
+                        {#if pit.folderListing.allowUpload }
+                            <div class="h-24 border-4 border-dashed border-gray-700">
+                                <FileUpload
+                                    postUrl={uploadUrl}
+                                    listingData={pit.folderListing.listingData ?? {}}
+                                    videoAddedAction={pit.folderListing.videoAddedAction}
+                                >
+                                    <div class="flex flex-col justify-center items-center h-full">
+                                        <div class="text-2xl text-gray-700">
+                                            <i class="fas fa-upload"></i>
+                                        </div>
+                                        <div class="text-xl text-gray-700">
+                                            Drop video files here to upload
+                                        </div>
+                                    </div>
+                                </FileUpload>
+                            </div>
+                        {/if}
+                    {/if}
+                {/each}
             </div>
+
 
             <div>
                 {#if $userMessages.length>0}

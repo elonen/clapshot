@@ -1,5 +1,6 @@
 _venv
 *.pyc
+build
 dist
 pkg_tmp
 

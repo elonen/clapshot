@@ -1,6 +1,6 @@
 <script lang="ts">
 import LocalStorageCookies from "@/cookies";
-import Dropzone from "svelte-file-dropzone" 
+import Dropzone from "svelte-file-dropzone"
 
 let dragActive: boolean = false;
 let files = {
@@ -9,6 +9,10 @@ let files = {
 };
 
 export let postUrl: string;
+// Passed to HTTP POST request:
+export let listingData: Object;
+export let videoAddedAction: string|undefined;
+
 
 let progressBar: HTMLProgressElement;
 let statusTxt: string = "";
@@ -31,7 +35,8 @@ function progressHandler(event: ProgressEvent<XMLHttpRequestEventTarget>)
     uploadingNow = true;
     // loaded_total = "Uploaded " + event.loaded + " bytes of " + event.total;
     var percent = (event.loaded / event.total) * 100;
-    progressBar.value = Math.round(percent);
+    if (progressBar)
+        progressBar.value = Math.round(percent);
     statusTxt = Math.round(percent) + "% uploaded... please wait";
 }
 
@@ -64,7 +69,13 @@ function upload() {
         ajax.addEventListener("abort", abortHandler, false);
         ajax.open("POST", postUrl);
         ajax.setRequestHeader("X-FILE-NAME", file.name);
-        ajax.setRequestHeader("X-CLAPSHOT-COOKIES", JSON.stringify(LocalStorageCookies.getAllNonExpired()));
+
+        let upload_cookies = { ...LocalStorageCookies.getAllNonExpired() };
+        if (videoAddedAction)
+            upload_cookies["video_added_action"] = videoAddedAction;
+        upload_cookies["listing_data_json"] = JSON.stringify(listingData);
+        ajax.setRequestHeader("X-CLAPSHOT-COOKIES", JSON.stringify(upload_cookies));
+
         ajax.send(formdata);
     }
     files.accepted = [];

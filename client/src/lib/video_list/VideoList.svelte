@@ -88,6 +88,8 @@ function handleMouseOrKeyDown(id: string, e: any) {
         console.log("(dragging => videolist: ignore key/mouse down)");
         return;
     }
+    hidePopupMenus();
+
     // Open item by keyboard
     if (e.key) {
         if (e.key == "Enter") {
@@ -97,7 +99,7 @@ function handleMouseOrKeyDown(id: string, e: any) {
         }
     }
     // (Multi-)selecting items
-    if (!e.ctrlKey && !e.metaKey) return;
+    if (!e.shiftKey ) return;
     if (e.key && e.key !== "Shift") return;
     if (Object.keys($selectedTiles).includes(id)) {
         delete($selectedTiles[id]);
@@ -125,9 +127,18 @@ function transformDraggedElement(el: any) {
 
 function handleMouseUp(e: MouseEvent, item: VideoListDefItem) {
     if (e.button > 0) return; // ignore right click
-    if (!isDragging && !e.ctrlKey) {
+    if (!isDragging && !e.shiftKey) {
         $selectedTiles = {};
         $selectedTiles[item.id] = item;
+    }
+}
+
+function hidePopupMenus() {
+    let popupContainer = document.querySelector('#popup-container');
+    if (!popupContainer) { alert("UI BUG: popup container missing"); return; }
+    for (let child of popupContainer.children as any) {
+        if (!('hide' in child)) { alert("UI BUG: popup container child missing hide()"); }
+        child.hide();
     }
 }
 
@@ -135,13 +146,7 @@ function handleMouseUp(e: MouseEvent, item: VideoListDefItem) {
 function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
 {
     let popupContainer = document.querySelector('#popup-container');
-    if (!popupContainer) { alert("UI BUG: popup container missing"); return; }
-
-    // Remove any existing popups
-    for (let child of popupContainer.children as any) {
-        if (!('hide' in child)) { alert("UI BUG: popup container child missing hide()"); }
-        child.hide();
-    }
+    hidePopupMenus();
 
     let actions: Proto3.ActionDef[] = [];
     let targetTiles: VideoListDefItem[] = [];

@@ -1,5 +1,5 @@
 use std::path::Path;
-use lib_clapshot_grpc::proto::org::CheckMigrationsRequest;
+use lib_clapshot_grpc::proto::org::{ApplyMigrationRequest, CheckMigrationsRequest, AfterMigrationsRequest};
 use lib_clapshot_grpc::GrpcBindAddr;
 
 use crate::grpc::grpc_client::{connect, OrganizerConnection};
@@ -56,10 +56,39 @@ impl OrganizerCaller {
             conn.handshake(req).await?;
 
             // TODO: Handle organizer migrations properly
+            // This is a naive version that doesn't handle dependencies at all.
             tracing::info!("Calling check_migrations on organizer.");
-            let cm_res = conn.check_migrations(CheckMigrationsRequest {}).await?;
-            if cm_res.get_ref().pending_migrations.len() > 0 {
-                unimplemented!("Organizer reported pending migrations, but server logic to apply them is NOT YET IMPLEMENTED. Migrations: {:?}", cm_res.get_ref().pending_migrations);
+
+            match conn.check_migrations(CheckMigrationsRequest {}).await {
+                Ok(cm_res) => {
+                    let mut pending = cm_res.get_ref().pending_migrations.clone();
+
+                    // Apply migrations
+                    pending.sort_by(|a, b| a.version.cmp(&b.version));  // Oldest first
+                    let mut cur_version = cm_res.get_ref().current_schema_ver.clone();
+                    for m in pending {
+                        tracing::warn!("MIGRATION DEPENDENCY RESOLVER NOT YET PROPERLY IMPLEMENTED! Blindly applying organizer migration: {:?}", m);
+                        assert!(m.version > cur_version, "Migration version {} is not greater than current version {} -- this needs a better implementation to resolve", m.version, cur_version);
+                        conn.apply_migration(ApplyMigrationRequest { uuid: m.uuid.clone() }).await
+                            .map_err(|e| anyhow::anyhow!("Error applying organizer migration '{}': {:?}", m.uuid, e))?;
+                        cur_version = m.version;
+                    }
+                },
+                Err(e) => {
+                    match e.code() {
+                        tonic::Code::NotFound => { tracing::info!("No migrations found on organizer."); },
+                        tonic::Code::Unimplemented => { tracing::info!("Organizer does not implement migrations. Ignoring."); },
+                        _ => { anyhow::bail!("Error checking organizer migrations: {:?}", e); }
+                    }
+                }
+            };
+
+            if let Err(e) = conn.after_migrations(AfterMigrationsRequest {}).await {
+                if e.code() == tonic::Code::Unimplemented {
+                    tracing::info!("Organizer does not implement after_migrations. Ignoring.");
+                } else {
+                    anyhow::bail!("Error calling after_migrations on organizer: {:?}", e);
+                }
             }
 
             Ok(())

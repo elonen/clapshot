@@ -10,6 +10,7 @@ pub fn proto_msg_type_to_event_name(t: proto::user_message::Type) -> &'static st
         proto::user_message::Type::Error => "error",
         proto::user_message::Type::Progress => "progress",
         proto::user_message::Type::VideoUpdated => "video_updated",
+        proto::user_message::Type::VideoAdded => "video_added"
     }
 }
 
@@ -19,6 +20,7 @@ pub fn msg_event_name_to_proto_msg_type(t: &str) -> proto::user_message::Type {
         "error" => proto::user_message::Type::Error,
         "progress" => proto::user_message::Type::Progress,
         "video_updated" => proto::user_message::Type::VideoUpdated,
+        "video_added" => proto::user_message::Type::VideoAdded,
         _ => proto::user_message::Type::Ok,
     }
 }

@@ -84,11 +84,18 @@ impl org::organizer_inbound_server::OrganizerInbound for DefaultOrganizer
         }))
     }
 
-    async fn apply_migrations(&self, _req: Request<org::ApplyMigrationsRequest>) -> RpcResponseResult<org::ApplyMigrationsResponse>
+    async fn apply_migration(&self, _req: Request<org::ApplyMigrationRequest>) -> RpcResponseResult<org::ApplyMigrationResponse>
     {
-        assert!(false, "apply_migrations not implemented");
-        Ok(Response::new(org::ApplyMigrationsResponse {}))
+        assert!(false, "apply_migration not implemented");
+        Ok(Response::new(org::ApplyMigrationResponse {}))
     }
+
+    async fn after_migrations(&self, _req: Request<org::AfterMigrationsRequest>) -> RpcResponseResult<proto::Empty>
+    {
+        assert!(false, "after_migrations (dummy)");
+        Ok(Response::new(proto::Empty {}))
+    }
+
 
     async fn navigate_page(&self, req: Request<org::NavigatePageRequest>) -> RpcResponseResult<org::ClientShowPageRequest>
     {
