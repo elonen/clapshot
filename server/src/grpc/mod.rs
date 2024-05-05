@@ -23,13 +23,13 @@ macro_rules! client_cmd {
 /// Convert database time to protobuf3
 pub fn datetime_to_proto3(dt: &chrono::NaiveDateTime) -> pbjson_types::Timestamp {
     pbjson_types::Timestamp {
-        seconds: dt.timestamp(),
-        nanos: dt.timestamp_subsec_nanos() as i32,
+        seconds: dt.and_utc().timestamp(),
+        nanos: dt.and_utc().timestamp_subsec_nanos() as i32,
     }
 }
 
 pub fn proto3_to_datetime(ts: &pbjson_types::Timestamp) -> Option<chrono::NaiveDateTime> {
-    chrono::NaiveDateTime::from_timestamp_opt(ts.seconds, ts.nanos as u32)
+    chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32).map(|dt| dt.naive_utc())
 }
 
 pub (crate) fn make_video_popup_actions() -> HashMap<String, proto::ActionDef> {

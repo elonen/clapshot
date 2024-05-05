@@ -1,0 +1,61 @@
+FROM debian:bookworm-slim AS python-bookworm-slim
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-venv \
+        dh-virtualenv \
+        ; \
+    rm -rf /var/lib/apt/lists/*;
+
+# ----------------------------------
+
+FROM python-bookworm-slim AS build
+
+# Install system packages
+RUN apt-get -qy update >/dev/null
+RUN apt-get -qy install make >/dev/null
+RUN apt-get -qy install sqlite3 >/dev/null
+
+# Build deps
+# RUN apt-get -qy install libssl-dev >/dev/null
+# RUN apt-get -qy install libsqlite3-dev >/dev/null
+RUN apt-get -qy install protobuf-compiler >/dev/null
+
+# Deb build deps
+RUN apt-get -qy install dh-virtualenv >/dev/null
+
+# Create regular user
+ARG USER=docker
+ARG UID=1000
+ARG GID=1000
+RUN echo "#### USER=${USER}, UID=${UID}, GID=${GID}"
+RUN test -n "${USER}" && test -n "${UID}" && test -n "${GID}"
+
+RUN groupadd -f ${USER} --gid=${GID}
+RUN useradd -m ${USER} --uid=${UID} --gid=${GID} || true
+RUN mkdir -p /build
+RUN chown -R ${UID}:${GID} /build
+
+USER ${UID}:${GID}
+RUN mkdir -p /build/organizer/basic_folders
+RUN mkdir -p /build/protobuf/libs/python
+
+WORKDIR /build/organizer/basic_folders
+
+# Build protobuf lib first
+WORKDIR /build/protobuf/libs/python
+COPY --chown=${UID}:${GID} protobuf/proto /build/protobuf/proto
+COPY --chown=${UID}:${GID} protobuf/libs/python .
+RUN make
+
+# Cache _venv separately
+WORKDIR /build/organizer/basic_folders
+COPY --chown=${UID}:${GID} organizer/basic_folders/requirements.txt .
+RUN python3 -m venv _venv
+RUN _venv/bin/pip install -r requirements.txt
+
+# Copy sources & build
+COPY --chown=${UID}:${GID} organizer/basic_folders .
+RUN make

@@ -32,4 +32,19 @@ package: $(VENV)
 	@echo "Packaging the application..."
 	@$(PYTHON) -m build
 
+debian-local: dist_deb/built.target
+
+dist_deb/built.target: ${SERVER_CMD} ${DEB_DEPS}
+	cargo install cargo-deb
+	cargo deb
+	mkdir -p dist_deb
+	cp target/debian/* dist_deb/
+	touch $@
+
+debian-docker:  ${RUST_DEPS} ${DEB_DEPS} ${ENV} docker
+	mkdir -p dist_deb
+	$(eval PKGDIR=${PACKAGE}-${PVER})
+	$(eval CMD="cd /app/server && cp -r --preserve=mode,ownership,timestamps /deb ./dist_deb && ls -l ./dist_deb && make debian-local && cp dist_deb/*.* /deb/ && chown -R ${UID}:${GID} /deb")
+	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:latest  bash -c ${CMD}
+
 all: install

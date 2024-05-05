@@ -39,7 +39,7 @@ test:
 
 #run-docker: clean-debian debian-docker
 run-docker: debian-docker
-	DOCKER_BUILDKIT=1 docker build -t clapshot-comb --build-arg UID=${UID} --build-arg GID=${GID} .
+	DOCKER_BUILDKIT=1 docker build -t clapshot-comb --build-arg UID=${UID} --build-arg GID=${GID} -f Dockerfile.demo .
 	# Add a simple test video to incoming already
 	mkdir -p test/VOLUME/data/incoming
 	cp server/src/tests/assets/60fps-example.mp4 test/VOLUME/data/incoming/
@@ -48,8 +48,8 @@ run-docker: debian-docker
 build-docker-demo: debian-docker
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
 	$(eval PVER=$(shell jq -r '.version' client/package.json))
-	docker build -t clapshot:${PVER}-demo --build-arg UID=1002 --build-arg GID=1002 .
-	docker build -t clapshot:${PVER}-demo-htadmin --build-arg UID=1002 --build-arg GID=1002 . --build-arg auth_variation=htadmin
+	docker build -t clapshot:${PVER}-demo --build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo .
+	docker build -t clapshot:${PVER}-demo-htadmin --build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htadmin
 	docker tag clapshot:${PVER}-demo clapshot:latest-demo
 	docker tag clapshot:${PVER}-demo-htadmin clapshot:latest-demo-htadmin
 	docker tag clapshot:${PVER}-demo elonen/clapshot:${PVER}-demo

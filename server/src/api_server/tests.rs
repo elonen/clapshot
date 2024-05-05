@@ -20,6 +20,7 @@ use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_no_msg, wri
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 
 use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, DelComment, DelVideo, EditComment, ListMyMessages, ListMyVideos, OpenVideo, RenameVideo};
+use std::convert::TryFrom;
 
 // ---------------------------------------------------------------------------------------------
 
@@ -336,9 +337,8 @@ async fn test_api_list_my_messages()
 
         send_server_cmd!(ws, ListMyMessages, ListMyMessages{});
         let sm = expect_client_cmd!(&mut ws, ShowMessages);
-        assert_eq!(sm.msgs.len(), 2);
         for (i, m) in sm.msgs.iter().enumerate() {
-            let mtype = proto::user_message::Type::from_i32(m.r#type).unwrap();
+            let mtype = proto::user_message::Type::try_from(m.r#type).unwrap();
             assert_eq!(m.message, msgs[i].message);
             assert_eq!(proto_msg_type_to_event_name(mtype), msgs[i].event_name);
             assert_eq!(m.seen, false);

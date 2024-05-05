@@ -146,6 +146,7 @@ function hidePopupMenus() {
 function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
 {
     let popupContainer = document.querySelector('#popup-container');
+    if (!popupContainer) { alert("UI BUG: popup container missing"); return; }
     hidePopupMenus();
 
     let actions: Proto3.ActionDef[] = [];
@@ -181,7 +182,7 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
         return;
 
     let popup = new VideoListPopup({
-        target: popupContainer,
+        target: popupContainer ,
         props: {
             menuLines: actions,
             x: e.clientX,
@@ -211,11 +212,14 @@ function isShadowItem(item: any) {
         on:finalize={handleFinalize}
         on:contextmenu={(e) => onContextMenu(e, null)}
         class="flex flex-wrap gap-4 p-4 bg-slate-900"
+        role="list"
     >
         {#each items as item(item.id)}
             <div
                 id="videolist_item__{item.id}"
                 class="video-list-tile-sqr"
+                role="button"
+                tabindex="0"
                 class:selectedTile={Object.keys($selectedTiles).includes(item.id)}
                 on:click|stopPropagation
                 on:dblclick={(_e) => {$selectedTiles = {}; dispatchOpenItem(item.id)}}

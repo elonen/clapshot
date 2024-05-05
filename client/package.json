@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "npm run check && vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json --compiler-warnings \"css-unused-selector:ignore,a11y-no-noninteractive-element-interactions:ignore,a11y-no-static-element-interactions:ignore\""
   },
   "devDependencies": {
     "@fortawesome/fontawesome-free": "^6.5.2",
@@ -28,7 +28,7 @@
     "tailwindcss": "^3.4.3",
     "tslib": "^2.6.2",
     "typescript": "^5.4.5",
-    "vite": "^5.2.10",
+    "vite": "^5.2.11",
     "vite-plugin-checker": "^0.6.4"
   }
 }

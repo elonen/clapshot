@@ -801,7 +801,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
                 <h1 class="text-2xl m-6 mt-12 text-slate-500">
                     Latest messages
                 </h1>
-                <div class="gap-4 max-h-56 overflow-y-auto border-l px-2 border-gray-900">
+                <div class="gap-4 max-h-56 overflow-y-auto border-l px-2 border-gray-900" role="log">
                     {#each $userMessages as msg}
                     <UserMessage {msg} />
                     {/each}

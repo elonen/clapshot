@@ -369,8 +369,11 @@ function onFrameEdited(e: Event) {
 </script>
 
 
-<div on:keydown={onWindowKeyPress} class="w-full h-full flex flex-col object-contain">
-
+<div
+    on:keydown={onWindowKeyPress}
+    class="w-full h-full flex flex-col object-contain"
+    role="main"
+>
 	<div  class="flex-1 grid place-items-center relative min-h-[12em]"
 			 style="{debug_layout?'border: 2px solid orange;':''}">
 		<div bind:this={videoCanvasContainer} class="absolute h-full {debug_layout?'border-4 border-x-zinc-50':''}">
