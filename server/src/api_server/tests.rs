@@ -19,9 +19,10 @@ use crate::database::tests::make_test_db;
 use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_no_msg, write, open_video, connect_client_ws};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 
+use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, DelComment, DelVideo, EditComment, ListMyMessages, ListMyVideos, OpenVideo, RenameVideo};
+
 // ---------------------------------------------------------------------------------------------
 
-#[tokio::test]
 #[traced_test]
 async fn test_echo()
 {
@@ -60,13 +61,13 @@ async fn test_api_push_msg()
 async fn test_api_list_user_videos()
 {
     api_test! {[ws, ts]
-        write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
+        send_server_cmd!(ws, ListMyVideos, ListMyVideos{});
         let sp = expect_client_cmd!(&mut ws, ShowPage);
         assert_eq!(sp.page_items.len(), 2);
 
         // Break the database, make sure we get an error
         ts.db.break_db();
-        write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
+        send_server_cmd!(ws, ListMyVideos, ListMyVideos{});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
@@ -82,7 +83,7 @@ async fn test_api_del_video()
         {
             assert!(models::Video::get(&ts.db, &ts.videos[0].id).is_ok());
 
-            write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"id":"{}"}}}}"#, ts.videos[0].id)).await;
+            send_server_cmd!(ws, DelVideo, DelVideo{video_id: ts.videos[0].id.clone()});
             expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
 
             // Make sure the dir is gone
@@ -100,18 +101,18 @@ async fn test_api_del_video()
         }
 
         // Fail to delete a non-existent video
-        write(&mut ws, r#"{"cmd":"del_video","data":{"id":"non-existent"}}"#).await;
+        send_server_cmd!(ws, DelVideo, DelVideo{video_id: "non-existent".into()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Fail to delete someones else's video
         assert!(models::Video::get(&ts.db, &ts.videos[1].id).is_ok());
-        write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"id":"{}"}}}}"#, ts.videos[1].id)).await;
+        send_server_cmd!(ws, DelVideo, DelVideo{video_id: ts.videos[1].id.clone()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
         assert!(models::Video::get(&ts.db, &ts.videos[1].id).is_ok());
 
         // Break the database
         ts.db.break_db();
-        write(&mut ws, &format!(r#"{{"cmd":"del_video","data":{{"id":"{}"}}}}"#, ts.videos[2].id)).await;
+        send_server_cmd!(ws, DelVideo, DelVideo{video_id: ts.videos[2].id.clone()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
@@ -138,7 +139,7 @@ async fn test_api_open_video()
 
         // Break the database
         ts.db.break_db();
-        write(&mut ws, &format!(r#"{{"cmd":"open_video","data":{{"id":"{}"}}}}"#, ts.videos[0].id)).await;
+        send_server_cmd!(ws, OpenVideo, OpenVideo{video_id: ts.videos[0].id.clone()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
@@ -148,7 +149,7 @@ async fn test_api_open_video()
 async fn test_api_open_bad_video()
 {
     api_test! {[ws, ts]
-        write(&mut ws, r#"{"cmd":"open_video","data":{"id":"non-existent"}}"#).await;
+        send_server_cmd!(ws, OpenVideo, OpenVideo{video_id: "non-existent".into()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
      }
 }
@@ -171,7 +172,7 @@ async fn test_api_rename_video()
         open_video(&mut ws, &video.id).await;
 
         // Rename the video (with leading/trailing whitespace that will be trimmed)
-        write(&mut ws, &format!(r#"{{"cmd":"rename_video","data":{{"id":"{}","new_name":"  New name  "}}}}"#, video.id)).await;
+        send_server_cmd!(ws, RenameVideo, RenameVideo{video_id: video.id.clone(), new_name: "  New name  ".into()});
         expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
 
         // Make sure the video was renamed in the DB
@@ -179,7 +180,7 @@ async fn test_api_rename_video()
         assert_eq!(v.title, Some("New name".to_string()));
 
         // Try to enter an invalid name
-        write(&mut ws, &format!(r#"{{"cmd":"rename_video","data":{{"id":"{}","new_name":" /._  "}}}}"#, video.id)).await;
+        send_server_cmd!(ws, RenameVideo, RenameVideo{video_id: video.id.clone(), new_name: " /._  ".into()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Make sure name wasn't changed
@@ -196,7 +197,7 @@ async fn test_api_add_plain_comment()
 {
     api_test! {[ws, ts]
         let video = &ts.videos[0];
-        write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_id":"{}","comment":"Test comment"}}}}"#, video.id)).await;
+        send_server_cmd!(ws, AddComment, AddComment{video_id: video.id.clone(), comment: "Test comment".into(), ..Default::default()});
 
         // No video opened by the client yet, so no response
         expect_no_msg(&mut ws).await;
@@ -205,7 +206,7 @@ async fn test_api_add_plain_comment()
         // Add another comment
         let drw_data = "data:image/webp;charset=utf-8;base64,SU1BR0VfREFUQQ==";  // "IMAGE_DATA"
 
-        write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_id":"{}","comment":"Test comment 2","drawing":"{}"}}}}"#, video.id, drw_data)).await;
+        send_server_cmd!(ws, AddComment, AddComment{video_id: video.id.clone(), comment: "Test comment 2".into(), drawing: Some(drw_data.into()), ..Default::default()});
 
         let c = expect_client_cmd!(&mut ws, AddComments);
         assert_eq!(c.comments.len(), 1);
@@ -217,12 +218,12 @@ async fn test_api_add_plain_comment()
         assert!(c.comments[0].clone().drawing.unwrap().starts_with("data:image/webp"));
 
         // Add a comment to a nonexisting video
-        write(&mut ws, r#"{"cmd":"add_comment","data":{"video_id":"bad_id","comment":"Test comment 3"}}"#).await;
+        send_server_cmd!(ws, AddComment, AddComment{video_id: "bad_id".into(), comment: "Test comment 3".into(), ..Default::default()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Break the database
         ts.db.break_db();
-        write(&mut ws, &format!(r#"{{"cmd":"add_comment","data":{{"video_id":"{}","comment":"Test comment 4"}}}}"#, video.id)).await;
+        send_server_cmd!(ws, AddComment, AddComment{video_id: video.id.clone(), comment: "Test comment 4".into(), ..Default::default()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
@@ -238,7 +239,7 @@ async fn test_api_edit_comment()
         open_video(&mut ws, &video.id).await;
 
         // Edit comment
-        write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"id":"{}","comment":"Edited comment"}}}}"#, com.id.to_string())).await;
+        send_server_cmd!(ws, EditComment, EditComment{comment_id: com.id.to_string(), new_comment: "Edited comment".into(), ..Default::default()});
 
         let m = expect_client_cmd!(&mut ws, DelComment);
         assert_eq!(m.comment_id, com.id.to_string());
@@ -254,16 +255,16 @@ async fn test_api_edit_comment()
         assert_eq!(drw_data, "IMAGE_DATA");
 
         // Edit nonexisting comment
-        write(&mut ws, r#"{"cmd":"edit_comment","data":{"id":"1234566999","comment":"Edited comment 2"}}"#).await;
+        send_server_cmd!(ws, EditComment, EditComment{comment_id: "1234566999".into(), new_comment: "Edited comment 2".into(), ..Default::default()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Try to edit someone else's comment
-        write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"id":"{}","comment":"Edited comment 3"}}}}"#, ts.comments[1].id.to_string())).await;
+        send_server_cmd!(ws, EditComment, EditComment{comment_id: ts.comments[1].id.to_string(), new_comment: "Edited comment 3".into(), ..Default::default()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Break the database
         ts.db.break_db();
-        write(&mut ws, &format!(r#"{{"cmd":"edit_comment","data":{{"id":"{}","comment":"Edited comment 4"}}}}"#, com.id.to_string())).await;
+        send_server_cmd!(ws, EditComment, EditComment{comment_id: com.id.to_string(), new_comment: "Edited comment 4".into(), ..Default::default()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
@@ -287,22 +288,22 @@ async fn test_api_del_comment()
         open_video(&mut ws, &video.id).await;
 
         // Delete comment[6] (user 1)
-        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, com.id.to_string())).await;
+        send_server_cmd!(ws, DelComment, DelComment{comment_id: com.id.to_string()});
 
         let m = expect_client_cmd!(&mut ws, DelComment);
         assert_eq!(m.comment_id, com.id.to_string());
 
         // Fail to delete nonexisting comment
-        write(&mut ws, r#"{"cmd":"del_comment","data":{"id":"1234566999"}}"#).await;
+        send_server_cmd!(ws, DelComment, DelComment{comment_id: "1234566999".into()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Fail to delete user2's comment[3] (user 2)
-        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, ts.comments[3].id.to_string())).await;
+        send_server_cmd!(ws, DelComment, DelComment{comment_id: ts.comments[3].id.to_string()});
         let m = expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
         assert!(m.message.contains("ermission"));
 
         // Fail to delete comment[0] that has replies
-        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, ts.comments[0].id.to_string())).await;
+        send_server_cmd!(ws, DelComment, DelComment{comment_id: ts.comments[0].id.to_string()});
         let m = expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
         assert!(m.details.unwrap().contains("repl"));
 
@@ -310,7 +311,7 @@ async fn test_api_del_comment()
         models::Comment::delete(&ts.db, &ts.comments[5].id).unwrap(); // Delete from db directly, to avoid user permission check
 
         // Try again to delete comment id 1 that should now have no replies
-        write(&mut ws, &format!(r#"{{"cmd":"del_comment","data":{{"id":"{}"}}}}"#, ts.comments[0].id.to_string())).await;
+        send_server_cmd!(ws, DelComment, DelComment{comment_id: ts.comments[0].id.to_string()});
         expect_client_cmd!(&mut ws, DelComment);
     }
 }
@@ -321,7 +322,7 @@ async fn test_api_del_comment()
 async fn test_api_list_my_messages()
 {
     api_test! {[ws, ts]
-        write(&mut ws, r#"{"cmd":"list_my_messages","data":{}}"#).await;
+        send_server_cmd!(ws, ListMyMessages, ListMyMessages{});
 
         let m = expect_client_cmd!(&mut ws, ShowMessages);
         assert_eq!(m.msgs.len(), 0);
@@ -333,7 +334,7 @@ async fn test_api_list_my_messages()
         ];
         let msgs = msgs.iter().map(|m| models::Message::insert(&ts.db, &m).unwrap()).collect::<Vec<_>>();
 
-        write(&mut ws, r#"{"cmd":"list_my_messages","data":{}}"#).await;
+        send_server_cmd!(ws, ListMyMessages, ListMyMessages{});
         let sm = expect_client_cmd!(&mut ws, ShowMessages);
         assert_eq!(sm.msgs.len(), 2);
         for (i, m) in sm.msgs.iter().enumerate() {
@@ -344,7 +345,7 @@ async fn test_api_list_my_messages()
         }
 
         // List again, this time messages should be marked "seen"
-        write(&mut ws, r#"{"cmd":"list_my_messages","data":{}}"#).await;
+        send_server_cmd!(ws, ListMyMessages, ListMyMessages{});
         let sm = expect_client_cmd!(&mut ws, ShowMessages);
         assert_eq!(sm.msgs.len(), 2);
         for (i, m) in sm.msgs.iter().enumerate() {

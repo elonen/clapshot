@@ -15,6 +15,20 @@ use crate::video_pipeline::IncomingFile;
 use crate::api_server::UserMessage;
 use crate::database::{DB, models};
 
+
+
+// write(&mut ws, &server_cmd_json!(ListMyVideos, ListMyVideos{})).await;
+#[macro_export]
+macro_rules! send_server_cmd {
+    ($ws:expr, $cmd_name:ident, $options:expr) => {{
+        let cmd = proto::client::ClientToServerCmd {
+            cmd: Some(proto::client::client_to_server_cmd::Cmd::$cmd_name($options)),
+        };
+        let json_cmd = serde_json::to_string(&cmd).expect("Failed to serialize ClientToServerCmd to JSON");
+        crate::api_server::test_utils::write(&mut $ws, &json_cmd).await;
+    }};
+}
+
 pub(crate) struct ApiTestState {
     pub(crate) db: Arc<DB>,
     pub(crate) user_msg_tx: crossbeam_channel::Sender<UserMessage>,
@@ -217,7 +231,10 @@ macro_rules! api_test {
 pub(crate) async fn open_video(ws: &mut WsClient, vid: &str) -> proto::client::server_to_client_cmd::OpenVideo
 {
     println!("--------- TEST: open_video '{}'...", vid);
-    write(ws, &format!(r#"{{"cmd":"open_video","data":{{"id":"{}"}}}}"#, vid)).await;
+
+    use lib_clapshot_grpc::proto::client::client_to_server_cmd as cmd_enum;
+    send_server_cmd!(*ws, OpenVideo, cmd_enum::OpenVideo{ video_id: vid.into() });
+
     let ov = expect_client_cmd!(ws, OpenVideo);
 
     while let Some(msg) = read(ws).await {

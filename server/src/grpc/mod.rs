@@ -122,7 +122,6 @@ if (confirm(msg)) {
 /// Convert a list of database Videos to a protobuf3 PageItem (FolderListing)
 pub (crate) fn folder_listing_for_videos(videos: &[crate::database::models::Video], url_base: &str) -> proto::PageItem {
     let videos: Vec<proto::page_item::folder_listing::Item> = videos.iter().map(|v| {
-            if v.id.chars().any(|c| !c.is_ascii_hexdigit()) { panic!("Unsafe video id for JS: {}", v.id); }  // Check that id is JS safe (plain hex)
             proto::page_item::folder_listing::Item {
                 item: Some(proto::page_item::folder_listing::item::Item::Video(v.to_proto3(url_base))),
                 open_action: Some(proto::ScriptCall {

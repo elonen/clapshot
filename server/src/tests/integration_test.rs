@@ -14,6 +14,7 @@ mod integration_test
 
     use assert_fs::prelude::PathCopy;
     use futures::Future;
+    use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, ListMyVideos};
     use lib_clapshot_grpc::proto::org;
     use rust_decimal::prelude::*;
 
@@ -22,7 +23,7 @@ mod integration_test
 
     use crate::api_server::tests::expect_user_msg;
     use crate::database::schema::videos::{thumb_sheet_cols, thumb_sheet_rows};
-    use crate::expect_client_cmd;
+    use crate::{expect_client_cmd, send_server_cmd};
     use crate::grpc::grpc_client::prepare_organizer;
     use crate::video_pipeline::{metadata_reader, IncomingFile};
     use crate::api_server::test_utils::{connect_client_ws, open_video, write};
@@ -158,8 +159,13 @@ mod integration_test
 
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
-            let m = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
-            let vid = m.refs.unwrap().video_id.unwrap();
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::VideoAdded).await;    // notification to client (with upload folder info etc)
+            let vid = msg.refs.unwrap().video_id.unwrap();
+
+            thread::sleep(Duration::from_secs_f32(0.5));
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
+            let vid2 = msg.refs.unwrap().video_id.unwrap();
+            assert_eq!(vid, vid2);
 
             crate::api_server::test_utils::wait_for_thumbnails(&mut ws).await;
 
@@ -180,8 +186,8 @@ mod integration_test
             assert!(!incoming_dir.join(mp4_file).exists());
 
             // Add a comment
-            let msg = serde_json::json!({"cmd": "add_comment", "data": { "video_id": vid, "comment": "Test comment"}});
-            write(&mut ws, &msg.to_string()).await;
+            send_server_cmd!(ws, AddComment, AddComment { video_id: vid, comment: "Test comment".to_string(), ..Default::default() });
+
             let mut got_new_comment = false;
             for _ in 0..3 {
                 match crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(&mut ws).await.map(|x| x.cmd.unwrap()) {
@@ -235,8 +241,13 @@ mod integration_test
 
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::VideoAdded).await;    // notification to client (with upload folder info etc)
             let vid = msg.refs.unwrap().video_id.unwrap();
+
+            thread::sleep(Duration::from_secs_f32(0.5));
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
+            let vid2 = msg.refs.unwrap().video_id.unwrap();
+            assert_eq!(vid, vid2);
 
             // Check that it's being transcoded
             assert!(msg.details.unwrap().to_ascii_lowercase().contains("ranscod"));
@@ -285,7 +296,7 @@ mod integration_test
                 }
 
                 println!("... doing list_my_videoos ...");
-                write(&mut ws, r#"{"cmd":"list_my_videos","data":{}}"#).await;
+                send_server_cmd!(ws, ListMyVideos, ListMyVideos {});
 
                 match crate::api_server::test_utils::expect_parsed::<ServerToClientCmd>(&mut ws).await.cmd {
 
