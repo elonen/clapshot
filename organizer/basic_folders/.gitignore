@@ -1,5 +1,6 @@
-Cargo.lock
-target
+deps/
+*.spec
+
 dist_deb
 Dockerfile
 _venv

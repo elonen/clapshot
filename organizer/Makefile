@@ -1,13 +1,20 @@
 SUBDIRS := $(wildcard */.)
 
-.PHONY: subdirs $(SUBDIRS) clean
+.PHONY: subdirs $(SUBDIRS) clean distclean
 
 subdirs: $(SUBDIRS)
 
 $(SUBDIRS):
 	$(MAKE) -C $@
 
-clean:
+distclean:
 	for dir in $(SUBDIRS); do \
-		$(MAKE) -C $$dir distclean; \
+		cd $$dir && $(MAKE) distclean; \
+	done
+
+clean: distclean
+
+debian-docker:
+	for dir in $(SUBDIRS); do \
+		cd $$dir && $(MAKE) debian-docker; \
 	done

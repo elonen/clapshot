@@ -14,13 +14,17 @@ clean-debian:
 debian-docker:
 	(cd client; make debian-docker)
 	(cd server; make debian-docker)
+	(cd organizer; make debian-docker)
 	@if [ "$(shell uname -m)" != "x86_64" ]; then \
 		echo "We're running on non-x86_64 architecture. Building x86_64 deb, too."; \
 		(cd server; export TARGET_ARCH=amd64; make debian-docker); \
+		(cd organizer; export TARGET_ARCH=amd64; make debian-docker); \
 	fi
 	mkdir -p dist_deb
 	cp client/dist_deb/* dist_deb/
 	cp server/dist_deb/* dist_deb/
+	cp organizer/basic_folders/dist_deb/* dist_deb/
+	rm dist_deb/*dbgsym*
 	ls -l dist_deb/
 
 clean:	clean-debian
@@ -32,6 +36,7 @@ clean:	clean-debian
 docker:
 	(cd client; make docker)
 	(cd server; make docker)
+	(cd organizer; make docker)
 
 test:
 	(cd client; make test-docker)

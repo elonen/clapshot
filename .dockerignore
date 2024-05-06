@@ -1,7 +1,7 @@
 test/VOLUME
 server/DEV_DATADIR*
 **/target
-
+**/dist_deb
 **/__pycache__
 **/.venv
 **/.classpath

@@ -1,5 +1,5 @@
 PACKAGE_NAME := clapshot_grpc
-PACKAGE_VERSION := 0.0.1
+PACKAGE_VERSION := 0.0.0+dev
 VENV := _venv
 
 PROTO_DIR := ../../proto

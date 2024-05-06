@@ -1,0 +1,5 @@
+clapshot-organizer-basic-folders (0.6.0) bullseye; urgency=low
+
+  * Initial debian packaging
+
+ -- Jarno Elonen <elonen@iki.fi>  Mon, 06 May 2024 12:40:00 +0200

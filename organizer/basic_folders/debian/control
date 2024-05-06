@@ -1,0 +1,18 @@
+Source: clapshot-organizer-basic-folders
+Section: python
+Priority: optional
+Maintainer: Jarno Elonen <elonen@iki.fi>
+Build-Depends: debhelper (>= 11), dh-virtualenv (>= 1.0), dh-python, python3, python3-setuptools, python3-pip, libprotobuf-dev, protobuf-compiler, python3-dev
+Standards-Version: 3.9.5
+X-DH-Virtualenv-Depends: python3-venv
+Homepage: https://github.com/elonen/clapshot
+
+Package: clapshot-organizer-basic-folders
+Architecture: any
+Depends: ${misc:Depends}, ${python3:Depends}
+Enhances: clapshot-server (>=0.6.0)
+Description: Clapshot Organizer plugin 'basic_folders'
+    .
+    Clapshot organizer pluging that provides
+    basic folders to the UI to better organize
+    your videos.

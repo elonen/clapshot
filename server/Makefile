@@ -1,8 +1,7 @@
 .PHONY: deps clean test docker test run run-local run-docker default debian-local
 
-DOCKER_IMG_TAG=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
-
-PLUGIN_BIN=../organizer/basic_folders/run-py-org.sh
+#PLUGIN_BIN=../organizer/basic_folders/run-py-org.sh
+PLUGIN_BIN=./org_basic_folders
 #../organizer/basic_folders/_venv/bin/clapshot-organizer-basic-folders
 
 UID=$(shell id -u)
@@ -16,7 +15,9 @@ else
   PLATFORM_STR = --platform linux/$(TARGET_ARCH)
 endif
 
-PACKAGE=clapshot_server_${ARCH}
+DOCKER_IMG_NAME=clapshot_server_${ARCH}
+DEV_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
+
 SERVER_CMD=target/debug/clapshot-server
 DEV_DATADIR=DEV_DATADIR
 
@@ -43,13 +44,13 @@ docker: ${DEV_DATADIR}
 	@echo "Otherwise you wouldn't be able to access it without root privileges."
 	@echo "-------------------------------------------------------------------------------"
 
-	cd .. && DOCKER_BUILDKIT=1 docker build $(PLATFORM_STR) -t ${PACKAGE}:${DOCKER_IMG_TAG} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID}  -f Dockerfile.server .
-	docker tag ${PACKAGE}:${DOCKER_IMG_TAG} ${PACKAGE}:latest
+	cd .. && DOCKER_BUILDKIT=1 docker build $(PLATFORM_STR) -t ${DOCKER_IMG_NAME}:${DEV_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID}  -f Dockerfile.server .
+	docker tag ${DOCKER_IMG_NAME}:${DEV_VERSION} ${DOCKER_IMG_NAME}:latest
 
 
-debian-local: dist_deb/built.target
+debian-local: dist_deb/built.${ARCH}.target
 
-dist_deb/built.target: ${SERVER_CMD} ${DEB_DEPS}
+dist_deb/built.${ARCH}.target: ${SERVER_CMD} ${DEB_DEPS}
 	cargo install cargo-deb
 	cargo deb
 	mkdir -p dist_deb
@@ -58,9 +59,8 @@ dist_deb/built.target: ${SERVER_CMD} ${DEB_DEPS}
 
 debian-docker: docker
 	mkdir -p dist_deb
-	# $(eval PKGDIR=${PACKAGE}-${PVER})
 	$(eval CMD="cd /app/server && cp -r --preserve=mode,ownership,timestamps /deb ./dist_deb && ls -l ./dist_deb && make debian-local && cp dist_deb/*.* /deb/ && chown -R ${UID}:${GID} /deb")
-	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:latest  bash -c ${CMD}
+	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${DOCKER_IMG_NAME}:latest  bash -c ${CMD}
 
 
 test-local:
@@ -69,7 +69,7 @@ test-local:
 	# TEST_ORG_CMD="${PLUGIN_BIN}" cargo test  test_organizer  | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"
 
 test-docker: docker
-	docker run --rm ${PACKAGE}:latest  cargo test
+	docker run --rm ${DOCKER_IMG_NAME}:latest  cargo test
 
 test:
 	@echo "Please run either 'test-docker' or 'test-local'"
@@ -80,7 +80,7 @@ run-local: ${SERVER_CMD} ${DEV_DATADIR}
 	${SERVER_CMD} --url-base http://127.0.0.1:8095/ --port 8095 --data-dir ${DEV_DATADIR} --migrate --cors '*' --debug  --org-cmd "${PLUGIN_BIN}"
 
 run-docker: docker
-	docker run --rm -it -p 127.0.0.1:8095:8095 --mount type=bind,source="$$(pwd)"/${DEV_DATADIR},target=/app/server/${DEV_DATADIR}  ${PACKAGE}:latest
+	docker run --rm -it -p 127.0.0.1:8095:8095 --mount type=bind,source="$$(pwd)"/${DEV_DATADIR},target=/app/server/${DEV_DATADIR}  ${DOCKER_IMG_NAME}:latest
 
 run:
 	@echo "Please run either 'run-docker' or 'run-local'"
