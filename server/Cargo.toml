@@ -1,6 +1,6 @@
 [package]
 name = "clapshot-server"
-version = "0.5.6"
+version = "0.6.0"
 edition = "2021"
 
 description = "Clapshot video review tool (backend)"

@@ -1,3 +1,10 @@
+clapshot-client (0.6.0) bullseye; urgency=low
+
+  * New communication API
+  * Support for folders and custom UI views (requires an Organizer plugin in the backend)
+
+ -- Jarno Elonen <elonen@iki.fi>  Mon, 6 May 2024 19:45:00 +0200
+
 clapshot-client (0.5.6) bullseye; urgency=low
 
   * Fix video list row spacing
