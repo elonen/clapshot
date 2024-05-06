@@ -17,7 +17,7 @@ VENV := _venv
 PYTHON := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
 
-PY_SRC=$(shell ls *.py) $(shell find database/ -type f) $(shell find ../../protobuf/proto -type f) $(shell find ../../protobuf/libs/python -name '*.py' -type f)
+PY_SRC=$(shell ls *.py) $(shell find organizer/ -type f) $(shell find ../../protobuf/proto -type f) $(shell find ../../protobuf/libs/python -name '*.py' -type f)
 DEB_SRC=debian/* README* LICENSE*
 
 DOCKER_IMG_NAME=clapshot_org_basic_folders_${ARCH}
@@ -36,9 +36,10 @@ setup: deps/$(PROTOLIB)
 	@echo "Setting up virtual environment..."
 	@test -d $(VENV) || python3 -m venv $(VENV)
 	@$(PIP) install -U pip
+	@$(PIP) install -r requirements.txt
 	@$(PIP) install build
 
-$(VENV): setup requirements.txt
+$(VENV): setup
 
 install: $(VENV)
 	@echo "Installing the application..."
@@ -46,7 +47,7 @@ install: $(VENV)
 
 clean:
 	@echo "Cleaning up build and Python file artifacts..."
-	@rm -rf build dist *.egg-info dist_deb
+	@rm -rf deps build dist *.egg-info dist_deb
 	@find . -type f -name '*.pyc' -delete
 	@find . -type d -name '__pycache__' -delete
 
@@ -56,7 +57,7 @@ distclean: clean
 
 package: $(VENV) $(PY_SRC) deps/$(PROTOLIB)
 	@echo "Packaging the application..."
-	make setup
+	@$(PYTHON) -m build --sdist
 
 
 docker: ${DEV_DATADIR}

@@ -1,8 +1,6 @@
-
 import json
 import logging
 import sys
-
 
 def make_logger(name: str, debug: bool = False, json: bool = False) -> logging.Logger:
     """

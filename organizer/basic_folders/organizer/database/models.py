@@ -7,6 +7,8 @@ from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, relationship
 
 
 # Database ORM mappings
+# See migrations.py for the actual SQL table creation statements.
+
 
 class Base(DeclarativeBase):
     pass
@@ -18,11 +20,6 @@ class DbFolder(Base):
     created: Mapped[datetime] = mapped_column(insert_default=sqlalchemy.func.now())
     user_id: Mapped[str] = mapped_column()
     title: Mapped[str] = mapped_column()
-
-    # ORM relationships (objects, not keys)
-    #items = relationship("DbFolderItems", primaryjoin="DbFolder.id==DbFolderItems.folder_id")
-    #parent = relationship("DbFolder", secondary="bf_folder_items", primaryjoin="DbFolder.id==DbFolderItems.folder_id", secondaryjoin="DbFolder.id==DbFolderItems.subfolder_id", uselist=False, remote_side="DbFolder.id")
-    #children = relationship("DbFolder", secondary="bf_folder_items", primaryjoin="DbFolder.id==DbFolderItems.subfolder_id", secondaryjoin="DbFolder.id==DbFolderItems.folder_id", remote_side="DbFolder.id")
 
 
 class DbFolderItems(Base):
@@ -64,6 +61,3 @@ class DbVideo(Base):
     title: Mapped[str] = mapped_column()
     thumb_sheet_cols: Mapped[int] = mapped_column()
     thumb_sheet_rows: Mapped[int] = mapped_column()
-
-    # ORM relationships (objects, not keys)
-    #folders = relationship("DbFolder", secondary="bf_folder_items", primaryjoin="DbVideo.id==DbFolderItems.video_id", secondaryjoin="DbFolder.id==DbFolderItems.folder_id")

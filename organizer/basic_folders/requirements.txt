@@ -1,0 +1,11 @@
+setuptools
+wheel
+SQLAlchemy
+grpclib
+betterproto==2.0.0b6
+
+docopt
+types-docopt
+
+networkx
+types-networkx

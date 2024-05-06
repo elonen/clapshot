@@ -1,7 +1,7 @@
 .PHONY: deps clean test docker test run run-local run-docker default debian-local
 
-#PLUGIN_BIN=../organizer/basic_folders/run-py-org.sh
-PLUGIN_BIN=./org_basic_folders
+PLUGIN_BIN=../organizer/basic_folders/run-py-org.sh
+#PLUGIN_BIN=./org_basic_folders
 #../organizer/basic_folders/_venv/bin/clapshot-organizer-basic-folders
 
 UID=$(shell id -u)

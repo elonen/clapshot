@@ -17,14 +17,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
 
-    install_requires=[
-        'wheel',
-        'docopt',
-        'SQLAlchemy',
-        'grpclib',
-        'betterproto==2.0.0b6',
-        'types-docopt'
-    ],
+    install_requires=[],
     package_data={
         '': ['deps/*.tar.gz'],  # Include the local tar.gz files in the package data
     },
