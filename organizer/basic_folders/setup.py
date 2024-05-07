@@ -19,14 +19,14 @@ setup(
 
     install_requires=[],
     package_data={
-        '': ['deps/*.tar.gz'],  # Include the local tar.gz files in the package data
+        '': ['deps/*.tar.gz'],  # locally built clapshot_grpc
     },
 
     cmdclass={
-        'install': CustomInstall,  # Use the custom install class
+        'install': CustomInstall,
     },
     entry_points='''
         [console_scripts]
-        clapshot-organizer-basic-folders=main:main
+        clapshot-organizer-basic-folders=organizer.main:main
     ''',
 )

@@ -4,7 +4,8 @@ import uuid
 from textwrap import dedent
 from logging import Logger
 
-import networkx
+from typing import List, Tuple, Set
+
 import sqlalchemy
 from sqlalchemy import Engine, text as sqla_text
 from sqlalchemy.orm import Session
@@ -101,29 +102,51 @@ def db_check_and_fix_integrity(dbs: Session, log: Logger):
 def db_check_for_folder_loops(dbs: Session, log: Logger) -> bool:
     """
     Check the folder structure for loops.
-    They shouldn't cause any crashes, but could confuse the user.
+    They can cause root folders to be unreachable, and infinite loops in the UI.
     """
     log.debug("Checking for folder loops...")
 
-    graph: networkx.DiGraph = networkx.DiGraph()
-    rows = dbs.query(DbFolderItems.folder_id, DbFolderItems.subfolder_id).filter(DbFolderItems.subfolder_id != None).all()
-    for folder_id, subfolder_id in rows:
-        graph.add_edge(folder_id, subfolder_id)
+    def find_cycles(edges: List[Tuple[int, int]]) -> List[List[int]]:
+        graph: dict[int,list[int]] = {n: [] for e in edges for n in e}
+        for u, v in edges: graph[u].append(v)
+        visited, rec_stack, cycles = set(), set(), []
 
-    try:
-        cycle = networkx.find_cycle(graph, orientation='original')
+        def dfs(v: int, path: List[int]) -> None:
+            if v in rec_stack:
+                cycles.append(path[path.index(v):])
+                return
+            if v not in visited:
+                visited.add(v)
+                rec_stack.add(v)
+                path.append(v)
+                for n in graph[v]: dfs(n, path)
+                path.pop()
+                rec_stack.remove(v)
 
-        cycle_description = " -> ".join(f"Folder (id: {u})" for u,v,_dir in cycle) + f" -> Folder (id: {cycle[0][0]})"
-        log.warning(f"! Found a folder loop: {cycle_description}")
+        for node in graph:
+            if node not in visited: dfs(node, [])
+        return cycles
 
-        mentioned_folder_ids = set(u for u,v,_dir in cycle)
-        mentioned_folder_objs = dbs.query(DbFolder).filter(DbFolder.id.in_(mentioned_folder_ids)).all()
-        log.warning(f" - Folders involved: {'; '.join(f'#{f.id} ({f.title}) user {f.user_id}' for f in mentioned_folder_objs)}")
+    with dbs.begin():
+        rows = dbs.query(DbFolderItems.folder_id, DbFolderItems.subfolder_id).filter(DbFolderItems.subfolder_id != None).all()
+        if not rows:
+            log.debug("(No folder structure found, skipping loop check.)")
+            return False
 
-        return True
-    except networkx.NetworkXNoCycle:
-        log.debug("No loops detected in the folder structure.")
-        return False
+        if cycles := find_cycles([(r.folder_id, r.subfolder_id) for r in rows]):
+            for i, cyc in enumerate(cycles):
+                cycle_description = " -> ".join(f"Folder (id: {v})" for v in cyc) + f" -> Folder (id: {cyc[0]})"
+                log.error(f"!! Found a folder loop ({i+1} of {len(cycles)}): {cycle_description}")
+                mentioned_folder_objs = dbs.query(DbFolder).filter(DbFolder.id.in_(set(cyc))).all()
+                log.error(f" - Folders involved: {'; '.join(f'#{f.id} (`{f.title}`) user `{f.user_id}`' for f in mentioned_folder_objs)}")
+                log.error(f" -> Breaking the loop now by removing the last edge (from {cyc[-1]} to {cyc[0]})")
+                cnt = dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == cyc[-1], DbFolderItems.subfolder_id == cyc[0]).delete()
+                dbs.flush()
+                assert cnt == 1, "Expected to delete exactly one row"
+            return True
+        else:
+            log.debug("No loops detected in the folder structure.")
+            return False
 
 
 async def db_get_or_create_user_root_folder(dbs: Session, ses: org.UserSessionData, srv: Optional[org.OrganizerOutboundStub], log: Logger) -> DbFolder:

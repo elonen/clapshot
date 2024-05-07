@@ -5,12 +5,12 @@ import re
 from docopt import docopt
 import grpclib.server
 
-from config import VERSION
-from organizer.helpers.logger import make_logger
-from organizer import OrganizerInbound
+from .config import VERSION
+from .helpers.logger import make_logger
+from . import OrganizerInbound
 
 
-async def main():
+async def async_main():
     doc = """
     Clapshot Organizer plugin that implements basic folders for the UI.
 
@@ -56,8 +56,12 @@ async def main():
     logger.info("Organizer stopped listening.")
 
 
-if __name__ == '__main__':
+def main():
     try:
-        asyncio.run(main())
+        asyncio.run(async_main())
     except KeyboardInterrupt:
         print("EXIT signaled.")
+
+
+if __name__ == '__main__':
+    main()

@@ -1,8 +1,6 @@
 import json
 from logging import Logger
 
-import grpclib
-import grpclib.client
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
 
@@ -20,7 +18,6 @@ from .testing_methods import list_tests, run_test
 from .helpers.folders import FoldersHelper
 from .helpers.pages import PagesHelper
 from .helpers.actiondefs import ActiondefsHelper
-from config import VERSION, MODULE_NAME
 
 
 try:

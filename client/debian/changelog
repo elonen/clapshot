@@ -1,4 +1,4 @@
-clapshot-client (0.6.0) bullseye; urgency=low
+clapshot-client (0.6.0) bookworm; urgency=low
 
   * New communication API
   * Support for folders and custom UI views (requires an Organizer plugin in the backend)

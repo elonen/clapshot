@@ -85,8 +85,14 @@ class PagesHelper:
 
             return " ▶ ".join(breadcrumbs_html) if len(breadcrumbs) > 1 else None
 
-        pg_items = [clap.PageItem(folder_listing=folder_listing)]
+        pg_items = []
+
         if html := make_breadcrumbs_html(folder_path):
-            pg_items.insert(0, clap.PageItem(html=html))  # add to first pos
+            pg_items.append(clap.PageItem(html=html))  # add to first pos
+
+        if len(folder_listing.items) == 0:
+            pg_items.append(clap.PageItem(html="<h2>Folder is empty.</h2>"))
+
+        pg_items.append(clap.PageItem(folder_listing=folder_listing))
 
         return org.ClientShowPageRequest(sid=ses.sid, page_items=pg_items)

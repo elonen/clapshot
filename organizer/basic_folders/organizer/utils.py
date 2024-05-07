@@ -1,6 +1,4 @@
 import json
-
-from config import MODULE_NAME, VERSION
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
 

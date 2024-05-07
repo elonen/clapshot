@@ -3,6 +3,14 @@
 UID=$(shell id -u)
 GID=$(shell id -g)
 
+ifeq ($(TARGET_ARCH),)
+  ARCH=$(shell uname -m)
+  PLATFORM_STR =
+else
+  ARCH = $(TARGET_ARCH)
+  PLATFORM_STR = --platform linux/$(TARGET_ARCH)
+endif
+
 
 default:
 	@echo "Make target 'debian-docker' explicitly."
@@ -15,7 +23,7 @@ debian-docker:
 	(cd client; make debian-docker)
 	(cd server; make debian-docker)
 	(cd organizer; make debian-docker)
-	@if [ "$(shell uname -m)" != "x86_64" ]; then \
+	@if [ "${ARCH}" != "x86_64" ]; then \
 		echo "We're running on non-x86_64 architecture. Building x86_64 deb, too."; \
 		(cd server; export TARGET_ARCH=amd64; make debian-docker); \
 		(cd organizer; export TARGET_ARCH=amd64; make debian-docker); \
@@ -50,11 +58,12 @@ run-docker: debian-docker
 	cp server/src/tests/assets/60fps-example.mp4 test/VOLUME/data/incoming/
 	docker run --rm -it -p 0.0.0.0:8080:80 --mount type=bind,source="$$(pwd)"/test/VOLUME,target=/mnt/clapshot-data  clapshot-comb
 
-build-docker-demo: debian-docker
+build-docker-demo: #debian-docker
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
 	$(eval PVER=$(shell jq -r '.version' client/package.json))
 	docker build -t clapshot:${PVER}-demo --build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo .
 	docker build -t clapshot:${PVER}-demo-htadmin --build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htadmin
+
 	docker tag clapshot:${PVER}-demo clapshot:latest-demo
 	docker tag clapshot:${PVER}-demo-htadmin clapshot:latest-demo-htadmin
 	docker tag clapshot:${PVER}-demo elonen/clapshot:${PVER}-demo

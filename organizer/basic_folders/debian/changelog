@@ -1,4 +1,4 @@
-clapshot-organizer-basic-folders (0.6.0) bullseye; urgency=low
+clapshot-organizer-basic-folders (0.6.0) bookworm; urgency=low
 
   * Initial debian packaging
 

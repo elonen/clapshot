@@ -58,4 +58,3 @@ COPY --chown=${UID}:${GID} organizer/basic_folders /build/organizer/basic_folder
 
 WORKDIR /build/organizer/basic_folders
 RUN ln -s ../ dist_deb
- 

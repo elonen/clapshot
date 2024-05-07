@@ -2,9 +2,9 @@ Source: clapshot-organizer-basic-folders
 Section: python
 Priority: optional
 Maintainer: Jarno Elonen <elonen@iki.fi>
-Build-Depends: debhelper (>= 11), dh-virtualenv (>= 1.0), dh-python, python3, python3-setuptools, python3-pip, libprotobuf-dev, protobuf-compiler, python3-dev
+Build-Depends: debhelper (>= 11), dh-virtualenv (>= 1.0), dh-python, python3.11, python3-setuptools, python3-pip, libprotobuf-dev, protobuf-compiler, python3-dev
 Standards-Version: 3.9.5
-X-DH-Virtualenv-Depends: python3-venv
+X-DH-Virtualenv-Depends: python3.11-venv
 Homepage: https://github.com/elonen/clapshot
 
 Package: clapshot-organizer-basic-folders

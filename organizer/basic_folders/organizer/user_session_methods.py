@@ -1,12 +1,13 @@
 import json
 from grpclib import GRPCError
 import grpclib
+import grpclib.client
 from grpclib.const import Status as GrpcStatus
 
 import clapshot_grpc.clapshot as clap
 import clapshot_grpc.clapshot.organizer as org
 
-from config import MODULE_NAME, PATH_COOKIE_NAME, VERSION
+from organizer.config import MODULE_NAME, PATH_COOKIE_NAME, VERSION
 from organizer.utils import parse_json_args
 
 from .database.models import DbFolder
