@@ -230,6 +230,7 @@ mod integration_test
 
     #[test]
     #[traced_test]
+    #[cfg(feature = "include_slow_tests")]
     fn test_video_ingest_and_transcode() -> anyhow::Result<()>
     {
         cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None]

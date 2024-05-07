@@ -44,6 +44,9 @@ path = "src/main.rs"
 name = "clapshot_server"
 path = "src/lib.rs"
 
+[features]
+default = ["include_slow_tests"]
+include_slow_tests = []
 
 [dependencies]
 lib-clapshot-grpc = { path = "../protobuf/libs/rust" }
