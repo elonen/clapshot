@@ -1,10 +1,8 @@
-<!--
-This is all derivative of the codepen and gist linked below. I claim none of it except the structure of the component.
-Any work in here that is original enough to need a license is offered under the MIT license:
-https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
--->
-<script context="module">
-    export let avatarColors = [
+<script context="module" lang="ts">
+
+// Convert a username to a hex color
+export function hexColorForUsername(name: string): string {
+    const AVATAR_COLORS = [
         "#1abc9c",
         "#2ecc71",
         "#3498db",
@@ -21,74 +19,64 @@ https://github.com/IQAndreas/markdown-licenses/blob/master/mit.md
         "#c0392b",
         "#bdc3c7",
     ];
+    let checksum = 0;
+    for (let i=0; i<name.length; i++)
+        checksum += name.charCodeAt(i)*i;
+    let res = AVATAR_COLORS[checksum % AVATAR_COLORS.length];
+    return res;
+}
 
-    // Convert a username to a hex color
-    export function hexColorForUsername(name) {
-        let checksum = 0;
-        for (let i=0; i<name.length; i++)
-            checksum += name.charCodeAt(i)*i;
-        return avatarColors[checksum % avatarColors.length];
-    }
 </script>
 
-<script>
-    export let userFullName;
-    import { onMount } from "svelte";
-    export let width = "32";
-    export let round = true;
-    export let src = null;
+<script lang="ts">
+import { onMount } from "svelte";
 
-    /*
-     * LetterAvatar. Based on https://codepen.io/arturheinze/pen/ZGvOMw, which is based on https://gist.github.com/leecrossley/6027780
-     */
-    function MakeLetterAvatar(name, size) {
-        name = name || "";
-        size = size || 60;
+export let username: string | null = "";
+export let width = "32";
+export let round = true;
+export let src: string | null = null;
 
-        var initials, canvas, context;
+/*
+    * LetterAvatar. Based on https://codepen.io/arturheinze/pen/ZGvOMw, which is based on https://gist.github.com/leecrossley/6027780
+    */
+function MakeLetterAvatar(name: string | null, size: number): string {
+    name = name || "?";
+    size = size || 60;
 
-        var nameSplit = String(name).toUpperCase().replace(".", " ").split(" ");
-        if (nameSplit.length == 1) {
-            initials = nameSplit[0] ? nameSplit[0].charAt(0) : "?";
-        } else {
-            initials = nameSplit[0].charAt(0) + nameSplit[1].charAt(0);
-        }
+    let initials: string;
+    let canvas: HTMLCanvasElement = document.createElement("canvas");
+    let context: CanvasRenderingContext2D = canvas.getContext("2d") ?? new CanvasRenderingContext2D();
 
-        if (window.devicePixelRatio)
-            size = size * window.devicePixelRatio;  // In case display zoomed or retina display
-
-        let checksum = 0;
-        for (let i=0; i<name.length; i++)
-            checksum += name.charCodeAt(i)*i;
-
-        canvas = document.createElement("canvas");
-        canvas.width = size;
-        canvas.height = size;
-        context = canvas.getContext("2d");
-
-        context.fillStyle = hexColorForUsername(name);
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.font = "bold " + Math.round(canvas.width / 2.2) + "px Arial";
-        context.font
-        context.textAlign = "center";
-        context.fillStyle = "#222";
-        context.fillText(initials, size / 2, size / 1.5);
-
-        let dataURI = canvas.toDataURL();
-        canvas = null;
-
-        return dataURI;  // Base64 encoded data url string + colour hex
+    let nameSplit = String(name).toUpperCase().replace(".", " ").split(" ");
+    if (nameSplit.length == 1) {
+        initials = nameSplit[0] ? nameSplit[0].charAt(0) : "?";
+    } else {
+        initials = nameSplit[0].charAt(0) + nameSplit[1].charAt(0);
     }
 
-    const letterAvatar = MakeLetterAvatar(userFullName, parseFloat(width));
+    if (window.devicePixelRatio)
+        size = size * window.devicePixelRatio;  // In case display zoomed or retina display
+    canvas.width = size;
+    canvas.height = size;
 
-    let avatarImage;
-    onMount(() => {
-        avatarImage.src = (src && (src!=="")) ? src : letterAvatar;
-    });
+    context.fillStyle = hexColorForUsername(name);
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.font = "bold " + Math.round(canvas.width / 2.2) + "px Arial";
+    context.textAlign = "center";
+    context.fillStyle = "#222";
+    context.fillText(initials, size / 2, size / 1.5);
+
+    return canvas.toDataURL();  // Base64 encoded data url string + colour hex
+}
+
+const letterAvatar = MakeLetterAvatar(username, parseFloat(width));
+let avatarImage: HTMLImageElement;
+onMount(() => {
+    avatarImage.src = (src && (src!=="")) ? src : letterAvatar;
+});
 </script>
 
-<img bind:this={avatarImage} class:round={round} loading="lazy" alt={userFullName} />
+<img bind:this={avatarImage} class:round={round} loading="lazy" alt={username} />
 
 <style>
     .round {

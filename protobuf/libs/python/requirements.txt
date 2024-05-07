@@ -1,0 +1,4 @@
+protobuf
+grpcio-tools
+setuptools
+betterproto[compiler]==2.0.0b6

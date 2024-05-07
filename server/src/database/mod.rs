@@ -1,14 +1,14 @@
+use diesel::{connection::TransactionManager, migration::Migration};
 use diesel::prelude::*;
-use diesel::r2d2::{ConnectionManager};
+use diesel::r2d2::ConnectionManager;
 use diesel::SqliteConnection;
 use anyhow::{Context, anyhow};
 
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
-use std::path::{Path};
+use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-
-use chrono::offset::Local;
 
 pub mod schema;
 pub mod models;
@@ -17,10 +17,13 @@ pub mod error;
 #[cfg(test)]
 pub mod tests;
 
+mod custom_ops;
+
 use error::{DBError, DBResult, EmptyDBResult};
+use parking_lot::Mutex;
 
 pub type Pool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
-type PooledConnection = r2d2::PooledConnection<ConnectionManager<SqliteConnection>>;
+type PooledConnection = Arc<Mutex<r2d2::PooledConnection<ConnectionManager<SqliteConnection>>>>;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
@@ -36,11 +39,12 @@ fn to_db_res<U>(res: QueryResult<U>) -> DBResult<U> {
     }
 }
 
-
 pub struct DB {
     pool: Pool,
     broken_for_test: AtomicBool,
+    connected: Arc<Mutex<Option<PooledConnection>>>
 }
+
 
 impl DB {
 
@@ -48,7 +52,18 @@ impl DB {
     pub fn connect_db_url( db_url: &str ) -> DBResult<DB> {
         let manager = ConnectionManager::<SqliteConnection>::new(db_url);
         let pool = Pool::builder().max_size(1).build(manager).context("Failed to build DB pool")?;
-        Ok(DB { pool: pool, broken_for_test: AtomicBool::new(false) })
+
+        let db = DB {
+            pool: pool,
+            broken_for_test: AtomicBool::new(false),
+            connected: Arc::new(Mutex::new(None))
+        };
+
+        diesel::sql_query("PRAGMA foreign_keys = ON;")
+            .execute(&mut *db.conn()?.lock())
+            .context("Failed to enable foreign keys")?;
+
+        Ok(db)
     }
 
     /// Connect to SQLite database with a file path
@@ -58,309 +73,172 @@ impl DB {
         DB::connect_db_url(&db_url)
     }
 
-
     /// Get a connection from the pool
     pub fn conn(&self) ->  DBResult<PooledConnection> {
+        // For testing
         if self.broken_for_test.load(std::sync::atomic::Ordering::Relaxed) {
             let bad_pool = Pool::builder().build(ConnectionManager::<SqliteConnection>::new("sqlite:///dev/urandom")).context("Failed to build 'broken' DB pool")?;
-            return bad_pool.get().map_err(|e| anyhow!("Failed to get connection from pool: {:?}", e).into());
+            return bad_pool.get()
+                .map(|v| Arc::new(Mutex::new(v)))
+                .map_err(|e| anyhow!("Failed to get connection from pool: {:?}", e).into());
         };
-        self.pool.get().map_err(|e| anyhow!("Failed to get connection from pool: {:?}", e).into())
+
+        // Use cached connection if available (e.g. for transactions)
+        if let Some(conn) = self.connected.lock().as_ref() {
+            return Ok(conn.clone());
+        }
+
+        // Otherwise get a new connection from the pool
+        let res = self.pool.get()
+            .map(|v| Arc::new(Mutex::new(v)))
+            .map_err(|e| DBError::Other(anyhow!("Failed to get connection from pool: {:?}", e)))?;
+        self.connected.lock().replace(res.clone());
+
+        Ok(res)
     }
 
-    // Check if database is up-to-date compared to the embedded migrations
-    pub fn migrations_needed(&self) -> DBResult<bool> {
-        let mut conn = self.conn()?;
-        MigrationHarness::has_pending_migration(&mut conn, MIGRATIONS)
-            .map_err(|e| anyhow!("Failed to check migrations: {:?}", e).into())
+    /// Return list of any pending migrations
+    pub fn pending_migration_names(&self) -> DBResult<Vec<String>> {
+        Ok(MigrationHarness::pending_migrations(&mut *self.conn()?.lock(), MIGRATIONS)
+            .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?
+            .iter().map(|m| m.name().to_string()).collect())
     }
 
-    /// Run DB migrations (or create DB if empty)
-    pub fn run_migrations(&self) -> EmptyDBResult
-    {
-        let mut conn = self.conn()?;
-        let migr = conn.run_pending_migrations(MIGRATIONS).map_err(|e| anyhow!("Failed to apply migrations: {:?}", e))?;
-        for m in migr { tracing::info!("Applied DB migration: {}", m); }
-        Ok(())
+    /// Run a named migration
+    pub fn apply_migration(&self, migration_name: &str) -> EmptyDBResult {
+        self.conn()?.lock().transaction(|lock| {
+            let pending = MigrationHarness::pending_migrations(&mut *lock, MIGRATIONS)
+                .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?;
+            let migration = pending.iter().find(|m| m.name().to_string() == migration_name)
+                .ok_or_else(|| anyhow!("Migration not found: {}", migration_name))?;
+
+            tracing::info!("Applying migration: {}", migration.name());
+            diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(&mut *lock)?;
+            MigrationHarness::run_migration(&mut *lock, &**migration)
+                .map_err(|e| anyhow!("Failed to apply migration: {:?}", e))?;
+            diesel::sql_query("PRAGMA foreign_keys = ON;").execute(&mut *lock)?;
+            Ok(())
+        })
     }
 
     /// "Corrupt" the connection for testing so that subsequent queries fail
     pub fn break_db(&self) {
         self.broken_for_test.store(true, std::sync::atomic::Ordering::Relaxed);
     }
-
-    // -----------------------------------------------------------------------------------------------
-
-    /// Add a new video to the database.
-    /// 
-    /// # Arguments
-    /// * `video` - Video object
-    /// 
-    /// # Returns
-    /// * `sql.Integer` - ID of the new video
-    pub fn add_video(&self, video: &models::VideoInsert) -> DBResult<i32>
-    {
-        use schema::videos::dsl::*;
-        let res = diesel::insert_into(videos)
-            .values(video).returning(id).get_result(&mut self.conn()?)?;
-        Ok(res)
-    }
-
-    /// Set the recompressed flag for a video.
-    /// 
-    /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
-    pub fn set_video_recompressed(&self, vh: &str) -> EmptyDBResult
-    {
-        use schema::videos::dsl::*;
-        diesel::update(videos.filter(video_hash.eq(vh)))
-            .set(recompression_done.eq(Local::now().naive_local()))
-            .execute(&mut self.conn()?)?;
-        Ok(())
-    }
-
-    /// Set thumbnail sheet dimensions for a video.
-    /// 
-    /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
-    /// * `width` - Width of the thumbnail sheet
-    /// * `height` - Height of the thumbnail sheet
-    pub fn set_video_thumb_sheet_dimensions(&self, vh: &str, width: u32, height: u32) -> EmptyDBResult
-    {
-        use schema::videos::dsl::*;
-        diesel::update(videos.filter(video_hash.eq(vh)))
-            .set(thumb_sheet_dims.eq(format!("{width}x{height}")))
-            .execute(&mut self.conn()?)?;
-        Ok(())
-    }
-
-    /// Get a video from the database.
-    /// 
-    /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
-    ///
-    /// # Returns
-    /// * `models::Video` - Video object
-    /// * `Err(NotFound)` - Video not found
-    pub fn get_video(&self, vh: &str) -> DBResult<models::Video>
-    {
-        use models::*;
-        use schema::videos::dsl::*;
-        to_db_res(videos.filter(video_hash.eq(vh)).first::<Video>(&mut self.conn()?))
-    }
-
-    /// Delete a video and all its comments from the database.
-    ///     
-    /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
-    /// 
-    /// # Returns
-    /// * `EmptyResult`
-    /// * `Err(NotFound)` - Video not found
-    pub fn del_video_and_comments(&self, vh: &str) -> EmptyDBResult
-    {
-        use schema::videos::dsl as sv;
-        use schema::comments::dsl as sc;
-        let conn = &mut self.conn()?;
-        conn.transaction::<_, diesel::result::Error, _>(|conn| {
-            diesel::delete(sv::videos.filter(sv::video_hash.eq(vh))).execute(conn)?;
-            diesel::delete(sc::comments.filter(sc::video_hash.eq(vh))).execute(conn)?;
-            Ok(())
-        })?;
-        Ok(())
-    }
-
-    /// Rename a video (title).
-    /// 
-    /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
-    /// * `new_name` - New title
-    /// 
-    /// # Returns
-    /// * `EmptyResult`
-    /// * `Err(NotFound)` - Video not found
-    /// * `Err(Other)` - Other error
-    pub fn rename_video(&self, vh: &str, new_name: &str) -> EmptyDBResult
-    {
-        use schema::videos::dsl::*;
-        diesel::update(videos.filter(video_hash.eq(vh)))
-            .set(title.eq(new_name))
-            .execute(&mut self.conn()?)?;
-        Ok(())
-    }
-    
-    /// Get all videos for a user.
-    /// 
-    /// # Arguments
-    /// * `user_id` - User ID
-    /// 
-    /// # Returns
-    /// * `Vec<models::Video>` - List of Video objects
-    pub fn get_all_user_videos(&self, user_id: &str) -> DBResult<Vec<models::Video>>
-    {
-        use models::*;
-        use schema::videos::dsl::*;
-        to_db_res(videos.filter(added_by_userid.eq(user_id)).load::<Video>(&mut self.conn()?))
-    }
-
-    /// Get all videos that don't have thumbnails yet.
-    /// 
-    /// # Returns
-    /// * `Vec<models::Video>` - List of Video objects
-    pub fn get_all_videos_without_thumbnails(&self) -> DBResult<Vec<models::Video>>
-    {
-        use models::*;
-        use schema::videos::dsl::*;
-        to_db_res(videos.filter(thumb_sheet_dims.is_null()).load::<Video>(&mut self.conn()?))
-    }
-
-    /// Add a new comment on a video.
-    /// 
-    /// # Arguments
-    /// * `comment` - Comment object
-    /// 
-    /// # Returns
-    /// * `i32` - ID of the new comment
-    pub fn add_comment(&self, cmt: &models::CommentInsert) -> DBResult<i32>
-    {
-        use schema::comments::dsl::*;
-        let res = diesel::insert_into(comments)
-            .values(cmt).returning(id).get_result(&mut self.conn()?)?;
-        Ok(res)
-    }
-
-    /// Get a comment from the database.
-    /// 
-    /// # Arguments
-    /// * `comment_id` - ID of the comment
-    /// 
-    /// # Returns
-    /// * `models::Comment` - Comment object
-    /// * `Err(NotFound)` - Comment not found
-    pub fn get_comment(&self, comment_id: i32 ) -> DBResult<models::Comment>
-    {
-        use models::*;
-        use schema::comments::dsl::*;
-        to_db_res(comments.filter(id.eq(comment_id)).first::<Comment>(&mut self.conn()?))
-    }
-
-    /// Get all comments for a video.
-    /// 
-    /// # Arguments
-    /// * `vh` - Hash (unique identifier) of the video
-    /// 
-    /// # Returns
-    /// * `Vec<models::Comment>` - List of Comment objects
-    pub fn get_video_comments(&self, vh: &str ) -> DBResult<Vec<models::Comment>>
-    {
-        use models::*;
-        use schema::comments::dsl::*;
-        Ok(comments.filter(video_hash.eq(vh)).load::<Comment>(&mut self.conn()?)?)
-    }
-
-    /// Delete a comment from the database.
-    /// 
-    /// # Arguments
-    /// * `comment_id` - ID of the comment
-    /// 
-    /// # Returns
-    /// * `Res<bool>` - True if comment was deleted, false if it was not found
-    pub fn del_comment(&self, comment_id: i32 ) -> DBResult<bool>
-    {
-        use schema::comments::dsl::*;
-        let res = diesel::delete(comments.filter(id.eq(comment_id))).execute(&mut self.conn()?)?;
-        Ok(res > 0)
-    }
-
-    /// Edit a comment (change text).
-    /// 
-    /// # Arguments
-    /// * `comment_id` - ID of the comment
-    /// * `new_comment` - New text of the comment
-    /// 
-    /// # Returns
-    /// * `Res<bool>` - True if comment was edited, false if it was not found
-    pub fn edit_comment(&self, comment_id: i32, new_comment: &str) -> DBResult<bool>
-    {
-        use schema::comments::dsl::*;
-        let res = diesel::update(comments.filter(id.eq(comment_id)))
-            .set((comment.eq(new_comment), edited.eq(diesel::dsl::now))).execute(&mut self.conn()?)?;
-        Ok(res > 0)
-    }
-
-    /// Add a new message to the database.
-    /// 
-    /// # Arguments
-    /// * `msg` - Message object
-    /// 
-    /// # Returns
-    /// * `models::Message` - Message object, with ID and timestamp set
-    pub fn add_message(&self, msg: &models::MessageInsert) -> DBResult<models::Message>
-    {
-        use schema::messages::dsl::*;
-        assert!(msg.event_name != "progress", "Must not add progress messages to database");
-        let res = diesel::insert_into(messages)
-            .values(msg).get_result(&mut self.conn()?)?;
-        Ok(res)
-    }
-
-    /// Get a message from the database.
-    /// 
-    /// # Arguments
-    /// * `msg_id` - ID of the message
-    /// 
-    /// # Returns
-    /// * `models::Message` - Message object
-    /// * `Err(NotFound)` - Message not found
-    pub fn get_message(&self, msg_id: i32) -> DBResult<models::Message>
-    {
-        use models::*;
-        use schema::messages::dsl::*;
-        to_db_res(messages.filter(id.eq(msg_id)).first::<Message>(&mut self.conn()?))
-    }
-
-    /// Get all messages for a user.
-    /// 
-    /// # Arguments
-    /// * `uid` - User ID
-    /// 
-    /// # Returns
-    /// * `Vec<models::Message>` - List of Message objects
-    pub fn get_user_messages(&self, uid: &str) -> DBResult<Vec<models::Message>>
-    {
-        use models::*;
-        use schema::messages::dsl::*;
-        Ok(messages.filter(user_id.eq(uid)).load::<Message>(&mut self.conn()?)?)
-    }
-
-    /// Set the seen status of a message.
-    /// 
-    /// # Arguments
-    /// * `msg_id` - ID of the message
-    /// * `new_status` - New status
-    /// 
-    /// # Returns
-    /// * `Res<bool>` - True if message was found and updated, false if it was not found
-    pub fn set_message_seen(&self, msg_id: i32, new_status: bool) -> DBResult<bool>
-    {
-        use schema::messages::dsl::*;
-        let res = diesel::update(messages.filter(id.eq(msg_id)))
-            .set(seen.eq(new_status)).execute(&mut self.conn()?)?;
-        Ok(res > 0)
-    }
-
-    /// Delete a message from the database.
-    /// 
-    /// # Arguments
-    /// * `msg_id` - ID of the message
-    /// 
-    /// # Returns
-    /// * `Res<bool>` - True if message was deleted, false if it was not found
-    pub fn del_message(&self, msg_id: i32) -> DBResult<bool>
-    {
-        use schema::messages::dsl::*;
-        let res = diesel::delete(messages.filter(id.eq(msg_id))).execute(&mut self.conn()?)?;
-        Ok(res > 0)
-    }
-
 }
+
+// ---------------- Transactions ----------------
+
+pub fn begin_transaction(conn: &PooledConnection) -> DBResult<()> {
+    diesel::r2d2::PoolTransactionManager::begin_transaction(&mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to begin transaction: {:?}", e).into())
+}
+
+pub fn commit_transaction(conn: &PooledConnection) -> DBResult<()> {
+    diesel::r2d2::PoolTransactionManager::commit_transaction(&mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to commit transaction: {:?}", e).into())
+}
+
+pub fn rollback_transaction(conn: &PooledConnection) -> DBResult<()> {
+    diesel::r2d2::PoolTransactionManager::rollback_transaction(&mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to rollback transaction: {:?}", e).into())
+}
+
+// ---------------- Savepoints ----------------
+
+/// Start a new named savepoint
+pub fn create_savepoint(conn: &PooledConnection, name: &str) -> DBResult<()> {
+    diesel::RunQueryDsl::execute(diesel::sql_query(&format!("SAVEPOINT {};", name)), &mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to create savepoint: {:?}", e).into())
+        .map(|_| ())    // discard row count
+}
+
+// Release (commit if not explicitly rolled back) a savepoint
+pub fn release_savepoint(conn: &PooledConnection, name: &str) -> DBResult<()> {
+    diesel::RunQueryDsl::execute(diesel::sql_query(&format!("RELEASE SAVEPOINT {};", name)), &mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to release savepoint: {:?}", e).into())
+        .map(|_| ())
+}
+
+/// Rollback to a savepoint. Remember to release the savepoint afterwards!
+pub fn rollback_to_savepoint(conn: &PooledConnection, name: &str) -> DBResult<()> {
+    diesel::RunQueryDsl::execute(diesel::sql_query(&format!("ROLLBACK TO SAVEPOINT {};", name)), &mut *conn.lock())
+        .map_err(|e| anyhow!("Failed to rollback to savepoint: {:?}", e).into())
+        .map(|_| ())
+}
+
+// ---------------- Query traits ----------------
+
+pub struct DBPaging {
+    pub page_num: u32,
+    pub page_size: std::num::NonZeroU32,
+}
+
+impl DBPaging {
+    pub fn offset(&self) -> i64 {
+        (self.page_num * self.page_size.get()) as i64
+    }
+    pub fn limit(&self) -> i64 {
+        self.page_size.get() as i64
+    }
+}
+
+impl Default for DBPaging {
+    fn default() -> Self {
+        Self { page_num: 0, page_size: unsafe { std::num::NonZeroU32::new_unchecked(u32::MAX) } }
+    }
+}
+
+
+pub trait DbBasicQuery<P, I>: Sized
+    where P: std::str::FromStr + Send + Sync + Clone,
+          I: Send + Sync,
+{
+    /// Insert a new object into the database.
+    fn insert(db: &DB, item: &I) -> DBResult<Self>;
+
+    /// Insert multiple objects into the database.
+    fn insert_many(db: &DB, items: &[I]) -> DBResult<Vec<Self>>;
+
+    /// Get a single object by its primary key.
+    /// Returns None if no object with the given ID was found.
+    fn get(db: &DB, pk: &P) -> DBResult<Self>;
+
+    /// Get multiple objects by their primary keys.
+    fn get_many(db: &DB, ids: &[P]) -> DBResult<Vec<Self>>;
+
+    /// Get all nodes of type Self, with no filtering, paginated.
+    fn get_all(db: &DB, pg: DBPaging) -> DBResult<Vec<Self>>;
+
+    /// Update objects, replaces the entire object except for the primary key.
+    fn update_many(db: &DB, items: &[Self]) -> DBResult<Vec<Self>>;
+
+    /// Delete a single object from the database.
+    fn delete(db: &DB, id: &P) -> DBResult<bool>;
+
+    /// Delete multiple objects from the database.
+    fn delete_many(db: &DB, ids: &[P]) -> DBResult<usize>;
+}
+
+mod basic_query;
+crate::implement_basic_query_traits!(models::Video, models::VideoInsert, videos, String, added_time.desc());
+crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32, created.desc());
+crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32, created.desc());
+
+
+pub trait DbQueryByUser: Sized {
+    /// Get all objects of type Self that belong to given user.
+    fn get_by_user(db: &DB, uid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
+}
+crate::implement_query_by_user_traits!(models::Video, videos, added_time.desc());
+crate::implement_query_by_user_traits!(models::Comment, comments, created.desc());
+crate::implement_query_by_user_traits!(models::Message, messages, created.desc());
+
+
+
+pub trait DbQueryByVideo: Sized {
+    /// Get all objects of type Self that are linked to given video.
+    fn get_by_video(db: &DB, vid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
+}
+crate::implement_query_by_video_traits!(models::Comment, comments, video_id, created.desc());
+crate::implement_query_by_video_traits!(models::Message, messages, video_id, created.desc());

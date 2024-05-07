@@ -1,7 +1,7 @@
-use std::{process::Command};
+use std::{collections::HashMap, process::Command};
 use std::sync::atomic::Ordering;
 use threadpool::ThreadPool;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use serde_json;
 use crossbeam_channel::{Sender, Receiver, RecvError};
 use tracing;
@@ -21,12 +21,13 @@ pub struct Metadata {
     pub fps: Decimal,
     pub bitrate: u32,
     pub metadata_all: String,
+    pub upload_cookies: HashMap<String, String>    // Cookies from the upload, not read from the file
 }
 
 pub type MetadataResult = Result<Metadata, DetailedMsg>;
 
 /// Run Mediainfo shell command and return the output
-/// 
+///
 /// # Arguments
 /// * `file_path` - Path to the file to be analyzed
 fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
@@ -63,7 +64,7 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
     match mediainfo_res
     {
         Ok(output) => {
-            if output.status.success() {                
+            if output.status.success() {
                 {
                     let json_res = String::from_utf8(output.stdout)
                         .map_err(|e| e.to_string())?;
@@ -85,7 +86,7 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
 /// Parse mediainfo JSON output and return the metadata object.
 /// Possibly returned error message contains details to be sent to the client
 /// in the DetailedMsg struct.
-/// 
+///
 /// # Arguments
 /// * `json` - Mediainfo JSON output
 /// * `args` - Metadata request arguments
@@ -120,7 +121,8 @@ fn extract_variables<F>(json: serde_json::Value, args: &IncomingFile, get_file_s
         orig_codec: video_track["Format"].as_str().ok_or("No codec found")?.to_string(),
         fps:  Decimal::from_str(fps).map_err(|_| format!("Invalid FPS: {}", fps))?,
         bitrate: bitrate,
-        metadata_all: json.to_string()
+        metadata_all: json.to_string(),
+        upload_cookies: args.cookies.clone()
     })
 }
 
@@ -135,7 +137,7 @@ fn read_metadata_from_file(args: &IncomingFile) -> Result<Metadata, String>
 /// When a new file is received, it is processed and the result is sent to outq.
 /// Starts a thread pool of `n_workers` workers to support simultaneous processing of multiple files.
 /// Exits when inq is closed or outq stops accepting messages.
-/// 
+///
 /// # Arguments
 /// * `inq` - channel to receive new files to process
 /// * `outq` - channel to send results to
@@ -174,7 +176,7 @@ pub fn run_forever(inq: Receiver<IncomingFile>, outq: Sender<MetadataResult>, n_
         }
     }
 
-    tracing::info!("Exiting.");
+    tracing::debug!("Exiting.");
 }
 
 
@@ -195,13 +197,15 @@ fn test_fixture(has_bitrate: bool, has_fps: bool) -> (IncomingFile, serde_json::
 
     let args = IncomingFile {
         file_path: PathBuf::from("test.mp4"),
-        user_id: "test_user".to_string()};
+        user_id: "test_user".to_string(),
+        cookies: Default::default()
+    };
 
     (args, json)
 }
 
 #[test]
-fn test_extract_variables_ok() 
+fn test_extract_variables_ok()
 {
     let (args, json) = test_fixture(true, true);
     let metadata = extract_variables(json, &args, || Ok(1000)).unwrap();
@@ -213,7 +217,7 @@ fn test_extract_variables_ok()
 }
 
 #[test]
-fn test_extract_variables_missing_bitrate() 
+fn test_extract_variables_missing_bitrate()
 {
     let (args, json) = test_fixture(false, true);
     let metadata = extract_variables(json, &args, || Ok(1000)).unwrap();

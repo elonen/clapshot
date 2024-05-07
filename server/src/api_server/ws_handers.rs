@@ -3,7 +3,11 @@
 #![allow(unused_imports)]
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use std::str::FromStr;
+use lib_clapshot_grpc::proto::client::ClientToServerCmd;
+use lib_clapshot_grpc::proto::client::client_to_server_cmd::{ListMyVideos, OpenVideo, DelVideo, RenameVideo, EditComment, DelComment, JoinCollab, LeaveCollab, CollabReport, ReorderItems};
+use parking_lot::RwLock;
 type WsMsg = warp::ws::Message;
 
 type Res<T> = anyhow::Result<T>;
@@ -18,228 +22,231 @@ use data_url::{DataUrl, mime};
 use sha2::{Sha256, Digest};
 use hex;
 
-use super::WsSessionArgs;
+use super::user_session::{self, AuthzTopic, org_authz_with_default};
+
+use super::UserSession;
 
 use crate::api_server::server_state::ServerState;
+use crate::api_server::user_session::Topic;
 use crate::database::error::DBError;
-use crate::database::{models, DB};
+use crate::database::{models, DB, DbBasicQuery, DbQueryByUser, DbQueryByVideo, DBPaging};
 use crate::database::schema::comments::drawing;
+use crate::{send_user_error, send_user_ok, client_cmd};
+
+use lib_clapshot_grpc::proto;
+
+use proto::org::authz_user_action_request as authz_req;
 
 
-// ---------------------------------------------------------------------
-// Result sending helpers
-// ---------------------------------------------------------------------
+/// Get video by ID from DB, or send user error.
+/// Return None if video not found and error was sent, or Some(video) if found.
+async fn get_video_or_send_error(video_id: Option<&str>, ses: &Option<&mut UserSession>, server: &ServerState) -> Res<Option<models::Video>> {
+    let video_id = video_id.ok_or(anyhow!("video id missing"))?;
 
-enum Topic<'a> {
-    Video(&'a str),
-    Comment(i32),
-    None
+    match models::Video::get(&server.db, &video_id.into()) {
+        Err(DBError::NotFound()) => {
+            if let Some(ses) = ses {
+                send_user_error!(ses.user_id, server, Topic::Video(video_id), "No such video.");
+            };
+            Ok(None)
+        }
+        Err(e) => { bail!(e); }
+        Ok(v) => { Ok(Some(v)) }
+    }
 }
-
-macro_rules! send_user_msg(
-    ($event_name:expr, $ses:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => {
-        let (comment_id, video_hash) = match $topic {
-            Topic::Video(video_hash) => (None, Some(video_hash.into())),
-            Topic::Comment(comment_id) => (Some(comment_id.into()), None),
-            Topic::None => (None, None)
-        };
-        $ses.push_notify_message(&models::MessageInsert {
-            event_name: $event_name.into(),
-            user_id: $ses.user_id.into(),
-            ref_comment_id: comment_id,
-            seen: false,
-            ref_video_hash: video_hash,
-            message: $msg.into(),
-            details: $details.into()
-        }, $persist)?;
-    };
-    ($event_name:expr, $ses:expr, $topic:expr, $msg:expr, $persist:expr) => {
-        send_user_error!($ses, $topic, $msg, String::new(), $persist)
-    };
-    ($event_name:expr, $ses:expr, $topic:expr, $msg:expr) => {
-        send_user_error!($ses, $topic, $msg, String::new(), false)
-    };
-);
-
-macro_rules! send_user_error(
-    ($ses:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => { send_user_msg!("error", $ses, $topic, $msg, $details, $persist); };
-    ($ses:expr, $topic:expr, $msg:expr, $persist:expr) => { send_user_error!($ses, $topic, $msg, String::new(), $persist); };
-    ($ses:expr, $topic:expr, $msg:expr) => { send_user_error!($ses, $topic, $msg, String::new(), false); };
-);
-
-macro_rules! send_user_ok(
-    ($ses:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => { send_user_msg!("ok", $ses, $topic, $msg, $details, $persist); };
-    ($ses:expr, $topic:expr, $msg:expr, $persist:expr) => { send_user_ok!($ses, $topic, $msg, String::new(), $persist); };
-    ($ses:expr, $topic:expr, $msg:expr) => { send_user_ok!($ses, $topic, $msg, String::new(), false); };
-);
 
 // ---------------------------------------------------------------------
 // Command handlers
 // ---------------------------------------------------------------------
 
 /// Send user a list of all videos they have.
-pub async fn msg_list_my_videos(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let mut videos = ses.server.db.get_all_user_videos(&ses.user_id)?;
-    videos.sort_by_cached_key(|v| -v.added_time.and_utc().timestamp_millis());    // newest first
-    let videos = videos.into_iter().map(|v| {
-            let mut fields = v.to_json()?;
-            if let Some(sheet_dims) = v.thumb_sheet_dims {
-                let (sheet_w, sheet_h) = sheet_dims.split_once('x').ok_or(anyhow!("Invalid sheet dims"))?;
-                fields["thumb_sheet_cols"] = json!(sheet_w.parse::<u32>()?);
-                fields["thumb_sheet_rows"] = json!(sheet_h.parse::<u32>()?);
-                fields["thumb_url"] = json!(format!("{}/videos/{}/thumbs/thumb.webp", ses.server.url_base, &v.video_hash));
-                fields["thumb_sheet_url"] = json!(format!("{}/videos/{}/thumbs/sheet-{}.webp", ses.server.url_base, &v.video_hash, sheet_dims));
-            };
-            Ok(fields)
-        }).collect::<Res<Vec<serde_json::Value>>>()?;
+pub async fn msg_list_my_videos(data: &ListMyVideos , ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    org_authz_with_default(&ses.org_session, "list videos", true, server,
+        &ses.organizer, true, AuthzTopic::Other(None, authz_req::other_op::Op::ViewHome)).await?;
 
+    // Try to delegate request to Organizer.
+    if let Some(org) = &ses.organizer {
+        let req = proto::org::NavigatePageRequest {
+            ses: Some(ses.org_session.clone()),
+        };
+        match org.lock().await.navigate_page(req).await {
+            Err(e) => {
+                if e.code() == tonic::Code::Unimplemented {
+                    tracing::debug!("Organizer doesn't implement navigate_page(). Using default.");
+                } else {
+                    tracing::error!(err=?e, "Error in organizer navigate_page() call");
+                    anyhow::bail!("Error in navigate_page() organizer call: {:?}", e);
+                }
+            },
+            Ok(res) => {
+                server.emit_cmd(
+                    client_cmd!(ShowPage, {
+                        page_items: res.into_inner().page_items,
+                    }),
+                    super::SendTo::UserSession(&ses.sid))?;
+                return Ok(());
+            }
+        }
+    }
 
-    ses.emit_cmd("user_videos", &json!({
-            "username": ses.user_name,
-            "user_id": ses.user_id,
-            "videos": videos }),
-        super::SendTo::CurSession())?;
+    // Organizer didn't handle this, so return a default listing.
+    let videos = models::Video::get_by_user(&server.db, &ses.user_id, DBPaging::default())?;
+    let h_txt = if videos.is_empty() {
+        "<h2>You have no videos yet.</h2>"
+    } else {
+        "<h2>All your videos</h2>"
+    };
+    let heading = proto::PageItem{ item: Some(proto::page_item::Item::Html(h_txt.into()))};
+    let listing = crate::grpc::folder_listing_for_videos(&videos, &server.url_base);
+    let page = vec![heading, listing];
+
+    server.emit_cmd(
+        client_cmd!(ShowPage, { page_items: page }),
+        super::SendTo::UserSession(&ses.sid))?;
     Ok(())
 }
+
 
 /// User opens a video.
 /// Send them the video info and all comments related to it.
 /// Register the session as a viewer of the video (video_session_guard).
-pub async fn msg_open_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let video_hash = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
-    match ses.server.db.get_video(video_hash) {
-        Err(DBError::NotFound()) => {
-            send_user_error!(ses, Topic::Video(video_hash), "No such video.");
-        }
-        Err(e) => { bail!(e); }
-        Ok(v) => {
-            ses.video_session_guard = Some(ses.server.link_session_to_video(video_hash, ses.sender.clone()));
-            let mut fields = v.to_json()?;
-
-            // Use transcoded or orig video?
-            let (file, uri) = match v.recompression_done {
-                Some(_) => Ok(("video.mp4".into(), "video.mp4".into())),
-                None => match &v.orig_filename {
-                    Some(f) => Ok((format!("orig/{}", f), format!("orig/{}", urlencoding::encode(f)))),
-                    None => Err(anyhow!("No video file"))
-                }}?;
-
-            fields["video_url"] = json!(format!("{}/videos/{}/{}", ses.server.url_base, &v.video_hash, uri));
-            ses.emit_cmd("open_video", &fields, super::SendTo::CurSession() )?;
-
-            for c in ses.server.db.get_video_comments(video_hash)? {
-                let cid = c.id;
-                if let Err(e) = ses.emit_new_comment(c, super::SendTo::CurSession()).await {
-                    tracing::error!("Error sending comment: {}", e);
-                    send_user_error!(ses, Topic::Comment(cid), format!("Error sending comment #{cid}: {:?}", e));
-                }
-            }
-        }
-    }
-    ses.cur_video_hash = Some(video_hash.into());
-    Ok(())
-}
-
-pub async fn msg_del_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let video_hash = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
-    match ses.server.db.get_video(video_hash) {
-        Ok(v) => {
-            if Some(ses.user_id.to_string()) != v.added_by_userid && ses.user_id != "admin" {
-                send_user_error!(ses, Topic::Video(video_hash), "Video not owned by you. Cannot delete.");
-            } else {
-                ses.server.db.del_video_and_comments(video_hash)?;
-                let mut details = format!("Added by {:?} ({:?}) on {}. Filename was {:?}.",
-                    v.added_by_username, v.added_by_userid, v.added_time, v.orig_filename);
-
-                fn backup_video_db_row(server: &ServerState, v: &models::Video) -> Res<()> {
-                    let backup_file = server.videos_dir.join(v.video_hash.clone()).join("db_backup.json");
-                    if backup_file.exists() {
-                        std::fs::remove_file(&backup_file)?;
-                    }
-                    let json_str = serde_json::to_string_pretty(&v)?;
-                    std::fs::write(&backup_file, json_str)?;
-                    Ok(())
-                }
-
-                fn move_video_to_trash(server: &ServerState, video_hash: &str) -> Res<()>
-                {
-                    let video_dir = server.videos_dir.join(video_hash);
-                    let trash_dir = server.videos_dir.join("trash");
-                    if !trash_dir.exists() {
-                        std::fs::create_dir(&trash_dir)?;
-                    }
-                    let hash_and_datetime = format!("{}_{}", video_hash, chrono::Utc::now().format("%Y%m%d-%H%M%S"));
-                    let video_trash_dir = trash_dir.join(hash_and_datetime);
-                    std::fs::rename(&video_dir, &video_trash_dir)?;
-                    Ok(())
-                }
-
-                let mut cleanup_errors = false;
-                if let Err(e) = backup_video_db_row(&ses.server, &v) {
-                    details.push_str(&format!(" WARNING: DB row backup failed: {:?}.", e));
-                    cleanup_errors = true;
-
-                }
-                if let Err(e) = move_video_to_trash(&ses.server, video_hash) {
-                    details.push_str(&format!(" WARNING: Move to trash failed: {:?}.", e));
-                    cleanup_errors = true;
-                }
-
-                send_user_ok!(ses, Topic::Video(video_hash),
-                    if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
-                    details, true);
-            }
-        }
-        Err(DBError::NotFound()) => {
-            send_user_error!(ses, Topic::Video(video_hash), "No such video. Cannot delete.");
-        }
-        Err(e) => { bail!(e); }
+pub async fn msg_open_video(data: &OpenVideo, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    if let Some(v) = get_video_or_send_error(Some(&data.video_id), &Some(ses), server).await? {
+        org_authz_with_default(&ses.org_session,
+            "open video", true, server, &ses.organizer,
+            true, AuthzTopic::Video(&v, authz_req::video_op::Op::View)).await?;
+        send_open_video_cmd(server, &ses.sid, &v.id).await?;
+        ses.cur_video_id = Some(v.id);
     }
     Ok(())
 }
 
-pub async fn msg_rename_video(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let video_hash = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
-    let new_name = data["new_name"].as_str().ok_or(anyhow!("new_name missing"))?;
 
-    match ses.server.db.get_video(video_hash) {
-        Ok(v) => {
-            if Some(ses.user_id.to_string()) != v.added_by_userid && ses.user_id != "admin" {
-                send_user_error!(ses, Topic::Video(video_hash), "Video not owned by you. Cannot rename.");
-            } else {
-                let new_name = new_name.trim();
-                if new_name.is_empty() || !new_name.chars().any(|c| c.is_alphanumeric()) {
-                    send_user_error!(ses, Topic::Video(video_hash), "Invalid video name (must have letters/numbers)");
-                    return Ok(());
-                }
-                if new_name.len() > 160 {
-                    send_user_error!(ses, Topic::Video(video_hash), "Video name too long (max 160)");
-                    return Ok(());
-                }
-                ses.server.db.rename_video(video_hash, new_name)?;
-                send_user_ok!(ses, Topic::Video(video_hash), "Video renamed.",
-                    format!("New name: '{}'", new_name), true);
+pub async fn send_open_video_cmd(server: &ServerState, session_id: &str, video_id: &str) -> Res<()> {
+    server.link_session_to_video(session_id, video_id)?;
+    let v = models::Video::get(&server.db, &video_id.into())?.to_proto3(&server.url_base);
+    if v.playback_url.is_none() {
+        return Err(anyhow!("No video file"));
+    }
+    server.emit_cmd(
+        client_cmd!(OpenVideo, {video: Some(v)}),
+        super::SendTo::UserSession(session_id))?;
+    let mut cmts = vec![];
+    for mut c in models::Comment::get_by_video(&server.db, video_id, DBPaging::default())? {
+        server.fetch_drawing_data_into_comment(&mut c).await?;
+        cmts.push(c.to_proto3());
+    }
+    server.emit_cmd(
+        client_cmd!(AddComments, {comments: cmts}),
+        super::SendTo::UserSession(session_id))?;
+    Ok(())
+}
+
+
+pub async fn del_video_and_cleanup(video_id: &str, ses: Option<&mut UserSession>, server: &ServerState) -> Res<()> {
+    if let Some(v) = get_video_or_send_error(Some(video_id), &ses, server).await? {
+
+        // Check authorization against user session, if provided
+        if let Some(ses) = &ses {
+            let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
+            org_authz_with_default(&ses.org_session, "delete video", true, server, &ses.organizer,
+                default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Delete)).await?;
+        }
+
+        models::Video::delete(&server.db, &v.id)?;
+        let mut details = format!("Added by '{}' ({}) on {}. Filename was {}.",
+            v.user_name.clone().unwrap_or_default(),
+            v.user_id.clone().unwrap_or_default(),
+            v.added_time,
+            v.orig_filename.clone().unwrap_or_default());
+
+        fn backup_video_db_row(server: &ServerState, v: &models::Video) -> Res<()> {
+            let backup_file = server.videos_dir.join(v.id.clone()).join("db_backup.json");
+            if backup_file.exists() {
+                std::fs::remove_file(&backup_file)?;
             }
+            let json_str = serde_json::to_string_pretty(&v)?;
+            std::fs::write(&backup_file, json_str)?;
+            Ok(())
         }
-        Err(DBError::NotFound()) => {
-            send_user_error!(ses, Topic::Video(video_hash), "No such video. Cannot rename.");
+
+        fn move_video_to_trash(server: &ServerState, video_id: &str) -> Res<()>
+        {
+            let video_dir = server.videos_dir.join(video_id);
+            let trash_dir = server.videos_dir.join("trash");
+            if !trash_dir.exists() {
+                std::fs::create_dir(&trash_dir)?;
+            }
+            let hash_and_datetime = format!("{}_{}", video_id, chrono::Utc::now().format("%Y%m%d-%H%M%S"));
+            let video_trash_dir = trash_dir.join(hash_and_datetime);
+            std::fs::rename(&video_dir, &video_trash_dir)?;
+            Ok(())
         }
-        Err(e) => { bail!(e); }
+
+        let mut cleanup_errors = false;
+        if let Err(e) = backup_video_db_row(server, &v) {
+            details.push_str(&format!(" WARNING: DB row backup failed: {:?}.", e));
+            cleanup_errors = true;
+
+        }
+        if let Err(e) = move_video_to_trash(server, &v.id) {
+            details.push_str(&format!(" WARNING: Move to trash failed: {:?}.", e));
+            cleanup_errors = true;
+        }
+
+        if let Some(user_id) = ses.as_ref().map(|s| &s.user_id).or(v.user_id.as_ref()) {
+            send_user_ok!(&user_id.clone(), &server, Topic::Video(&v.id),
+                if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
+                details, true);
+        }
     }
     Ok(())
 }
 
-pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let vh = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
 
-    if let Err(DBError::NotFound())  = ses.server.db.get_video(&vh) {
-        send_user_error!(ses, Topic::Video(&vh), "No such video. Cannot comment.");
-        return Ok(());
+pub async fn msg_del_video(data: &DelVideo, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    del_video_and_cleanup(&data.video_id, Some(ses), server).await
+}
+
+
+pub async fn msg_rename_video(data: &RenameVideo, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    if let Some(v) = get_video_or_send_error(Some(&data.video_id), &Some(ses), server).await? {
+        let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
+        org_authz_with_default(&ses.org_session, "rename video", true, server, &ses.organizer,
+            default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Rename)).await?;
+
+        let new_name = data.new_name.trim();
+        if new_name.is_empty() || !new_name.chars().any(|c| c.is_alphanumeric()) {
+            send_user_error!(&ses.user_id, server, Topic::Video(&v.id), "Invalid video name (must have letters/numbers)");
+            return Ok(());
+        }
+        if new_name.len() > 160 {
+            send_user_error!(&ses.user_id, server, Topic::Video(&v.id), "Video name too long (max 160)");
+            return Ok(());
+        }
+        models::Video::rename(&server.db, &v.id, new_name)?;
+        send_user_ok!(&ses.user_id, server, Topic::Video(&v.id), "Video renamed.",
+            format!("New name: '{}'", new_name), true);
     }
+    Ok(())
+}
+
+
+pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComment, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+
+    let video_id = match get_video_or_send_error(Some(&data.video_id), &Some(ses), server).await? {
+        Some(v) => {
+            let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
+            org_authz_with_default(&ses.org_session, "comment video", true, server, &ses.organizer,
+                default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Comment)).await?;
+            v.id
+        },
+        None => return Ok(()),
+    };
 
     // Parse drawing data if present and write to file
-    let mut drwn = data["drawing"].as_str().map(|s| s.to_string());
-    if let Some(d) = drwn.clone() {
+    let mut drwn = data.drawing.clone();
+    if let Some(d) = &drwn {
         if d.starts_with("data:") {
 
             // Convert data URI to bytes
@@ -261,7 +268,7 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
             let fname = format!("{}.webp", short_csum);
 
             // Write to file
-            let drawing_path = ses.server.videos_dir.join(&vh).join("drawings").join(&fname);
+            let drawing_path = server.videos_dir.join(&video_id).join("drawings").join(&fname);
             std::fs::create_dir_all(drawing_path.parent().unwrap())
                 .map_err(|e| anyhow!("Failed to create drawings dir: {:?}", e))?;
             async_std::fs::write(drawing_path, img_data.0).await.map_err(
@@ -272,146 +279,235 @@ pub async fn msg_add_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'
         }
     };
 
-    let c = models::CommentInsert {
-        video_hash: vh.to_string(),
-        parent_id: data["parent_id"].as_i64().map(|x| x as i32),
-        user_id: ses.user_id.into(),
-        username: ses.user_name.into(),
-        comment: data["comment"].as_str().ok_or(anyhow!("comment missing"))?.to_string(),
-        timecode: data["timecode"].as_str().map(String::from),
-        drawing: drwn,
+    let parent_id = match data.parent_id.as_ref().map(|s| s.parse::<i32>()) {
+        Some(Ok(id)) => Some(id),
+        Some(Err(_)) => { bail!("Invalid parent_id for comment"); }
+        None => None,
     };
-    let new_id = ses.server.db.add_comment(&c)
+
+    let c = models::CommentInsert {
+        video_id: video_id.to_string(),
+        parent_id,
+        user_id: ses.user_id.clone(),
+        user_name: ses.user_name.clone(),
+        comment: data.comment.clone(),
+        timecode: data.timecode.clone(),
+        drawing: drwn.clone(),
+    };
+    let c = models::Comment::insert(&server.db, &c)
         .map_err(|e| anyhow!("Failed to add comment: {:?}", e))?;
-    let c = ses.server.db.get_comment(new_id)?;
-
     // Send to all clients watching this video
-    ses.emit_new_comment(c, super::SendTo::VideoHash(&vh)).await?;
+    ses.emit_new_comment(server, c, super::SendTo::VideoId(&video_id)).await?;
     Ok(())
 }
 
-pub async fn msg_edit_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let comment_id = data["comment_id"].as_i64().ok_or(anyhow!("comment_id missing"))? as i32;
-    let new_text = data["comment"].as_str().ok_or(anyhow!("comment missing"))?.to_string();
 
-    match ses.server.db.get_comment(comment_id) {
+pub async fn msg_edit_comment(data: &EditComment, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    let id = i32::from_str(&data.comment_id)?;
+
+    match models::Comment::get(&server.db, &id) {
         Ok(old) => {
-            let vh = old.video_hash;
-            if ses.user_id != old.user_id && ses.user_id != "admin" {
-                send_user_error!(ses, Topic::Video(&vh), "Failed to edit comment.", "You can only edit your own comments", true);
-                return Ok(());
-            }
-            ses.server.db.edit_comment(comment_id, &new_text)?;
-            ses.emit_cmd("del_comment", &json!({ "comment_id": comment_id }), super::SendTo::VideoHash(&vh))?;
-            let c = ses.server.db.get_comment(comment_id)?;
-            ses.emit_new_comment(c, super::SendTo::VideoHash(&vh)).await?;
+            let default_perm = ses.user_id == old.user_id || ses.user_id == "admin";
+            org_authz_with_default(&ses.org_session, "edit comment", true, server, &ses.organizer,
+                default_perm, AuthzTopic::Comment(&old, authz_req::comment_op::Op::Edit)).await?;
+
+            let vid = &old.video_id;
+            models::Comment::edit(&server.db, id, &data.new_comment)?;
+
+            server.emit_cmd(
+                client_cmd!(DelComment, {comment_id: id.to_string()}),
+                super::SendTo::VideoId(&vid))?;
+
+            let c = models::Comment::get(&server.db, &id)?;
+            ses.emit_new_comment(server, c, super::SendTo::VideoId(&vid)).await?;
         }
         Err(DBError::NotFound()) => {
-            send_user_error!(ses, Topic::None, "Failed to edit comment.", "No such comment. Cannot edit.", true);
+            send_user_error!(&ses.user_id, server, Topic::None, "Failed to edit comment.", "No such comment. Cannot edit.", true);
         }
         Err(e) => { bail!(e); }
     }
     Ok(())
 }
 
-pub async fn msg_del_comment(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let comment_id = data["comment_id"].as_i64().ok_or(anyhow!("comment_id missing"))? as i32;
 
-    match ses.server.db.get_comment(comment_id) {
+pub async fn msg_del_comment(data: &DelComment, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    let id = i32::from_str(&data.comment_id)?;
+    match models::Comment::get(&server.db, &id) {
         Ok(cmt) => {
-            let vh = cmt.video_hash;
+            let default_perm = ses.user_id == cmt.user_id || ses.user_id == "admin";
+            org_authz_with_default(&ses.org_session, "delete comment", true, server, &ses.organizer,
+                default_perm, AuthzTopic::Comment(&cmt, authz_req::comment_op::Op::Delete)).await?;
+
+            let vid = cmt.video_id;
             if ses.user_id != cmt.user_id && ses.user_id != "admin" {
-                send_user_error!(ses, Topic::Video(&vh), "Failed to delete comment.", "You can only delete your own comments", true);
+                send_user_error!(&ses.user_id, server, Topic::Video(&vid), "Failed to delete comment.", "You can only delete your own comments", true);
                 return Ok(());
             }
-            let all_comm = ses.server.db.get_video_comments(&vh)?;
-            if all_comm.iter().any(|c| c.parent_id == Some(comment_id)) {
-                send_user_error!(ses, Topic::Video(&vh), "Failed to delete comment.", "Comment has replies. Cannot delete.", true);
+            let all_comm = models::Comment::get_by_video(&server.db, &vid, DBPaging::default())?;
+            if all_comm.iter().any(|c| c.parent_id.map(|i| i.to_string()) == Some(id.to_string())) {
+                send_user_error!(&ses.user_id, server, Topic::Video(&vid), "Failed to delete comment.", "Comment has replies. Cannot delete.", true);
                 return Ok(());
             }
-            ses.server.db.del_comment(comment_id)?;
-            ses.emit_cmd("del_comment", &json!({ "comment_id": comment_id }), super::SendTo::VideoHash(&vh))?;
+            models::Comment::delete(&server.db, &id)?;
+            server.emit_cmd(
+                client_cmd!(DelComment, {comment_id: id.to_string()}),
+                super::SendTo::VideoId(&vid))?;
         }
         Err(DBError::NotFound()) => {
-            send_user_error!(ses, Topic::None, "Failed to delete comment.", "No such comment. Cannot delete.", true);
+            send_user_error!(&ses.user_id, server, Topic::None, "Failed to delete comment.", "No such comment. Cannot delete.", true);
         }
         Err(e) => { bail!(e); }
     }
     Ok(())
 }
 
-pub async fn msg_list_my_messages(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let msgs = ses.server.db.get_user_messages(&ses.user_id)?;
+
+pub async fn msg_list_my_messages(data: &proto::client::client_to_server_cmd::ListMyMessages, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    let msgs = models::Message::get_by_user(&server.db, &ses.user_id, DBPaging::default())?;
+    server.emit_cmd(
+        client_cmd!(ShowMessages, { msgs: (&msgs).into_iter().map(|m| m.to_proto3()).collect() }),
+        super::SendTo::UserSession(&ses.sid)
+    )?;
     for m in msgs {
-        ses.emit_cmd("message", &m.to_json()?, super::SendTo::CurSession())?;
-        if !m.seen {
-            ses.server.db.set_message_seen(m.id, true)?;
-        }
+        if !m.seen { models::Message::set_seen(&server.db, m.id, true)?; }
     }
     Ok(())
 }
 
-pub async fn msg_join_collab(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let collab_id = data["collab_id"].as_str().ok_or(anyhow!("collab_id missing"))?;
-    let video_hash = data["video_hash"].as_str().ok_or(anyhow!("video_hash missing"))?;
 
+pub async fn msg_join_collab(data: &JoinCollab, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     if let Some(collab_id) = ses.cur_collab_id.clone() {
-        if ses.server.sender_is_collab_participant(collab_id.as_str(), &ses.sender) {
+        if server.sender_is_collab_participant(collab_id.as_str(), &ses.sender) {
             tracing::debug!("{} is already in collab {}. Ignoring double join.", ses.user_name, collab_id);
             return Ok(());
         }
     }
-
     ses.collab_session_guard = None;
     ses.cur_collab_id = None;
 
-    match ses.server.db.get_video(video_hash) {
-        Err(DBError::NotFound()) => {
-            send_user_error!(ses, Topic::Video(video_hash), "No such video.");
-        }
-        Err(e) => { bail!(e); }
-        Ok(v) => {
-            match ses.server.link_session_to_collab(collab_id, video_hash, ses.sender.clone()) {
-                Ok(csg) => {
-                    ses.collab_session_guard = Some(csg);
-                    ses.cur_collab_id = Some(collab_id.to_string());
-                    ses.emit_cmd("message", &json!({"event_name": "ok", "message": format!("'{}' joined collab", ses.user_name)}), super::SendTo::CurCollab())?;
-                }
-                Err(e) => {
-                    send_user_error!(ses, Topic::Video(video_hash), format!("Failed to join collab session: {}", e));
-                }
+    if let Some(v) = get_video_or_send_error(Some(&data.video_id), &Some(ses), server).await? {
+        org_authz_with_default(&ses.org_session, "join collab", true, server, &ses.organizer,
+            true, AuthzTopic::Other(Some(&data.collab_id), authz_req::other_op::Op::JoinCollabSession)).await?;
+
+        match server.link_session_to_collab(&data.collab_id, &v.id, ses.sender.clone()) {
+            Ok(csg) => {
+                ses.collab_session_guard = Some(csg);
+                ses.cur_collab_id = Some(data.collab_id.clone());
+                server.emit_cmd(
+                    client_cmd!(ShowMessages, { msgs: vec![
+                            proto::UserMessage {
+                            r#type: proto::user_message::Type::Ok as i32,
+                            message: format!("'{}' joined collab", &ses.user_name),
+                            ..Default::default()
+                        }]
+                    }),
+                    super::SendTo::Collab(&data.collab_id)
+                )?;
+            }
+            Err(e) => {
+                send_user_error!(&ses.user_id, server, Topic::Video(&v.id), format!("Failed to join collab session: {}", e));
             }
         }
     }
     Ok(())
 }
 
-pub async fn msg_leave_collab(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    if ses.cur_collab_id.is_some() {
-        ses.emit_cmd("message", &json!({"event_name": "ok", "message": format!("'{}' left collab", ses.user_name)}), super::SendTo::CurCollab())?;
+
+pub async fn msg_leave_collab(data: &LeaveCollab, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    if let Some(collab_id) = &ses.cur_collab_id {
+        server.emit_cmd(
+            client_cmd!(ShowMessages, { msgs: vec![
+                    proto::UserMessage {
+                    r#type: proto::user_message::Type::Ok as i32,
+                    message: format!("'{}' left collab", &ses.user_name),
+                    ..Default::default()
+                }]
+            }),
+            super::SendTo::Collab(&collab_id)
+        )?;
         ses.collab_session_guard = None;
         ses.cur_collab_id = None;
     }
     Ok(())
 }
 
-pub async fn msg_collab_report(data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    if ses.cur_collab_id.is_none() {
-        send_user_error!(ses, Topic::None, "Report rejected: no active collab session.");
+
+pub async fn msg_collab_report(data: &CollabReport, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    if let Some(collab_id) = &ses.cur_collab_id {
+        let ce = client_cmd!(CollabEvent, {
+            paused: data.paused,
+            r#loop: data.paused,
+            seek_time_sec: data.seek_time_sec,
+            from_user: ses.user_name.clone(),
+            drawing: data.drawing.clone(),
+        });
+        server.emit_cmd(ce, super::SendTo::Collab(collab_id)).map(|_| ())
+    } else {
+        send_user_error!(&ses.user_id, server, Topic::None, "Report rejected: no active collab session.");
         return Ok(());
     }
-    let paused = data["paused"].as_bool().ok_or(anyhow!("paused missing"))?;
-    let seek_time = data["seek_time"].as_f64().ok_or(anyhow!("seek_time missing"))?;
-    let img_url = data["drawing"].as_str();
-    let msg = if img_url.is_some() {
-        json!({ "paused": paused, "seek_time": seek_time, "drawing": img_url, "from_user": &ses.user_name })
-    } else {
-        json!({ "paused": paused, "seek_time": seek_time, "from_user": &ses.user_name })
-    };
-    ses.emit_cmd("collab_cmd", &msg, super::SendTo::CurCollab()).map(|_| ())
 }
 
-// custom logout error with thiserror
+
+pub async fn msg_move_to_folder(data: &proto::client::client_to_server_cmd::MoveToFolder, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    if let Some(org) = &ses.organizer {
+        let req = proto::org::MoveToFolderRequest {
+            ses: Some(ses.org_session.clone()),
+            dst_folder_id: data.dst_folder_id.clone(),
+            ids: data.ids.clone(),
+            listing_data: data.listing_data.clone(),
+        };
+        if let Err(e) = org.lock().await.move_to_folder(req).await {
+            if e.code() == tonic::Code::Unimplemented {
+                tracing::debug!("Organizer doesn't implement move_to_folder(). Ignoring.");
+            } else {
+                tracing::error!(err=?e, "Error in organizer move_to_folder() call");
+                anyhow::bail!("Error in move_to_folder() organizer call: {:?}", e);
+            }
+        }
+    } else { send_user_error!(&ses.user_id, server, Topic::None, "No organizer session."); }
+    Ok(())
+}
+
+pub async fn msg_reorder_items(data: &ReorderItems, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    if let Some(org) = &ses.organizer {
+        let req = proto::org::ReorderItemsRequest {
+            ses: Some(ses.org_session.clone()),
+            ids: data.ids.clone(),
+            listing_data: data.listing_data.clone(),
+        };
+        if let Err(e) = org.lock().await.reorder_items(req).await {
+            if e.code() == tonic::Code::Unimplemented {
+                tracing::debug!("Organizer doesn't implement reorder_items(). Ignoring.");
+            } else {
+                tracing::error!(err=?e, "Error in organizer reorder_items() call");
+                anyhow::bail!("Error in reorder_items() organizer call: {:?}", e);
+            }
+        }
+    } else { send_user_error!(&ses.user_id, server, Topic::None, "No organizer session."); }
+    Ok(())
+}
+
+
+pub async fn msg_organizer_cmd(data: &proto::client::client_to_server_cmd::OrganizerCmd, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    if let Some(org) = &ses.organizer {
+        let req = proto::org::CmdFromClientRequest {
+            ses: Some(ses.org_session.clone()),
+            cmd: data.cmd.clone(),
+            args: data.args.clone()
+        };
+        match org.lock().await.cmd_from_client(req).await {
+            Err(e) => {
+                tracing::error!(err=?e, "Error in organizer navigate_page() call");
+                anyhow::bail!("Error in cmd_from_client() organizer call: {:?}", e);
+            },
+            Ok(res) => { return Ok(()); }
+        }
+    }
+    Ok(())
+}
+
+
 
 #[derive(thiserror::Error, Debug)]
 pub enum SessionClose {
@@ -419,37 +515,43 @@ pub enum SessionClose {
     Logout,
 }
 
-
-pub async fn msg_dispatch(cmd: &str, data: &serde_json::Value, ses: &mut WsSessionArgs<'_>) -> Res<()> {
-    let res = match cmd {
-        "list_my_videos" => msg_list_my_videos(data, ses).await,
-        "open_video" => msg_open_video(data, ses).await,
-        "del_video" => msg_del_video(data, ses).await,
-        "rename_video" => msg_rename_video(data, ses).await,
-        "add_comment" => msg_add_comment(data, ses).await,
-        "edit_comment" => msg_edit_comment(data, ses).await,
-        "del_comment" => msg_del_comment(data, ses).await,
-        "list_my_messages" => msg_list_my_messages(data, ses).await,
-        "join_collab" => msg_join_collab(data, ses).await,
-        "leave_collab" => msg_leave_collab(data, ses).await,
-        "collab_report" => msg_collab_report(data, ses).await,
-        "logout" => {
-            tracing::info!("logout from client: user={}", ses.user_id);
-            return Err(SessionClose::Logout.into());
-        },
-        "echo" => {
-            let answ = format!("Echo: {}", data.as_str().ok_or(anyhow!("data not found"))?);
-            ses.sender.send(WsMsg::text(answ))?;
-            Ok(())
-        },
-        _ => {
-            send_user_error!(ses, Topic::None, format!("Unknown command: '{}'", cmd));
+/// Dispatch a message from client to appropriate handler.
+/// Return true if the session should be kept open, or false if it should be closed.
+pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server: &ServerState) -> Res<bool> {
+    use proto::client::client_to_server_cmd::Cmd;
+    let res = match req.cmd.as_ref() {
+        None => {
+            send_user_error!(&ses.user_id, server, Topic::None, format!("Missing command from client: {:?}", req));
             Ok(())
         }
+        Some(cmd) => match cmd {
+            Cmd::ListMyVideos(data) => msg_list_my_videos(&data, ses, server).await,
+            Cmd::OpenVideo(data) => msg_open_video(&data, ses, server).await,
+            Cmd::DelVideo(data) => msg_del_video(&data, ses, server).await,
+            Cmd::RenameVideo(data) => msg_rename_video(&data, ses, server).await,
+            Cmd::AddComment(data) => msg_add_comment(&data, ses, server).await,
+            Cmd::EditComment(data) => msg_edit_comment(&data, ses, server).await,
+            Cmd::DelComment(data) => msg_del_comment(&data, ses, server).await,
+            Cmd::ListMyMessages(data) => msg_list_my_messages(&data, ses, server).await,
+            Cmd::JoinCollab(data) => msg_join_collab(&data, ses, server).await,
+            Cmd::LeaveCollab(data) => msg_leave_collab(&data, ses, server).await,
+            Cmd::CollabReport(data) => msg_collab_report(&data, ses, server).await,
+            Cmd::OrganizerCmd(data) => msg_organizer_cmd(&data, ses, server).await,
+            Cmd::MoveToFolder(data) => msg_move_to_folder(&data, ses, server).await,
+            Cmd::ReorderItems(data) => msg_reorder_items(&data, ses, server).await,
+            Cmd::Logout(_) => {
+                tracing::info!("logout from client: user={}", ses.user_id);
+                return Err(SessionClose::Logout.into());
+            },
+        },
     };
     if let Err(e) = res {
-        tracing::warn!("[{}] '{cmd}' failed: {}", ses.sid, e);
-        send_user_error!(ses, Topic::None, format!("{cmd} failed: {e}"));
+        // Ignore authz errors, they are already logged
+        if let None = e.downcast_ref::<user_session::AuthzError>() {
+            let cmd_name = req.cmd.as_ref().map(|c| format!("{:?}", c)).unwrap_or_default();
+            tracing::warn!("[{}] '{cmd_name}' failed: {}", ses.sid, e);
+            send_user_error!(&ses.user_id, server, Topic::None, format!("{cmd_name} failed: {e}"));
+        }
     }
-    Ok(())
+    Ok(true)
 }

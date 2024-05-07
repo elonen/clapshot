@@ -1,17 +1,36 @@
 use tracing_test::traced_test;
 use crate::database::*;
 
+use models::{Video, VideoInsert, Message, MessageInsert, Comment, CommentInsert};
 
+
+fn _dump_db(db: &DB) {
+    println!("================ dump_db ================");
+
+    let videos = Video::get_all(db, DBPaging::default()).unwrap();
+    println!("----- Videos -----");
+    for v in videos { println!("----\n{:#?}", v);}
+
+    let comments = Comment::get_all(db, DBPaging::default()).unwrap();
+    println!("----- Comments -----");
+    for c in comments { println!("----\n{:#?}", c);}
+
+    let messages = Message::get_all(db, DBPaging::default()).unwrap();
+    println!("----- Messages -----");
+    for m in messages { println!("----\n{:#?}", m);}
+
+    println!("=========================================");
+}
 
 /// Create a temporary database and populate it for testing.
-/// 
+///
 /// Contents are roughly as follows:
 /// ```text
-/// <Video(id=1 video_hash=HASH0 orig_filename=test0.mp4 added_by_userid=user.num1 ...)>
-/// <Video(id=2 video_hash=1111 orig_filename=test1.mp4 added_by_userid=user.num2 ...)>
-/// <Video(id=3 video_hash=22222 orig_filename=test2.mp4 added_by_userid=user.num1 ...)>
-/// <Video(id=4 video_hash=HASH3 orig_filename=test3.mp4 added_by_userid=user.num2 ...)>
-/// <Video(id=5 video_hash=HASH4 orig_filename=test4.mp4 added_by_userid=user.num1 ...)>
+/// <Video(id=HASH0 orig_filename=test0.mp4 added_by_userid=user.num1 ...)>
+/// <Video(id=1111 orig_filename=test1.mp4 added_by_userid=user.num2 ...)>
+/// <Video(id=22222 orig_filename=test2.mp4 added_by_userid=user.num1 ...)>
+/// <Video(id=HASH3 orig_filename=test3.mp4 added_by_userid=user.num2 ...)>
+/// <Video(id=HASH4 orig_filename=test4.mp4 added_by_userid=user.num1 ...)>
 /// <Comment(id='1' video=HASH0 parent=None user_id='user.num1' comment='Comment 0' has-drawing=True ...)>
 /// <Comment(id='2' video=1111 parent=None user_id='user.num2' comment='Comment 1' has-drawing=True ...)>
 /// <Comment(id='3' video=22222 parent=None user_id='user.num1' comment='Comment 2' has-drawing=True ...)>
@@ -20,116 +39,159 @@ use crate::database::*;
 /// <Comment(id='6' video=HASH0 parent=1 user_id='user.num2' comment='Comment 5' has-drawing=True ...)>
 /// <Comment(id='7' video=HASH0 parent=1 user_id='user.num1' comment='Comment 6' has-drawing=True ...)>
 /// ```
-pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<models::Video>, Vec<models::Comment>)
+pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Vec<Comment>)
 {
-    let data_dir = assert_fs::TempDir::new().unwrap();
+    println!("--- make_test_db");
 
-    let db = DB::connect_db_url(":memory:").unwrap();
-    db.run_migrations().unwrap();
+    let data_dir = assert_fs::TempDir::new().unwrap();
+    std::fs::create_dir(&data_dir.path().join("incoming")).ok();
+
+    let db = std::sync::Arc::new(DB::connect_db_file(data_dir.join("clapshot.sqlite").as_path()).unwrap());
+    for m in db.pending_migration_names().unwrap() {
+        db.apply_migration(&m).unwrap();
+    }
 
     // Make some videos
     let hashes = vec!["HASH0", "11111", "22222", "HASH3", "HASH4"];
     let mkvid = |i: usize| {
-        let v = models::VideoInsert {
-            video_hash: hashes[i].to_string(),
-            added_by_userid: Some(format!("user.num{}", 1 + i % 2)),
-            added_by_username: Some(format!("User Number{}", 1 + i % 2)),
+        let v = VideoInsert {
+            id: hashes[i].to_string(),
+            user_id: Some(format!("user.num{}", 1 + i % 2)),
+            user_name: Some(format!("User Number{}", 1 + i % 2)),
             orig_filename: Some(format!("test{}.mp4", i)),
             title: Some(format!("test{}.mp4", i)),
-            recompression_done: None,
-            thumb_sheet_dims: None,
+            recompression_done: Some(chrono::NaiveDateTime::default()),
+            thumb_sheet_cols: Some(i as i32),
+            thumb_sheet_rows: Some(i as i32),
             total_frames: Some((i * 1000) as i32),
             duration: Some((i * 100) as f32),
             fps: Some(format!("{}", i * i)),
             raw_metadata_all: Some(format!("{{all: {{video: {}}}}}", i)),
         };
-        db.add_video(&v).unwrap();
-        db.get_video(&v.video_hash).unwrap()
+        Video::insert(&db, &v).unwrap();
+        Video::get(&db, &v.id.into()).unwrap()
     };
     let videos = (0..5).map(mkvid).collect::<Vec<_>>();
 
     // Make some comments
-    let mkcom = |i: usize, vh: &str, parent_id: Option<i32>| {
-        let c = models::CommentInsert {
-            video_hash: vh.to_string(),
+    let mkcom = |i: usize, vid: &str, parent_id: Option<i32>| {
+        let c = CommentInsert {
+            video_id: vid.to_string(),
             parent_id,
             timecode: None,
             user_id: format!("user.num{}", 1 + i % 2),
-            username: format!("User Number{}", 1 + i % 2),
+            user_name: format!("User Number{}", 1 + i % 2),
             comment: format!("Comment {}", i),
             drawing: Some(format!("drawing_{}.webp", i)),
         };
-        let id = db.add_comment(&c).unwrap();
-        let c = db.get_comment(id).unwrap();
-        let dp = data_dir.join("videos").join(vh).join("drawings");
+        let c = Comment::insert(&db, &c).unwrap();
+        let dp = data_dir.join("videos").join(vid).join("drawings");
         std::fs::create_dir_all(&dp).unwrap();
         std::fs::write(dp.join(&c.drawing.clone().unwrap()), "IMAGE_DATA").unwrap();
         c
     };
     let mut comments = (0..5)
-        .map(|i| mkcom(i, &videos[i % 3].video_hash, None))
+        .map(|i| mkcom(i, &videos[i % 3].id, None))
         .collect::<Vec<_>>();
     let more_comments = (5..5 + 2)
-        .map(|i| mkcom(i, &comments[0].video_hash, Some(comments[0].id)))
+        .map(|i| mkcom(i, &comments[0].video_id, Some(comments[0].id)))
         .collect::<Vec<_>>();
     comments.extend(more_comments);
 
-    // Add another comment with empty drawing (caused an error at one point)
-    let c = models::CommentInsert {
-        video_hash: videos[0].video_hash.clone(),
+    // Add another comment (#8) with empty drawing (caused an error at one point)
+    let c = CommentInsert {
+        video_id: videos[0].id.clone(),
         parent_id: None,
         timecode: None,
         user_id: "user.num1".to_string(),
-        username: "User Number1".to_string(),
+        user_name: "User Number1".to_string(),
         comment: "Comment_with_empty_drawing".to_string(),
         drawing: Some("".into()),
     };
-    db.add_comment(&c).unwrap();
+    let cmt = models::Comment::insert(&db, &c).unwrap();
+    comments.push(cmt);
 
-    (std::sync::Arc::new(db), data_dir, videos, comments)
+    (db, data_dir, videos, comments)
 }
+
+
+#[test]
+#[traced_test]
+fn test_pagination() -> anyhow::Result<()> {
+    let (db, _data_dir, _videos, comments) = make_test_db();
+
+    // Test pagination of comments
+    let mut res = Comment::get_all(&db, DBPaging { page_num: 0, page_size: 3.try_into()? })?;
+    println!("---- page 0, 3");
+    println!("res: {:#?}", res);
+
+    assert_eq!(res.len(), 3);
+    assert_eq!(res[0].id, comments[0].id);
+    assert_eq!(res[1].id, comments[1].id);
+    assert_eq!(res[2].id, comments[2].id);
+
+    res = Comment::get_all(&db, DBPaging { page_num: 1, page_size: 3.try_into()? })?;
+    println!("---- page 1, 3");
+    println!("res: {:#?}", res);
+    assert_eq!(res.len(), 3);
+    assert_eq!(res[0].id, comments[3].id);
+    assert_eq!(res[1].id, comments[4].id);
+    assert_eq!(res[2].id, comments[5].id);
+
+    res = Comment::get_all(&db, DBPaging { page_num: 2, page_size: 3.try_into()? })?;
+    println!("---- page 2, 3");
+    println!("res: {:#?}", res);
+    assert_eq!(res.len(), 2);
+    assert_eq!(res[0].id, comments[6].id);
+    assert_eq!(res[1].id, comments[7].id);
+
+    Ok(())
+}
+
+
+// ----------------------------------------------------------------------------
 
 
 #[test]
 #[traced_test]
 fn test_fixture_state() -> anyhow::Result<()>
 {
-    let (db, _data_dir, vid, com) = make_test_db();
+    let (db, _data_dir, videos, comments) = make_test_db();
 
     // First 5 comments have no parent, last 2 have parent_id=1
-    for i in 0..5 { assert!(com[i].parent_id.is_none()); }
-    for i in 5..5 + 2 { assert_eq!(com[i].parent_id, Some(com[0].id)); }
+    for i in 0..5 { assert!(comments[i].parent_id.is_none()); }
+    for i in 5..5 + 2 { assert_eq!(comments[i].parent_id, Some(comments[0].id)); }
 
     // Video #0 has 3 comments, video #1 has 2, video #2 has 1
-    assert_eq!(com[0].video_hash, com[3].video_hash);
-    assert_eq!(com[0].video_hash, com[5].video_hash);
-    assert_eq!(com[0].video_hash, com[6].video_hash);
-    assert_eq!(com[0].video_hash, vid[0].video_hash);
-    assert_eq!(com[1].video_hash, com[4].video_hash);
-    assert_eq!(com[1].video_hash, vid[1].video_hash);
-    assert_eq!(com[2].video_hash, vid[2].video_hash);
+    assert_eq!(comments[0].video_id, comments[3].video_id);
+    assert_eq!(comments[0].video_id, comments[5].video_id);
+    assert_eq!(comments[0].video_id, comments[6].video_id);
+    assert_eq!(comments[0].video_id, videos[0].id);
+    assert_eq!(comments[1].video_id, comments[4].video_id);
+    assert_eq!(comments[1].video_id, videos[1].id);
+    assert_eq!(comments[2].video_id, videos[2].id);
 
     // Read entries from database and check that they match definitions
-    for v in vid.iter() {
-        assert_eq!(db.get_video(&v.video_hash)?.video_hash, v.video_hash);
-        let comments = db.get_video_comments(&v.video_hash)?;
-        assert_eq!(comments.len(), match v.video_hash.as_str() {
+    for v in videos.iter() {
+        assert_eq!(Video::get(&db, &v.id)?.id, v.id);
+        let comments = Comment::get_by_video(&db, &v.id, DBPaging::default())?;
+        assert_eq!(comments.len(), match v.id.as_str() {
             "HASH0" => 5,
             "11111" => 2,
             "22222" => 1,
             "HASH3" => 0,
             "HASH4" => 0,
-            _ => panic!("Unexpected video hash"),
+            _ => panic!("Unexpected video id"),
         });
     }
-    for c in com.iter() {
-        assert_eq!(db.get_comment(c.id)?.id, c.id);
-        assert_eq!(db.get_comment(c.id)?.comment, c.comment);
+    for c in comments.iter() {
+        assert_eq!(models::Comment::get(&db, &c.id)?.id, c.id);
+        assert_eq!(models::Comment::get(&db, &c.id)?.comment, c.comment);
     }
 
     // Check that we can get videos by user
-    assert_eq!(db.get_all_user_videos("user.num1")?.len(), 3);
-    assert_eq!(db.get_all_user_videos("user.num2")?.len(), 2);
+    assert_eq!(models::Video::get_by_user(&db, "user.num1", DBPaging::default())?.len(), 3);
+    assert_eq!(models::Video::get_by_user(&db, "user.num2", DBPaging::default())?.len(), 2);
     Ok(())
 }
 
@@ -139,33 +201,33 @@ fn test_fixture_state() -> anyhow::Result<()>
 fn test_comment_delete() -> anyhow::Result<()> {
     let (db, _data_dir, _vid, com) = make_test_db();
 
-    assert_eq!(db.get_video_comments(&com[1].video_hash)?.len(), 2, "Video should have 2 comments before deletion");
+    assert_eq!(Comment::get_by_video(&db, &com[1].video_id, DBPaging::default())?.len(), 2, "Video should have 2 comments before deletion");
 
     // Delete comment #2 and check that it was deleted, and nothing else
-    db.del_comment(com[1].id)?;
+    models::Comment::delete(&db, &com[1].id)?;
     for c in com.iter() {
         if c.id == com[1].id {
-            assert!(matches!(db.get_comment(c.id).unwrap_err() , DBError::NotFound()), "Comment should be deleted");
+            assert!(matches!(models::Comment::get(&db, &c.id).unwrap_err() , DBError::NotFound()), "Comment should be deleted");
         } else {
-            assert_eq!(db.get_comment(c.id)?.id, c.id, "Deletion removed wrong comment(s)");
+            assert_eq!(models::Comment::get(&db, &c.id)?.id, c.id, "Deletion removed wrong comment(s)");
         }
     }
 
     // Check that video still has 1 comment
-    assert_eq!(db.get_video_comments(&com[1].video_hash)?.len(), 1, "Video should have 1 comment left");
+    assert_eq!(Comment::get_by_video(&db, &com[1].video_id, DBPaging::default())?.len(), 1, "Video should have 1 comment left");
 
     // Delete last, add a new one and check for ID reuse
-    db.del_comment(com[6].id)?;
-    let c = models::CommentInsert {
-        video_hash: com[1].video_hash.clone(),
+    models::Comment::delete(&db, &com[6].id)?;
+    let c = CommentInsert {
+        video_id: com[1].video_id.clone(),
         parent_id: None,
         user_id: com[1].user_id.clone(),
-        username: "name".to_string(),
+        user_name: "name".to_string(),
         comment: "re-add".to_string(),
         timecode: None,
         drawing: None,
     };
-    let new_id = db.add_comment(&c)?;
+    let new_id = models::Comment::insert(&db, &c)?.id;
     assert_ne!(new_id, com[6].id, "Comment ID was re-used after deletion. This would mix up comment threads in the UI.");
     Ok(())
 }
@@ -177,14 +239,14 @@ fn test_rename_video() -> anyhow::Result<()> {
 
     // Rename video #1
     let new_name = "New name";
-    db.rename_video(&"11111".to_string(), new_name)?;
+    Video::rename(&db, "11111", new_name)?;
 
     // Check that video #1 has new name
-    let v = db.get_video(&"11111".to_string())?;
+    let v = Video::get(&db, &"11111".into())?;
     assert_eq!(v.title, Some(new_name.into()));
 
     // Check that video #2 still has old name
-    let v = db.get_video(&"22222".to_string())?;
+    let v = Video::get(&db, &"22222".into())?;
     assert_ne!(v.title, Some(new_name.into()));
 
     Ok(())
@@ -198,30 +260,30 @@ fn test_user_messages() -> anyhow::Result<()> {
 
     // Add a message to user #1
     let msgs = [
-        models::MessageInsert {
+        MessageInsert {
             user_id: "user.num1".into(),
             message: "message1".into(),
             event_name: "info".into(),
-            ref_video_hash: Some("HASH0".into()),
-            ref_comment_id: None,
+            video_id: Some("HASH0".into()),
+            comment_id: None,
             details: "".into(),
             seen: false,
         },
-        models::MessageInsert {
+        MessageInsert {
             user_id: "user.num1".into(),
             message: "message2".into(),
             event_name: "oops".into(),
-            ref_video_hash: Some("HASH0".into()),
-            ref_comment_id: None,
+            video_id: Some("HASH0".into()),
+            comment_id: None,
             details: "STACKTRACE".into(),
             seen: false,
         },
-        models::MessageInsert {
+        MessageInsert {
             user_id: "user.num2".into(),
             message: "message3".into(),
             event_name: "info".into(),
-            ref_video_hash: None,
-            ref_comment_id: None,
+            video_id: None,
+            comment_id: None,
             details: "".into(),
             seen: false,
         },
@@ -229,27 +291,61 @@ fn test_user_messages() -> anyhow::Result<()> {
 
     let mut new_msgs = vec![];
     for i in 0..msgs.len() {
-        let new_msg = db.add_message(&msgs[i])?;
+        let new_msg = Message::insert(&db, &msgs[i])?;
         assert_eq!(new_msg.user_id, msgs[i].user_id);
         assert_eq!(new_msg.message, msgs[i].message);
-        assert_eq!(db.get_message(new_msg.id)?.to_json()?, new_msg.to_json()?);
-        assert!(!db.get_message(new_msg.id)?.seen);
+
+        let a = serde_json::to_value(Message::get(&db, &new_msg.id)?.to_proto3())?;
+        let b = serde_json::to_value(new_msg.to_proto3())?;
+        assert_eq!(a,b);
+
+        assert!(!Message::get(&db, &new_msg.id)?.seen);
         new_msgs.push(new_msg);
     }
 
     // Correctly count messages
-    assert_eq!(db.get_user_messages("user.num1")?.len(), 2);
-    assert_eq!(db.get_user_messages("user.num2")?.len(), 1);
+    assert_eq!(Message::get_by_user(&db, "user.num1", DBPaging::default())?.len(), 2);
+    assert_eq!(Message::get_by_user(&db, "user.num2", DBPaging::default())?.len(), 1);
 
     // Mark message #2 as seen
-    db.set_message_seen(new_msgs[1].id, true)?;
-    assert!(db.get_message(new_msgs[1].id)?.seen);
+    Message::set_seen(&db, new_msgs[1].id, true)?;
+    assert!(Message::get(&db, &new_msgs[1].id)?.seen);
 
     // Delete & recount
-    db.del_message(new_msgs[2].id)?;
-    db.del_message(new_msgs[0].id)?;
-    assert_eq!(db.get_user_messages("user.num1")?.len(), 1);
-    assert_eq!(db.get_user_messages("user.num2")?.len(), 0);
+    Message::delete(&db, &new_msgs[2].id)?;
+    Message::delete(&db, &new_msgs[0].id)?;
+    assert_eq!(Message::get_by_user(&db, "user.num1", DBPaging::default())?.len(), 1);
+    assert_eq!(Message::get_by_user(&db, "user.num2", DBPaging::default())?.len(), 0);
+
+    Ok(())
+}
+
+#[test]
+#[traced_test]
+fn test_transaction_rollback() -> anyhow::Result<()> {
+    let (db, _data_dir, vid, _com) = make_test_db();
+
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len());
+    begin_transaction(&db.conn()?)?;
+    Video::delete(&db, &vid[0].id)?;
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len()-1);
+    rollback_transaction(&db.conn()?)?;
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len());
+
+    Ok(())
+}
+
+#[test]
+#[traced_test]
+fn test_transaction_commit() -> anyhow::Result<()> {
+    let (db, _data_dir, vid, _com) = make_test_db();
+
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len());
+    begin_transaction(&db.conn()?)?;
+    Video::delete(&db, &vid[0].id)?;
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len()-1);
+    commit_transaction(&db.conn()?)?;
+    assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len()-1);
 
     Ok(())
 }

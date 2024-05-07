@@ -18,7 +18,7 @@ pub struct CmprInput {
     pub video_dst: Option<PathBuf>,
     pub thumb_dir: Option<PathBuf>,
     pub video_bitrate: u32,
-    pub video_hash: String,
+    pub video_id: String,
     pub user_id: String,
 }
 
@@ -27,7 +27,7 @@ pub struct CmprOutput {
     pub success: bool,
     pub video_dst: Option<PathBuf>,
     pub thumb_dir: Option<PathBuf>,
-    pub video_hash: String,
+    pub video_id: String,
     pub stdout: String,
     pub stderr: String,
     pub dmsg: DetailedMsg,
@@ -42,7 +42,7 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
         success: false,
         video_dst: args.video_dst.clone(),
         thumb_dir: args.thumb_dir.clone(),
-        video_hash: args.video_hash.clone(),
+        video_id: args.video_id.clone(),
         stdout: "".into(),
         stderr: "".into(),
         dmsg: DetailedMsg {
@@ -65,7 +65,7 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
 fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutput
 {
     let _span = tracing::info_span!("run_ffmpeg_transcode",
-        video = %args.video_hash,
+        video = %args.video_id,
         user = %args.user_id,
         thread = ?std::thread::current().id()).entered();
 
@@ -144,7 +144,7 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
         match ppipe_fname {
             None => std::thread::spawn(move || {}),
             Some(pfn) => {
-                let vh = args.video_hash.clone();
+                let vid = args.video_id.clone();
                 let src = args.src.clone();
                 std::thread::spawn(move || {
                     let _span = tracing::info_span!("progress_thread",
@@ -217,7 +217,7 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
                                         }}}
                                 // Send progress message (if any)
                                 if let Some(msg) = msg.take() {
-                                    if let Err(e) = progress.send((vh.clone(), user_id.clone(), msg)) {
+                                    if let Err(e) = progress.send((vid.clone(), user_id.clone(), msg)) {
                                         tracing::debug!(details=%e, "Failed to send FFMPEG progress message. Ending progress tracking.");
                                         return;
                                     }}
@@ -245,7 +245,7 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
         success: err_msg.is_none(),
         video_dst: Some(video_dst),
         thumb_dir: None,
-        video_hash: args.video_hash.clone(),
+        video_id: args.video_id.clone(),
         stdout: stdout,
         stderr: stderr,
         dmsg: DetailedMsg {
@@ -295,7 +295,7 @@ fn count_frames( src: &PathBuf ) -> Option<i32>
 fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 {
     let _span = tracing::info_span!("run_ffmpeg_thumbnailer",
-        video = %args.video_hash,
+        video = %args.video_id,
         user = %args.user_id,
         thread = ?std::thread::current().id()).entered();
 
@@ -427,7 +427,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
         success: comb_err.is_none(),
         video_dst: None,
         thumb_dir: Some(thumb_dir),
-        video_hash: args.video_hash.clone(),
+        video_id: args.video_id.clone(),
         stdout: comb_stdout,
         stderr: comb_stderr,
         dmsg: DetailedMsg {
@@ -447,7 +447,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 /// # Arguments
 /// * `inq` - Channel to receive incoming requests
 /// * `outq` - Channel to send results
-/// * `progress` - Channel to send transcoding progress updates. Tuple: (video_hash, progress_msg)
+/// * `progress` - Channel to send transcoding progress updates. Tuple: (video_id, progress_msg)
 /// * `n_workers` - Number of worker threads to spawn for processing. This should be at most the number of CPU cores.
 pub fn run_forever(
     inq: Receiver<CmprInput>,
@@ -485,5 +485,5 @@ pub fn run_forever(
         }
     }
 
-    tracing::info!("Exiting.");
+    tracing::debug!("Exiting.");
 }

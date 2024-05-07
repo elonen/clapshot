@@ -7,21 +7,23 @@ UID=$(shell id -u)
 GID=$(shell id -g)
 
 
-default: build
+default: build-local
 
 clean:
 	rm -rf node_modules dist dist_deb
+	cd ../protobuf/libs/typescript && make clean
 
 npm-deps:
 	npm install vite
 	npm install
+	cd ../protobuf/libs/typescript && make
 
-docker: clean 
-	DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} .
+docker: clean
+	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} -f Dockerfile.client .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
 
-docker-for-deb: clean 
-	DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg TARGET=deb  .
+docker-for-deb: clean
+	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg TARGET=deb  -f Dockerfile.client .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:deb
 
 
@@ -31,11 +33,8 @@ build-local: npm-deps
 build-docker: docker-for-deb
 	mkdir -p dist
 	chmod a+rwx dist
-	docker run --rm --mount type=bind,source="$$(pwd)"/dist,target=/build/dist  ${PACKAGE}:deb  make build-local
+	docker run --rm --mount type=bind,source="$$(pwd)"/dist,target=/build/client/dist  ${PACKAGE}:deb  make build-local
 	@echo "==== Build in Docker done. Results are in ./dist/ ===="
-
-build:
-	@echo "Run explicitly either 'build-local' or 'build-docker'"
 
 
 debian-local:
@@ -49,9 +48,8 @@ debian-docker: docker-for-deb
 	$(eval PVER=$(shell jq -r '.version' package.json))
 	test -n ${PVER}
 	$(eval PKGDIR=${PACKAGE}-${PVER})
-	$(eval CMD="mkdir -p /deb/ && cp -a /build /deb/${PKGDIR} && cd /deb/${PKGDIR} && make debian-local && rm -rf /deb/${PKGDIR} && chown -R ${UID}:${GID} /deb")
+	$(eval CMD="mkdir -p /deb/ && cp -a /build /deb/${PKGDIR} && cd /deb/${PKGDIR}/client && make debian-local && mv /deb/${PKGDIR}/*.deb /deb/ && rm -rf /deb/${PKGDIR} && chown -R ${UID}:${GID} /deb")
 	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:deb  bash -c ${CMD}
-
 
 
 dev-local: npm-deps

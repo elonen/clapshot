@@ -3,57 +3,58 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
+	font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+	font-size: 16px;
+	line-height: 24px;
+	font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: black;
+	color-scheme: light dark;
+	color: rgba(255, 255, 255, 0.87);
+	background-color: black;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+	font-synthesis: none;
+	text-rendering: optimizeLegibility;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	-webkit-text-size-adjust: 100%;
 }
 
 /* Customize emoji picker (fix z-index and colors) */
 .my-picmo-popup {
-  --background-color: red;
-  --text-color: red;
-  border: 2px solid #131d2b;
-  border-radius: 8px;
-  z-index: 1000;
+	--background-color: red;
+	--text-color: red;
+	border: 2px solid #131d2b;
+	border-radius: 8px;
+	z-index: 1000;
 }
 .my-picmo-popup .dark {
-  --background-color: #1f2937;
-  --category-name-background-color: #1f2937;
-  --secondary-background-color: #161f2b;
-  filter: drop-shadow(8px 8px 10px black);
+	--background-color: #1f2937;
+	--category-name-background-color: #1f2937;
+	--secondary-background-color: #161f2b;
+	filter: drop-shadow(8px 8px 10px black);
 }
  .popupContainer button.closeButton {
-  z-index: 1010;
+	z-index: 1010;
 }
 
+.videolist_item_pump_anim {
+	animation-name: zoom_inout;
+	animation-duration: 0.2s;
+	animation-iteration-count: 2;
+	animation-direction: alternate;
+}
+@keyframes zoom_inout {
+	0% { transform: scale(1); }
+	100% { transform: scale(0.8); }
+}
 
 /* Comment card highlight animation */
 .highlighted_comment {
-  animation-name: glow;
-  animation-duration: 1s;
+	animation-name: glow;
+	animation-duration: 1s;
 }
 @keyframes glow {
-  0% {
-    box-shadow: 0px 0px 0px 0px rgba(255, 162, 0, 0);
-  }
-  50% {
-    box-shadow: 0px 0px 15px 10px rgb(255, 162, 0);
-  }
-  100% {
-    box-shadow: 0px 0px 0px 0px rgba(255, 162, 0, 0);
-  }
-}
-
-#app {
+	0% { box-shadow: 0px 0px 0px 0px rgba(255, 162, 0, 0); }
+	50% { box-shadow: 0px 0px 15px 10px rgb(255, 162, 0); }
+	100% { box-shadow: 0px 0px 0px 0px rgba(255, 162, 0, 0); }
 }

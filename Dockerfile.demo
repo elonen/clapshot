@@ -1,23 +1,12 @@
 ARG auth_variation=none
 
-FROM debian:bullseye-slim AS base
+FROM debian:bookworm-slim AS base
 
 # Install system packages
 RUN apt-get -qy update
 
-RUN apt-get -qy install python3 >/dev/null
-RUN apt-get -qy install ffmpeg >/dev/null
-RUN apt-get -qy install mediainfo >/dev/null
-RUN apt-get -qy install nginx >/dev/null
-RUN apt-get -qy install acl sudo >/dev/null
-
-# Version of sqlite3 that support ALTER TABLE DROP column
-RUN echo 'deb http://ftp.debian.org/debian bookworm main' >> /etc/apt/sources.list.d/bookworm.list
-RUN apt-get -qy update >/dev/null
-RUN apt-get -qy install -t bookworm sqlite3 >/dev/null
-RUN rm /etc/apt/sources.list.d/bookworm.list
-RUN apt-get -qy update >/dev/null
-
+RUN apt-get -qy install acl sudo python3.11 >/dev/null
+RUN apt-get -qy install sqlite3 ffmpeg mediainfo nginx >/dev/null
 
 # Add regular user (to match local user ID)
 ARG UID=1000
@@ -30,8 +19,7 @@ RUN mkdir -p /mnt/clapshot-data
 RUN chown -R ${UID} /mnt/clapshot-data
 
 # Install Clapshot server & client
-COPY dist_deb/clapshot-client_*.deb /root/
-COPY dist_deb/clapshot-server_*.deb /root/
+COPY dist_deb/*.deb /root/
 RUN echo "Current architecture: $(dpkg --print-architecture)"
 RUN dpkg --path-include '/usr/share/doc/*' --refuse-downgrade -i /root/*_$(dpkg --print-architecture).deb /root/*_all.deb
 
@@ -48,7 +36,7 @@ COPY test/docker-entry_no-auth.sh /root/docker-entry.sh
 # ------------- basic auth (with PHP htadmin for management) -------------
 
 FROM base AS base-git-php
-RUN apt-get -qy install git php7.4-fpm >/dev/null
+RUN apt-get -qy install git php8.2-fpm >/dev/null
 RUN mkdir -p /run/php
 
 

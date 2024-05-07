@@ -1,751 +1,838 @@
 <script lang="ts">
-  import {fade, slide} from "svelte/transition";
-  import CommentCard from './lib/CommentCard.svelte'
-  import NavBar from './lib/NavBar.svelte'
-  import VideoPlayer from './lib/VideoPlayer.svelte';
-  import CommentInput from './lib/CommentInput.svelte';
-  import UserMessage from './lib/UserMessage.svelte';
-  import FileUpload from './lib/FileUpload.svelte';
-  import {Notifications, acts} from '@tadashi/svelte-notification'
-  import VideoListPopup from './lib/VideoListPopup.svelte';
+import {Notifications, acts} from '@tadashi/svelte-notification'
+import {fade, slide} from "svelte/transition";
 
-  import {all_comments, cur_username, cur_user_id, video_is_ready, video_url, video_hash, video_fps, video_title, all_my_videos, user_messages, video_progress_msg, collab_id, user_menu_items} from './stores.js';
+import * as Proto3 from '@clapshot_protobuf/typescript';
 
-  let video_player: VideoPlayer;
-  let comment_input: CommentInput;
-  let debug_layout: boolean = false;
-  let ui_connected_state: boolean = false; // true if UI should look like we're connected to the server
+import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, videoId, videoFps, videoTitle, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions} from '@/stores';
+import {IndentedComment, type UserMenuItem, type StringMap} from "@/types";
 
-  let last_video_progress_msg_ts = Date.now();  // used to hide video_progress_msg after a few seconds
+import CommentCard from '@/lib/CommentCard.svelte'
+import NavBar from '@/lib/NavBar.svelte'
+import CommentInput from '@/lib/CommentInput.svelte';
+import UserMessage from '@/lib/UserMessage.svelte';
+import FileUpload from '@/lib/FileUpload.svelte';
+import VideoPlayer from '@/lib/VideoPlayer.svelte';
+import {folderItemsToIDs, type VideoListDefItem} from "@/lib/video_list/types";
+import VideoList from "@/lib/video_list/VideoList.svelte";
+import LocalStorageCookies from './cookies';
+import RawHtmlItem from './lib/RawHtmlItem.svelte';
+import { ClientToServerCmd } from '@clapshot_protobuf/typescript/dist/src/client';
 
-  let collab_dialog_ack = false;  // true if user has clicked "OK" on the collab dialog
-  let last_collab_controlling_user = null;    // last user to control the video in a collab session
+let videoPlayer: VideoPlayer;
+let commentInput: CommentInput;
+let debugLayout: boolean = false;
+let uiConnectedState: boolean = false; // true if UI should look like we're connected to the server
 
-  function log_abbreviated(str: string) {
-      const max_len = 180;
-      if (str.length > max_len)
-        str = str.substr(0, max_len) + "(...)";
-      console.log(str);
-  }
+let lastVideoProgressMsgTime = Date.now();  // used to hide video_progress_msg after a few seconds
 
-  // Messages from CommentInput component
-  function onCommentInputButton(e) {
+let collabDialogAck = false;  // true if user has clicked "OK" on the collab dialog
+let lastCollabControllingUser: string | null = null;    // last user to control the video in a collab session
+
+function logAbbrev(...strs: any[]) {
+    const maxLen = 180;
+    let abbreviated: string[] = [];
+    for (let i = 0; i < strs.length; i++) {
+        let str = (typeof strs[i] == "string" || typeof strs[i] == "number" || typeof strs[i] == "boolean")
+        ? String(strs[i])
+        : JSON.stringify(strs[i]);
+        abbreviated[i] = (str.length > maxLen) ? (str.slice(0, maxLen) + " ……") : str;
+    }
+    console.log(...abbreviated);
+}
+
+
+// Messages from CommentInput component
+function onCommentInputButton(e: any) {
+
+    const PLAYBACK_REQ_SOURCE = "comment_input";
+    function resumeVideo() {
+        // Only resume if playback was paused by comment input
+        if (videoPlayer.getPlaybackState().request_source == PLAYBACK_REQ_SOURCE) {
+            videoPlayer.setPlayback(true, PLAYBACK_REQ_SOURCE);
+        }
+    }
+    function pauseVideo() {
+        videoPlayer.setPlayback(false, PLAYBACK_REQ_SOURCE);
+    }
+
     if (e.detail.action == "send")
     {
-      if (e.detail.comment_text != "")
-      {
-        ws_emit('add_comment', {
-          video_hash: $video_hash,
-          parent_id: null,            // TODO: parent id here
-          comment: e.detail.comment_text,
-          drawing: video_player.getDrawing(),
-          timecode: e.detail.is_timed ? video_player.getCurTimecode() : "",
-        });
-      }
+        if (e.detail.comment_text != "")
+        {
+            wsEmit({addComment: {
+                videoId: $videoId!,
+                comment: e.detail.comment_text,
+                drawing: videoPlayer.getScreenshot(),
+                timecode: e.detail.is_timed ? videoPlayer.getCurTimecode() : "",
+            }});
+        }
+        resumeVideo();
+    }
+    else if (e.detail.action == "text_input") {
+        pauseVideo();   // auto-pause when typing a comment
     }
     else if (e.detail.action == "color_select") {
-      video_player.onColorSelect(e.detail.color);
+        pauseVideo();
+        videoPlayer.onColorSelect(e.detail.color);
     }
     else if (e.detail.action == "draw") {
-      video_player.onToggleDraw(e.detail.is_draw_mode);
+        if (e.detail.is_draw_mode) { pauseVideo(); }
+        videoPlayer.onToggleDraw(e.detail.is_draw_mode);
     }
     else if (e.detail.action == "undo") {
-      video_player.onDrawUndo();
+        pauseVideo();
+        videoPlayer.onDrawUndo();
     }
     else if (e.detail.action == "redo") {
-      video_player.onDrawRedo();
+        pauseVideo();
+        videoPlayer.onDrawRedo();
     }
-  }
+}
 
-  function onDisplayComment(e) {
-    video_player.seekTo(e.detail.timecode, 'SMPTE');
+function onDisplayComment(e: any) {
+    videoPlayer.seekToSMPTE(e.detail.timecode);
     // Close draw mode while showing (drawing from a saved) comment
-    video_player.onToggleDraw(false);
-    comment_input.forceDrawMode(false);
+    videoPlayer.onToggleDraw(false);
+    commentInput.forceDrawMode(false);
     if (e.detail.drawing)
-      video_player.setDrawing(e.detail.drawing);
-    if ($collab_id) {
-      console.log("Collab: onDisplayComment. collab_id: '" + $collab_id + "'");
-      ws_emit('collab_report', {paused: true, seek_time: video_player.getCurTime(), drawing: e.detail.drawing});
+    videoPlayer.setDrawing(e.detail.drawing);
+    if ($collabId) {
+        logAbbrev("Collab: onDisplayComment. collab_id: '" + $collabId + "'");
+        wsEmit({collabReport: {
+            paused: true,
+            loop: videoPlayer.isLooping(),
+            seekTimeSec: videoPlayer.getCurTime(),
+            drawing: e.detail.drawing,
+        }});
     }
-  }
+}
 
-  function onDeleteComment(e) {
-    ws_emit('del_comment', {
-      comment_id: e.detail.comment_id,
-    });
-  }
+function onDeleteComment(e: any) {
+    wsEmit({delComment: { commentId: e.detail.id }});
+}
 
-  function onReplyComment(e) {
-    ws_emit('add_comment', {
-        video_hash: $video_hash,
-        parent_id: e.detail.parent_id,
+function onReplyComment(e: { detail: { parent_id: string; comment_text: string; }}) {
+    console.log("onReplyComment: ", e.detail);
+    wsEmit({addComment: {
+        videoId: $videoId!,
+        parentId: e.detail.parent_id,
         comment: e.detail.comment_text,
-      });
-  }
+    }});
+}
 
-  function onEditComment(e) {
-    ws_emit('edit_comment', {
-      comment_id: e.detail.comment_id,
-      comment: e.detail.comment_text,
-    });
-  }
+function onEditComment(e: any) {
+    wsEmit({editComment: {
+        commentId: e.detail.id,
+        newComment: e.detail.comment_text,
+    }});
+}
 
-  function onSeekToTimecode(e) {
-    video_player.seekTo(e.detail.timecode, 'SMPTE');
-  }
-
-
-  function closeVideo() {
+function closeVideo() {
     // Close current video, list all user's own videos.
     // This is called from onClearAll event and history.back()
     console.log("closeVideo");
-    ws_emit('leave_collab', {});
-    $collab_id = null;
-    $video_hash = null;
-    $video_url = null;
-    $video_fps = null;
-    $video_title = null;
-    $all_comments = [];
-    $video_is_ready = false;
-    ws_emit('list_my_videos', {});
-    ws_emit('list_my_messages', {});
-  }
+    wsEmit({leaveCollab: {}});
+    $collabId = null;
+    $videoId = null;
+    $videoPlaybackUrl = null;
+    $videoFps = null;
+    $videoTitle = null;
+    $allComments = [];
+    $videoIsReady = false;
+    wsEmit({listMyVideos: {}});
+    wsEmit({listMyMessages: {}});
+}
 
-  function onClearAll(e) {
-    history.pushState('/', null, '/');  // Clear URL
+function onClearAll(_e: any) {
+    history.pushState('/', '', '/');  // Clear URL
     closeVideo();
-  }
+}
 
-  function onClickVideo(new_video_hash) {
-    ws_emit('open_video', {video_hash: new_video_hash});
-    history.pushState(new_video_hash, null, '/?vid='+new_video_hash);  // Point URL to video
-  }
+function onVideoSeeked(_e: any) {
+    commentInput.forceDrawMode(false);  // Close draw mode when video frame is changed
+}
 
-  function onVideoSeeked(e) {
-    //console.log("App: seeked()");
-    comment_input.forceDrawMode(false);  // Close draw mode when video frame is changed
-  }
+function onCollabReport(e: any) {
+    if ($collabId)
+        wsEmit({collabReport: {
+            paused: e.detail.paused,
+            loop: e.detail.loop,
+            seekTimeSec: e.detail.seek_time,
+            drawing: e.detail.drawing,
+        }});
+}
 
-  function onCollabReport(e) {
-    if ($collab_id)
-      ws_emit('collab_report', {paused: e.detail.paused, seek_time: e.detail.seek_time, drawing: e.detail.drawing});
-  }
-
-  function onCommentPinClicked(e) {
-      // Find corresponding comment in the list, scroll to it and highlight
-      let comment_id = e.detail.id;
-    let comment = $all_comments.find(c => c.id == comment_id);
-    if (comment) {
-      onDisplayComment({detail: {timecode: comment.timecode, drawing: comment.drawing_data}});
-      let comment_card = document.getElementById("comment_card_" + comment_id);
-      if (comment_card) {
-        comment_card.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"});
-        setTimeout(() => { comment_card.classList.add("highlighted_comment"); }, 500);
-        setTimeout(() => { comment_card.classList.remove("highlighted_comment"); }, 3000);
-      }
+function onCommentPinClicked(e: any) {
+    // Find corresponding comment in the list, scroll to it and highlight
+    let commentId = e.detail.id;
+    let c = $allComments.find(c => c.comment.id == commentId);
+    if (c) {
+        onDisplayComment({detail: {timecode: c.comment.timecode, drawing: c.comment.drawing}});
+        let card = document.getElementById("comment_card_" + commentId);
+        if (card) {
+            card.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"});
+            setTimeout(() => { card?.classList.add("highlighted_comment"); }, 500);
+            setTimeout(() => { card?.classList.remove("highlighted_comment"); }, 3000);
+        }
     }
-  }
+}
 
-  function popHistoryState(e) {
-    console.log("popHistoryState: " + e.state);
+function popHistoryState(e: any) {
     if (e.state && e.state !== '/')
-      ws_emit('open_video', {video_hash: e.state});
+        wsEmit({openVideo: { videoId: e.state }});
     else
-      closeVideo();
-  }
+        closeVideo();
+}
 
-  // Parse URL to see if we have a video to open
-  const urlParams = new URLSearchParams(window.location.search);
-  urlParams.forEach((value, key) => {
+// Parse URL to see if we have a video to open
+const urlParams = new URLSearchParams(window.location.search);
+urlParams.forEach((value, key) => {
     if (key != "vid" && key != "collab") {
-      console.log("Got UNKNOWN URL parameter: '" + key + "'. Value= " + value);
-      acts.add({mode: 'warn', message: "Unknown URL parameter: '" + key + "'", lifetime: 5});
+        console.error("Got UNKNOWN URL parameter: '" + key + "'. Value= " + value);
+        acts.add({mode: 'warn', message: "Unknown URL parameter: '" + key + "'", lifetime: 5});
     }
-  });
-  $video_hash = urlParams.get('vid');
-  const prev_collab_id = $collab_id;
-  $collab_id = urlParams.get('collab');
-  if ($video_hash) {
-    // console.log("Video hash: " + video_hash);
-    if ($collab_id)
-      history.pushState($video_hash, null, '/?vid='+$video_hash+'&collab='+$collab_id);
+});
+
+$videoId = urlParams.get('vid');
+const prevCollabId = $collabId;
+$collabId = urlParams.get('collab');
+if ($videoId) {
+    if ($collabId)
+    history.pushState($videoId, '', '/?vid='+$videoId+'&collab='+$collabId);
     else
-      history.pushState($video_hash, null, '/?vid='+$video_hash);
-  }
+    history.pushState($videoId, '', '/?vid='+$videoId);
+}
 
-  let upload_url: string = "";
+let uploadUrl: string = "";
 
-  // -------------------------------------------------------------
-  // Websocket messaging
-  // -------------------------------------------------------------
 
-  // Read config from HTTP server first
-  const conf_file = "clapshot_client.conf.json";
-  function handleErrors(response: any) {
+// -------------------------------------------------------------
+// Websocket messaging
+// -------------------------------------------------------------
+
+// Read config from HTTP server first
+const CONF_FILE = "clapshot_client.conf.json";
+function handleErrors(response: any) {
     if (!response.ok)
-        throw Error("HTTP error: " + response.status);
+    throw Error("HTTP error: " + response.status);
     return response;
-  }
-  fetch(conf_file)
-      .then(handleErrors)
-      .then(response => response.json())
-      .then(json => {
-        // Check that we have all the expected config lines
-        const expected = ["ws_url", "upload_url", "user_menu_extra_items", "user_menu_show_basic_auth_logout"];
-        for (let key of expected) {
-          if (!(key in json))
-            throw Error("Missing key '" + key + "' in client config file '" + conf_file + "'");
-        }
-
-        upload_url = json.upload_url;
-        connect_websocket(json.ws_url);
-
-        $user_menu_items = json.user_menu_extra_items;
-        if (json.user_menu_show_basic_auth_logout) {
-          $user_menu_items = [...$user_menu_items, {label: "Logout", type: "logout-basic-auth"}];
-        }
-      })
-      .catch(error => {
-          console.log("Failed to read config. " + error)
-          acts.add({mode: 'danger', message: "Failed to read config. " + error, lifetime: 50});
-        });
-
-
-  let video_list_refresh_scheduled = false;
-  function refresh_my_videos()
-  {
-    if (!video_list_refresh_scheduled) {
-      video_list_refresh_scheduled = true;
-      setTimeout(() => {
-        video_list_refresh_scheduled = false;
-        ws_emit('list_my_videos', {});
-      }, 500);
+}
+fetch(CONF_FILE)
+.then(handleErrors)
+.then(response => response.json())
+.then(json => {
+    // Check that we have all the expected config lines
+    const expected = ["ws_url", "upload_url", "user_menu_extra_items", "user_menu_show_basic_auth_logout"];
+    for (let key of expected) {
+        if (!(key in json))
+            throw Error("Missing key '" + key + "' in client config file '" + CONF_FILE + "'");
     }
-  }
+
+    uploadUrl = json.upload_url;
+    connectWebsocket(json.ws_url);
+
+    $userMenuItems = json.user_menu_extra_items;
+    if (json.user_menu_show_basic_auth_logout) {
+        $userMenuItems = [...$userMenuItems, {label: "Logout", type: "logout-basic-auth"} as UserMenuItem];
+    }
+})
+.catch(error => {
+    console.error("Failed to read config:", error)
+    acts.add({mode: 'danger', message: "Failed to read config. " + error, lifetime: 50});
+});
 
 
+let videoListRefreshScheduled = false;
+function refreshMyVideos()
+{
+    if (!videoListRefreshScheduled) {
+        videoListRefreshScheduled = true;
+        setTimeout(() => {
+            videoListRefreshScheduled = false;
+            wsEmit({listMyVideos: {}});
+        }, 500);
+    }
+}
 
-  let ws_socket: WebSocket;
 
-  function is_connected() {
-    return ws_socket && ws_socket.readyState == ws_socket.OPEN;
-  }
+let wsSocket: WebSocket | undefined;
 
-  function disconnect() {
+function isConnected() {
+    return wsSocket && wsSocket.readyState == wsSocket.OPEN;
+}
+
+function disconnect() {
     closeVideo();
-    if (ws_socket) {
-      ws_socket.close();
+    if (wsSocket) {
+        wsSocket.close();
     }
-    ui_connected_state = false;
-  }
+    uiConnectedState = false;
+}
 
 
-  let send_queue: any[] = [];
+let sendQueue: any[] = [];
 
-  // Send message to server. If not connected, queue it.
-  function ws_emit(event_name: string, data: any)
-  {
-    let raw_msg = JSON.stringify({cmd: event_name, data: data});
-    if (is_connected()) {
-      log_abbreviated("ws_emit(): Sending: " + raw_msg);
-      ws_socket.send(raw_msg);
+// Send message to server. If not connected, queue it.
+function wsEmit(cmd: ClientToServerCmd)
+{
+    let cookies = LocalStorageCookies.getAllNonExpired();
+    let raw_msg = JSON.stringify({ ...cmd, cookies });
+    if (isConnected()) {
+        logAbbrev("[SEND] " + raw_msg);
+        wsSocket?.send(raw_msg);
     }
     else {
-      console.log("ws_emit(): Disconnected, so queuing: " + raw_msg);
-      send_queue.push(raw_msg);
+        logAbbrev("[SEND] (Disconnected, so queuing:) " + raw_msg);
+        sendQueue.push(raw_msg);
     }
-  }
+}
 
-  // Infinite loop that sends messages from the queue.
-  // This only ever sends anything if ws_emit() queues messages due to temporary disconnection.
-  function send_queue_loop()
-  {
-    while (send_queue.length > 0) {
-      let raw_msg = send_queue.shift();
-      ws_socket.send(raw_msg);
+
+// Infinite loop that sends messages from the queue.
+// This only ever sends anything if ws_emit() queues messages due to temporary disconnection.
+function sendQueueLoop()
+{
+    while (wsSocket && sendQueue.length > 0) {
+        let raw_msg = sendQueue.shift();
+        wsSocket.send(raw_msg);
     }
-    setTimeout(send_queue_loop, 500);
-  }
-  setTimeout(send_queue_loop, 500); // Start the loop
+    setTimeout(sendQueueLoop, 500);
+}
+setTimeout(sendQueueLoop, 500); // Start the loop
 
 
-  let reconnect_delay = 100;  // for exponential backoff
+let reconnectDelay = 100;  // for exponential backoff
 
 
-  function connect_websocket(ws_url: string) {
-    const auth_url = ws_url.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/api\/.*$/, "/api/health");
+function connectWebsocket(wsUrl: string) {
+    const auth_url = wsUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/api\/.*$/, "/api/health");
+    let req_init: RequestInit = {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Clapshot-Cookies': JSON.stringify(LocalStorageCookies.getAllNonExpired()),
+        },
+    };
 
-    function schedule_reconnect() {
-        reconnect_delay = Math.round(Math.min(reconnect_delay * 1.5, 5000));
-        console.log("API reconnecting in " + reconnect_delay + " ms");
-        setTimeout(() => { connect_websocket(ws_url); }, reconnect_delay);
-        setTimeout(() => { if (!is_connected()) ui_connected_state = false; }, 3000);
+    function scheduleReconnect() {
+        reconnectDelay = Math.round(Math.min(reconnectDelay * 1.5, 5000));
+        console.log("API reconnecting in " + reconnectDelay + " ms");
+        setTimeout(() => { connectWebsocket(wsUrl); }, reconnectDelay);
+        setTimeout(() => { if (!isConnected()) uiConnectedState = false; }, 3000);
     }
 
     try {
-        return fetch(auth_url)
-          .then(response => {
+        return fetch(auth_url, req_init)
+        .then(response => {
             if (response.ok) {
                 console.log("Authentication check OK. Connecting to WS API");
-                return connect_websocket_after_auth_check(ws_url);
+                return connectWebsocketAfterAuthCheck(wsUrl);
             } else if (response.status === 401 || response.status === 403) {
                 console.log("Auth failed. Status: " + response.status);
-                if (reconnect_delay > 1500) {
-                  // Force full reload to show login page
-                  window.location.reload();
+                if (reconnectDelay > 1500) {
+                    // Force full reload to show login page
+                    window.location.reload();
                 }
             } else {
                 throw new Error(`HTTP auth check ERROR: ${response.status}`);
             }
-            schedule_reconnect();
-          })
-          .catch(error => {
+            scheduleReconnect();
+        })
+        .catch(error => {
             console.error('HTTP auth check failed:', error);
-            schedule_reconnect();
-          });
-      } catch (error) {
-        schedule_reconnect();
-      }
-  }
+            scheduleReconnect();
+        });
+    } catch (error) {
+        scheduleReconnect();
+    }
+}
 
 
-  // Called after we get the API URL from the server.
-  function connect_websocket_after_auth_check(ws_url: string)
-  {
-    if (!ws_url)
-      throw Error("API URL not specified in config file");
+// Called after we get the API URL from the server.
+function connectWebsocketAfterAuthCheck(ws_url: string)
+{
+    if (!ws_url) throw Error("API URL not specified in config file");
 
     console.log("...CONNECTING to WS API: " + ws_url);
-    ws_socket = new WebSocket(ws_url);
+    wsSocket = new WebSocket(ws_url);
 
 
     // Handle connection opening
-    ws_socket.addEventListener("open", function (event) {
-      reconnect_delay = 100;
-      ui_connected_state = true;
+    wsSocket.addEventListener("open", function (_event) {
+        reconnectDelay = 100;
+        uiConnectedState = true;
 
-      console.log("Socket connected");
-      //acts.add({mode: 'info', message: 'Connected.', lifetime: 1.5});
-      if ($video_hash) {
-        ws_emit('open_video', {video_hash: $video_hash});
-      } else {
-        ws_emit('list_my_videos', {});
-        ws_emit('list_my_messages', {});
-      }
+        console.log("Socket connected");
+        //acts.add({mode: 'info', message: 'Connected.', lifetime: 1.5});
+        if ($videoId) {
+            wsEmit({openVideo: { videoId: $videoId }});
+        } else {
+            wsEmit({listMyVideos: {}});
+            wsEmit({listMyMessages: {}});
+        }
     });
 
-    function handle_with_errors(func) {
-      try {
-        return func();
-      } catch (e) {
-        // log message, fileName, lineNumber
-        console.log("Exception in Websocket handler: ", e);
-        console.log(e.stack);
-        acts.add({mode: 'danger', message: 'Client error: ' + e, lifetime: 5});
-      }
+    function handleWithErrors(func: { (): any; }): any {
+        try {
+            return func();
+        } catch (e: any) {
+            // log message, fileName, lineNumber
+            console.error("Exception in Websocket handler: ", e);
+            console.log(e.stack);
+            acts.add({mode: 'danger', message: 'Client error: ' + e, lifetime: 5});
+        }
     }
 
-    /*
-    ws_socket.addEventListener("error", function (event) {
-      handle_with_errors(() => {
-        console.log("Websocket error: " + event);
-      });
-    });
-    */
-
     // Reconnect if closed, with exponential+random backoff
-    ws_socket.addEventListener("close", function (event) {
-      console.log("Websock kocket closed:", event);
-
-      reconnect_delay = Math.round(Math.min(reconnect_delay * 1.5, 5000));
-      console.log("API reconnecting in " + reconnect_delay + " ms");
-      setTimeout(() => { connect_websocket(ws_url); }, reconnect_delay);
-      setTimeout(() => { if (!is_connected()) ui_connected_state = false; }, 3000);
+    wsSocket.addEventListener("close", function (_event) {
+        reconnectDelay = Math.round(Math.min(reconnectDelay * 1.5, 5000));
+        console.log("API reconnecting in " + reconnectDelay + " ms");
+        setTimeout(() => { connectWebsocket(ws_url); }, reconnectDelay);
+        setTimeout(() => { if (!isConnected()) uiConnectedState = false; }, 3000);
     });
 
-    if (prev_collab_id != $collab_id) {
-      // We have a new collab id. Close old and open new one.
-      if (prev_collab_id)
-        ws_emit('leave_collab', {});
-      if ($collab_id)
-        ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
+    if (prevCollabId != $collabId) {
+        // We have a new collab id. Close old and open new one.
+        if (prevCollabId)
+            wsEmit({leaveCollab: {}});
+        if ($collabId)
+            wsEmit({joinCollab: { collabId: $collabId, videoId: $videoId! }});
     }
 
     // Incoming messages
-    ws_socket.addEventListener("message", function (event)
+    wsSocket.addEventListener("message", function (event)
     {
-      const msg_json = JSON.parse(event.data);
-      handle_with_errors(() =>
-      {
-        const cmd = msg_json.cmd;
-        const data = msg_json.data;
-
-        log_abbreviated("[RAW SERVER] cmd: '" + cmd + "', data size = " + JSON.stringify(data).length);
-
-        if (Date.now() - last_video_progress_msg_ts > 5000) {
-          $video_progress_msg = null; // timeout progress message after a while
-        }
-
-        switch (cmd)
+        logAbbrev("[RECV] " + event.data);
+        const msgJson = JSON.parse(event.data);
+        handleWithErrors(() =>
         {
-          case 'welcome':
-            //log_abbreviated("[SERVER] welcome: " + JSON.stringify(data));
-            $cur_username = data.username;
-            $cur_user_id = data.user_id
-            break;
-
-          case 'error':
-            console.log("[SERVER ERROR]: " + JSON.stringify(data));
-            acts.add({mode: 'danger', message: data.msg, lifetime: 5});
-            break;
-
-          case 'user_videos':
-            log_abbreviated("[SERVER] user_videos: " + JSON.stringify(data));
-            $all_my_videos = data.videos;
-            console.log("Got " + $all_my_videos.length + " videos");
-            console.log($all_my_videos);
-            break;
-
-          case 'message':
-            log_abbreviated("[SERVER] message: " + JSON.stringify(data));
-            if ( data.event_name == 'progress' ) {
-              if (data.ref_video_hash == $video_hash) {
-                $video_progress_msg = data.message;
-                last_video_progress_msg_ts = Date.now();
-              }
+            const cmd = Proto3.client.ServerToClientCmd.fromJSON(msgJson);
+            if (!cmd) {
+                console.error("Got INVALID message: ", msgJson);
+                return;
             }
-            else if ( data.event_name == 'video_updated' ) {
-              refresh_my_videos();
+
+            if (Date.now() - lastVideoProgressMsgTime > 5000) {
+                $videoProgressMsg = null; // timeout progress message after a while
+            }
+
+            // welcome
+            if (cmd.welcome) {
+                if (!cmd.welcome.user) {
+                    console.error("No user in welcome message");
+                    acts.add({mode: 'danger', message: 'No user in welcome message', lifetime: 5});
+                    return;
+                }
+                $curUsername = cmd.welcome.user.name ?? cmd.welcome.user.id;
+                $curUserId = cmd.welcome.user.id;
+            }
+            // error
+            else if (cmd.error) {
+                console.error("[SERVER ERROR]: ", cmd.error);
+                acts.add({mode: 'danger', message: cmd.error.msg, lifetime: 5});
+            }
+            // showPage
+            else if (cmd.showPage) {
+                $curPageItems = [...cmd.showPage.pageItems];  // force svelte to re-render
+            }
+            // defineActions
+            else if (cmd.defineActions) {
+                for (var name in cmd.defineActions.actions)
+                    $serverDefinedActions[name] = cmd.defineActions.actions[name];
+            }
+            // messages
+            else if (cmd.showMessages) {
+                for (const msg of cmd.showMessages.msgs) {
+                    if ( msg.type === Proto3.UserMessage_Type.PROGRESS ) {
+                        if (msg.refs?.videoId == $videoId) {
+                            $videoProgressMsg = msg.message;
+                            lastVideoProgressMsgTime = Date.now();
+                        }
+                    }
+                    else if ( msg.type === Proto3.UserMessage_Type.VIDEO_UPDATED ) {
+                        refreshMyVideos();
+                    }
+                    else if ( msg.type === Proto3.UserMessage_Type.VIDEO_ADDED ) {
+                        console.log("Handling VIDEO_ADDED: ", msg);
+                        if (!msg.refs?.videoId) { console.error("VIDEO_ADDED message with no videoId. This is a bug."); }
+
+                        // Parse details and extract JSON data (added by FileUpload) from msg
+                        const uploadCookies = JSON.parse(msg.details ?? '{}');
+                        const listingData = JSON.parse(uploadCookies.listing_data_json ?? '{}');
+                        const videoAddedAction = uploadCookies.video_added_action;
+
+                        // Call organizer script if defined, otherwise refresh video list
+                        if (videoAddedAction) {
+                            const action = $serverDefinedActions[videoAddedAction];
+                            if (!action) {
+                                const errorMsg = `Undefined video_added_action: '${videoAddedAction}'`;
+                                acts.add({ mode: 'error', message: errorMsg, lifetime: 5 });
+                                console.error(errorMsg);
+                            } else {
+                                callOrganizerScript(action.action, {
+                                    video_id: msg.refs?.videoId,
+                                    listing_data: listingData,
+                                });
+                            }
+                        } else {
+                            refreshMyVideos();
+                        }
+                    }
+                    else {
+                        $userMessages = $userMessages.filter((m) => m.id != msg.id);
+                        if (msg.created) { $userMessages.push(msg); }
+                        if (!msg.seen) {
+                            const severity = (msg.type == Proto3.UserMessage_Type.ERROR) ? 'danger' : 'info';
+                            acts.add({mode: severity, message: msg.message, lifetime: 5});
+                            if (severity == 'info') {
+                                refreshMyVideos();    // hack, rename and other such actions send info notifications
+                            }
+                        };
+                    }
+                }
+            }
+            // openVideo
+            else if (cmd.openVideo) {
+                try {
+                    const v: Proto3.Video = cmd.openVideo.video!;
+                    if (!v.playbackUrl) throw Error("No playback URL");
+                    if (!v.duration) throw Error("No duration");
+                    if (!v.title) throw Error("No title");
+
+                    $videoPlaybackUrl = v.playbackUrl;
+                    $videoOrigUrl = v.origUrl ?? null;
+                    $videoId = v.id;
+                    $videoFps = parseFloat(v.duration.fps);
+                    if (isNaN($videoFps)) throw Error("Invalid FPS");
+                    $videoTitle = v.title;
+                    $allComments = [];
+
+                    if ($collabId)
+                        wsEmit({joinCollab: { collabId: $collabId, videoId: $videoId! }});
+                    else
+                        history.pushState($videoId, '', '/?vid=' + $videoId);  // Point URL to video
+                } catch(error) {
+                    acts.add({mode: 'danger', message: 'Bad video open request. See log.', lifetime: 5});
+                    console.error("Invalid video open request. Error: ", error);
+                }
+            }
+            // addComments
+            else if (cmd.addComments) {
+
+                // Add/replace the new comments
+                for (const newComment of cmd.addComments.comments) {
+                    if (newComment.videoId != $videoId) {
+                        console.warn("Comment not for current video. Ignoring.");
+                        continue;
+                    }
+                    $allComments = $allComments.filter((c) => c.comment.id !== newComment.id);
+                    $allComments.push({
+                        comment: newComment,
+                        indent: 0
+                    });
+                }
+
+                // Re-sort / turn updated comment tree into an indented, ordered list for UI
+                function indentCommentTree(items: IndentedComment[]): IndentedComment[]
+                {
+                    let rootComments = items.filter(item => item.comment.parentId == null);
+                    rootComments.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
+
+                    // Recursive DFS function to traverse and build the ordered list
+                    function dfs(c: IndentedComment, depth: number, result: IndentedComment[]): void {
+                        if (result.find((it) => it.comment.id === c.comment.id)) return;  // already added, cut infinite loop
+                        result.push({ ...c, indent: depth });
+                        let children = items.filter(item => (item.comment.parentId === c.comment.id));
+                        children.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
+                        for (let child of children)
+                        dfs(child, depth + 1, result);
+                    }
+
+                    let res: IndentedComment[] = [];
+                    rootComments.forEach((c) => dfs(c, 0, res));
+
+                    // Add any orphaned comments to the end (we may receive them out of order)
+                    items.forEach((c) => {
+                        if (!res.find((it) => it.comment.id === c.comment.id))
+                        res.push(c);
+                    });
+                    return res;
+                }
+                $allComments = indentCommentTree($allComments);
+            }
+            // delComment
+            else if (cmd.delComment) {
+                $allComments = $allComments.filter((c) => c.comment.id != cmd.delComment!.commentId);
+            }
+            // collabEvent
+            else if (cmd.collabEvent) {
+                const evt = cmd.collabEvent;
+                if (!evt.paused) {
+                    videoPlayer.collabPlay(evt.seekTimeSec, evt.loop);
+                } else {
+                    videoPlayer.collabPause(evt.seekTimeSec, evt.loop, evt.drawing);
+                }
+                if (lastCollabControllingUser != evt.fromUser) {
+                    lastCollabControllingUser = evt.fromUser;
+                    acts.add({mode: 'info', message: lastCollabControllingUser + " is controlling", lifetime: 5});
+                }
+            }
+            // setCookies
+            else if (cmd.setCookies) {
+                let cookie_dict = cmd.setCookies.cookies;
+                if (!cookie_dict) {
+                    console.error("[SERVER] setCookies command with no cookies. Raw JSON:", msgJson);
+                } else {
+                    let expireTimestamp = cmd.setCookies.expireTime?.getTime() ?? null;
+                    for (const [key, value] of Object.entries(cookie_dict)) {
+                        LocalStorageCookies.set(key, value, expireTimestamp);
+                    }
+                }
             }
             else {
-              $user_messages = $user_messages.filter((m) => m.id != data.id);
-              if (data.created) { $user_messages.push(data); }
-              $user_messages = $user_messages.sort((a, b) => a.id > b.id ? -1 : a.id < b.id ? 1 : 0);
-              if (!data.seen) {
-                const severity = (data.event_name == 'error') ? 'danger' : 'info';
-                acts.add({mode: severity, message: data.message, lifetime: 5});
-                if (severity == 'info') {
-                  refresh_my_videos();
-              }};
+                console.error("[SERVER] UNKNOWN command from server. Raw JSON:", msgJson);
             }
-            break;
-
-          case 'open_video':
-            log_abbreviated("[SERVER] open_video: " + JSON.stringify(data));
-            $video_url = data.video_url;
-            $video_hash = data.video_hash;
-            $video_fps = data.fps;
-            $video_title = data.title;
-            $all_comments = [];
-            if ($collab_id)
-              ws_emit('join_collab', {collab_id: $collab_id, video_hash: $video_hash});
-            break;
-
-          case 'new_comment':
-            log_abbreviated("[SERVER] new_comment: " + JSON.stringify(data));
-            {
-              function reorder_comments(old_order) {
-                // Helper to show comment threads in the right order and with correct indentation
-                let old_sorted = old_order.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
-                let new_order = [];
-                function find_insert_position_and_indent(parent_id)
-                {
-                  if (parent_id) {
-                    for (let i=new_order.length-1; i>=0; i--) {
-                      if (new_order[i].id == parent_id)
-                        return [i, new_order[i].indent+1] as const;
-                      if (new_order[i].parent_id == parent_id)
-                        return [i, new_order[i].indent] as const;
-                    }}
-                  return [new_order.length-1, 0] as const;
-                }
-                old_sorted.forEach((comment) => {
-                  let [pos, indent] = find_insert_position_and_indent(comment.parent_id);
-                  new_order.splice(pos+1, 0, {...comment, indent: indent});
-                });
-                return new_order;
-              }
-
-              //console.log("[SERVER] new_comment id=" + data.comment_id + " parent_id=" + data.parent_id + " tc=" + data.timecode + " comment=" + data.comment);
-              if (data.video_hash == $video_hash)
-              {
-                $all_comments.push({
-                    id: data.comment_id,
-                    comment: data.comment,
-                    username: data.username,
-                    user_id: data.user_id,
-                    avatar_url: null,
-                    drawing_data: data.drawing,
-                    parent_id: data.parent_id,
-                    edited: data.edited,
-                    indent: 0,
-                    timecode: data.timecode
-                  });
-                $all_comments = reorder_comments($all_comments);
-              } else {
-                log_abbreviated("Comment not for this video. Ignoring.");
-              }
-            }
-            break;
-
-          case 'del_comment':
-            //log_abbreviated("[SERVER] del_comment: " + data.comment_id);
-            $all_comments = $all_comments.filter((c) => c.id != data.comment_id);
-            break;
-
-          case 'collab_cmd':
-            log_abbreviated("[SERVER] collab_cmd: " + JSON.stringify(data));
-            if (!data.paused) {
-              video_player.collabPlay(data.seek_time);
-            } else {
-              video_player.collabPause(data.seek_time, data.drawing);
-            }
-            if (last_collab_controlling_user != data.from_user) {
-              last_collab_controlling_user = data.from_user;
-              acts.add({mode: 'info', message: last_collab_controlling_user + " is controlling", lifetime: 5});
-            }
-            break;
-
-          default:
-            log_abbreviated("[SERVER] UNKNOWN CMD '"+data.cmd+"': " + JSON.stringify(data));
-            break;
-        }
-      });
+        });
     });
-
-  }
-
-  function onClickDeleteVideo(video_hash: string, video_name: string) {
-    log_abbreviated("onClickDeleteVideo: " + video_hash + " / " + video_name);
-    if (confirm("Are you sure you want to delete '" + video_name + "'?")) {
-      ws_emit('del_video', {video_hash: video_hash});
-
-      // After 2 seconds, refresh the list of videos
-      function refresh_my_videos() { ws_emit('list_my_videos', {}); }
-      setTimeout(refresh_my_videos, 2000);
-    }
-  }
-
-  function onClickRenameVideo(video_hash: string, video_name: string) {
-    log_abbreviated("onClickRenameVideo: " + video_hash + " / " + video_name);
-    let new_name = prompt("Rename video to:", video_name);
-    if (new_name) {
-      ws_emit('rename_video', {video_hash: video_hash, new_name: new_name});
-      ws_emit('list_my_videos', {});
-    }
-  }
-
-function installThumbScrubber(e: MouseEvent, item: object)
-{
-  let sheet_cols = item.thumb_sheet_cols;
-  let sheet_rows = item.thumb_sheet_rows;
-  let bgImg =  new Image();
-
-  bgImg.onload = (le) => {
-    // Total size of sprite sheet in pixels
-    let sheet_w_px = le.target.naturalWidth;
-    let sheet_h_px = le.target.naturalHeight;
-
-    // Size of one frame in pixels
-    let frame_width = sheet_w_px / sheet_cols;
-    let frame_height = sheet_h_px / sheet_rows;
-
-    // Size of current div (that shows the sprite sheet) in pixels
-    let div_w_px = e.target.clientWidth;
-    let div_h_px = e.target.clientHeight;
-
-    // Switch background image to the now loaded sprite sheet
-    e.target.style.backgroundRepeat = 'no-repeat';
-    e.target.style.backgroundImage = 'url(' + bgImg.src + ')';
-
-    // Scale the sprite sheet so one frame fits in the div
-    let scaled_bgr_w = (div_w_px / frame_width) * sheet_w_px;
-    let scaled_bgr_h = (div_h_px / frame_height) * sheet_h_px;
-    e.target.style.backgroundSize = scaled_bgr_w + 'px ' + scaled_bgr_h + 'px';
-
-    function show_frame(frame_idx) {
-      let frame_xi = frame_idx % sheet_cols;
-      let frame_yi = Math.floor(frame_idx / sheet_cols);
-
-      let frame_left = scaled_bgr_w * (frame_xi / sheet_cols);
-      let frame_top = scaled_bgr_h * (frame_yi / sheet_rows);
-
-      e.target.style.backgroundPosition = '-' + frame_left + 'px -' + frame_top + 'px';
-    }
-
-    // Show first frame at first
-    show_frame(0);
-
-    // Scrub sheet on mouse move
-    e.target.onmousemove = (e) => {
-      let frame_idx = Math.floor((e.offsetX / e.target.clientWidth) * (sheet_cols * sheet_rows));
-      show_frame(frame_idx);
-    }
-  };
-
-  // Start loading the sprite sheet
-  bgImg.src = item.thumb_sheet_url;
 }
 
-function removeThumbScrubber(e: MouseEvent, item: object)
-{
-  // Restore original background image (item.thumb_url)
-  e.target.onmousemove = null;
-  e.target.onload = null;
-  e.target.style.backgroundImage = 'url(' + item.thumb_url + ')';
-  e.target.style.backgroundPosition = '0 0';
-  e.target.style.backgroundSize = '100% 100%';
+function onMoveItemsToFolder(e: {detail: {dstFolderId: string; ids: Proto3.FolderItemID[], listingData: StringMap}}) {
+    let {dstFolderId, ids, listingData} = e.detail;
+    wsEmit({moveToFolder: { dstFolderId, ids, listingData }});
 }
 
+function onReorderItems(e: {detail: {ids: Proto3.FolderItemID[], listingData: StringMap}}) {
+    let {ids, listingData} = e.detail;
+    wsEmit({reorderItems: { listingData, ids }});
+}
 
+function openVideoListItem(e: { detail: { item: Proto3.PageItem_FolderListing_Item, listingData: StringMap }}): void {
+    let {item, listingData} = e.detail;
+    if (item.openAction) {
+        callOrganizerScript(item.openAction, {
+            listing_data: listingData,
+            item_to_open: item
+        });
+    } else {
+        console.error("No openAction script for item: " + item);
+        acts.add({mode: 'error', message: "No open action for item. See log.", lifetime: 5});
+    }
+}
 
+// ------------
+
+// Expose some API functions to browser JS (=scripts from Server and Organizer)
+
+(window as any).clapshot = {
+    openVideo: (videoId: string) => { wsEmit({ openVideo: { videoId } }) },
+    renameVideo: (videoId: string, newName: string) => { wsEmit({ renameVideo: { videoId, newName } }) },
+    delVideo: (videoId: string) => { wsEmit({ delVideo: { videoId } }) },
+
+    callOrganizer: (cmd: string, args: Object) => { wsEmit({ organizerCmd: { cmd, args: JSON.stringify(args) } }) },
+    itemsToIDs: (items: Proto3.PageItem_FolderListing_Item[]): Proto3.FolderItemID[] => { return folderItemsToIDs(items) },
+    moveToFolder: (
+        dstFolderId: string,
+        ids: Proto3.FolderItemID[],
+        listingData: StringMap) => { wsEmit({ moveToFolder: { dstFolderId, ids, listingData } }) },
+    reorderItems: (
+        ids: Proto3.FolderItemID[],
+        listingData: StringMap) => { wsEmit({ reorderItems: { ids, listingData } }) },
+};
+
+/// Evalute a string as Javascript from Organizer (or Server)
+function callOrganizerScript(script: Proto3.ScriptCall|undefined, action_args: Object): void {
+    if (!script || !script.code ) {
+        console.log("callOrganizerScript called with empty code. Ignoring.");
+        return;
+    }
+    if (script.lang != Proto3.ScriptCall_Lang.JAVASCRIPT ) {
+        console.error("BUG: Unsupported Organizer script language: " + script.lang);
+        acts.add({mode: 'error', message: "BUG: Unsupported script lang. See log.", lifetime: 5});
+        return;
+    }
+    const Function = function () {}.constructor;
+    // @ts-ignore
+    let scriptFn = new Function("_action_args", script.code);
+    console.log("Calling organizer script:", {action_args, code: script.code});
+    try {
+        scriptFn(action_args);
+    } catch (e: any) {
+        console.error("Error in organizer script:", e);
+        acts.add({mode: 'error', message: "Organizer script error. See log.", lifetime: 5});
+    }
+}
+
+function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: VideoListDefItem[], listingData: StringMap }})
+{
+    let {action, items, listingData} = e.detail;
+    let itemsObjs = items.map((it) => it.obj);
+    console.log("onVideoListPopupAction():", {action, itemsObjs, listingData});
+    callOrganizerScript(action.action, {
+                listing_data: listingData,
+                selected_items: itemsObjs
+            });
+}
 </script>
 
+
 <svelte:window on:popstate={popHistoryState}/>
+
 <main>
-<div class="flex flex-col w-screen h-screen {debug_layout?'border-2 border-yellow-300':''}">
-    <div class="flex-none w-full"><NavBar on:clear-all={onClearAll} on:basic-auth-logout={disconnect} /></div>
-    <div class="flex-grow w-full overflow-auto {debug_layout?'border-2 border-cyan-300':''}">
-        <Notifications />
+    <span id="popup-container"></span>
+    <div class="flex flex-col bg-[#101016] w-screen h-screen {debugLayout?'border-2 border-yellow-300':''}">
+        <div class="flex-none w-full"><NavBar on:clear-all={onClearAll} on:basic-auth-logout={disconnect} /></div>
+        <div class="flex-grow w-full overflow-auto {debugLayout?'border-2 border-cyan-300':''}">
+            <Notifications />
 
-        {#if !ui_connected_state }
+        {#if !uiConnectedState }
 
-          <!-- ========== "connecting" spinner ============= -->
-          <div transition:fade class="w-full h-full text-5xl text-slate-600 align-middle text-center">
+        <!-- ========== "connecting" spinner ============= -->
+        <div transition:fade class="w-full h-full text-5xl text-slate-600 align-middle text-center">
             <h1 class="m-16" style="font-family: 'Yanone Kaffeesatz', sans-serif;">
-              Connecting server...
+                Connecting server...
             </h1>
             <div class="fa-2x block">
-              <i class="fas fa-spinner connecting-spinner"></i>
+                <i class="fas fa-spinner connecting-spinner"></i>
             </div>
 
-          </div>
+        </div>
 
-        {:else if $video_hash}
+        {:else if $videoId}
 
-          <!-- ========== video review widgets ============= -->
-          <div transition:slide class="flex h-full w-full {debug_layout?'border-2 border-blue-700':''}">
+        <!-- ========== video review widgets ============= -->
+        <div transition:slide class="flex h-full w-full {debugLayout?'border-2 border-blue-700':''}">
 
-            <div transition:slide class="flex-1 flex flex-col {debug_layout?'border-2 border-purple-600':''}">
-              <div class="flex-1 bg-cyan-900">
-                <VideoPlayer
-                  bind:this={video_player} src={$video_url}
-                  on:seeked={onVideoSeeked}
-                  on:collabReport={onCollabReport}
-                  on:commentPinClicked={onCommentPinClicked}
-                  />
-              </div>
-              <div class="flex-none w-full p-2 {debug_layout?'border-2 border-green-500':''}">
-                <CommentInput bind:this={comment_input} on:button-clicked={onCommentInputButton} />
-              </div>
+            <div transition:slide class="flex-1 flex flex-col {debugLayout?'border-2 border-purple-600':''}">
+                <div class="flex-1 bg-cyan-900">
+                    <VideoPlayer
+                    bind:this={videoPlayer} src={$videoPlaybackUrl}
+                    on:seeked={onVideoSeeked}
+                    on:collabReport={onCollabReport}
+                    on:commentPinClicked={onCommentPinClicked}
+                    />
+                </div>
+                <div class="flex-none w-full p-2 {debugLayout?'border-2 border-green-500':''}">
+                    <CommentInput bind:this={commentInput} on:button-clicked={onCommentInputButton} />
+                </div>
             </div>
 
-            {#if $all_comments.length > 0}
+            {#if $allComments.length > 0}
             <!-- ========== comment sidepanel ============= -->
             <div id="comment_list" transition:fade class="flex-none w-72 basis-128 bg-gray-900 py-2 px-2 space-y-2 ml-2 overflow-y-auto">
-                {#each $all_comments as item}
-                  <CommentCard {...item} on:display-comment={onDisplayComment} on:delete-comment={onDeleteComment} on:reply-to-comment={onReplyComment} on:edit-comment={onEditComment}/>
+                {#each $allComments as it}
+                <CommentCard
+                    indent={it.indent}
+                    comment={it.comment}
+                    on:display-comment={onDisplayComment}
+                    on:delete-comment={onDeleteComment}
+                    on:reply-to-comment={onReplyComment}
+                    on:edit-comment={onEditComment}
+                />
                 {/each}
             </div>
             {/if}
-          </div>
+        </div>
 
-          {#if $collab_id && !collab_dialog_ack}
-          <div class="fixed top-0 left-0 w-full h-full flex justify-center items-center">
-              <div class="bg-gray-900 text-white p-4 rounded-md shadow-lg text-center leading-loose">
+        {#if $collabId && !collabDialogAck}
+        <div class="fixed top-0 left-0 w-full h-full flex justify-center items-center">
+            <div class="bg-gray-900 text-white p-4 rounded-md shadow-lg text-center leading-loose">
                 <p class="text-xl text-green-500">Collaborative viewing session active.</p>
-                <p class="">Session ID is <code class="text-green-700">{$collab_id}</code></p>
+                <p class="">Session ID is <code class="text-green-700">{$collabId}</code></p>
                 <p class="">Actions like seek, play and draw are mirrored to all participants.</p>
                 <p class="">To invite people, copy browser URL and send it to them.</p>
                 <p class="">Exit by clicking the green icon in header.</p>
-                <button class="bg-gray-800 hover:bg-gray-700 text-green m-2 p-2 rounded-md shadow-lg" on:click|preventDefault="{()=>collab_dialog_ack=true}">Understood</button>
-              </div>
-          </div>
-          {/if}
+                <button class="bg-gray-800 hover:bg-gray-700 text-green m-2 p-2 rounded-md shadow-lg" on:click|preventDefault="{()=>collabDialogAck=true}">Understood</button>
+            </div>
+        </div>
+        {/if}
 
         {:else}
 
-          {#if upload_url }
-          <div class="m-6">
-            <FileUpload post_url={upload_url}/>
-          </div>
-          {/if}
-
-          <!-- ========== video listing ============= -->
-          <div class="m-6 text">
-            <h1 class="text-4xl m-6">
-              {#if $all_my_videos.length==0}
-                You have no videos.
-              {/if}
-            </h1>
-            <div class="flex flex-wrap gap-4">
-              {#each $all_my_videos as item}
-              <div class="bg-slate-600 w-80 h-20 rounded-md p-2 m-1 mx-1 overflow-clip cursor-pointer"
-                  on:click|preventDefault={ () => onClickVideo(item.video_hash) }
-                  on:keypress={(e) => { if (e.key === 'Enter') { onClickVideo(item.video_hash) }}}
-                  >
-
-                {#if item.thumb_url}
-                  <!-- hover mouse to scrub thumb sheet -->
-                  <div class="w-[7.111rem] h-[4rem] float-left mr-2 bg-gray-900 rounded-md overflow-hidden"
-                    style="background-image: url('{item.thumb_url}'); background-size: cover; background-position: 0 0;"
-                    on:focus={()=>{}}
-                    on:blur={()=>{}}
-                    on:mouseover={(e) => installThumbScrubber(e, item)}
-                    on:mouseout={(e) => removeThumbScrubber(e, item)}
-                  >
-                  </div>
-                {/if}
-
-                <span class="text-amber-400 text-xs pr-2 border-r border-gray-400">{item.added_time}</span>
-                <span class="text-amber-500 font-mono text-xs pr-2">{item.video_hash}</span>
-                <VideoListPopup
-                  onDel={() => { onClickDeleteVideo(item.video_hash, item.title) }}
-                  onRename={() => { onClickRenameVideo(item.video_hash, item.title) }} />
-                <div class="leading-none"><a href="/?vid={item.video_hash}" title="{item.title}" class="break-all text-xs">{item.title}</a></div>
-              </div>
-              {/each}
+            <!-- ========== page components ============= -->
+            <div class="organizer_page">
+                {#each $curPageItems as pit}
+                    {#if pit.html }
+                        <div>
+                            <RawHtmlItem html={pit.html} />
+                        </div>
+                    {:else if pit.folderListing}
+                        <div class="my-6">
+                            <VideoList
+                                listingData={pit.folderListing.listingData}
+                                items={pit.folderListing.items.map((it)=>({
+                                    id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
+                                    obj: it }))}
+                                dragDisabled = {pit.folderListing.allowReordering ? false : true}
+                                listPopupActions = {pit.folderListing.popupActions}
+                                on:open-item = {openVideoListItem}
+                                on:reorder-items = {onReorderItems}
+                                on:move-to-folder = {onMoveItemsToFolder}
+                                on:popup-action = {onVideoListPopupAction}
+                            />
+                        </div>
+                        <!-- ========== upload widget ============= -->
+                        {#if pit.folderListing.allowUpload }
+                            <div class="h-24 border-4 border-dashed border-gray-700">
+                                <FileUpload
+                                    postUrl={uploadUrl}
+                                    listingData={pit.folderListing.listingData ?? {}}
+                                    videoAddedAction={pit.folderListing.videoAddedAction}
+                                >
+                                    <div class="flex flex-col justify-center items-center h-full">
+                                        <div class="text-2xl text-gray-700">
+                                            <i class="fas fa-upload"></i>
+                                        </div>
+                                        <div class="text-xl text-gray-700">
+                                            Drop video files here to upload
+                                        </div>
+                                    </div>
+                                </FileUpload>
+                            </div>
+                        {/if}
+                    {/if}
+                {/each}
             </div>
 
-            {#if $user_messages.length>0}
-              <h1 class="text-2xl m-6 mt-12 text-slate-500">
-                  Latest messages
-              </h1>
-              <div class="gap-4 max-h-56 overflow-y-auto border-l px-2 border-gray-900">
-                {#each $user_messages as msg}
-                  <UserMessage {msg} />
-                {/each}
-              </div>
+
+            <div>
+                {#if $userMessages.length>0}
+                <h1 class="text-2xl m-6 mt-12 text-slate-500">
+                    Latest messages
+                </h1>
+                <div class="gap-4 max-h-56 overflow-y-auto border-l px-2 border-gray-900" role="log">
+                    {#each $userMessages as msg}
+                    <UserMessage {msg} />
+                    {/each}
+                </div>
+                {/if}
+            </div>
+
             {/if}
-
-          </div>
-
-        {/if}
+        </div>
     </div>
-</div>
 </main>
 
-<style>
-/* Animate "waiting for server" spinner */
-.connecting-spinner { animation: rotation 3s infinite steps(8); }
-@keyframes rotation {
-    from {
-        transform: rotate(0deg);
-    } to {
-        transform: rotate(360deg);
-    }
-}
 
-/*
-::-webkit-scrollbar {
-    display: none;
-}
-body {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-}
-*/
+<style>
+    /* Animate "waiting for server" spinner */
+    .connecting-spinner { animation: rotation 3s infinite steps(8); }
+    @keyframes rotation {
+        from {
+            transform: rotate(0deg);
+        } to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* Make all headings in organizer page bigger */
+    :global(div.organizer_page){
+        margin: 2em;
+    }
+
+    :global(.organizer_page h2){
+        font-size: 200%;
+    }
 
 </style>
-

@@ -1,0 +1,238 @@
+<div class="p-6 rounded shadow-lg space-y-5">
+    <h2 class="text-xl font-bold mb-4">User Permissions</h2>
+    <h4 class="mb-2 opacity-50"><code>My cat videos</code></h4>
+
+    <div>
+      <table id="user-perms-table" class="w-full text-left border-2 border-gray-800">
+        <thead>
+          <tr class="text-gray-600">
+            <th class="py-2 px-4 font-bold uppercase text-sm">Who</th>
+            <th class="py-2 px-4 font-bold uppercase text-sm"> Current Folder</th>
+            <th class="py-2 px-4 font-bold uppercase text-sm">Role for New Items</th>
+            <th class="py-2 px-4 font-bold uppercase text-sm"></th>
+          </tr>
+        </thead>
+        <tbody id="permission-list">
+          <!-- Dynamically generated rows go here -->
+        </tbody>
+      </table>
+    </div>
+
+    <div class="rounded-md">
+        <h4 class="text-gray-600 font-semibold mb-2">Add user / group</h3>
+        <input type="text" name="user_search" id="user_search" class="mt-1 p-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" placeholder="Search..." />
+    </div>
+
+    <div class="flex justify-end space-x-2">
+      <button class="px-4 py-2 bg-gray-300 text-gray-600 rounded-md hover:bg-gray-400">Cancel</button>
+      <button class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save</button>
+    </div>
+
+    <div class="role-help">
+      <table class="text-s text-left">
+        <tr>
+          <th>viewer</th>
+          <td>For a video: can play it. For a folder: can list contents.</td>
+        </tr>
+        <tr>
+          <th>commenter</th>
+          <td>Can also read and write video comments.</td>
+        </tr>
+        <tr>
+          <th>contributor</th>
+          <td>Can also add videos and subfolders.</td>
+        </tr>
+        <tr>
+          <th>manager</th>
+          <td>Can also reshare, edit video details, unlink/move item(s) from folder.</td>
+        </tr>
+        <tr>
+          <th>admin</th>
+          <td>Can also take ownership of item(s).</td>
+        </tr>
+      </table>
+    </div>
+
+    <style>
+      .role-help { opacity: 50%; border-top: 1px solid #888; margin-top: 2em; }
+      .role-help table { margin-top: 2em; }
+      .role-help td, .role-help th { font-size: small; }
+      .role-help th { padding-right: 1em; }
+    </style>
+
+</div>
+
+  <!-- Template for a row in the permission table -->
+
+  <script type="text/html" id="template-row">
+    <tr>
+      <td class="subject-name py-2 px-4">%SUBJECT_NAME%</td>
+      <td class="py-2 px-4">
+        <select class="role-select border-gray-300 rounded-md shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+          <!-- Role options will be dynamically generated -->
+        </select>
+      </td>
+      <td class="py-2 px-4">
+        <select class="role-select border-gray-300 rounded-md shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+          <!-- Role options will be dynamically generated -->
+        </select>
+      </td>
+      <td>
+          <button class="remove-button" title="Remove"><i class="fas fa-trash text-amber-600 hover:text-amber-500"></i></button>
+      </td>
+    </tr>
+  </script>
+
+
+<script type="text/javascript">
+
+
+// List of roles
+const ROLES = ["viewer", "commenter", "contributor", "manager", "admin"];
+
+// Mock remote data source function
+async function getUserIds() {
+  await new Promise(resolve => setTimeout(resolve, 200)); // Simulate a delay
+ let current_uids = $('#user-perms-table tr').map(function() { return $(this).attr('data-user-id'); }).get();
+  return ["Alice", "Bob", "Charlie", "LDAP Group 1", "User1", "User2", "Group1", "Group2"]
+    .filter(x => !current_uids.includes(x));
+};
+
+
+
+function removeUser(userId) {
+  console.log('removeUser: ' + userId);
+  let table_id = 'user-perms-table';
+  $('#user-perms-table tr[data-user-id="' + userId + '"]').remove();
+}
+
+function initializeUserTable() {
+  // Add a non-editable row for Alice
+  $(document).ready(function() {
+    addRow('Alice', true);
+    addRow('Bob', false);
+  });
+}
+
+
+// jQuery UI autocomplete
+function initializeAutocomplete() {
+  $("#user_search").autocomplete({
+    source: async function(request, response) {
+      var userIds = await getUserIds();
+      var results = $.ui.autocomplete.filter(userIds, request.term);
+      response(results.slice(0, 16));
+    },
+    select: function(event, ui) {
+      var subjectName = ui.item.value;
+      addRow(subjectName, false);
+      $("#user_search").val('');
+      return false;
+    }
+  });
+}
+
+function addRow(userId, nonEditable) {
+  var templateRow = $("#template-row").html();
+  templateRow = templateRow.replace('%SUBJECT_NAME%', userId);
+
+  var newTr = $(templateRow);
+  $("#permission-list").append(newTr);
+  newTr.attr("data-user-id", userId);
+
+  // Replace select options with roles
+  $(newTr).find('.role-select').each(function() {
+    for (var i = 0; i < ROLES.length; i++) {
+      $(this).append(new Option(ROLES[i], ROLES[i]));
+    }
+  });
+
+  // If the row is non-editable, disable the inputs and buttons
+  if (nonEditable) {
+    $(newTr).find('.role-select').prop('disabled', true);
+    $(newTr).find('.remove-button').remove();
+  } else {
+    $(newTr).find('.remove-button').click(function() {
+      removeUser(userId);
+    });
+  }
+}
+
+
+
+
+// Event listener for select change
+function initializeSelectChangeEvent() {
+  $(document).on('change', 'select', function() {
+    var currentSubject = $(this).closest('tr').find('td:first').text();
+    var currentRoleCurrentFolder = $(this).closest('tr').find('select:first').val();
+    var currentRoleNewItems = $(this).closest('tr').find('select:last').val();
+
+    console.log('Subject: ' + currentSubject);
+    console.log('Role for Current Folder: ' + currentRoleCurrentFolder);
+    console.log('Role for New Items: ' + currentRoleNewItems);
+  });
+}
+
+// -----------------------------
+
+
+// Function to load scripts dynamically
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    var script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+// Function to load styles dynamically
+function loadStyle(href) {
+  return new Promise((resolve, reject) => {
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.type = 'text/css';
+    link.href = href;
+    link.onload = resolve;
+    link.onerror = reject;
+    document.head.appendChild(link);
+  });
+}
+
+// Load the required scripts and styles
+async function loadScriptsAndStyles() {
+  try {
+    await loadStyle('https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css');
+    await loadScript('https://code.jquery.com/jquery-3.6.0.min.js');
+    await loadScript('https://code.jquery.com/ui/1.12.1/jquery-ui.min.js');
+    return Promise.resolve();
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
+
+
+// Main function
+async function main() {
+  console.log("Main function called");
+  try {
+    await loadScriptsAndStyles();
+    console.log("Scripts and styles loaded");
+    $(function() {
+      initializeAutocomplete();
+      console.log("Autocomplete initialized");
+      initializeSelectChangeEvent();
+      console.log("Select change event initialized");
+      initializeUserTable();
+      console.log("User table initialized");
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the main function
+main();
+</script>

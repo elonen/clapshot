@@ -1,6 +1,10 @@
 use docopt::Docopt;
-use std::path::PathBuf;
-use anyhow::bail;
+use serde::Deserialize;
+use tracing::{error};
+use std::{path::{PathBuf}};
+use anyhow::{bail};
+use clapshot_server::{PKG_NAME, PKG_VERSION, run_clapshot, grpc::{grpc_client::prepare_organizer, grpc_server::make_grpc_server_bind}};
+
 mod log;
 
 const USAGE: &'static str = r#"
@@ -11,74 +15,138 @@ Then serves the annotations and comments via an asyncronous HTTP + Socket.IO API
 Use a proxy server to serve files in /videos and to secure the API with HTTPS/WSS.
 
 Usage:
-  clapshot-server [options] (--url-base=URL) (--data-dir=PATH)
-  clapshot-server [options] [--mute TOPIC]... (--url-base=URL) (--data-dir=PATH)
-  clapshot-server (-h | --help)
+{NAME} [options] (--url-base <url>) (--data-dir <path>)
+{NAME} (-h | --help)
 
 Required:
- --url-base=URL       Base URL of the API server, e.g. https://example.com/clapshot/.
+
+ --url-base <url>     Base URL of the API server, e.g. https://example.com/clapshot/.
                       This depends on your proxy server configuration.
- --data-dir=PATH      Directory for database, /incoming, /videos and /rejected
+ --data-dir <path>    Directory for database, /incoming, /videos and /rejected
 
 Options:
- -p PORT --port=PORT    Port to listen on [default: 8095]
- -H HOST --host=HOST    Host to listen on [default: 0.0.0.0]
- --host-videos          Host the /videos directory
-                        (For debugging. Use Nginx or Apache with auth in production.)
- -P SEC --poll SEC      Polling interval for incoming folder [default: 3.0]
- -m TOPIC --mute TOPIC    Mute logging for a topic (can be repeated). Sets level to WARNING.
-                        See logs logs for available topics.
- -l FILE --log FILE     Log to file instead of stdout
- -j --json              Log in JSON format
- -w N --workers N       Max number of workers for video processing [default: 0]
-                        (0 = number of CPU cores)
- -b VBR --bitrate VBR   Target (max) bitrate for transcoding, in Mbps [default: 2.5]
- --migrate              Migrate database to latest version. Make a backup first.
 
- -d --debug             Enable debug logging
- -h --help              Show this screen
+ -p --port <port>     Port to listen on [default: 8095]
+ -H --host <host>     Host to listen on [default: 127.0.0.1]
+
+ -P --poll <sec>      Polling interval for incoming folder [default: 3.0]
+
+ -l --log <file>      Log to file instead of stdout
+ -j --json            Log in JSON format
+ -w --workers <n>     Max number of workers for video processing [default: 0]
+                      (0 = number of CPU cores)
+
+ -b --bitrate <vbr>   Target (max) bitrate for transcoding, in Mbps [default: 2.5]
+ --migrate            Migrate database to latest version. Make a backup first.
+
+ --cors <origins>     Allowed CORS origins, separated by commas.
+                      Defaults to allowing url-base only.
+
+ -d --debug           Enable debug logging
+ -h --help            Show this screen
+ -v --version         Show version and exit
+
+Organizer:
+
+Plugin system for organizing videos and users. Clapshot server can connect to
+a custom Organizer through gRPC, which then connects back to the server,
+establishing bidirectional gRPC. Recommended way to run an Organizer
+is to use --org-cmd, which allows integrated logging and shutdown.
+Unix sockets are used by default, and you don't usually need to
+specify --org-in-uri or --org-out-tcp.
+
+ --org-cmd <cmd>       Shell command to start Organizer plugin.
+                       The command should block until SIGTERM, and log to
+                       stdout/stderr without timestamps. Unless --org-uri is a HTTP(S) URI,
+                       the command will get a Unix socket path as an argument when
+                       Clapshot server calls it.
+
+ --org-in-uri <uri>    Custom endpoint for srv->org connections.
+                       E.g. `/path/to/plugin.sock` or `http://[::1]:50051`
+                       If `--org-cmd` is given, this defaults to a temp .sock in datadir.
+
+ --org-out-tcp <addr>  Listen in TCP address port for org->srv connections.
+                       Default is to use a Unix socket in datadir. E.g. `[::1]:50052`
+
 "#;
+
+#[derive(Debug, Deserialize)]
+struct Args {
+    flag_port: u16,
+    flag_host: String,
+    flag_poll: f32,
+    flag_log: Option<String>,
+    flag_json: bool,
+    flag_workers: usize,
+    flag_bitrate: f32,
+    flag_migrate: bool,
+    flag_org_cmd: Option<String>,
+    flag_org_in_uri: Option<String>,
+    flag_org_out_tcp: Option<String>,
+    flag_url_base: String,
+    flag_data_dir: PathBuf,
+    flag_cors: Option<String>,
+    flag_debug: bool,
+    flag_version: bool,
+}
 
 fn main() -> anyhow::Result<()>
 {
-    let argv = std::env::args;
-    //let argv = || vec!["clapshot-server", "--bitrate", "8", "--migrate", "--debug", "--url-base", "http://127.0.0.1:8095", "--data-dir", "DEV_DATADIR/"];
-
-    let args = Docopt::new(USAGE)
-        .and_then(|d| d.argv(argv().into_iter()).parse())
+    let args: Args = Docopt::new(USAGE.replace("{NAME}", PKG_NAME))
+        .and_then(|d| d.deserialize())
         .unwrap_or_else(|e| e.exit());
 
-    let port_str = args.get_str("--port");
-    let port = port_str.parse::<u16>().unwrap();
+    if args.flag_version { println!("{}", PKG_VERSION); return Ok(()); }
+    // if args.flag_debug { println!("Debug enabled; parsed command line: {:#?}", args); }
 
-    let debug: bool = args.get_bool("--debug");
-    let data_dir = PathBuf::from(args.get_str("--data-dir"));
+    let target_bitrate = {
+        if args.flag_bitrate < 0.1 { bail!("Bitrate must be >= 0.1"); }
+        (args.flag_bitrate * 1_000_000.0) as u32
+    };
 
-    let log_file = args.get_str("--log").to_string();
-    let json_log = args.get_bool("--json");
+    if !(&args.flag_data_dir).exists() {
+        bail!("Data directory does not exist: {:?}", args.flag_data_dir);
+    }
 
-    let mut n_workers = args.get_str("--workers").parse::<usize>().unwrap_or(0);
-    if n_workers == 0 { n_workers = num_cpus::get(); }
+    let url_base = args.flag_url_base.strip_suffix("/").unwrap_or("").to_string(); // strip trailing slash, if any
 
-    let bitrate_mbps = args.get_str("--bitrate").parse::<f32>().unwrap_or(2.5);
-    if bitrate_mbps < 0.1 { bail!("Bitrate must be >= 0.1"); }
-    let target_bitrate = (bitrate_mbps * 1_000_000.0) as u32;
-
-    let url_base = args.get_str("--url-base").to_string()
-        .strip_suffix("/").unwrap_or("").to_string(); // strip trailing slash, if any
-
-    let migrate = args.get_bool("--migrate");
-
-    let poll_interval = args.get_str("--poll").parse::<f32>().unwrap_or(3.0);
-    let resubmit_delay = poll_interval * 5.0;
-
-    // Setup logging
     let time_offset = time::UtcOffset::current_local_offset().expect("should get local offset");
     let _log_guard = log::setup_logging(
         time_offset,
-        debug,
-        &log_file,
-        json_log);
+        args.flag_debug,
+        &args.flag_log.clone().unwrap_or_default(),
+        args.flag_json);
 
-    clapshot_server::run_clapshot(data_dir, migrate, url_base, port, n_workers, target_bitrate, poll_interval, resubmit_delay)
+    let grpc_server_bind = make_grpc_server_bind(&args.flag_org_out_tcp, &args.flag_data_dir)?;
+
+    let (org_uri, _org_hdl) = prepare_organizer(
+        &args.flag_org_in_uri,
+        &args.flag_org_cmd,
+        args.flag_debug,
+        args.flag_json,
+        &args.flag_data_dir)?;
+
+    let cors_origins: Vec<String> = args.flag_cors
+        .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
+        .unwrap_or_default();
+
+    // Run the server (blocking)
+    if let Err(e) = run_clapshot(
+        args.flag_data_dir.to_path_buf(),
+        args.flag_migrate,
+        url_base,
+        cors_origins,
+        args.flag_host,
+        args.flag_port,
+        org_uri,
+        grpc_server_bind,
+        if args.flag_workers == 0 { num_cpus::get() } else { args.flag_workers },
+        target_bitrate,
+        args.flag_poll,
+        args.flag_poll * 5.0)
+    {
+        error!("run_clapshot() failed: {}", e);
+    }
+
+    Ok(())
 }

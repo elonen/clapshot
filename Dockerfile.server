@@ -1,0 +1,80 @@
+FROM rust:1.78-slim-bookworm AS rust-bookworm-slim
+
+# ----------------------------------
+
+FROM rust-bookworm-slim AS chef
+
+# Create regular user
+ARG USER=docker
+ARG UID=1000
+ARG GID=1000
+RUN echo "#### USER=${USER}, UID=${UID}, GID=${GID}"
+RUN test -n "${USER}" && test -n "${UID}" && test -n "${GID}"
+
+RUN groupadd -f ${USER} --gid=${GID}
+RUN useradd -m ${USER} --uid=${UID} --gid=${GID} || true
+
+# Install cargo chef (Rust build cache for Docker)
+USER ${UID}:${GID}
+RUN cargo install cargo-chef
+RUN cargo install cargo-deb
+USER root
+
+# Install system packages
+RUN apt-get -qy update
+RUN apt-get -qy install acl sudo >/dev/null
+
+# Install system packages
+RUN apt-get -qy update >/dev/null
+RUN apt-get -qy install make >/dev/null
+RUN apt-get -qy install ffmpeg >/dev/null
+RUN apt-get -qy install mediainfo >/dev/null
+RUN apt-get -qy install mscgen >/dev/null
+RUN apt-get -qy install sqlite3 >/dev/null
+
+# Rust build deps
+RUN apt-get -qy install libssl-dev >/dev/null
+RUN apt-get -qy install libsqlite3-dev >/dev/null
+RUN apt-get -qy install protobuf-compiler >/dev/null
+
+# Switch to regular user
+RUN mkdir -p /app
+RUN chown -R ${UID}:${GID} /app
+USER ${UID}:${GID}
+
+# ----------------------------------
+
+FROM chef AS planner
+
+RUN mkdir -p /app/server
+WORKDIR /app/server
+COPY --chown=${UID}:${GID} server/Cargo.toml .
+RUN cargo chef prepare --recipe-path recipe.json
+
+RUN mkdir -p /app/protobuf/libs/rust
+WORKDIR /app/protobuf/libs/rust
+COPY --chown=${UID}:${GID} ../protobuf/libs/rust/Cargo.toml .
+RUN cargo chef prepare --recipe-path recipe.json
+
+# ----------------------------------
+
+FROM chef AS builder
+
+# Prebuild dependencies (build cache)
+WORKDIR /app/protobuf/libs/rust
+COPY --from=planner /app/protobuf/libs/rust/recipe.json ./
+RUN cargo chef cook --recipe-path recipe.json
+
+WORKDIR /app/server
+COPY --from=planner /app/server/recipe.json ./
+RUN cargo chef cook --recipe-path recipe.json
+
+# Copy dep sources
+COPY --chown=${UID}:${GID} protobuf/proto /app/protobuf/proto
+COPY --chown=${UID}:${GID} protobuf/libs/rust /app/protobuf/libs/rust
+COPY --chown=${UID}:${GID} server /app/server
+
+# -- config entrypoint --
+WORKDIR /app/server
+EXPOSE 8095
+CMD ["make", "run-local"]

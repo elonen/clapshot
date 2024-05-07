@@ -1,0 +1,7 @@
+syntax = "proto3";
+package clapshot;
+
+import public "common.proto";
+import public "client.proto";
+import public "organizer.proto";
+import public "database.proto";

@@ -1,0 +1,139 @@
+syntax = "proto3";
+package clapshot.client;
+
+import public "common.proto";
+
+import "google/protobuf/timestamp.proto";
+
+// ----------------------------------------
+// Server <-> client communication messages
+// ----------------------------------------
+
+// These are internal and may change between versions -- don't use in Organizer code
+
+message ServerToClientCmd {
+    message Welcome {
+        UserInfo user = 1;
+    }
+    message Error {
+        string msg = 1;
+    }
+    message ShowPage {
+        repeated PageItem page_items = 1;
+    }
+    message DefineActions {
+        map<string, ActionDef> actions = 1;
+    }
+    message ShowMessages {
+        repeated UserMessage msgs = 1;
+    }
+    message OpenVideo {
+        Video video = 1;
+    }
+    message AddComments {
+        repeated Comment comments = 1;
+    }
+    message DelComment {
+        string comment_id = 1;
+    }
+    message CollabEvent {
+        string from_user = 1;
+        bool paused = 2;
+        bool loop = 3;
+        double seek_time_sec = 4;       // From start of video
+        optional string drawing = 5;    // data-uri of an image
+    }
+    message SetCookies {
+        map<string, string> cookies = 1;        // Cookies to set. Use empty string to delete a cookie.
+        google.protobuf.Timestamp expire_time = 2;
+    }
+
+    oneof cmd {
+        Welcome welcome = 10;
+        Error error = 20;
+        ShowPage show_page = 30;
+        DefineActions define_actions = 40;
+        ShowMessages show_messages = 50;
+        OpenVideo open_video = 60;
+        AddComments add_comments = 70;
+        DelComment del_comment = 80;
+        CollabEvent collab_event = 90;
+        SetCookies set_cookies = 100;
+    }
+}
+
+message ClientToServerCmd {
+    message ListMyVideos {
+    }
+    message OpenVideo {
+        string video_id = 1;
+    }
+    message DelVideo {
+        string video_id = 1;
+    }
+    message RenameVideo {
+        string video_id = 1;
+        string new_name = 2;
+    }
+    message AddComment {
+        string video_id = 1;
+        string comment = 2;
+        optional string timecode = 3;
+        optional string parent_id = 4;
+        optional string drawing = 5;
+    }
+    message EditComment {
+        string comment_id = 1;
+        string new_comment = 2;
+    }
+    message DelComment {
+        string comment_id = 1;
+    }
+    message ListMyMessages {
+    }
+    message JoinCollab {
+        string collab_id = 1;
+        string video_id = 2;
+    }
+    message LeaveCollab {
+    }
+    message CollabReport {
+        bool paused = 1;
+        bool loop = 2;
+        double seek_time_sec = 3;
+        optional string drawing = 4;
+    }
+    message OrganizerCmd {
+        string cmd = 1;
+        string args = 2;
+    }
+    message MoveToFolder {
+        string dst_folder_id = 1;
+        repeated FolderItemID ids = 2;
+        map<string, string> listing_data = 3;
+    }
+    message ReorderItems {
+        repeated FolderItemID ids = 1;
+        map<string, string> listing_data = 2;
+    }
+    message Logout {
+    }
+
+    oneof cmd {
+        ListMyVideos list_my_videos = 10;
+        OpenVideo open_video = 20;
+        DelVideo del_video = 30;
+        RenameVideo rename_video = 40;
+        AddComment add_comment = 50;
+        EditComment edit_comment = 60;
+        DelComment del_comment = 70;
+        ListMyMessages list_my_messages = 80;
+        JoinCollab join_collab = 90;
+        LeaveCollab leave_collab = 100;
+        CollabReport collab_report = 110;
+        OrganizerCmd organizer_cmd = 120;
+        MoveToFolder move_to_folder = 130;
+        ReorderItems reorder_items = 140;
+        Logout logout = 150;
+    }
+}

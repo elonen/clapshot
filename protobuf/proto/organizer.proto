@@ -1,0 +1,316 @@
+syntax = "proto3";
+package clapshot.organizer;
+
+import public "common.proto";
+import public "database.proto";
+import public "client.proto";
+
+import "google/protobuf/timestamp.proto";
+
+
+// This defines the gRPC API for Clapshot Organizer services.
+//
+// An **organizer plugin** is responsible for organizing
+// Clapshot videos into UI folders and enforcing access
+// control according to your particular business logic,
+// perhaps by looking up projects and ACL groups from
+// some LDAP or project management SQL database.
+//
+// Clapshot server will connect the organizer
+// on startup, and sends the handshake message. Organizer
+// connects back to the server and send its own
+// handshake message.
+//
+// The organizer service must live as long as the Clapshot
+// server and have a stable connection, which is why it is
+// recommended to have the server actually launch the
+// organizer service as a subprocess and use Unix sockets
+// for communication.
+
+
+// Calls that Organizer makes to Clapshot server
+service OrganizerOutbound {
+    rpc handshake(OrganizerInfo) returns (Empty);
+
+    rpc client_define_actions(ClientDefineActionsRequest) returns (Empty);  // Multiple calls will add/replace actions
+    rpc client_show_page(ClientShowPageRequest) returns (Empty);
+    rpc client_show_user_message(ClientShowUserMessageRequest) returns (Empty);
+    rpc client_open_video(ClientOpenVideoRequest) returns (Empty);
+    rpc client_set_cookies(ClientSetCookiesRequest) returns (Empty);
+
+    rpc delete_video(DeleteVideoRequest) returns (Empty);   // Delete (trash) video cleanly from both database and filesystem
+
+    rpc DbGetVideos(DbGetVideosRequest) returns (DbVideoList);
+    rpc DbGetComments(DbGetCommentsRequest) returns (DbCommentList);
+    rpc DbGetUserMessages(DbGetUserMessagesRequest) returns (DbUserMessageList);
+
+    rpc DbUpsert(DbUpsertRequest) returns (DbUpsertResponse);
+    rpc DbDelete(DbDeleteRequest) returns (DbDeleteResponse);
+
+    // Explicit transaction calls. You should probably wrap these in RAII guards in your program code.
+    // Don't expect nested transactions to work reliably.
+    rpc DbBeginTransaction(DbBeginTransactionRequest) returns (Empty);
+    rpc DbCommitTransaction(DbCommitTransactionRequest) returns (Empty);
+    rpc DbRollbackTransaction(DbRollbackTransactionRequest) returns (Empty);
+}
+
+// Calls that Clapshot server makes to Organizer
+service OrganizerInbound {
+    rpc handshake(ServerInfo) returns (Empty);
+
+    rpc check_migrations(CheckMigrationsRequest) returns (CheckMigrationsResponse); // This is called on startup, after handshake
+    rpc apply_migration(ApplyMigrationRequest) returns (ApplyMigrationResponse); // Called if check_migrations returns any pending migrations
+    rpc after_migrations(AfterMigrationsRequest) returns (Empty); // Called after all migrations to all modules have been applied
+
+    rpc on_start_user_session(OnStartUserSessionRequest) returns (OnStartUserSessionResponse);
+    rpc navigate_page(NavigatePageRequest) returns (ClientShowPageRequest);
+    rpc authz_user_action(AuthzUserActionRequest) returns (AuthzResponse);
+    rpc cmd_from_client(CmdFromClientRequest) returns (Empty);
+
+    // Calls from client when user interacts with the folder UI
+    rpc move_to_folder(MoveToFolderRequest) returns (Empty);
+    rpc reorder_items(ReorderItemsRequest) returns (Empty);
+
+    // Unit / integration tests
+    rpc list_tests(Empty) returns (ListTestsResponse);
+    rpc run_test(RunTestRequest) returns (RunTestResponse);
+}
+
+// ---------------------------------------------------------
+
+message ServerInfo {
+
+    message Database {
+        // Use direct database connection only as a last resort hack.
+        // gRPC API methods are more future-proof and robust.
+        enum DatabaseType {
+            SQLITE = 0;
+        }
+        DatabaseType type = 1;
+        string endpoint = 2;
+    }
+
+    message Storage {
+        message LocalFilesystem {
+            string base_dir = 1;
+        }
+        oneof storage {
+            LocalFilesystem local_fs = 1;
+        }
+    }
+
+    message GrpcEndpoint {
+        message Unix {
+            string path = 1;
+        }
+        message TCP {
+            string host = 1;
+            uint32 port = 2;
+        }
+        oneof endpoint {
+            Unix unix = 1;
+            TCP tcp = 2;
+        }
+    }
+
+    SemanticVersionNumber version = 1;
+    Storage storage = 3;
+    string url_base = 4;
+    Database db = 5;
+    GrpcEndpoint backchannel = 6;
+}
+
+
+message OrganizerInfo {
+    SemanticVersionNumber version = 1;
+    string name = 2;                        // Make sure this is (globally) unique, e.g. "com.example.myorganizer", to avoid conflicts
+    string description = 3;                 // Human-readable description of the organizer plugin
+
+    repeated OrganizerDependency hard_dependencies = 4;  // List of any other modules that must be present for this module to work
+}
+
+message OrganizerDependency {
+    string name = 1;                        // e.g. "com.example.someotherorganizer", or "clapshot.server" for the core server
+    SemanticVersionNumber min_ver = 2;
+}
+
+message SemanticVersionNumber {
+    uint64 major = 1;
+    uint64 minor = 2;
+    uint64 patch = 3;
+}
+
+// ---------------------------------------------------------
+
+message Migration {
+    string uuid = 1;                        // Unique identifier for this migration
+    string version = 2;                     // Schema version this migration will result in. (must be sortable (e.g. "1.2.3", "2024-01-02_b" etc)
+    repeated Dependency dependencies = 3;   // Note: remember to include the plugin itself in the list, if needed
+    string description = 4;                 // Human-readable description of the migration, for logging
+
+    message Dependency {
+        string name = 1;                    // Plugin/module whose schema version to check
+        optional string min_ver = 2;        // "Name"'s schema version must be at least this for this migration to be applicable. (not set = any)
+        optional string max_ver = 3;        // --||-- at most --||--
+    }
+}
+
+message CheckMigrationsRequest {}
+message CheckMigrationsResponse {
+    string current_schema_ver = 1;               // Current (last applied) migration version
+    repeated Migration pending_migrations = 2;   // List of pending (alternative) migrations.
+    // Note that multiple migrations can advertise the same resulting version, but with different dependencies.
+    // The algorithm will try to find a "path" of migrations that satisfies all dependencies and achieves the highest version
+    // advertised by any of pending_migrations. If no such path exists, the server will refuse to start.
+}
+
+message ApplyMigrationRequest {
+    string uuid = 1;    // UUID of the migration to apply (from CheckMigrationResponse)
+}
+message ApplyMigrationResponse {}
+message AfterMigrationsRequest {}
+
+
+// ---------------------------------------------------------
+
+message UserSessionData {
+    string sid = 1;
+    UserInfo user = 2;
+    map<string, string> cookies = 3;
+}
+
+// ---------------------------------------------------------
+// Server -> Organizer commands
+// ---------------------------------------------------------
+
+message OnStartUserSessionRequest {
+    UserSessionData ses = 1;
+}
+
+message OnStartUserSessionResponse {}
+
+message NavigatePageRequest {
+    UserSessionData ses = 1;
+}
+
+message CmdFromClientRequest {
+    UserSessionData ses = 1;
+    string cmd = 2;
+    string args = 3;    // Arbitrary data from your own Action handler that is executed on the client
+}
+
+message MoveToFolderRequest {
+    UserSessionData ses = 1;
+    repeated FolderItemID ids = 2;
+    string dst_folder_id = 3;
+    map<string, string> listing_data = 4;
+}
+
+message ReorderItemsRequest {
+    UserSessionData ses = 1;
+    repeated FolderItemID ids = 2;
+    map<string, string> listing_data = 3;
+}
+
+message AuthzUserActionRequest {
+
+    message OtherOp {
+        enum Op {
+            LOGIN = 0;
+            VIEW_HOME = 1;
+            UPLOAD_VIDEO = 2;
+            JOIN_COLLAB_SESSION = 10;
+        }
+        Op op = 1;
+        optional string subject = 2;
+    }
+
+    message VideoOp {
+        enum Op {
+            VIEW = 0;
+            RENAME = 1;
+            DELETE = 2;
+            COMMENT = 3;
+        }
+        Video video = 1;
+        Op op = 2;
+    }
+
+    message CommentOp {
+        enum Op {
+            EDIT = 0;
+            DELETE = 1;
+        }
+        Comment comment = 1;
+        Op op = 2;
+    }
+
+    UserSessionData ses = 1;
+    oneof op {
+        OtherOp other_op = 8;
+        VideoOp video_op = 9;
+        CommentOp comment_op = 10;
+    }
+}
+
+message AuthzResponse {
+    optional bool is_authorized = 1;     // If not set, leave authorization decision to server
+    optional string message = 2;         // e.g. "You are not authorized to view this video"
+    optional string details = 3;         // e.g. "You are not a member of the project"
+}
+
+// --- Unit / integration tests ---
+
+message ListTestsResponse {
+    repeated string test_names = 1;
+}
+
+message RunTestRequest {
+    string test_name = 1;
+}
+
+message RunTestResponse {
+    string output = 1;
+    optional string error = 2;
+}
+
+// ---------------------------------------------------------
+// Organizer -> Server commands
+// ---------------------------------------------------------
+
+message ClientShowPageRequest {
+    string sid = 1;
+    repeated PageItem page_items = 2;
+}
+
+message ClientShowUserMessageRequest {
+    UserMessage msg = 1;
+    oneof recipient {
+        string sid = 100;               // send to client with this session ID
+        string user_temp = 101;         // send to all session with this username
+        string user_persist = 102;      // send to all sessions with this username, and store in DB
+        string video_id = 103;          // send to all clients watching this video
+        string collab_session = 104;    // send to all clients in this collaboration session
+    }
+}
+
+message ClientDefineActionsRequest {
+    string sid = 1;
+    map<string, ActionDef> actions = 2; // e.g. "rename" -> {label: "Rename", icon: "edit"}
+}
+
+// Tell client of session `sid` to open video `id` in the video player
+message ClientOpenVideoRequest {
+    string sid = 1;
+    string id = 2;
+}
+
+message ClientSetCookiesRequest {
+    string sid = 1;
+    map<string, string> cookies = 2;
+    optional google.protobuf.Timestamp expire_time = 3;
+}
+
+message DeleteVideoRequest {
+    string id = 1;
+}

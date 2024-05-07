@@ -22,6 +22,7 @@ EOF
 # Assume user accesses this at $URL_BASE
 sed -i "s@^url-base.*@url-base = http://${URL_BASE}@g" /etc/clapshot-server.conf
 echo "migrate = true" >> /etc/clapshot-server.conf
+echo "org-cmd = /usr/bin/clapshot-organizer-basic-folders" >> /etc/clapshot-server.conf
 
 # Make server data dir and log accessible to docker user
 chown -R docker "$DIR"
@@ -31,7 +32,7 @@ ln -s "$DIR/clapshot.log" /var/log/
 
 # Start nginx (in the background)
 nginx
-php-fpm7.4
+php-fpm8.2
 
 # Disable log buffering for better docker experience
 export ENV PYTHONDONTWRITEBYTECODE=1

@@ -3,8 +3,9 @@
 #![allow(unused_imports)]
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::os;
-use std::{time::Duration};
+use std::time::Duration;
 use std::path::{Path, PathBuf};
 use file_owner::PathExt;
 use async_std::net::Incoming;
@@ -75,7 +76,7 @@ pub fn run_forever(
                                         tracing::info!("Submitting for processing.");
                                         submission_time.insert(path.clone(), std::time::Instant::now());
                                         if let Err(e) = incoming_sender.send(
-                                                super::IncomingFile {file_path: path.clone(), user_id: owner}) {
+                                                super::IncomingFile {file_path: path.clone(), user_id: owner, cookies: HashMap::new()}) {
                                             tracing::error!(details=%e, "Failed to send incoming file to processing queue.");
                                         }
                                     },
@@ -97,6 +98,6 @@ pub fn run_forever(
         }
     }
 
-    tracing::info!("Exiting.");
+    tracing::debug!("Exiting.");
     Ok(())
 }

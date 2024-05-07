@@ -1,466 +1,472 @@
 <script lang="ts">
 
-  import {VideoFrame, FrameRates} from './VideoFrame.js';
-  import {Notifications, acts} from '@tadashi/svelte-notification'
-  import {create as sdb_create} from "simple-drawing-board";
-  import {onMount} from 'svelte';
-  import {fade, slide, scale} from "svelte/transition";
+import {acts} from '@tadashi/svelte-notification'
+import {create as sdb_create} from "simple-drawing-board";
+import {onMount, createEventDispatcher} from 'svelte';
+import {scale} from "svelte/transition";
 
-  import {all_comments, video_is_ready, video_fps, collab_id} from '../stores.js';
-  import Avatar from './Avatar.svelte';
+import * as Proto3 from '@clapshot_protobuf/typescript';
+import {VideoFrame} from '@/lib/VideoFrame';
+import {allComments, videoIsReady, videoFps, collabId} from '@/stores';
 
-  import {createEventDispatcher} from 'svelte';
-  import CommentTimelinePin from './CommentTimelinePin.svelte';
-  import { each } from 'svelte/internal';
-  const dispatch = createEventDispatcher();
+import CommentTimelinePin from '@/lib/CommentTimelinePin.svelte';
 
-  export let src: any;
+const dispatch = createEventDispatcher();
 
-// These values are bound to properties of the video
-  let video_elem: any;
-	let time: number = 0;
-	let duration: number;
-  let paused: boolean = true;
-  let video_canvas_container: any;
-  let vframe_calc: VideoFrame;
+export let src: any;
 
-  let debug_layout: boolean = false; // Set to true to show CSS layout boxes
+// These are bound to properties of the video
+let videoElem: any;
+let time: number = 0;
+let duration: number;
+let paused: boolean = true;
+let loop: boolean = false;
+let videoCanvasContainer: any;
+let vframeCalc: VideoFrame;
 
-  let commentsWithTc = [];  // Will be populated by the store once video is ready (=frame rate is known)
+let debug_layout: boolean = false; // Set to true to show CSS layout boxes
+let commentsWithTc: Proto3.Comment[] = [];  // Will be populated by the store once video is ready (=frame rate is known)
 
-  function refreshCommentPins() {
+
+function refreshCommentPins(): void {
     // Make pins for all comments with timecode
     commentsWithTc = [];
-    all_comments.subscribe(comments => {
-      for (let c of comments) { if (c.timecode) { commentsWithTc.push(c); } }
-      commentsWithTc = commentsWithTc.sort((a, b) => a.timecode - b.timecode);
+    allComments.subscribe(comments => {
+        for (let c of comments) { if (c.comment.timecode) { commentsWithTc.push(c.comment); } }
+        commentsWithTc = commentsWithTc.sort((a, b) => {
+            if (!a.timecode || !b.timecode) { return 0; }
+            return a.timecode.localeCompare(b.timecode);  // Sort by SMPTE timecode = sort by string
+        });
     });
-  }
+}
 
-
-  function send_collab_report() {
-    if ($collab_id) {
-      let drawing = paused ? getDrawing(true) : null;
-      dispatch('collabReport', {paused: video_elem.paused, seek_time: video_elem.currentTime, drawing: drawing});
+function send_collab_report(): void {
+    if ($collabId) {
+        let drawing = paused ? getScreenshot() : null;
+        dispatch('collabReport', {paused: videoElem.paused, loop: videoElem.loop, seek_time: videoElem.currentTime, drawing: drawing});
     }
-  }
+}
 
-  class Draw
-  {
-    constructor() {
-      this._color = "red";
-      this._board = null;
-      this._canvas = null;
-    }
+let draw_color: string = "red";
+let draw_board: any = null;
+let draw_canvas: any = null;
 
-    get color() { return this._color; }
-    set color(color: string) {
-      this._color = color;
-      draw.board.setLineColor(this._color);
-      draw.canvas.style.outline = "5px solid " + this._color;
-    }
+function setPenColor(c: string): void {
+    draw_color = c;
+    draw_board.setLineColor(draw_color);
+    draw_canvas.style.outline = "5px solid " + draw_color;
+}
 
-    get board() {
-      this.try_create_all();
-      return this._board;
-    }
-
-    get canvas() {
-      this.try_create_all();
-      return this._canvas;
-    }
-    
-    isEmpty(): bool 
+function prepare_drawing(): void
+{
+    if (!draw_board && videoElem.videoWidth>0)
     {
-      if (!this._board || !this._canvas) return true;
-      const blankCanvas = document.createElement('canvas');
-      blankCanvas.width = this._canvas.width;
-      blankCanvas.height = this._canvas.height;
-      return this._canvas.toDataURL() === blankCanvas.toDataURL()
-    }
+        $videoIsReady = true;
 
-    // Returns the drawing as a data URL, or an empty string if the drawing is empty.
-    // If including_empty is true, then the data URL is returned even if the
-    // drawing is empty -- this is useful for sending screenshot of current
-    // video frame even without the drawing, mainly used as a work-around
-    // for sharing exact frame with others since HTML video element seeking
-    // is currently (Jan 2023) not necessarily frame-precise. 
-    getDataUrl(including_empty: boolean = False): string
-    {
-      if (this.isEmpty() && !including_empty)
-        return "";
-      let comb_canvas = document.createElement('canvas');
-      comb_canvas.width  = video_elem.videoWidth;
-      comb_canvas.height = video_elem.videoHeight;
-      var ctx = comb_canvas.getContext('2d');
-      // ctx.drawImage(video_elem, 0, 0);   // Removed, as frame capture is now done when draw mode is entered
-      ctx.drawImage(this._canvas, 0, 0);
-      return comb_canvas.toDataURL("image/webp", 0.8);
-    }
-
-    try_create_all() : void
-    {
-      if (!this._board && video_elem.videoWidth>0)
-      {
-        //console.log("Creating drawing board");
-
-        $video_is_ready = true;
-
-        vframe_calc = new VideoFrame({
-          video: video_elem,
-          frameRate: $video_fps,
-          callback: function(response) { console.log(response); } });
+        vframeCalc = new VideoFrame({
+            video: videoElem,
+            frameRate: $videoFps,
+            callback: function(response: any) { console.log(response); } });
 
         refreshCommentPins(); // Creates CommentTimelinePin components, now that we can calculate timecodes properly
 
         // Create the drawing board
-        this._canvas = document.createElement('canvas');
-        this._canvas.width = video_elem.videoWidth;
-        this._canvas.height = video_elem.videoHeight;
-        this._canvas.classList.add("absolute", "max-h-full", "max-w-full", "z-[100]");
-        this._canvas.style.cssText = 'outline: 5px solid red; outline-offset: -5px; cursor:crosshair; left: 50%; top: 50%; transform: translate(-50%, -50%);';
+        draw_canvas = document.createElement('canvas');
+        draw_canvas.width = videoElem.videoWidth;
+        draw_canvas.height = videoElem.videoHeight;
+        draw_canvas.classList.add("absolute", "max-h-full", "max-w-full", "z-[100]");
+        draw_canvas.style.cssText = 'outline: 5px solid red; outline-offset: -5px; cursor:crosshair; left: 50%; top: 50%; transform: translate(-50%, -50%);';
 
         // add mouse up listener to the canvas
-        this._canvas.addEventListener('mouseup', function(e) {
-          if (e.button == 0 && draw.canvas.style.visibility == "visible") {
-            console.log("Mouse up");
-            send_collab_report();
-          }
+        draw_canvas.addEventListener('mouseup', function(e: MouseEvent) {
+            if (e.button == 0 && draw_canvas.style.visibility == "visible") {
+                send_collab_report();
+            }
         });
 
-        video_canvas_container.appendChild(this._canvas);
+        videoCanvasContainer.appendChild(draw_canvas);
 
-        this._board = sdb_create(this._canvas);
-        this._board.setLineSize(video_elem.videoWidth / 100);
-        this._board.setLineColor(this.color);
-        this._canvas.style.visibility = "hidden"; // hide the canvas until the user clicks the draw button
-      }
+        draw_board = sdb_create(draw_canvas);
+        draw_board.setLineSize(videoElem.videoWidth / 100);
+        draw_board.setLineColor(draw_color);
+        draw_canvas.style.visibility = "hidden"; // hide the canvas until the user clicks the draw button
     }
-  }
-  let draw = new Draw();
+}
 
-	onMount(async () => {
+
+onMount(async () => {
     // Force the video to load
-    if (!video_elem.videoWidth) { video_elem.load(); }
-    draw.try_create_all();
-    all_comments.subscribe((v) => { refreshCommentPins(); });
-	});
+    if (!videoElem.videoWidth) { videoElem.load(); }
+    prepare_drawing();
+    allComments.subscribe((_v) => { refreshCommentPins(); });
+});
+
+// Monitor video elem "loop" property in a timer.
+// Couldn't find a way to bind to it directly.
+setInterval(() => { loop = videoElem?.loop }, 500);
 
 
-	function handleMove(e: any) {
-		if (!duration) return; // video not loaded yet
-		if (e.type !== 'touchmove' && !(e.buttons & 1)) return; // mouse not down
-    video_elem.pause();
-		const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
-		const { left, right } = this.getBoundingClientRect();
-		time = duration * (clientX - left) / (right - left);
-    video_elem.currentTime = time;
+function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) {
+    if (!target) throw new Error("progress bar missing");
+    if (!duration) return; // video not loaded yet
+    if (e instanceof MouseEvent && !(e.buttons & 1)) return; // mouse not down
+    videoElem.pause();
+    const clientX = e instanceof TouchEvent ? e.touches[0].clientX : e.clientX;
+    const { left, right } = (target as HTMLProgressElement).getBoundingClientRect();
+    time = duration * (clientX - left) / (right - left);
+    videoElem.currentTime = time;
     seekSideEffects();
     paused = true;
     send_collab_report();
-	}
+}
 
-	function togglePlay() {
-    if (paused) {
-      seekSideEffects();
-      video_elem.play();
-    }
-    else video_elem.pause();
-    send_collab_report();
-	}
+let playback_request_source: string|undefined = undefined;
 
-	function format_tc(seconds: number) : string {
-		if (isNaN(seconds)) return '...';
-    if (vframe_calc) {
-      const fr = Math.floor(seconds * vframe_calc.frameRate);
-      return `${vframe_calc.toSMPTE(fr)}`;
-    }
-    else if(seconds==0)
-      return '--:--:--:--';
-    else {
-      const minutes = Math.floor(seconds / 60);
-      seconds = Math.floor(seconds % 60);
-      if (seconds < 10) seconds = '0' + seconds;
-      return `${minutes}:${seconds}`;
-    }
-	}
+/// Start / stop playback
+///
+/// @param play  True to start, false to stop
+/// @param request_source  ID of the source of the request, or undefined
+/// @return  True if the playback state was changed
+export function setPlayback(play: boolean, request_source: string|undefined): boolean {
+    if (play == (!paused))
+        return false;       // "no change"
 
-	function format_frames(seconds: number) : string {
-		if (isNaN(seconds)) return '';
-    if (vframe_calc) {
-      const fr = Math.floor(seconds * vframe_calc.frameRate);
-      return `${fr}`;
+    if (play) {
+        seekSideEffects();
+        videoElem.play();
     }
     else
-      return '----';
-	}
+        videoElem.pause();
+    send_collab_report();
 
+    playback_request_source = request_source;
+    return true;
+}
 
-  export function getCurTime() {
-    return video_elem.currentTime;
-  }
+/// Get state of playback, and the source of the request that caused it
+export function getPlaybackState(): {playing: boolean, request_source: string|undefined} {
+    return {playing: !paused, request_source: playback_request_source};
+}
 
-  export function getCurTimecode() {
-    return format_tc(time);
-  }
+export function isLooping(): boolean {
+    return loop;
+}
 
-  export function getCurFrame() {
-    return Math.floor(time * vframe_calc.fps);
-  }
+function togglePlay() {
+    let should_play = paused;
+    setPlayback(should_play, "VideoPlayer");
+}
 
-
-  function step_video(frames: number) {
-    if (vframe_calc) {
-      if (frames < 0) {
-        vframe_calc.seekBackward(-frames, null);
-      } else {
-        vframe_calc.seekForward(frames, null);
-      }
-      seekSideEffects();
-      send_collab_report();
+function format_tc(seconds: number) : string {
+    if (isNaN(seconds)) return '...';
+    if (vframeCalc) {
+        const fr = Math.floor(seconds * vframeCalc.frameRate);
+        return `${vframeCalc.toSMPTE(fr)}`;
     }
-  }
+    else if(seconds==0)
+        return '--:--:--:--';
+    else {
+        const minutes = Math.floor(seconds / 60);
+        seconds = Math.floor(seconds % 60);
+        // Return zero padded
+        if (seconds < 10) return `${minutes}:0${seconds}`;
+        else return `${minutes}:${seconds}`;
+    }
+}
 
-  function onWindowKeyPress(e: any) {
-    var event = document.all ? window.event : e;
+function format_frames(seconds: number) : string {
+    if (isNaN(seconds)) return '';
+    if (vframeCalc) {
+        const fr = Math.floor(seconds * vframeCalc.frameRate);
+        return `${fr}`;
+    }
+    else
+        return '----';
+}
+
+
+export function getCurTime() {
+    return videoElem.currentTime;
+}
+
+export function getCurTimecode() {
+    return format_tc(time);
+}
+
+export function getCurFrame() {
+    let fps = vframeCalc.fps ?? NaN;
+    if (isNaN(fps)) console.error("getCurFrame(): VideoFrame not initialized or invalid fps");
+    return Math.floor(time * fps);
+}
+
+
+function step_video(frames: number) {
+    if (vframeCalc) {
+        if (frames < 0) {
+            vframeCalc.seekBackward(-frames, null);
+        } else {
+            vframeCalc.seekForward(frames, null);
+        }
+        seekSideEffects();
+        send_collab_report();
+    }
+}
+
+const INTERACTIVE_ELEMS = ['input', 'textarea', 'select', 'option', 'button'];
+const INTERACTIVE_ROLES = ['textbox', 'combobox', 'listbox', 'menu', 'menubar', 'grid', 'dialog', 'alertdialog'];
+const WINDOW_KEY_ACTIONS: {[key: string]: (e: KeyboardEvent)=>any} = {
+        ' ':  () => togglePlay(),
+        'ArrowLeft': () => step_video(-1),
+        'ArrowRight': () => step_video(1),
+        'ArrowUp': () => step_video(1),
+        'ArrowDown': () => step_video(-1),
+        'z': (e) => { if (e.ctrlKey) onDrawUndo(); },
+        'y': (e) => { if (e.ctrlKey) onDrawRedo(); },
+    };
+
+function onWindowKeyPress(e: KeyboardEvent): void {
+    let target = e.target as HTMLElement;
 
     // Skip if the user is in a keyboard interactive element
-    if (e.target.isContentEditable)
-      return;
-    switch (e.target.tagName.toLowerCase()) {
-      case "input":
-      case "textarea":
-      case "select":
-      case "button":
+    if (target.isContentEditable)
         return;
-    }
-    //console.log(e);
-    switch(event.keyCode) {
-      case 32: // space
-        togglePlay();
-        break;
-      case 37: // left
-        step_video(-1);
-        break;
-      case 39: // right
-      step_video(1);
-        break;
-      case 38: // up
-        time += 1;
-        step_video(0);
-        break;
-      case 40: // down
-        time -= 1;
-        step_video(0);
-        break;
-      case 90: // z
-        if (e.ctrlKey) {
-          onDrawUndo();
-          break;
-        }
-      case 89: // y
-        if (e.ctrlKey) {
-          onDrawRedo();
-          break;
-        }
-    }
-    e.preventDefault();
-  }
 
-  function seekSideEffects() {
-    draw.board?.clear();
+    if (INTERACTIVE_ELEMS.includes(target.tagName.toLowerCase()) ||
+            INTERACTIVE_ROLES.includes(target.getAttribute('role') ?? '-'))
+        return;
+
+    if (e.key in WINDOW_KEY_ACTIONS) {
+        WINDOW_KEY_ACTIONS[e.key](e);
+        e.preventDefault();
+    }
+}
+
+function seekSideEffects() {
+    draw_board?.clear();
     onToggleDraw(false);
     dispatch('seeked', {});
-  }
+}
 
-  export function seekTo(value: string, fmt: string) {
-    // fmt should be either "SMPTE" or "frame"
+export function seekToSMPTE(smpte: string) {
     try {
-      seekSideEffects();
-      let ops = new Object();
-      ops[fmt] = value;
-      vframe_calc.seekTo(ops);
+        seekSideEffects();
+        vframeCalc.seekToSMPTE(smpte);
     } catch(err) {
-      acts.add({mode: 'warning', message: `Seek failed to: ${fmt} ${value}`, lifetime: 3});
+        acts.add({mode: 'warning', message: `Seek failed to: ${smpte}`, lifetime: 3});
     }
-  }
+}
 
-  // Audio control
-  let audio_volume = 50;
-	$:{
-    if (video_elem)
-      video_elem.volume = audio_volume/100; // Immediately changes video element volume
-	}
-
-  // These are called from PARENT component on user interaction
-  export function onToggleDraw(mode_on: boolean) {
+export function seekToFrame(frame: number) {
     try {
-      draw.board.clear();
-      if (mode_on) {
-        draw.canvas.style.outline = "5px solid " + draw.color;
-        draw.canvas.style.cursor = "crosshair";
-        var ctx = draw.canvas.getContext('2d');
-        ctx.drawImage(video_elem, 0, 0);
-        draw.canvas.style.visibility = "visible";
-      } else {
-        draw.canvas.style.visibility = "hidden";
-      }
+        seekSideEffects();
+        vframeCalc.seekToFrame(frame);
     } catch(err) {
-      acts.add({mode: 'error', message: `Video loading not done? Cannot enable drawing.`, lifetime: 3});
+        acts.add({mode: 'warning', message: `Seek failed to: ${frame}`, lifetime: 3});
     }
-  }
+}
 
-  export function onColorSelect(color: string) {
-    draw.color = color;
-  }
-  
-  export function onDrawUndo() {
-    draw.board?.undo();
-  }
+// Audio control
+let audio_volume = 50;
+$:{
+    if (videoElem)
+        videoElem.volume = audio_volume/100; // Immediately changes video element volume
+}
 
-  export function onDrawRedo() {
-    draw.board?.redo();
-  }
+// These are called from PARENT component on user interaction
+export function onToggleDraw(mode_on: boolean) {
+    try {
+        draw_board.clear();
+        if (mode_on) {
+            draw_canvas.style.outline = "5px solid " + draw_color;
+            draw_canvas.style.cursor = "crosshair";
+            var ctx = draw_canvas.getContext('2d');
+            ctx.drawImage(videoElem, 0, 0);
+            draw_canvas.style.visibility = "visible";
+        } else {
+            draw_canvas.style.visibility = "hidden";
+        }
+    } catch(err) {
+        acts.add({mode: 'error', message: `Video loading not done? Cannot enable drawing.`, lifetime: 3});
+    }
+}
 
-  export function getDrawing(including_empty: boolean = false) : string | null {
-    return draw.getDataUrl(including_empty);
-  }
+export function onColorSelect(color: string) {
+    setPenColor(color);
+}
 
-  export function collabPlay(seek_time: number) {
-    video_elem.pause();
+export function onDrawUndo() {
+    draw_board?.undo();
+}
+
+export function onDrawRedo() {
+    draw_board?.redo();
+}
+
+// Capture current video frame + drawing as a data URL (base64 encoded image)
+export function getScreenshot() : string
+{
+        let comb = document.createElement('canvas');
+        comb.width  = videoElem.videoWidth;
+        comb.height = videoElem.videoHeight;
+        var ctx = comb.getContext('2d');
+        if (!ctx) throw new Error("Cannot get canvas context");
+        // ctx.drawImage(videoElem, 0, 0);   // Removed, as bgr frame capture is now done when draw mode is entered
+        ctx.drawImage(draw_canvas, 0, 0);
+        return comb.toDataURL("image/webp", 0.8);
+}
+
+export function collabPlay(seek_time: number, looping: boolean) {
+    videoElem.loop = looping;
+    videoElem.pause();
     time = seek_time;
     seekSideEffects();
-    video_elem.play();
-  }
+    videoElem.play();
+}
 
-  export function collabPause(seek_time: number, drawing: string) {
+export function collabPause(seek_time: number, looping: boolean, drawing: string|undefined) {
+    videoElem.loop = looping;
     if (!paused)
-      video_elem.pause();
+        videoElem.pause();
     if (time != seek_time) {
-      time = seek_time;
-      seekSideEffects();
+        time = seek_time;
+        seekSideEffects();
     }
-    if (drawing && drawing != getDrawing(true))
-      setDrawing(drawing);
-  }
+    if (drawing && getScreenshot() != drawing)
+        setDrawing(drawing);
+}
 
-  export async function setDrawing(drawing: string) {
+export async function setDrawing(drawing: string) {
     try {
-      await draw.board.fillImageByDataURL(drawing, { isOverlay: false })
-      draw.canvas.style.visibility = "visible";
-      draw.canvas.style.cursor = "";
-      draw.canvas.style.outline = "none";
+        await draw_board.fillImageByDataURL(drawing, { isOverlay: false })
+        draw_canvas.style.visibility = "visible";
+        draw_canvas.style.cursor = "";
+        draw_canvas.style.outline = "none";
     }
     catch(err) {
-      acts.add({mode: 'error', message: `Failed to show image.`, lifetime: 3});
+        acts.add({mode: 'error', message: `Failed to show image.`, lifetime: 3});
     }
-  }
+}
 
-  function tcToDurationFract(timecode: string) {
+function tcToDurationFract(timecode: string|undefined) {
     /// Convert SMPTE timecode to a fraction of the video duration (0-1)
-    if (!vframe_calc) { return 0; }
-    let pos = vframe_calc.toMilliseconds(timecode)/1000.0;
+    if (timecode === undefined) { throw new Error("Timecode is undefined"); }
+    if (!vframeCalc) { return 0; }
+    let pos = vframeCalc.toMilliseconds(timecode)/1000.0;
     return pos / duration;
-  }
+}
+
+// Input element event handlers
+function onTimecodeEdited(e: Event) {
+    seekToSMPTE((e.target as HTMLInputElement).value);
+    send_collab_report();
+}
+
+function onFrameEdited(e: Event) {
+    seekToFrame(parseInt((e.target as HTMLInputElement).value));
+    send_collab_report();
+}
 
 </script>
 
-<div on:keydown={onWindowKeyPress} class="w-full h-full flex flex-col object-contain">
 
-  <div  class="flex-1 grid place-items-center relative min-h-[12em]"
-       style="{debug_layout?'border: 2px solid orange;':''}">
-    <div bind:this={video_canvas_container} class="absolute h-full {debug_layout?'border-4 border-x-zinc-50':''}">
-      <video
-        transition:scale
-        src="{src}"
-        crossOrigin="anonymous"
-        preload="auto"
-        class="h-full w-full"
-        style="opacity: {$video_is_ready ? 1.0 : 0}; transition-opacity: 1.0s;"
-        bind:this={video_elem}
-        on:loadedmetadata={draw.try_create_all}
-        on:click={togglePlay}
-        bind:currentTime={time}
-        bind:duration
-        bind:paused>
-        <track kind="captions">
-      </video>
+<div
+    on:keydown={onWindowKeyPress}
+    class="w-full h-full flex flex-col object-contain"
+    role="main"
+>
+	<div  class="flex-1 grid place-items-center relative min-h-[12em]"
+			 style="{debug_layout?'border: 2px solid orange;':''}">
+		<div bind:this={videoCanvasContainer} class="absolute h-full {debug_layout?'border-4 border-x-zinc-50':''}">
+			<video
+				transition:scale
+				src="{src}"
+				crossOrigin="anonymous"
+				preload="auto"
+				class="h-full w-full"
+				style="opacity: {$videoIsReady ? 1.0 : 0}; transition-opacity: 1.0s;"
+				bind:this={videoElem}
+				on:loadedmetadata={prepare_drawing}
+				on:click={togglePlay}
+				bind:currentTime={time}
+				bind:duration
+				bind:paused>
+				<track kind="captions">
+			</video>
 
-      <!--    TODO: maybe show actively controlling collaborator's avatar like this?
-      <div class="absolute top-0 left-0 w-full h-full z-1">
-        <div class="flex-none w-6 h-6 block"><Avatar userFullName="Username Here"/></div>
-      </div>
-    -->
+			<!--    TODO: maybe show actively controlling collaborator's avatar like this?
+			<div class="absolute top-0 left-0 w-full h-full z-1">
+				<div class="flex-none w-6 h-6 block"><Avatar username="Username Here"/></div>
+			</div>
+		-->
 
-    </div>
-  </div>
-  
-	<div class="flex-none {debug_layout?'border-2 border-red-600':''}">
-
-    <div class="flex-1 space-y-0 leading-none">
-      <progress value="{(time / duration) || 0}"
-        class="w-full h-[2em] hover:cursor-pointer"
-        on:mousedown|preventDefault={handleMove}
-        on:mousemove={handleMove}
-        on:touchmove|preventDefault={handleMove}
-      />
-      {#each commentsWithTc as item}
-        <CommentTimelinePin
-          id={item.id},
-          username={item.username},
-          comment={item.comment},
-          avatar_url={item.avatar_url},
-          x_loc={tcToDurationFract(item.timecode).toString()}
-          on:click={(e) => { dispatch('commentPinClicked', {id: item.id});}}
-          />
-      {/each}
-    </div>
-
-    <!-- playback controls -->
-		<div class="flex p-1">
-			
-      <!-- Play/Pause -->
-			<span class="flex-1 text-left ml-8 space-x-3 text-l whitespace-nowrap">
-        <button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
-        <button class="w-4 fa-solid {paused ? 'fa-play' : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
-        <button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
-
-        <!-- Timecode -->
-        <span class="flex-0 mx-4 text-sm font-mono">
-          <input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => {seekTo(e.target.value, 'SMPTE'); send_collab_report();}}/>
-          FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => {seekTo(e.target.value, 'frame'); send_collab_report();}}/>
-        </span>
-
-      </span>
- 
-      <!-- Audio volume -->
-      <span class="flex-0 text-center whitespace-nowrap">
-        <button
-          class="fas {audio_volume>0 ? 'fa-volume-high' : 'fa-volume-mute'} mx-2"
-          on:click="{() => audio_volume = audio_volume>0 ? 0 : 50}"
-          />
-          <input class="mx-2" id="vol-control" type="range" min="0" max="100" step="1" bind:value={audio_volume}/>
-      </span>
-
-      <!-- Video duration -->
-			<span class="flex-0 text-lg mx-4 mx-8">{format_tc(duration)}</span>
 		</div>
 	</div>
-  
+
+	<div class="flex-none {debug_layout?'border-2 border-red-600':''}">
+
+		<div class="flex-1 space-y-0 leading-none">
+			<progress value="{(time / duration) || 0}"
+				class="w-full h-[2em] hover:cursor-pointer"
+				on:mousedown|preventDefault={(e)=>handleMove(e, e.target)}
+				on:mousemove={(e)=>handleMove(e, e.target)}
+				on:touchmove|preventDefault={(e)=>handleMove(e, e.target)}
+			/>
+			{#each commentsWithTc as item}
+				<CommentTimelinePin
+					id={item.id}
+					username={item.user?.name || item.user?.id || '?'}
+					comment={item.comment}
+					x_loc={tcToDurationFract(item.timecode)}
+					on:click={(_e) => { dispatch('commentPinClicked', {id: item.id});}}
+					/>
+			{/each}
+		</div>
+
+		<!-- playback controls -->
+		<div class="flex p-1">
+
+			<!-- Play/Pause -->
+			<span class="flex-1 text-left ml-8 space-x-3 text-l whitespace-nowrap">
+				<button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
+				<button class="w-4 fa-solid {paused ? (loop ? 'fa-repeat' : 'fa-play') : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
+				<button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
+
+				<!-- Timecode -->
+				<span class="flex-0 mx-4 text-sm font-mono">
+					<input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => onTimecodeEdited(e)}/>
+					FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => onFrameEdited(e)}/>
+				</span>
+			</span>
+
+			<!-- Audio volume -->
+			<span class="flex-0 text-center whitespace-nowrap">
+				<button
+					class="fas {audio_volume>0 ? 'fa-volume-high' : 'fa-volume-mute'} mx-2"
+					on:click="{() => audio_volume = audio_volume>0 ? 0 : 50}"
+					/>
+					<input class="mx-2" id="vol-control" type="range" min="0" max="100" step="1" bind:value={audio_volume}/>
+			</span>
+
+			<!-- Video duration -->
+			<span class="flex-0 text-lg mx-4">{format_tc(duration)}</span>
+		</div>
+	</div>
+
 </div>
 
 <svelte:window on:keydown={onWindowKeyPress} />
 
 <style>
-  @import '@fortawesome/fontawesome-free/css/all.min.css';
-  
-  button:disabled {
+@import '@fortawesome/fontawesome-free/css/all.min.css';
+
+button:disabled {
     opacity: 0.3;
-  }
-	progress::-webkit-progress-bar {
-		background-color: rgba(0,0,0,0.2);
-	}
-	progress::-webkit-progress-value {
-		background-color: rgba(255,255,255,0.6);
-	}
+}
+progress::-webkit-progress-bar {
+    background-color: rgba(0,0,0,0.2);
+}
+progress::-webkit-progress-value {
+    background-color: rgba(255,255,255,0.6);
+}
+
 </style>

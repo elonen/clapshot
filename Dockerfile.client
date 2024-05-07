@@ -1,0 +1,40 @@
+FROM node:18.16.0-bullseye-slim
+
+# Install system packages
+RUN apt-get -qy update >/dev/null
+RUN apt-get -qy install make protobuf-compiler >/dev/null
+
+ARG TARGET=dev
+RUN if [ "$TARGET" = "deb" ]; then apt-get -qy install make debhelper devscripts; fi >/dev/null
+
+# Create regular user
+
+ARG USER=docker
+ARG UID=1000
+ARG GID=1000
+RUN echo "#### USER=${USER}, UID=${UID}, GID=${GID}"
+RUN test -n "${USER}" && test -n "${UID}" && test -n "${GID} "
+
+RUN groupadd -f ${USER} --gid=${GID}
+RUN useradd -m ${USER} --uid=${UID} --gid=${GID} || true
+RUN mkdir -p /build/client
+RUN mkdir -p /build/protobuf/libs/typescript
+RUN chown -R ${UID}:${GID} /build
+
+WORKDIR /build/client
+USER ${UID}:${GID}
+
+COPY --chown=${UID}:${GID} client/package*.json ./
+RUN npm install
+
+COPY --chown=${UID}:${GID} client /build/client
+COPY --chown=${UID}:${GID} protobuf/proto /build/protobuf/proto
+COPY --chown=${UID}:${GID} protobuf/libs/typescript /build/protobuf/libs/typescript
+
+WORKDIR /build/protobuf/libs/typescript
+RUN make
+WORKDIR /build/client
+RUN make build-local
+
+EXPOSE 5173
+CMD ["make", "dev-local"]

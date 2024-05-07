@@ -2,13 +2,13 @@
 
 diesel::table! {
     videos (id) {
-        id -> Integer,
-        video_hash -> Text,
-        added_by_userid -> Nullable<Text>,
-        added_by_username -> Nullable<Text>,
+        id -> Text,
+        user_id -> Nullable<Text>,
+        user_name -> Nullable<Text>,
         added_time -> Timestamp,
         recompression_done -> Nullable<Timestamp>,
-        thumb_sheet_dims -> Nullable<Text>,  // "10x10"
+        thumb_sheet_cols -> Nullable<Integer>,
+        thumb_sheet_rows -> Nullable<Integer>,
         orig_filename -> Nullable<Text>,
         title -> Nullable<Text>,
         total_frames -> Nullable<Integer>,
@@ -21,12 +21,12 @@ diesel::table! {
 diesel::table! {
     comments (id) {
         id -> Integer,
-        video_hash -> Text,
+        video_id -> Text,
         parent_id -> Nullable<Integer>,
         created -> Timestamp,
         edited -> Nullable<Timestamp>,
         user_id -> Text,
-        username -> Text,
+        user_name -> Text,
         comment -> Text,
         timecode -> Nullable<Text>,
         drawing -> Nullable<Text>,
@@ -39,15 +39,15 @@ diesel::table! {
         user_id -> Text,
         created -> Timestamp,
         seen -> Bool,
-        ref_video_hash -> Nullable<Text>,
-        ref_comment_id -> Nullable<Integer>,
+        video_id -> Nullable<Text>,
+        comment_id -> Nullable<Integer>,
         event_name -> Text,
         message -> Text,
         details -> Text,
     }
 }
+diesel::joinable!(messages -> comments (comment_id));
 
-diesel::joinable!(messages -> comments (ref_comment_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     comments,

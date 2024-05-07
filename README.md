@@ -7,8 +7,6 @@ Clapshot is an open-source, self-hosted tool for collaborative video review and 
 1. policy constraints (*enterprise users*), or
 2. cost-benefit concerns against paid cloud services (*very small businesses*)
 
-DISCLAIMER: This is primarily meant for cases where you have to host videos **locally for policy reasons**. Otherwise you'll **likely prefer commercially offered cloud services**. You'll need networking experience to get it running.
-
 ![Review UI screenshot](doc/video-commenting.webp)
 
 **Key Features:**
@@ -18,6 +16,7 @@ DISCLAIMER: This is primarily meant for cases where you have to host videos **lo
 - Real-time collaborative review sessions
 - Storage of videos as files, and metadata in an SQLite (3.5+) database
 - Authentication agnostic, you can use *OAuth, JWS, Kerberos, Okta* etc. using Nginx username passthrough
+- **[NEW]** Extensible "Organizer" plugins for custom integrations, workflow, and access control
 
 **When not to use it:** If you don't require local hosting, commercial cloud services may be more suitable and provide more features. Some networking and Linux experience is recommended for setup.
 
@@ -63,6 +62,13 @@ See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on
 - performing database migrations
 - implementing advanced authentication methods
 
+## Organizer Plugin System (New in 0.6.0):
+Clapshot now includes an extensible "Organizer" plugin system. Organizer plugins can be used for custom UIs, virtuak folders, enforcing access control based on your business logic, and integrating with existing systems (e.g. LDAP, project management databases, etc).
+
+Organizer plugins use gRPC to communicate with the Clapshot server (+ client), and can be implemented in any language.
+
+**WARNING:** The API is still evolving, so you are invited to **provide feedback** and discuss the future development, but please **do not expect backwards compatibility for now**. See [Organizer Plugins](doc/organizer-plugins.md) for more details.
+
 ## Development Setup
 
 Follow the [development setup guide](doc/development-setup.md) . This includes setting up the server and client development environments and running local builds and tests.
@@ -73,5 +79,9 @@ Contributions are welcome, especially for features and improvements that benefit
 
 ## License and Copyrights
 
-Clapshot is licensed under the GPL v2.
 Copyright 2022-2024 by Jarno Elonen
+
+Main app code is copyleft, libraries and plugins are permissive (to allow non-free proprietary workflow and auth plugins):
+
+- Clapshot Server and Client are licensed under the **GNU General Public License, GPLv2**.
+- gRPC/proto3 libraries and example organizer plugins are under the **MIT License**.

@@ -1,7 +1,10 @@
-**/test/VOLUME
-**/server/DEV_DATADIR*
-**/server/target
-**/server/dist_deb
+server/dist_deb
+client/dist_deb
+organizer/**/dist_deb
+
+test/VOLUME
+server/DEV_DATADIR*
+**/target
 
 **/__pycache__
 **/.venv

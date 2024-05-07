@@ -1,0 +1,60 @@
+FROM debian:bookworm-slim AS python-bookworm-slim
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        debhelper \
+        dh-virtualenv \
+	dh-python \
+        python3 \
+        python3-dev \
+        python3-pip \
+        python3-setuptools \
+        python3-venv \
+        libprotobuf-dev \
+        protobuf-compiler \
+        git \
+        ; \
+    rm -rf /var/lib/apt/lists/*;
+
+# ----------------------------------
+
+FROM python-bookworm-slim AS build
+
+# Install system packages
+RUN apt-get -qy update >/dev/null
+RUN apt-get -qy install make >/dev/null
+RUN apt-get -qy install sqlite3 >/dev/null
+
+# Build deps
+# RUN apt-get -qy install libssl-dev >/dev/null
+# RUN apt-get -qy install libsqlite3-dev >/dev/null
+RUN apt-get -qy install protobuf-compiler >/dev/null
+
+# Deb build deps
+RUN apt-get -qy install dh-virtualenv >/dev/null
+
+# Create regular user
+ARG USER=docker
+ARG UID=1000
+ARG GID=1000
+RUN echo "#### USER=${USER}, UID=${UID}, GID=${GID}"
+RUN test -n "${USER}" && test -n "${UID}" && test -n "${GID}"
+
+RUN groupadd -f ${USER} --gid=${GID}
+RUN useradd -m ${USER} --uid=${UID} --gid=${GID} || true
+RUN mkdir -p /build
+RUN chown -R ${UID}:${GID} /build
+
+USER ${UID}:${GID}
+RUN mkdir -p /build/organizer/basic_folders
+RUN mkdir -p /build/protobuf/libs/python
+
+# Copy sources
+COPY --chown=${UID}:${GID} protobuf/proto /build/protobuf/proto
+COPY --chown=${UID}:${GID} protobuf/libs/python /build/protobuf/libs/python
+COPY --chown=${UID}:${GID} organizer/basic_folders /build/organizer/basic_folders
+
+WORKDIR /build/organizer/basic_folders
+RUN ln -s ../ dist_deb

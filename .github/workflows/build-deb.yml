@@ -1,0 +1,39 @@
+name: Release version with Debian packages
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger the workflow on push tags like v1.0, v1.1, etc.
+
+jobs:
+  build-debian-package:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build .deb files
+      run: make debian-docker
+
+    - name: Upload Debian Package
+      uses: actions/upload-artifact@v2
+      with:
+        name: debian-packages
+        path: ./dist_deb/*.deb
+
+  create-release:
+    needs: build-debian-package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: debian-packages
+          path: dist_deb
+
+      - name: Create Release and Upload Assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh auth login --with-token <<< "${GITHUB_TOKEN}"
+          gh release create "${{ github.ref_name }}" dist_deb/*.deb --draft --title "Release ${{ github.ref_name }}" --notes "Release ${{ github.ref_name }}"

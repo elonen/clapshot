@@ -1,0 +1,19 @@
+{
+  "name": "clapshot-proto3",
+  "description": "Proto3 definitions for Clapshot API",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/"
+  ],
+  "dependencies": {
+    "long": "^5.2.3",
+    "protobufjs": "^7.2.6"
+  },
+
+  "devDependencies": {
+    "ts-proto": "^1.172.0",
+    "typescript": "^5.4.5"
+  }
+}

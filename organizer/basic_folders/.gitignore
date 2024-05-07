@@ -1,0 +1,11 @@
+deps/
+*.spec
+dist/
+dist_deb
+build/
+
+_venv
+.vscode
+__pycache__
+.mypy_cache
+*.egg-info*

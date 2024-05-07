@@ -1,22 +1,27 @@
-import { writable } from 'svelte/store';
+import { writable, type Writable } from 'svelte/store';
+import type { IndentedComment, UserMenuItem } from '@/types';
+import type { VideoListDefItem } from '@/lib/video_list/types';
+import * as Proto3 from '@clapshot_protobuf/typescript';
 
-export let video_url = writable(null);
-export let video_hash = writable(null);
-export let video_fps = writable(42);
-export let video_title = writable("(no video loaded)");
-export let video_progress_msg = writable(null);
+export let videoPlaybackUrl: Writable<string|null> = writable(null);
+export let videoOrigUrl: Writable<string|null> = writable(null);
+export let videoId: Writable<string|null> = writable(null);
+export let videoFps: Writable<number|null> = writable(null);
+export let videoTitle: Writable<string|null> = writable("(no video loaded)");
+export let videoProgressMsg: Writable<string|null> = writable(null);
 
-export let all_my_videos = writable([]);
+export let curPageItems: Writable<Proto3.PageItem[]> = writable([]);
 
-export let cur_username = writable(null);
-export let cur_user_id = writable(null);
-export let cur_user_pic = writable(null);
+export let curUsername: Writable<string|null> = writable(null);
+export let curUserId: Writable<string|null> = writable(null);
+export let curUserPic: Writable<string|null> = writable(null);
 
-export let video_is_ready = writable(false);
+export let videoIsReady: Writable<boolean> = writable(false);
 
-export let all_comments = writable([]);
-export let user_messages = writable([]);
+export let allComments: Writable<IndentedComment[]> = writable([]);
+export let userMessages: Writable<Proto3.UserMessage[]> = writable([]);
 
-export let collab_id = writable(null);
-
-export let user_menu_items = writable([]);
+export let collabId: Writable<string|null> = writable(null);
+export let userMenuItems: Writable<UserMenuItem[]> = writable([]);
+export let selectedTiles: Writable<{[key: string]: VideoListDefItem}> = writable({});
+export let serverDefinedActions: Writable<{ [key: string]: Proto3.ActionDef }> = writable({});

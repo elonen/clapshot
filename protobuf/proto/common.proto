@@ -1,0 +1,258 @@
+syntax = "proto3";
+package clapshot;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+
+message Empty {}
+
+// ---------------------------------------------------------
+// Video metadata
+// ---------------------------------------------------------
+
+message Video {
+    string id = 1;
+    optional string title = 2;
+    optional UserInfo added_by = 3;
+    optional VideoDuration duration = 4;
+    optional google.protobuf.Timestamp added_time = 5;
+    optional VideoPreviewData preview_data = 6;
+    optional VideoProcessingMetadata processing_metadata = 7;
+
+    optional string playback_url = 100;         // e.g. "https://example.com/video.mp4"
+    optional string orig_url = 101;             // URL to download the original video
+}
+
+message VideoDuration {
+    double duration = 1;
+    int64 total_frames = 2;
+    string fps = 3; // e.g. "29.97"
+}
+
+message VideoProcessingMetadata {
+    optional google.protobuf.Timestamp recompression_done = 2;
+    string orig_filename = 102;
+    optional string ffprobe_metadata_all = 103;
+}
+
+message VideoPreviewData {
+    message ThumbSheet {
+        string url = 1;     // Sprite sheet of thumbnails
+        uint32 rows = 2;
+        uint32 cols = 3;
+    }
+    optional string thumb_url = 1;
+    optional ThumbSheet thumb_sheet = 2;
+}
+
+// ---------------------------------------------------------
+// Comments
+// ---------------------------------------------------------
+
+message Comment {
+    string id = 1;
+    string video_id = 2;
+    UserInfo user = 3;
+    string comment = 4;
+    optional string timecode = 5;       // e.g. "00:00:00.000"
+    optional string parent_id = 6;      // parent comment, null if top-level
+    optional string drawing = 12;       // data-uri of an image
+    optional google.protobuf.Timestamp created = 100;
+    optional google.protobuf.Timestamp edited = 101;
+}
+
+// ---------------------------------------------------------
+// User messages (notifications)
+// ---------------------------------------------------------
+
+message UserMessage {
+    enum Type {
+        OK = 0;
+        ERROR = 1;
+        PROGRESS = 2;
+        VIDEO_UPDATED = 3;  // Video metadata changed
+        VIDEO_ADDED = 4;    // video_id set in refs, upload session cookies in details (if it was an HTTP upload)
+    }
+    message Refs {
+        optional string video_id = 1;
+        optional string comment_id = 2;
+    }
+
+    optional string id = 1;
+    optional string user_id = 2;
+    optional google.protobuf.Timestamp created = 3;
+    bool seen = 4;
+    Type type = 5;
+    Refs refs = 6;  // Objects referenced by this message
+    string message = 7;
+    optional string details = 8;
+}
+
+
+// ---------------------------------------------------------
+// Organizer page items
+// ---------------------------------------------------------
+
+message PageItem {
+
+    message FolderListing {
+        message Folder {
+            string id = 1;
+            string title = 2;
+            repeated Item preview_items = 4;
+        }
+        message Item {
+            message Visualization {
+                optional Color base_color = 1;
+                optional Icon icon = 2;
+            }
+            oneof item {
+                Folder folder = 1;
+                Video video = 2;
+            }
+            optional Visualization vis = 100;
+
+            optional ScriptCall open_action = 110;  // Omit to disable "open" action. JS parameters (_action_args): `item_to_open` (single UI object), `listing_data` (map)
+            repeated string popup_actions = 120;    // References to actions defined in ClientDefineActionsRequest. JS parameters (_action_args): `selected_items` (array of UI objects), `listing_data` (map)
+        }
+        repeated Item items = 1;
+        repeated string popup_actions = 2;          // Popups for the whole folder listing (e.g. "new_folder")
+        map<string, string> listing_data = 3;       // Custom data from organizer to itself
+
+        bool allow_reordering = 10;                 // Allow (drag-and-drop & kbd) reordering of items
+
+        bool allow_upload = 11;                     // Allow uploading new items
+        optional string video_added_action = 12;    // Action name (ref. ClientDefineActionsRequest) to call after successful upload (e.g. move to folder, send notification somewhere, ...)
+                                                    //  JS parameters (_action_args): `video_id`, `listing_data` (map)
+    }
+
+    oneof item {
+        string html = 1;
+        FolderListing folder_listing = 2;
+    }
+}
+
+message FolderItemID {
+    oneof item {
+        string folder_id = 1;
+        string video_id = 2;
+    }
+}
+
+// ---------------------------------------------------------
+// UI actions and popups
+// ---------------------------------------------------------
+
+message ActionUIProps {
+    optional string label = 1;           // e.g. "Rename"
+    optional Icon icon = 2;
+    optional string key_shortcut = 3;    // e.g. "F2", "Insert", "Delete"
+    optional string natural_desc = 4;    // e.g. For tooltips and AI. Example: "Rename the selected item"
+    optional Color text_color = 5;
+}
+
+message ActionDef {
+    optional ActionUIProps ui_props = 1; // Only used for actions that are used as popups
+    optional ScriptCall    action=2;
+}
+
+// ---------------------------------------------------------
+
+message UserInfo {
+    string id = 1;                   // e.g. "user:123", "alice.smith", "alice.smith@example.com" etc. depending on used authn backend.
+    optional string name = 2;        // e.g. "Alice Smith"
+}
+
+message Color {
+    uint32 r = 1;   // 0-255
+    uint32 g = 2;
+    uint32 b = 3;
+}
+
+message Icon {
+    message FaClass {
+        string classes = 1;             // e.g. "fa fa-folder"
+        optional Color color = 2;
+    }
+    oneof src {
+        FaClass fa_class = 1;
+        string img_url = 2;
+    }
+    optional float size = 3;
+}
+
+// ---------------------------------------------------------
+// Client-side action scripts
+// ---------------------------------------------------------
+
+message ScriptCall {
+    enum Lang {
+        JAVASCRIPT = 0;
+    }
+    string code = 1;
+    Lang lang = 2;
+
+    /*
+    The 'code' string is evaluated inside a function with the following context:
+
+    Parameters:
+        - _action_args: Object - Contains different parameters depending on the call context.
+
+            1. `PageItem.FolderListing.Item.popup_actions` - user right-clicks a video or folder:
+                - selected_items: Proto3.PageItem_FolderListing_Item[] - Selected items in the UI.
+                - listing_data: StringMap - Data from Organizer (to itself) about current folder listing.
+
+            2. `PageItem.FolderListing.Item.open_action` - user doubleclicks (to open) a video or folder:
+                - item_to_open: Proto3.PageItem_FolderListing_Item - Item to open.
+                - listing_data: StringMap
+
+            3. `PageItem.FolderListing.popup_actions` - user right-clicks on the folder listing background:
+                - listing_data: StringMap
+
+            4. `PageItem.FolderListing.video_added_action` - a new video was just uploaded to this folder:
+                - video_id: string - ID of the newly added video.
+                - listing_data: StringMap
+
+    Available functions:
+        - clapshot.openVideo(videoId: string): void - Open a video by its ID.
+        - clapshot.renameVideo(videoId: string, newName: string): void - Rename a video.
+        - clapshot.delVideo(videoId: string): void - Delete a video.
+        - clapshot.callOrganizer(cmd: string, args: Object): void - Call an Organizer API command.
+        - clapshot.itemsToIDs(items: Proto3.PageItem_FolderListing_Item[]): Proto3.FolderItemID[] - Convert items to their IDs.
+        - clapshot.moveToFolder(dstFolderId: string, ids: Proto3.FolderItemID[], listingData: StringMap): void - Move items to a folder.
+        - clapshot.reorderItems(ids: Proto3.FolderItemID[], listingData: StringMap): void - Reorder items within a folder.
+
+    Usual JS functions are also available, e.g.:
+        - alert(msg: string): void - Display an alert message.
+        - prompt(msg: string, default_value: string): string - Prompt the user for input with a default value.
+        - confirm(msg: string): boolean - Ask the user for confirmation.
+
+    Example scripts:
+
+    1. Rename an item (video or folder) when user right-clicks:
+        var it = _action_args.selected_items[0];
+        var old_name = it.video?.title || it.folder?.title;
+        var new_name = (prompt("Rename item", old_name))?.trim();
+        if (new_name && new_name != old_name) {
+            if (it.video) {
+                clapshot.renameVideo(it.video.id, new_name);
+            } else if (it.folder) {
+                clapshot.callOrganizer("rename_folder", {id: it.folder.id, new_name: new_name});
+            } else {
+                alert("Unknown item type in rename action. Please report this bug.");
+            }
+        }
+
+    2. Move a newly added video to a folder:
+        var vid = _action_args.video_id;
+        var listingData = _action_args.listing_data;
+        var folderId = listingData?.folder_id;
+        if (!folderId || !vid) {
+            var msg = "on_video_added error: video_id missing, or folder_id from listingData.";
+            alert(msg); console.error(msg);
+        } else {
+            clapshot.moveToFolder(folderId, [{videoId: vid}], listingData);
+        }
+    */
+}
