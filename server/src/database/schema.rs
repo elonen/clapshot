@@ -49,35 +49,8 @@ diesel::table! {
 diesel::joinable!(messages -> comments (comment_id));
 
 
-diesel::table! {
-    prop_edges (id) {
-        id -> Integer,
-        from_video -> Nullable<Text>,
-        from_comment -> Nullable<Integer>,
-        from_node -> Nullable<Integer>,
-        to_video -> Nullable<Text>,
-        to_comment -> Nullable<Integer>,
-        to_node -> Nullable<Integer>,
-        edge_type -> Text,
-        body -> Nullable<Text>,
-        sort_order -> Nullable<Float>,
-        sibling_id -> Nullable<Integer>,
-    }
-}
-
-diesel::table! {
-    prop_nodes (id) {
-        id -> Integer,
-        node_type -> Text,
-        body -> Nullable<Text>,
-        singleton_key -> Nullable<Text>,
-    }
-}
-
 diesel::allow_tables_to_appear_in_same_query!(
     comments,
     messages,
-    prop_edges,
-    prop_nodes,
     videos,
 );

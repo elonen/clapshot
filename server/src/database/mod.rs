@@ -224,9 +224,6 @@ mod basic_query;
 crate::implement_basic_query_traits!(models::Video, models::VideoInsert, videos, String, added_time.desc());
 crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32, created.desc());
 crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32, created.desc());
-crate::implement_basic_query_traits!(models::PropNode, models::PropNodeInsert, prop_nodes, i32, id.asc());
-crate::implement_basic_query_traits!(models::PropEdge, models::PropEdgeInsert, prop_edges, i32, sort_order.asc());
-
 
 
 pub trait DbQueryByUser: Sized {
@@ -245,43 +242,3 @@ pub trait DbQueryByVideo: Sized {
 }
 crate::implement_query_by_video_traits!(models::Comment, comments, video_id, created.desc());
 crate::implement_query_by_video_traits!(models::Message, messages, video_id, created.desc());
-
-
-
-pub enum GraphObjId<'a> {
-    Video(&'a str),
-    Node(i32),
-    Comment(i32)
-}
-pub struct EdgeAndObj<T> {
-    pub edge: models::PropEdge,
-    pub obj: T
-}
-
-pub trait DbGraphQuery: Sized {
-
-    /// Get nodes of type Self that have edges pointing to the given node.
-    /// If `edge_type` is Some, only edges of that type are considered.
-    fn graph_get_by_parent(db: &DB, parent_id: GraphObjId, edge_type: Option<&str>)
-        -> DBResult<Vec<EdgeAndObj<Self>>>;
-
-    /// Get nodes of type Self that have edges pointing to it from the given node.
-    /// If edge_type is Some, only edges of that type are considered.
-    fn graph_get_by_child(db: &DB, child_id: GraphObjId, edge_type: Option<&str>)
-        -> DBResult<Vec<EdgeAndObj<Self>>>;
-
-    /// Get nodes of type Self that have no edges pointing away from them.
-    /// If `edge_type` is Some, only edges of that type are considered.
-    fn graph_get_parentless(db: &DB, edge_type: Option<&str>)
-        -> DBResult<Vec<Self>>;
-
-    /// Get nodes of type Self that have no edges pointing to them.
-    /// If `edge_type` is Some, only edges of that type are considered.
-    fn graph_get_childless(db: &DB, edge_type: Option<&str>)
-        -> DBResult<Vec<Self>>;
-}
-
-mod graph_query;
-crate::implement_graph_query_traits!(models::Video, videos, String, from_video, to_video);
-crate::implement_graph_query_traits!(models::PropNode, prop_nodes, i32, from_node, to_node);
-crate::implement_graph_query_traits!(models::Comment, comments, i32, from_comment, to_comment);

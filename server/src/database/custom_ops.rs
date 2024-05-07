@@ -1,7 +1,6 @@
 use diesel::prelude::*;
 use chrono::offset::Local;
-use crate::database::{models, schema, DB, DBError, DBResult, DBPaging, EmptyDBResult, to_db_res};
-use super::{GraphObjId};
+use crate::database::{models, schema, DB, DBResult, EmptyDBResult, to_db_res};
 
 // ------------------- Model-specific custom operations -------------------
 
@@ -125,93 +124,5 @@ impl models::Message {
     {
         use schema::messages::dsl::*;
         to_db_res(messages.filter(comment_id.eq(cid)).load::<models::Message>(&mut *db.conn()?.lock()))
-    }
-}
-
-
-impl models::PropNode {
-
-    /// Get (some) nodes from the prop graph database, filtered by node type.
-    ///
-    /// # Arguments
-    /// * `db` - Database
-    /// * `node_type` - Node type to filter by.
-    /// * `node_ids` - Optional list of node IDs to filter by. If None, consider all nodes.
-    pub fn get_by_type(db: &DB, node_type: &str, node_ids: &Option<Vec<i32>>) -> DBResult<Vec<models::PropNode>>
-    {
-        let xnt = node_type;
-        {
-            use schema::prop_nodes::dsl::*;
-            let q = prop_nodes.filter(node_type.eq(xnt)).into_boxed();
-            let q = if let Some(node_ids) = node_ids { q.filter(id.eq_any(node_ids)) } else { q };
-            to_db_res(q.load::<models::PropNode>(&mut *db.conn()?.lock()))
-        }
-    }
-
-    pub fn get_singleton(db: &DB, node_type: &str, singleton_key: &str) -> DBResult<Option<models::PropNode>>
-    {
-        let xnt = node_type;
-        let xsk = singleton_key;
-        {
-            use schema::prop_nodes::dsl::*;
-            let q = prop_nodes.filter(node_type.eq(xnt).and(singleton_key.eq(xsk)));
-            to_db_res(q.first::<models::PropNode>(&mut *db.conn()?.lock()).optional())
-        }
-    }
-}
-
-
-impl models::PropEdge {
-
-    // Query edges, filtered by edge type, IDs and/or from/to node.
-    // Each filter is optional, so all None will return all edges in the database.
-    pub fn get_filtered(db: &DB, from_id: Option<GraphObjId>, to_id: Option<GraphObjId>, edge_type: Option<&str>, edge_ids: &Option<Vec<i32>>, pg: DBPaging)
-        -> DBResult<Vec<models::PropEdge>>
-    {
-        let et = edge_type; {
-            use schema::prop_edges::dsl::*;
-            let q = prop_edges.into_boxed();
-            let q = if let Some(edge_ids) = edge_ids { q.filter(id.eq_any(edge_ids)) } else { q };
-            let q = if let Some(et) = et { q.filter(edge_type.eq(et)) } else { q };
-            let q = match from_id {
-                Some(GraphObjId::Video(vid)) => q.filter(from_video.eq(vid)),
-                Some(GraphObjId::Comment(cid)) => q.filter(from_comment.eq(cid)),
-                Some(GraphObjId::Node(nid)) => q.filter(from_node.eq(nid)),
-                None => q
-            };
-            let q = match to_id {
-                Some(GraphObjId::Video(vid)) => q.filter(to_video.eq(vid)),
-                Some(GraphObjId::Comment(cid)) => q.filter(to_comment.eq(cid)),
-                Some(GraphObjId::Node(nid)) => q.filter(to_node.eq(nid)),
-                None => q
-            };
-            to_db_res(q.order(sort_order.asc())
-                .then_order_by(id.asc())
-                .offset(pg.offset())
-                .limit(pg.limit())
-                .load::<models::PropEdge>(&mut *db.conn()?.lock()))
-        }
-    }
-
-    // Convert the database from_video/comment/node fields into a GraphObjId
-    pub fn obj_id_from(&self) -> DBResult<GraphObjId>
-    {
-        match (&self.from_video, self.from_comment, self.from_node) {
-            (Some(vid), None, None) => Ok(GraphObjId::Video(&vid)),
-            (None, Some(cid), None) => Ok(GraphObjId::Comment(cid)),
-            (None, None, Some(nid)) => Ok(GraphObjId::Node(nid)),
-            _ => Err(DBError::NotFound())
-        }
-    }
-
-    // Convert the database to_video/comment/node fields into a GraphObjId
-    pub fn obj_id_to(&self) -> DBResult<GraphObjId>
-    {
-        match (&self.to_video, self.to_comment, self.to_node) {
-            (Some(vid), None, None) => Ok(GraphObjId::Video(&vid)),
-            (None, Some(cid), None) => Ok(GraphObjId::Comment(cid)),
-            (None, None, Some(nid)) => Ok(GraphObjId::Node(nid)),
-            _ => Err(DBError::NotFound())
-        }
     }
 }

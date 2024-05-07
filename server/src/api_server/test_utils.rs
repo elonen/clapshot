@@ -38,8 +38,6 @@ pub(crate) struct ApiTestState {
     pub(crate) terminate_flag: Arc<AtomicBool>,
     pub(crate) videos: Vec<models::Video>,
     pub(crate) comments: Vec<models::Comment>,
-    pub(crate) nodes: Vec<models::PropNode>,
-    pub(crate) edges: Vec<models::PropEdge>,
     pub(crate) url_base: String,
     pub(crate) port: u16,
     pub(crate) ws_url: String,
@@ -181,7 +179,7 @@ pub(crate) async fn connect_client_ws(ws_url: &str, user_id: &str) -> WsClient {
 macro_rules! api_test {
     ([$ws:ident, $state:ident] $($body:tt)*) => {
         {
-            let (db, data_dir, videos, comments, nodes, edges) = make_test_db();
+            let (db, data_dir, videos, comments) = make_test_db();
 
             let port = portpicker::pick_unused_port().expect("No TCP ports free");
             let (user_msg_tx, user_msg_rx) = crossbeam_channel::unbounded();
@@ -202,7 +200,7 @@ macro_rules! api_test {
                 terminate_flag.clone());
 
             let bind_addr: std::net::IpAddr = "127.0.0.1".parse().unwrap();
-            let $state = ApiTestState { db, user_msg_tx, upload_res_rx, videos_dir, upload_dir, terminate_flag, videos, comments, nodes, edges, url_base, port, ws_url };
+            let $state = ApiTestState { db, user_msg_tx, upload_res_rx, videos_dir, upload_dir, terminate_flag, videos, comments, url_base, port, ws_url };
             let api = async move { run_api_server_async(bind_addr, vec![], server_state, user_msg_rx, upload_res_tx, None, port).await; Ok(()) };
 
             let tst = tokio::spawn(async move {

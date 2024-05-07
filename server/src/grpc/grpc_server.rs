@@ -1,7 +1,7 @@
 use std::{sync::atomic::Ordering::Relaxed, path::Path};
 use anyhow::Context;
 use tonic::{Request, Response, Status};
-use crate::{api_server::{server_state::ServerState, ws_handers::del_video_and_cleanup, SendTo}, client_cmd, database::{DbBasicQuery, DbGraphQuery, DbQueryByUser, DbQueryByVideo}, grpc::grpc_impl_helpers::{paged_vec, rpc_expect_field}};
+use crate::{api_server::{server_state::ServerState, ws_handers::del_video_and_cleanup, SendTo}, client_cmd, database::{DbBasicQuery, DbQueryByUser, DbQueryByVideo}, grpc::grpc_impl_helpers::{paged_vec, rpc_expect_field}};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::database::models;
 
@@ -120,7 +120,6 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
     async fn db_get_videos(&self, req: Request<org::DbGetVideosRequest>) -> RpcResult<org::DbVideoList>
     {
         use org::db_get_videos_request::Filter;
-        use org::graph_obj_rel::Rel;
         let req = req.into_inner();
         let db = self.server.db.clone();
         let pg = req.paging.as_ref().try_into()?;
@@ -129,18 +128,6 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             Filter::All(_) => { models::Video::get_all(&db, pg)? },
             Filter::Ids(ids) => { paged_vec(models::Video::get_many(&db, &ids.ids)?, pg) },
             Filter::UserId(user_id) => { models::Video::get_by_user(&db, &user_id, pg)? },
-            Filter::GraphRel(rel) => {
-                let et = rel.edge_type.as_ref().map(|s| s.as_str());
-                let vids = match rpc_expect_field(&rel.rel, "GraphObjRel.rel")? {
-                    Rel::ParentIs(id) => models::Video::graph_get_by_parent(&db, id.try_into()?, et)?
-                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
-                    Rel::ChildIs(id) => models::Video::graph_get_by_child(&db, id.try_into()?, et)?
-                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
-                    Rel::Parentless(_) => models::Video::graph_get_parentless(&db, et)?,
-                    Rel::Childless(_) => models::Video::graph_get_childless(&db, et)?,
-                };
-                paged_vec(vids, pg)
-            },
         };
         Ok(Response::new(org::DbVideoList {
             items: items.into_iter().map(|v| v.to_proto3(&self.server.url_base)).collect(),
@@ -152,7 +139,6 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
     async fn db_get_comments(&self, req: Request<org::DbGetCommentsRequest>) -> RpcResult<org::DbCommentList>
     {
         use org::db_get_comments_request::Filter;
-        use org::graph_obj_rel::Rel;
         let req = req.into_inner();
         let db = self.server.db.clone();
         let pg = req.paging.as_ref().try_into()?;
@@ -166,18 +152,6 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             },
             Filter::UserId(user_id) => { models::Comment::get_by_user(&db, user_id, pg)? },
             Filter::VideoId(video_id) => { models::Comment::get_by_video(&db, video_id, pg)? },
-            Filter::GraphRel(rel) => {
-                let et = rel.edge_type.as_ref().map(|s| s.as_str());
-                let comms = match rpc_expect_field(&rel.rel, "GraphObjRel.rel")? {
-                    Rel::ParentIs(id) => models::Comment::graph_get_by_parent(&db, id.try_into()?, et)?
-                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
-                    Rel::ChildIs(id) => models::Comment::graph_get_by_child(&db, id.try_into()?, et)?
-                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
-                    Rel::Parentless(_) => models::Comment::graph_get_parentless(&db, et)?,
-                    Rel::Childless(_) => models::Comment::graph_get_childless(&db, et)?,
-                };
-                paged_vec(comms, pg)
-            },
         };
         Ok(Response::new(org::DbCommentList {
             items: items.into_iter().map(|c| c.to_proto3()).collect(),
@@ -214,86 +188,6 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         }))
     }
 
-
-    async fn db_get_prop_nodes(&self, req: Request<org::DbGetPropNodesRequest>) -> RpcResult<org::DbPropNodeList>
-    {
-        use org::graph_obj_rel::Rel;
-
-        let req = req.into_inner();
-        let db = self.server.db.clone();
-        let pg = req.paging.as_ref().try_into()?;
-
-        let ids = if let Some(ids) = req.ids {
-            Some(ids.ids.iter().map(|s| s.parse::<i32>()).collect::<Result<Vec<_>, _>>()
-                .map_err(|e| Status::invalid_argument(format!("Invalid user message ID: {}", e)))?)
-        } else { None };
-
-        let items = match (req.node_type, ids, req.graph_rel) {
-            (None, None, None) => models::PropNode::get_all(&db, pg)?,
-            (None, Some(ids), None) => paged_vec(models::PropNode::get_many(&db, ids.as_slice() )?, pg),
-            (Some(node_type), ids, None) => paged_vec(models::PropNode::get_by_type(&db, &node_type, &ids)?, pg),
-            (node_type, ids, Some(rel)) => {
-                let et = rel.edge_type.as_ref().map(|s| s.as_str());
-                let objs = match rpc_expect_field(&rel.rel, "GraphObjRel.rel")? {
-                    Rel::ParentIs(id) => models::PropNode::graph_get_by_parent(&db, id.try_into()?, et)?
-                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
-                    Rel::ChildIs(id) => models::PropNode::graph_get_by_child(&db, id.try_into()?, et)?
-                        .into_iter().map(|c| c.obj).collect::<Vec<_>>(),
-                    Rel::Parentless(_) => models::PropNode::graph_get_parentless(&db, et)?,
-                    Rel::Childless(_) => models::PropNode::graph_get_childless(&db, et)?,
-                };
-
-                let objs = match node_type {
-                    Some(node_type) => objs.into_iter().filter(|o| o.node_type == node_type).collect(),
-                    None => objs,
-                };
-                let objs = match ids {
-                    Some(ids) => objs.into_iter().filter(|o| ids.contains(&o.id)).collect(),
-                    None => objs,
-                };
-                paged_vec(objs, pg)
-            },
-        };
-        Ok(Response::new(org::DbPropNodeList {
-            items: items.into_iter().map(|o| o.to_proto3()).collect(),
-            paging: req.paging,
-        }))
-    }
-
-//pub fn get_singleton(db: &DB, node_type: &str, singleton_key: &str) -> DBResult<Option<models::PropNode>>
-    async fn db_get_singleton_prop_node(&self, req: Request<org::DbGetSingletonPropNodeRequest>) -> RpcResult<org::DbGetSingletonPropNodeResponse>
-    {
-        let req = req.into_inner();
-        let db = self.server.db.clone();
-        let node = models::PropNode::get_singleton(&db, &req.node_type, &req.singleton_key)?;
-        Ok(Response::new(org::DbGetSingletonPropNodeResponse {
-            node: node.map(|n| n.to_proto3()),
-        }))
-    }
-
-
-    async fn db_get_prop_edges(&self, req: Request<org::DbGetPropEdgesRequest>) -> RpcResult<org::DbPropEdgeList>
-    {
-        let req = req.into_inner();
-        let db = self.server.db.clone();
-        let pg = req.paging.as_ref().try_into()?;
-
-        let ids = if let Some(ids) = req.ids {
-            Some(ids.ids.iter().map(|s| s.parse::<i32>()).collect::<Result<Vec<_>, _>>()
-                .map_err(|e| Status::invalid_argument(format!("Invalid user message ID: {}", e)))?)
-        } else { None };
-
-        let items = models::PropEdge::get_filtered(&db,
-            req.from.as_ref().map(|o| o.try_into()).transpose()?,
-            req.to.as_ref().map(|o| o.try_into()).transpose()?,
-            req.edge_type.as_deref(),
-            &ids, pg)?;
-
-        Ok(Response::new(org::DbPropEdgeList {
-            items: items.into_iter().map(|o| o.to_proto3()).collect(),
-            paging: req.paging,
-        }))
-    }
 
     async fn db_upsert(&self, req: Request<org::DbUpsertRequest>) -> RpcResult<org::DbUpsertResponse>
     {
@@ -347,14 +241,6 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
                 db.as_ref(), req.user_messages, models::Message, models::MessageInsert,
                 |it: &proto::UserMessage| it.id.is_none(),
                 |it: &models::Message| it.to_proto3()]),
-            nodes: upsert_type!([
-                db.as_ref(), req.nodes, models::PropNode, models::PropNodeInsert,
-                |it: &org::PropNode| it.id.is_empty(),
-                |it: &models::PropNode| it.to_proto3()]),
-            edges: upsert_type!([
-                db.as_ref(), req.edges, models::PropEdge, models::PropEdgeInsert,
-                |it: &org::PropEdge| it.id.is_empty(),
-                |it: &models::PropEdge| it.to_proto3()]),
         }))
     }
 
@@ -377,8 +263,6 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             videos_deleted: delete_type!([db.as_ref(), req.video_ids, String, models::Video]),
             comments_deleted: delete_type!([db.as_ref(), req.comment_ids, i32, models::Comment]),
             user_messages_deleted: delete_type!([db.as_ref(), req.user_message_ids, i32, models::Message]),
-            nodes_deleted: delete_type!([db.as_ref(), req.node_ids, i32, models::PropNode]),
-            edges_deleted: delete_type!([db.as_ref(), req.edge_ids, i32, models::PropEdge]),
         }))
     }
 

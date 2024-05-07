@@ -9,7 +9,6 @@ message DbGetVideosRequest {
         Empty all = 10;             // All videos in the database. Make sure to set paging.
         IdList ids = 11;            // List of video ids
         string user_id = 12;        // Owner of the video
-        GraphObjRel graph_rel = 13; // Videos that are immediate children/parents of the given object (via a prop edge)
     }
 }
 
@@ -20,7 +19,6 @@ message DbGetCommentsRequest {
         IdList ids = 11;            // List of comment ids
         string user_id = 12;        // User who posted the comment
         string video_id = 13;       // Video the comments are attached to
-        GraphObjRel graph_rel = 14; // Comments that are immediate children/parents of the given object (via a prop edge)
     }
 }
 
@@ -35,36 +33,6 @@ message DbGetUserMessagesRequest {
     }
 }
 
-
-
-message DbGetPropNodesRequest {
-    optional DbPaging paging = 1;
-    optional string node_type = 2;
-    optional GraphObjRel graph_rel = 3;
-    optional IdList ids = 4;
-    // Leave all fields empty to get all nodes in the database (use paging)
-}
-
-message DbGetPropEdgesRequest {
-    optional DbPaging paging = 1;
-    optional string edge_type = 2;
-    optional GraphObj from = 3;
-    optional GraphObj to = 4;
-    optional IdList ids = 5;
-    // Leave all fields empty to get all edges in the database (use paging)
-}
-
-
-message DbGetSingletonPropNodeRequest {
-    string node_type = 1;
-    string singleton_key = 2;
-}
-
-message DbGetSingletonPropNodeResponse {
-    optional PropNode node = 1;     // Null if no such node, i.e. "not found" is not an error
-}
-
-
 // ----------------------------------------
 
 // Add or replace objects in the database.
@@ -74,8 +42,6 @@ message DbUpsertRequest {
     repeated Video videos = 1;
     repeated Comment comments = 2;
     repeated UserMessage user_messages = 3;
-    repeated PropNode nodes = 4;
-    repeated PropEdge edges = 5;
 }
 
 message DbUpsertResponse {
@@ -83,24 +49,18 @@ message DbUpsertResponse {
     repeated Video videos = 1;
     repeated Comment comments = 2;
     repeated UserMessage user_messages = 3;
-    repeated PropNode nodes = 4;
-    repeated PropEdge edges = 5;
 }
 
 message DbDeleteRequest {
     repeated string video_ids = 1;
     repeated string comment_ids = 2;
     repeated string user_message_ids = 3;
-    repeated string node_ids = 4;
-    repeated string edge_ids = 5;
 }
 
 message DbDeleteResponse {
     uint32 videos_deleted = 1;
     uint32 comments_deleted = 2;
     uint32 user_messages_deleted = 3;
-    uint32 nodes_deleted = 4;
-    uint32 edges_deleted = 5;
 }
 
 // ----------------------------------------
@@ -135,62 +95,4 @@ message DbCommentList {
 message DbUserMessageList {
     repeated UserMessage items = 1;
     optional DbPaging paging = 2;
-}
-
-message DbPropNodeList {
-    repeated PropNode items = 1;
-    optional DbPaging paging = 2;
-}
-
-message DbPropEdgeList {
-    repeated PropEdge items = 1;
-    optional DbPaging paging = 2;
-}
-
-// ----------------------------------------
-// Prop graph
-// ----------------------------------------
-
-message PropNode {
-    string id = 1;
-    string node_type = 2;
-    optional string body = 3;
-    optional string singleton_key = 4;  // If set, only one pair of [this + node_type] can exist in the database. Inserts will silently auto-replace old ones.
-}
-
-message GraphObj {
-    oneof id {
-        string video_id = 1;
-        string comment_id = 2;
-        string node_id = 3;
-    }
-}
-
-message GraphObjRel {
-    oneof rel {
-        GraphObj parent_is = 1;      // Get children of obj parent_is...
-        GraphObj child_is = 2;       // Get parents of obj child_is...
-        Empty parentless = 3;        // Get objects that have no parents...
-        Empty childless = 4;         // Get objects that have no children...
-    }
-    optional string edge_type = 10;  // ...via this edge type. (If not set, all edges are considered.)
-}
-
-message PropEdge {
-    string id = 1;
-
-    GraphObj from = 2;
-    GraphObj to = 3;
-
-    string edge_type = 8;
-    optional string body = 9;
-
-    optional float sort_order = 10;  // Sort order of edges between the same nodes. Lower values come first.
-
-    // Edges are unique on [from, to, edge_type, sibling_id], so if you need
-    // multiple edges of same type between the same nodes, use sibling_id to differentiate them.
-    //
-    // If not set, any new insert will silently replace existing edge; that is,
-    // the latest body and sort_order will be used.
-    optional int32 sibling_id = 11;
 }

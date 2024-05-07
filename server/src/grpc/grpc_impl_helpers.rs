@@ -2,7 +2,6 @@ use std::num::NonZeroU32;
 use tonic::Status;
 use crate::database::error::DBError;
 
-use lib_clapshot_grpc::proto::org::GraphObj;
 use lib_clapshot_grpc::proto::org;
 
 
@@ -46,26 +45,6 @@ impl From<DBError> for Status {
             DBError::NotFound() => Status::not_found("DB item not found"),
             DBError::BackendError(e) => Status::internal(format!("DB backend error: {}", e)),
             DBError::Other(e) => Status::internal(format!("DB error: {}", e)),
-        }
-    }
-}
-
-/// Convert DB GraphObjId to GRPC GraphObj
-impl<'a> TryInto<crate::database::GraphObjId<'a>> for &'a GraphObj
-{
-    type Error = Status;
-    fn try_into(self) -> tonic::Result<crate::database::GraphObjId<'a>> {
-        use crate::database::GraphObjId;
-        use org::graph_obj::Id;
-        match &self.id {
-            Some(id) => match id {
-                Id::VideoId(id) => Ok(GraphObjId::Video(id)),
-                Id::CommentId(id) => Ok(GraphObjId::Comment(
-                    id.parse::<i32>().map_err(|_e| Status::invalid_argument("Failed to parse comment id"))?)),
-                Id::NodeId(id) => Ok(GraphObjId::Node(
-                    id.parse().map_err(|_e| Status::invalid_argument("Failed to parse prop node id"))?)),
-            },
-            None => Err(Status::invalid_argument("Missing 'obj' field from GraphObj")),
         }
     }
 }

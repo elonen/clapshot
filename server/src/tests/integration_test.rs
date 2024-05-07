@@ -405,7 +405,7 @@ mod integration_test
                     println!("\n\n\n------------ Running organizer test {}/{}: '{}'... ------------\n\n\n", i+1, test_names.len()+1, test_name);
                     let had_errors = had_errors.clone();
 
-                    let (_db, temp_dir, _videos, _comments, _nodes, _edges) = crate::database::tests::make_test_db();
+                    let (_db, temp_dir, _videos, _comments) = crate::database::tests::make_test_db();
 
                     cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone()), Some(temp_dir)]
                         match org_conn {

@@ -1,30 +1,8 @@
 use tracing_test::traced_test;
 use crate::database::*;
 
-use models::{Video, VideoInsert, Message, MessageInsert, Comment, CommentInsert, PropNode, PropNodeInsert, PropEdge, PropEdgeInsert};
+use models::{Video, VideoInsert, Message, MessageInsert, Comment, CommentInsert};
 
-macro_rules! test_insert_node {
-    ($db:expr, $type:expr, $body:expr, $singleton_key:expr) => {
-        PropNode::insert(&$db, &PropNodeInsert {
-            node_type: $type.to_string(),
-            body: $body.map(|s: &str| s.to_string()),
-            singleton_key: $singleton_key.map(|s: &str| s.to_string()),
-        }).expect("Failed to insert test node")
-    };
-}
-
-macro_rules! test_insert_edge {
-    ($db:ident, $from_type:ident, $from_expr:expr, $to_type:ident, $to_expr:expr, $edge_type:expr, $sort_order:expr, $body:expr) => {
-        PropEdge::insert(&$db, &PropEdgeInsert {
-            $from_type: Some($from_expr.clone()),
-            $to_type: Some($to_expr.clone()),
-            edge_type: $edge_type.to_string(),
-            sort_order: Some($sort_order as f32),
-            body: $body.map(|s: &str| s.to_string()),
-            ..Default::default()
-        }).expect("Failed to insert test edge")
-    };
-}
 
 fn _dump_db(db: &DB) {
     println!("================ dump_db ================");
@@ -40,14 +18,6 @@ fn _dump_db(db: &DB) {
     let messages = Message::get_all(db, DBPaging::default()).unwrap();
     println!("----- Messages -----");
     for m in messages { println!("----\n{:#?}", m);}
-
-    let nodes = PropNode::get_all(db, DBPaging::default()).unwrap();
-    println!("----- Nodes -----");
-    for n in nodes { println!("----\n{:#?}", n);}
-
-    let edges = PropEdge::get_all(db, DBPaging::default()).unwrap();
-    println!("----- Edges -----");
-    for e in edges { println!("----\n{:#?}", e);}
 
     println!("=========================================");
 }
@@ -69,7 +39,7 @@ fn _dump_db(db: &DB) {
 /// <Comment(id='6' video=HASH0 parent=1 user_id='user.num2' comment='Comment 5' has-drawing=True ...)>
 /// <Comment(id='7' video=HASH0 parent=1 user_id='user.num1' comment='Comment 6' has-drawing=True ...)>
 /// ```
-pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Vec<Comment>, Vec<PropNode>, Vec<PropEdge>)
+pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Vec<Comment>)
 {
     println!("--- make_test_db");
 
@@ -141,49 +111,14 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Ve
     let cmt = models::Comment::insert(&db, &c).unwrap();
     comments.push(cmt);
 
-    // Make a test props graph
-
-    let nodes = vec![
-        test_insert_node!(&db, "node_type_a", Some("node_body0"), None),
-        test_insert_node!(&db, "node_type_b", Some("node_body1"), None),
-        test_insert_node!(&db, "node_type_c", Some("node_body2"), None),
-        test_insert_node!(&db, "node_type_c", None, None),
-        test_insert_node!(&db, "node_type_d", Some("node_body4"), None),
-    ];
-
-    let edges = vec![
-        test_insert_edge!(db, from_node,nodes[0].id, to_node,nodes[1].id, "edge_type_a", 0, Some("edge_body0")),
-        test_insert_edge!(db, from_node,nodes[0].id, to_node,nodes[1].id, "edge_type_b", 1, Some("edge_body1")),
-        test_insert_edge!(db, from_node,nodes[0].id, to_node,nodes[2].id, "edge_type_c", 2, None),
-
-        test_insert_edge!(db, from_node,nodes[0].id, to_video,videos[0].id, "edge_type_a", 3, Some("edge_body3")),
-        test_insert_edge!(db, from_node,nodes[1].id, to_video,videos[0].id, "edge_type_a", 4, None),
-        test_insert_edge!(db, from_node,nodes[0].id, to_video,videos[1].id, "edge_type_b", 5, Some("edge_body5")),
-
-        test_insert_edge!(db, from_video,videos[1].id, to_node,nodes[2].id, "edge_type_a", 6, Some("edge_body6")),
-        test_insert_edge!(db, from_video,videos[2].id, to_node,nodes[2].id, "edge_type_b", 7, Some("edge_body7")),
-        test_insert_edge!(db, from_video,videos[2].id, to_node,nodes[3].id, "edge_type_b", 8, Some("edge_body8")),
-
-        test_insert_edge!(db, from_node,nodes[0].id, to_comment,comments[0].id, "edge_type_c", 9, Some("edge_body9")),
-        test_insert_edge!(db, from_node,nodes[1].id, to_comment,comments[0].id, "edge_type_c", 10, None),
-        test_insert_edge!(db, from_node,nodes[0].id, to_comment,comments[1].id, "edge_type_b", 11, Some("edge_body11")),
-
-        test_insert_edge!(db, from_comment,comments[0].id, to_node,nodes[2].id, "edge_type_a", 12, Some("edge_body12")),
-        test_insert_edge!(db, from_comment,comments[1].id, to_node,nodes[2].id, "edge_type_b", 13, Some("edge_body13")),
-        test_insert_edge!(db, from_comment,comments[1].id, to_node,nodes[3].id, "edge_type_b", 14, Some("edge_body14")),
-
-        test_insert_edge!(db, from_comment,comments[0].id, to_video,videos[0].id, "edge_type_a",    15, Some("edge_body15")),
-        test_insert_edge!(db, from_video,videos[3].id,     to_video,videos[3].id, "edge_type_loop", 16, None),
-    ];
-
-    (db, data_dir, videos, comments, nodes, edges)
+    (db, data_dir, videos, comments)
 }
 
 
 #[test]
 #[traced_test]
 fn test_pagination() -> anyhow::Result<()> {
-    let (db, _data_dir, _videos, comments, _nodes, _edges) = make_test_db();
+    let (db, _data_dir, _videos, comments) = make_test_db();
 
     // Test pagination of comments
     let mut res = Comment::get_all(&db, DBPaging { page_num: 0, page_size: 3.try_into()? })?;
@@ -214,200 +149,6 @@ fn test_pagination() -> anyhow::Result<()> {
 }
 
 
-
-#[test]
-#[traced_test]
-fn test_fail_invalid_edge_inserts() -> anyhow::Result<()> {
-    let (db, _data_dir, videos, comments, nodes, _edges) = make_test_db();
-
-    // Insert an edge with no from_*
-    let e = PropEdgeInsert {
-        to_video: Some(videos[0].id.clone()), ..Default::default()
-    };
-    assert!(PropEdge::insert(&db, &e).is_err());
-
-    // Insert an edge with no to_*
-    let e = PropEdgeInsert {
-        from_video: Some(videos[0].id.clone()), ..Default::default()
-    };
-    assert!(PropEdge::insert(&db, &e).is_err());
-
-    // Insert an edge with multiple from_*
-    let e = PropEdgeInsert {
-        from_video: Some(videos[0].id.clone()),
-        from_comment: Some(comments[0].id.clone()), ..Default::default()
-    };
-    assert!(PropEdge::insert(&db, &e).is_err());
-
-    // Insert an edge with multiple to_*
-    let e = PropEdgeInsert {
-        to_node: Some(nodes[0].id.clone()),
-        to_comment: Some(comments[0].id.clone()), ..Default::default()
-    };
-    assert!(PropEdge::insert(&db, &e).is_err());
-
-    Ok(())
-}
-
-
-#[test]
-#[traced_test]
-fn test_graph_db_pointing_queries() -> anyhow::Result<()> {
-    let (db, _data_dir, videos, comments, nodes, edges) = make_test_db();
-
-    // Videos pointing to nodes
-
-    assert_eq!(Video::graph_get_by_parent(&db, GraphObjId::Node(nodes[3].id), None)?.len(), 1);
-    assert_eq!(Video::graph_get_by_parent(&db, GraphObjId::Node(nodes[4].id), None)?.len(), 0);
-
-    let res = Video::graph_get_by_parent(&db, GraphObjId::Node(nodes[2].id), None)?;
-    assert_eq!(res.len(), 2);
-    assert_eq!(res[0].edge.from_video, Some(res[0].obj.id.clone()));
-
-    assert_eq!(res[0].obj.id, videos[1].id);
-    assert_eq!(res[0].obj.user_id, videos[1].user_id);
-    assert_eq!(res[0].edge.to_node, Some(nodes[2].id));
-    assert_eq!(res[0].edge.edge_type, "edge_type_a");
-    assert_eq!(res[0].edge.body, Some("edge_body6".to_string()));
-    assert_eq!(res[0].edge.sort_order, Some(6.0));
-
-    assert_eq!(res[1].obj.id, videos[2].id);
-    assert_eq!(res[1].obj.user_id, videos[2].user_id);
-    assert_eq!(res[1].edge.to_node, Some(nodes[2].id));
-    assert_eq!(res[1].edge.edge_type, "edge_type_b");
-    assert_eq!(res[1].edge.body, Some("edge_body7".to_string()));
-    assert_eq!(res[1].edge.sort_order, Some(7.0));
-
-    let res = Video::graph_get_by_parent(&db, GraphObjId::Node(nodes[2].id), Some("edge_type_b"))?;
-    assert_eq!(res.len(), 1);
-    assert_eq!(res[0].obj.id, videos[2].id);
-
-    // Nodes pointing to videos
-    assert_eq!(PropNode::graph_get_by_parent(&db, GraphObjId::Video(&videos[0].id), None)?.len(), 2);
-    assert_eq!(PropNode::graph_get_by_parent(&db, GraphObjId::Video(&videos[1].id), None)?.len(), 1);
-
-    let res = PropNode::graph_get_by_parent(&db, GraphObjId::Video(&videos[0].id), None)?;
-    assert_eq!(res.len(), 2);
-    assert_eq!(res[0].edge.from_node, Some(nodes[0].id));
-    assert_eq!(res[1].edge.from_node, Some(nodes[1].id));
-    assert_eq!(res[0].edge.to_video, Some(videos[0].id.clone()));
-    assert_eq!(res[1].edge.to_video, Some(videos[0].id.clone()));
-    assert_eq!(res[0].edge.body, Some("edge_body3".to_string()));
-    assert_eq!(res[1].edge.body, None);
-
-    // Nodes pointing to nodes
-    let res = PropNode::graph_get_by_parent(&db, GraphObjId::Node(nodes[1].id), None)?;
-    assert_eq!(res.len(), 2);
-
-    assert_eq!(res[0].edge.from_node, Some(nodes[0].id));
-    assert_eq!(res[0].edge.to_node, Some(nodes[1].id));
-    assert_eq!(res[0].edge.edge_type, "edge_type_a");
-    assert_eq!(res[0].edge.body, Some("edge_body0".to_string()));
-
-    assert_eq!(res[1].edge.from_node, Some(nodes[0].id));
-    assert_eq!(res[1].edge.to_node, Some(nodes[1].id));
-    assert_eq!(res[1].edge.edge_type, "edge_type_b");
-    assert_eq!(res[1].edge.body, Some("edge_body1".to_string()));
-
-    assert_eq!(PropNode::graph_get_by_parent(&db, GraphObjId::Node(nodes[1].id), Some("edge_type_a"))?.len(), 1);
-    assert_eq!(PropNode::graph_get_by_parent(&db, GraphObjId::Node(nodes[1].id), Some("NO_SUCH_TYPE"))?.len(), 0);
-
-    let res = Comment::graph_get_by_child(&db, GraphObjId::Node(nodes[0].id), None)?;
-    assert_eq!(res.len(), 2);
-    assert_eq!(res[0].obj.id, comments[0].id);
-    assert_eq!(res[1].obj.id, comments[1].id);
-
-    let res = PropNode::graph_get_parentless(&db, None)?;
-    assert_eq!(res.len(), 3);
-    assert_eq!(res[0].id, nodes[2].id);
-    assert_eq!(res[1].id, nodes[3].id);
-    assert_eq!(res[2].id, nodes[4].id);
-
-    let res = Video::graph_get_parentless(&db, None)?;
-    assert_eq!(res.len(), 2);
-    assert_eq!(res[0].id, videos[0].id);
-    assert_eq!(res[1].id, videos[4].id);
-
-    let res = Video::graph_get_parentless(&db, Some("edge_type_a"))?;
-    assert_eq!(res.len(), 4);
-    assert!(res.iter().find(|v| v.id == videos[1].id).is_none());
-
-    let res = Video::graph_get_parentless(&db, Some("edge_type_b"))?;
-    assert_eq!(res.len(), 4);
-    assert!(res.iter().find(|v| v.id == videos[2].id).is_none());
-
-
-    let res = PropNode::graph_get_childless(&db, None)?;
-    assert_eq!(res.len(), 2);
-    assert!(res.iter().find(|v| v.id == nodes[0].id).is_some());
-    assert!(res.iter().find(|v| v.id == nodes[4].id).is_some());
-
-    let res = Video::graph_get_childless(&db, Some("edge_type_a"))?;
-    assert_eq!(res.len(), 4);
-    assert!(res.iter().find(|v| v.id == videos[0].id).is_none());
-
-    assert_eq!(PropEdge::get_all(&db, DBPaging::default())?.len(), 17);
-
-    let et_a = PropEdge::get_filtered(&db, None, None, Some("edge_type_a"), &None, DBPaging::default())?;
-    assert_eq!(et_a.len(), 6);
-    let et_loop = PropEdge::get_filtered(&db, None, None, Some("edge_type_loop"), &None, DBPaging::default())?;
-    assert_eq!(et_loop.len(), 1);
-
-    let edge_ids = &[edges[0].id, edges[2].id];
-    assert_eq!(PropEdge::get_many(&db, edge_ids)?.len(), 2);
-    assert_eq!( PropEdge::get_filtered(&db, None, None, None, &Some(edge_ids.to_vec()), DBPaging::default())?.len(), 2);
-
-    Ok(())
-}
-
-#[test]
-#[traced_test]
-fn test_graph_db_delete_nodes() -> anyhow::Result<()> {
-    let (db, _data_dir, videos, _comments, nodes, _edges) = make_test_db();
-
-    assert_eq!(PropNode::get_all(&db, DBPaging::default())?.len(), 5);
-    assert_eq!(PropEdge::get_all(&db, DBPaging::default())?.len(), 17);
-
-    PropNode::delete_many(&db, &[nodes[0].id, nodes[1].id])?;
-    assert_eq!(PropNode::get_all(&db, DBPaging::default())?.len(), 3);
-    assert_eq!(PropEdge::get_all(&db, DBPaging::default())?.len(), 8);       // 9 edges deleted by cascade on nodes
-    println!("Deleting video {}", videos[1].id);
-
-    // delete a video and check that all edges from/to it and its comments are deleted
-    Video::delete(&db, &videos[1].id)?;
-    assert_eq!(PropEdge::get_all(&db, DBPaging::default())?.len(), 5);  // 1 edge and 2 comments deleted by cascade on video, 2 more edges deleted by cascade on the 2 deleted comments
-
-    Ok(())
-}
-
-#[test]
-#[traced_test]
-fn test_singleton_prop_nodes() -> anyhow::Result<()> {
-    let (db, _data_dir, _videos, _comments, _nodes, _edges) = make_test_db();
-
-    // Test 1: Insert two rows with the same node_type and NULL singleton_key
-    test_insert_node!(&db, "A", Some("body1"), None);
-    test_insert_node!(&db, "A", Some("body2"), None);
-    assert_eq!(PropNode::get_by_type(&db, "A", &None)?.len(), 2);
-
-    // Test 2: Insert two rows with the same node_type and same non-NULL singleton_key
-
-    test_insert_node!(&db, "B", Some("body3"), Some("key1"));
-    assert_eq!(PropNode::get_by_type(&db, "B", &None)?.len(), 1);
-    assert_eq!(PropNode::get_by_type(&db, "B", &None)?[0].body, Some("body3".into()));
-    // This should replace the previous row due to the ON CONFLICT REPLACE clause
-    test_insert_node!(&db, "B", Some("body4"), Some("key1"));
-
-    assert_eq!(PropNode::get_by_type(&db, "B", &None)?.len(), 1);
-    assert_eq!(PropNode::get_by_type(&db, "B", &None)?[0].body, Some("body4".into()));
-
-    // Test 3: Insert another "B" type node but with a different singleton_key
-    test_insert_node!(&db, "B", Some("body5"), Some("key2"));
-    assert_eq!(PropNode::get_by_type(&db, "B", &None)?.len(), 2);
-
-    Ok(())
-}
-
 // ----------------------------------------------------------------------------
 
 
@@ -415,7 +156,7 @@ fn test_singleton_prop_nodes() -> anyhow::Result<()> {
 #[traced_test]
 fn test_fixture_state() -> anyhow::Result<()>
 {
-    let (db, _data_dir, videos, comments, _nodes, _edges) = make_test_db();
+    let (db, _data_dir, videos, comments) = make_test_db();
 
     // First 5 comments have no parent, last 2 have parent_id=1
     for i in 0..5 { assert!(comments[i].parent_id.is_none()); }
@@ -458,7 +199,7 @@ fn test_fixture_state() -> anyhow::Result<()>
 #[test]
 #[traced_test]
 fn test_comment_delete() -> anyhow::Result<()> {
-    let (db, _data_dir, _vid, com, _nodes, _edges) = make_test_db();
+    let (db, _data_dir, _vid, com) = make_test_db();
 
     assert_eq!(Comment::get_by_video(&db, &com[1].video_id, DBPaging::default())?.len(), 2, "Video should have 2 comments before deletion");
 
@@ -494,7 +235,7 @@ fn test_comment_delete() -> anyhow::Result<()> {
 #[test]
 #[traced_test]
 fn test_rename_video() -> anyhow::Result<()> {
-    let (db, _data_dir, _vid, _com, _nodes, _edges) = make_test_db();
+    let (db, _data_dir, _vid, _com) = make_test_db();
 
     // Rename video #1
     let new_name = "New name";
@@ -515,7 +256,7 @@ fn test_rename_video() -> anyhow::Result<()> {
 #[test]
 #[traced_test]
 fn test_user_messages() -> anyhow::Result<()> {
-    let (db, _data_dir, _vid, _com, _nodes, _edges) = make_test_db();
+    let (db, _data_dir, _vid, _com) = make_test_db();
 
     // Add a message to user #1
     let msgs = [
@@ -582,7 +323,7 @@ fn test_user_messages() -> anyhow::Result<()> {
 #[test]
 #[traced_test]
 fn test_transaction_rollback() -> anyhow::Result<()> {
-    let (db, _data_dir, vid, _com, _nodes, _edges) = make_test_db();
+    let (db, _data_dir, vid, _com) = make_test_db();
 
     assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len());
     begin_transaction(&db.conn()?)?;
@@ -597,7 +338,7 @@ fn test_transaction_rollback() -> anyhow::Result<()> {
 #[test]
 #[traced_test]
 fn test_transaction_commit() -> anyhow::Result<()> {
-    let (db, _data_dir, vid, _com, _nodes, _edges) = make_test_db();
+    let (db, _data_dir, vid, _com) = make_test_db();
 
     assert_eq!(Video::get_all(&db, DBPaging::default()).unwrap().len(), vid.len());
     begin_transaction(&db.conn()?)?;

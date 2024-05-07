@@ -118,69 +118,6 @@ pub struct MessageInsert {
 }
 
 // -------------------------------------------------------
-// Graph structures
-// -------------------------------------------------------
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
-#[diesel(table_name = prop_edges)]
-#[diesel(treat_none_as_null = true)]
-pub struct PropEdge {
-    pub id: i32,
-
-    pub from_video: Option<String>,
-    pub from_comment: Option<i32>,
-    pub from_node: Option<i32>,
-
-    pub to_video: Option<String>,
-    pub to_comment: Option<i32>,
-    pub to_node: Option<i32>,
-
-    pub edge_type: String,
-    pub body: Option<String>,
-
-    pub sort_order: Option<f32>,
-    pub sibling_id: Option<i32>,
-}
-
-#[derive(Serialize, Deserialize, Default, Debug, Insertable, AsChangeset)]
-#[diesel(table_name = prop_edges)]
-pub struct PropEdgeInsert {
-    pub from_video: Option<String>,
-    pub from_comment: Option<i32>,
-    pub from_node: Option<i32>,
-
-    pub to_video: Option<String>,
-    pub to_comment: Option<i32>,
-    pub to_node: Option<i32>,
-
-    pub edge_type: String,
-    pub body: Option<String>,
-
-    pub sort_order: Option<f32>,
-    pub sibling_id: Option<i32>,
-}
-
-
-
-#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
-#[diesel(table_name = prop_nodes)]
-#[diesel(primary_key(id))]
-#[diesel(treat_none_as_null = true)]
-pub struct PropNode {
-    pub id: i32,
-    pub node_type: String,
-    pub body: Option<String>,
-    pub singleton_key: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Default, Debug, Insertable, AsChangeset)]
-#[diesel(table_name = prop_nodes)]
-pub struct PropNodeInsert {
-    pub node_type: String,
-    pub body: Option<String>,
-    pub singleton_key: Option<String>,
-}
-
-// -------------------------------------------------------
 // Serialization helpers
 // -------------------------------------------------------
 

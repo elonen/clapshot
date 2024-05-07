@@ -38,22 +38,17 @@ service OrganizerOutbound {
     rpc client_open_video(ClientOpenVideoRequest) returns (Empty);
     rpc client_set_cookies(ClientSetCookiesRequest) returns (Empty);
 
-    rpc delete_video(DeleteVideoRequest) returns (Empty);   // Delete (trash) video cleanly (db, filesystem, etc)
+    rpc delete_video(DeleteVideoRequest) returns (Empty);   // Delete (trash) video cleanly from both database and filesystem
 
     rpc DbGetVideos(DbGetVideosRequest) returns (DbVideoList);
     rpc DbGetComments(DbGetCommentsRequest) returns (DbCommentList);
     rpc DbGetUserMessages(DbGetUserMessagesRequest) returns (DbUserMessageList);
-
-    rpc DbGetPropNodes(DbGetPropNodesRequest) returns (DbPropNodeList);
-    rpc DbGetSingletonPropNode(DbGetSingletonPropNodeRequest) returns (DbGetSingletonPropNodeResponse);
-    rpc DbGetPropEdges(DbGetPropEdgesRequest) returns (DbPropEdgeList);
 
     rpc DbUpsert(DbUpsertRequest) returns (DbUpsertResponse);
     rpc DbDelete(DbDeleteRequest) returns (DbDeleteResponse);
 
     // Explicit transaction calls. You should probably wrap these in RAII guards in your program code.
     // Don't expect nested transactions to work reliably.
-
     rpc DbBeginTransaction(DbBeginTransactionRequest) returns (Empty);
     rpc DbCommitTransaction(DbCommitTransactionRequest) returns (Empty);
     rpc DbRollbackTransaction(DbRollbackTransactionRequest) returns (Empty);

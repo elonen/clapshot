@@ -194,33 +194,65 @@ message ScriptCall {
     Lang lang = 2;
 
     /*
-    The 'code' is evaluated inside an async function defined as follows:
+    The 'code' string is evaluated inside a function with the following context:
 
-        async function run_script( items: any[]): Promise<void> {
-            // ... code ...
-        }
+    Parameters:
+        - _action_args: Object - Contains different parameters depending on the call context.
 
-    Current context:
+            1. `PageItem.FolderListing.Item.popup_actions` - user right-clicks a video or folder:
+                - selected_items: Proto3.PageItem_FolderListing_Item[] - Selected items in the UI.
+                - listing_data: StringMap - Data from Organizer (to itself) about current folder listing.
 
-        - async function call_server(cmd: string, args: Object) - call server API
-        - async function call_organizer(cmd: string, args: Object) - call organizer API
-        - Following prompts:
-            - async alert(msg: string): Promise<void>
-            - async prompt(msg: string, default_value: string): Promise<string>
-            - async confirm(msg: string): Promise<boolean>
-        - all normal browser APIs (e.g. fetch, localStorage, ...)
+            2. `PageItem.FolderListing.Item.open_action` - user doubleclicks (to open) a video or folder:
+                - item_to_open: Proto3.PageItem_FolderListing_Item - Item to open.
+                - listing_data: StringMap
 
-    Example: rename_video
+            3. `PageItem.FolderListing.popup_actions` - user right-clicks on the folder listing background:
+                - listing_data: StringMap
 
-        var it = items[0];
-        if (!it.video) {
-            await alert("Non-video rename not implemented (no Organizer).");
-            return;
-        }
-        var old_name = it.video.title;
-        var new_name = (await prompt("Rename item", old_name))?.trim();
+            4. `PageItem.FolderListing.video_added_action` - a new video was just uploaded to this folder:
+                - video_id: string - ID of the newly added video.
+                - listing_data: StringMap
+
+    Available functions:
+        - clapshot.openVideo(videoId: string): void - Open a video by its ID.
+        - clapshot.renameVideo(videoId: string, newName: string): void - Rename a video.
+        - clapshot.delVideo(videoId: string): void - Delete a video.
+        - clapshot.callOrganizer(cmd: string, args: Object): void - Call an Organizer API command.
+        - clapshot.itemsToIDs(items: Proto3.PageItem_FolderListing_Item[]): Proto3.FolderItemID[] - Convert items to their IDs.
+        - clapshot.moveToFolder(dstFolderId: string, ids: Proto3.FolderItemID[], listingData: StringMap): void - Move items to a folder.
+        - clapshot.reorderItems(ids: Proto3.FolderItemID[], listingData: StringMap): void - Reorder items within a folder.
+
+    Usual JS functions are also available, e.g.:
+        - alert(msg: string): void - Display an alert message.
+        - prompt(msg: string, default_value: string): string - Prompt the user for input with a default value.
+        - confirm(msg: string): boolean - Ask the user for confirmation.
+
+    Example scripts:
+
+    1. Rename an item (video or folder) when user right-clicks:
+        var it = _action_args.selected_items[0];
+        var old_name = it.video?.title || it.folder?.title;
+        var new_name = (prompt("Rename item", old_name))?.trim();
         if (new_name && new_name != old_name) {
-            await call_server("rename_video", {video_id: it.video.videoId, new_name: new_name});
+            if (it.video) {
+                clapshot.renameVideo(it.video.id, new_name);
+            } else if (it.folder) {
+                clapshot.callOrganizer("rename_folder", {id: it.folder.id, new_name: new_name});
+            } else {
+                alert("Unknown item type in rename action. Please report this bug.");
+            }
+        }
+
+    2. Move a newly added video to a folder:
+        var vid = _action_args.video_id;
+        var listingData = _action_args.listing_data;
+        var folderId = listingData?.folder_id;
+        if (!folderId || !vid) {
+            var msg = "on_video_added error: video_id missing, or folder_id from listingData.";
+            alert(msg); console.error(msg);
+        } else {
+            clapshot.moveToFolder(folderId, [{videoId: vid}], listingData);
         }
     */
 }
