@@ -64,7 +64,7 @@ debian-docker: docker
 
 
 test-local:
-	@if [ -z "$$CI" ]; then \
+	@if [ "${CI}" ]; then \
 		cargo test | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"; \
 	else \
 		echo "!! Running in CI: No-default-features = skip expensive tests"; \
@@ -74,7 +74,7 @@ test-local:
 	# TEST_ORG_CMD="${PLUGIN_BIN}" cargo test  test_organizer  | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"
 
 test-docker: docker
-	docker run --rm ${DOCKER_IMG_NAME}:latest  cargo test
+	docker run --rm ${DOCKER_IMG_NAME}:latest  make test-local
 
 test:
 	@echo "Please run either 'test-docker' or 'test-local'"
