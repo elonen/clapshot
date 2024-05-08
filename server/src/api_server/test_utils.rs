@@ -17,7 +17,6 @@ use crate::database::{DB, models};
 
 
 
-// write(&mut ws, &server_cmd_json!(ListMyVideos, ListMyVideos{})).await;
 #[macro_export]
 macro_rules! send_server_cmd {
     ($ws:expr, $cmd_name:ident, $options:expr) => {{

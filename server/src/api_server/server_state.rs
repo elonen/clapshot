@@ -122,7 +122,7 @@ impl ServerState {
         let send_res = self.emit_cmd(cmd, send_to);
         if let Ok(sent_count) = send_res {
             if persist {
-                models::Message::insert(&self.db, &models::MessageInsert {
+                models::Message::insert(&mut self.db.conn()?, &models::MessageInsert {
                     seen: msg.seen || sent_count > 0,
                     ..msg.clone()
                 })?;

@@ -107,7 +107,7 @@ fn ingest_video(
     // Video already exists on disk?
     if dir_for_video.exists() {
         tracing::debug!("Video dir already exists.");
-        match models::Video::get(&db, &vid.into()) {
+        match models::Video::get(&mut db.conn()?, &vid.into()) {
             Ok(v) => {
                 let new_owner = &md.user_id;
                 if v.user_id == Some(new_owner.clone()) {
@@ -158,7 +158,7 @@ fn ingest_video(
 
     // Add to DB
     tracing::info!("Adding video to DB.");
-    models::Video::insert(&db, &models::VideoInsert {
+    models::Video::insert(&mut db.conn()?, &models::VideoInsert {
         id: vid.to_string(),
         user_id: Some(md.user_id.clone()),
         user_name: Some(md.user_id.clone()),  // TODO: get username from somewhere
@@ -327,12 +327,13 @@ pub fn run_forever(
 
     // Migration from older version: find a video that is missing thumbnail sheet
     fn legacy_thumbnail_next_video(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<video_compressor::CmprInput>) -> Option<String> {
-        let next = match models::Video::get_all_with_missing_thumbnails(&db) {
-            Ok(videos) => videos.first().cloned(),
-            Err(e) => {
-                tracing::error!(details=?e, "DB: Failed to get videos without thumbnails.");
-                return None;
-            }};
+
+        let next = db.conn()
+            .and_then(|mut conn| models::Video::get_all_with_missing_thumbnails(&mut conn))
+            .map(|videos| videos.first().cloned())
+            .map_err(|e| {
+                tracing::error!(details=?e, "DB: Failed to get videos without thumbnails or connection.");
+            }).ok()?;
 
         if let Some(v) = next {
             tracing::info!(video_id=%v.id, "Found legacy video that needs thumbnailing.");
@@ -481,7 +482,7 @@ pub fn run_forever(
 
                             // Thumbnails done?
                             if let Some(thumb_dir) = res.thumb_dir {
-                                if let Err(e) = models::Video::set_thumb_sheet_dimensions(&db, &vid, THUMB_SHEET_COLS, THUMB_SHEET_ROWS) {
+                                if let Err(e) = db.conn().and_then(|mut conn| models::Video::set_thumb_sheet_dimensions(&mut conn, &vid, THUMB_SHEET_COLS, THUMB_SHEET_ROWS)) {
                                     tracing::error!(details=%e, "Error storing thumbnail sheet dims in DB");
                                 } else {
                                     // Thumbnailer for old videos: find next video to thumbnail, if any
@@ -545,7 +546,8 @@ pub fn run_forever(
                                         tracing::error!(details=%e, "Failed to create symlink {:?} -> {:?}", symlink_path, res.video_dst);
                                         return false;
                                     }
-                                    if let Err(e) = models::Video::set_recompressed(&db, &vid) {
+
+                                    if let Err(e) = db.conn().and_then(|mut conn| models::Video::set_recompressed(&mut conn, &vid)) {
                                         tracing::error!(details=%e, "Error marking video as recompressed in DB");
                                         return false;
                                     } else {

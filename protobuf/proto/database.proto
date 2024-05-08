@@ -65,12 +65,6 @@ message DbDeleteResponse {
 
 // ----------------------------------------
 
-message DbBeginTransactionRequest {}
-message DbCommitTransactionRequest {}
-message DbRollbackTransactionRequest {}
-
-// ----------------------------------------
-
 message DbPaging {
     uint32 page_num = 1;    // Page number (0 = first page)
     uint32 page_size = 2;   // Number of items per page

@@ -123,11 +123,11 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         let req = req.into_inner();
         let db = self.server.db.clone();
         let pg = req.paging.as_ref().try_into()?;
-        let items = match rpc_expect_field(&req.filter, "filter")?
-        {
-            Filter::All(_) => { models::Video::get_all(&db, pg)? },
-            Filter::Ids(ids) => { paged_vec(models::Video::get_many(&db, &ids.ids)?, pg) },
-            Filter::UserId(user_id) => { models::Video::get_by_user(&db, &user_id, pg)? },
+        let conn = &mut db.conn()?;
+        let items = match rpc_expect_field(&req.filter, "filter")? {
+            Filter::All(_) => { models::Video::get_all(conn, pg)? },
+            Filter::Ids(ids) => { paged_vec(models::Video::get_many(conn, &ids.ids)?, pg) },
+            Filter::UserId(user_id) => { models::Video::get_by_user(conn, &user_id, pg)? },
         };
         Ok(Response::new(org::DbVideoList {
             items: items.into_iter().map(|v| v.to_proto3(&self.server.url_base)).collect(),
@@ -142,16 +142,16 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         let req = req.into_inner();
         let db = self.server.db.clone();
         let pg = req.paging.as_ref().try_into()?;
-        let items = match rpc_expect_field(&req.filter, "filter")?
-        {
-            Filter::All(_) => { models::Comment::get_all(&db, pg)? },
+        let conn = &mut db.conn()?;
+        let items = match rpc_expect_field(&req.filter, "filter")? {
+            Filter::All(_) => { models::Comment::get_all(conn, pg)? },
             Filter::Ids(ids) => {
                 let ids = ids.ids.iter().map(|s| s.parse::<i32>()).collect::<Result<Vec<_>, _>>()
                     .map_err(|e| Status::invalid_argument(format!("Invalid comment ID: {}", e)))?;
-                paged_vec(models::Comment::get_many(&db, &ids)?, pg)
+                paged_vec(models::Comment::get_many(conn, &ids)?, pg)
             },
-            Filter::UserId(user_id) => { models::Comment::get_by_user(&db, user_id, pg)? },
-            Filter::VideoId(video_id) => { models::Comment::get_by_video(&db, video_id, pg)? },
+            Filter::UserId(user_id) => { models::Comment::get_by_user(conn, user_id, pg)? },
+            Filter::VideoId(video_id) => { models::Comment::get_by_video(conn, video_id, pg)? },
         };
         Ok(Response::new(org::DbCommentList {
             items: items.into_iter().map(|c| c.to_proto3()).collect(),
@@ -166,20 +166,20 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         let req = req.into_inner();
         let db = self.server.db.clone();
         let pg = req.paging.as_ref().try_into()?;
-        let items = match rpc_expect_field(&req.filter, "filter")?
-        {
-            Filter::All(_) => { models::Message::get_all(&db, pg)? },
+        let conn = &mut db.conn()?;
+        let items = match rpc_expect_field(&req.filter, "filter")? {
+            Filter::All(_) => { models::Message::get_all(conn, pg)? },
             Filter::Ids(ids) => {
                 let ids = ids.ids.iter().map(|s| s.parse::<i32>()).collect::<Result<Vec<_>, _>>()
                     .map_err(|e| Status::invalid_argument(format!("Invalid user message ID: {}", e)))?;
-                paged_vec(models::Message::get_many(&db, &ids)?, pg)
+                paged_vec(models::Message::get_many(conn, &ids)?, pg)
             },
-            Filter::UserId(user_id) => { models::Message::get_by_user(&db, user_id, pg)? },
-            Filter::VideoId(video_id) => { models::Message::get_by_video(&db, video_id, pg)? },
+            Filter::UserId(user_id) => { models::Message::get_by_user(conn, user_id, pg)? },
+            Filter::VideoId(video_id) => { models::Message::get_by_video(conn, video_id, pg)? },
             Filter::CommentId(comment_id) => {
                 let comment_id = comment_id.parse::<i32>()
                     .map_err(|e| Status::invalid_argument(format!("Invalid comment ID: {}", e)))?;
-                models::Message::get_by_comment(&db, comment_id)?
+                models::Message::get_by_comment(conn, comment_id)?
             },
         };
         Ok(Response::new(org::DbUserMessageList {
@@ -192,7 +192,6 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
     async fn db_upsert(&self, req: Request<org::DbUpsertRequest>) -> RpcResult<org::DbUpsertResponse>
     {
         let req = req.into_inner();
-        let db = self.server.db.clone();
         macro_rules! upsert_type {
             ([$db:expr, $input_items:expr, $model:ty, $ins_model:ty, $id_missing:expr, $to_proto:expr]) => {
                 {
@@ -228,17 +227,18 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
                 }
             }
         }
+        let conn = &mut self.server.db.conn()?;
         Ok(Response::new(org::DbUpsertResponse {
             videos: upsert_type!([
-                db.as_ref(), req.videos, models::Video, models::VideoInsert,
+                conn, req.videos, models::Video, models::VideoInsert,
                 |it: &proto::Video| it.id.is_empty(),
                 |it: &models::Video| it.to_proto3(self.server.url_base.as_str())]),
             comments: upsert_type!([
-                db.as_ref(), req.comments, models::Comment, models::CommentInsert,
+                conn, req.comments, models::Comment, models::CommentInsert,
                 |it: &proto::Comment| it.id.is_empty(),
                 |it: &models::Comment| it.to_proto3()]),
             user_messages: upsert_type!([
-                db.as_ref(), req.user_messages, models::Message, models::MessageInsert,
+                conn, req.user_messages, models::Message, models::MessageInsert,
                 |it: &proto::UserMessage| it.id.is_none(),
                 |it: &models::Message| it.to_proto3()]),
         }))
@@ -247,7 +247,6 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
     async fn db_delete(&self, req: Request<org::DbDeleteRequest>) -> RpcResult<org::DbDeleteResponse>
     {
         let req = req.into_inner();
-        let db = self.server.db.clone();
         macro_rules! delete_type {
             ([$db:expr, $input_ids:expr, $id_type:ty, $model:ty]) => {
                 {
@@ -259,26 +258,12 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
                 }
             }
         }
+        let conn = &mut self.server.db.conn()?;
         Ok(Response::new(org::DbDeleteResponse {
-            videos_deleted: delete_type!([db.as_ref(), req.video_ids, String, models::Video]),
-            comments_deleted: delete_type!([db.as_ref(), req.comment_ids, i32, models::Comment]),
-            user_messages_deleted: delete_type!([db.as_ref(), req.user_message_ids, i32, models::Message]),
+            videos_deleted: delete_type!([conn, req.video_ids, String, models::Video]),
+            comments_deleted: delete_type!([conn, req.comment_ids, i32, models::Comment]),
+            user_messages_deleted: delete_type!([conn, req.user_message_ids, i32, models::Message]),
         }))
-    }
-
-    async fn db_begin_transaction(&self, _req: Request<org::DbBeginTransactionRequest>) -> RpcResult<proto::Empty>
-    {
-        to_rpc_empty(crate::database::begin_transaction(&self.server.db.conn()?))
-    }
-
-    async fn db_commit_transaction(&self, _req: Request<org::DbCommitTransactionRequest>) -> RpcResult<proto::Empty>
-    {
-        to_rpc_empty(crate::database::commit_transaction(&self.server.db.conn()?))
-    }
-
-    async fn db_rollback_transaction(&self, _req: Request<org::DbRollbackTransactionRequest>) -> RpcResult<proto::Empty>
-    {
-        to_rpc_empty(crate::database::rollback_transaction(&self.server.db.conn()?))
     }
 }
 

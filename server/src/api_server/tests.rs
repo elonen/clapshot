@@ -79,16 +79,17 @@ async fn test_api_list_user_videos()
 async fn test_api_del_video()
 {
     api_test! {[ws, ts]
+        let conn = &mut ts.db.conn().unwrap();
 
         // Delete one successfully
         {
-            assert!(models::Video::get(&ts.db, &ts.videos[0].id).is_ok());
+            assert!(models::Video::get(conn, &ts.videos[0].id).is_ok());
 
             send_server_cmd!(ws, DelVideo, DelVideo{video_id: ts.videos[0].id.clone()});
             expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
 
             // Make sure the dir is gone
-            assert!(matches!(models::Video::get(&ts.db, &ts.videos[0].id).unwrap_err(), DBError::NotFound()));
+            assert!(matches!(models::Video::get(conn, &ts.videos[0].id).unwrap_err(), DBError::NotFound()));
 
             // Make sure it's in trash, and DB row was backed up on disk
             let trash_dir = ts.videos_dir.join("trash");
@@ -106,10 +107,10 @@ async fn test_api_del_video()
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Fail to delete someones else's video
-        assert!(models::Video::get(&ts.db, &ts.videos[1].id).is_ok());
+        assert!(models::Video::get(conn, &ts.videos[1].id).is_ok());
         send_server_cmd!(ws, DelVideo, DelVideo{video_id: ts.videos[1].id.clone()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
-        assert!(models::Video::get(&ts.db, &ts.videos[1].id).is_ok());
+        assert!(models::Video::get(conn, &ts.videos[1].id).is_ok());
 
         // Break the database
         ts.db.break_db();
@@ -171,13 +172,14 @@ async fn test_api_rename_video()
     api_test! {[ws, ts]
         let video = &ts.videos[0];
         open_video(&mut ws, &video.id).await;
+        let conn = &mut ts.db.conn().unwrap();
 
         // Rename the video (with leading/trailing whitespace that will be trimmed)
         send_server_cmd!(ws, RenameVideo, RenameVideo{video_id: video.id.clone(), new_name: "  New name  ".into()});
         expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
 
         // Make sure the video was renamed in the DB
-        let v = models::Video::get(&ts.db, &video.id).unwrap();
+        let v = models::Video::get(conn, &video.id).unwrap();
         assert_eq!(v.title, Some("New name".to_string()));
 
         // Try to enter an invalid name
@@ -185,7 +187,7 @@ async fn test_api_rename_video()
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Make sure name wasn't changed
-        let v = models::Video::get(&ts.db, &video.id).unwrap();
+        let v = models::Video::get(conn, &video.id).unwrap();
         assert_eq!(v.title, Some("New name".to_string()));
     }
 }
@@ -215,7 +217,7 @@ async fn test_api_add_plain_comment()
 
         // Stored in database, the the image must be path to a file, not the actual image data as data URI
         let cid = i32::from_str(&c.comments[0].id).unwrap();
-        assert!(!models::Comment::get(&ts.db, &cid).unwrap().drawing.unwrap().contains("data:image"));
+        assert!(!models::Comment::get(&mut ts.db.conn().unwrap(), &cid).unwrap().drawing.unwrap().contains("data:image"));
         assert!(c.comments[0].clone().drawing.unwrap().starts_with("data:image/webp"));
 
         // Add a comment to a nonexisting video
@@ -309,7 +311,7 @@ async fn test_api_del_comment()
         assert!(m.details.unwrap().contains("repl"));
 
         // Delete the last remaining reply comment[5]
-        models::Comment::delete(&ts.db, &ts.comments[5].id).unwrap(); // Delete from db directly, to avoid user permission check
+        models::Comment::delete(&mut ts.db.conn().unwrap(), &ts.comments[5].id).unwrap(); // Delete from db directly, to avoid user permission check
 
         // Try again to delete comment id 1 that should now have no replies
         send_server_cmd!(ws, DelComment, DelComment{comment_id: ts.comments[0].id.to_string()});
@@ -333,7 +335,7 @@ async fn test_api_list_my_messages()
             models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "error".into(), video_id: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
             models::MessageInsert { user_id: "user.num2".into(), message: "message3".into(), event_name: "ok".into(), ..Default::default() },
         ];
-        let msgs = msgs.iter().map(|m| models::Message::insert(&ts.db, &m).unwrap()).collect::<Vec<_>>();
+        let msgs = msgs.iter().map(|m| models::Message::insert(&mut ts.db.conn().unwrap(), &m).unwrap()).collect::<Vec<_>>();
 
         send_server_cmd!(ws, ListMyMessages, ListMyMessages{});
         let sm = expect_client_cmd!(&mut ws, ShowMessages);

@@ -40,18 +40,12 @@ service OrganizerOutbound {
 
     rpc delete_video(DeleteVideoRequest) returns (Empty);   // Delete (trash) video cleanly from both database and filesystem
 
+    // Database access (note: these may each happen in a separate DB connection / transaction)
     rpc DbGetVideos(DbGetVideosRequest) returns (DbVideoList);
     rpc DbGetComments(DbGetCommentsRequest) returns (DbCommentList);
     rpc DbGetUserMessages(DbGetUserMessagesRequest) returns (DbUserMessageList);
-
     rpc DbUpsert(DbUpsertRequest) returns (DbUpsertResponse);
     rpc DbDelete(DbDeleteRequest) returns (DbDeleteResponse);
-
-    // Explicit transaction calls. You should probably wrap these in RAII guards in your program code.
-    // Don't expect nested transactions to work reliably.
-    rpc DbBeginTransaction(DbBeginTransactionRequest) returns (Empty);
-    rpc DbCommitTransaction(DbCommitTransactionRequest) returns (Empty);
-    rpc DbRollbackTransaction(DbRollbackTransactionRequest) returns (Empty);
 }
 
 // Calls that Clapshot server makes to Organizer

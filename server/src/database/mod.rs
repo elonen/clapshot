@@ -1,4 +1,4 @@
-use diesel::{connection::TransactionManager, migration::Migration};
+use diesel::migration::Migration;
 use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use diesel::SqliteConnection;
@@ -7,7 +7,6 @@ use anyhow::{Context, anyhow};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 pub mod schema;
@@ -20,10 +19,9 @@ pub mod tests;
 mod custom_ops;
 
 use error::{DBError, DBResult, EmptyDBResult};
-use parking_lot::Mutex;
 
-pub type Pool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
-type PooledConnection = Arc<Mutex<r2d2::PooledConnection<ConnectionManager<SqliteConnection>>>>;
+pub type PooledConnection = r2d2::PooledConnection<ConnectionManager<SqliteConnection>>;
+pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
@@ -42,81 +40,68 @@ fn to_db_res<U>(res: QueryResult<U>) -> DBResult<U> {
 pub struct DB {
     pool: Pool,
     broken_for_test: AtomicBool,
-    connected: Arc<Mutex<Option<PooledConnection>>>
 }
 
 
 impl DB {
 
     /// Connect to SQLite database with an URL (use this for memory databases)
-    pub fn connect_db_url( db_url: &str ) -> DBResult<DB> {
+    pub fn open_db_url(db_url: &str) -> DBResult<Self> {
         let manager = ConnectionManager::<SqliteConnection>::new(db_url);
-        let pool = Pool::builder().max_size(1).build(manager).context("Failed to build DB pool")?;
-
-        let db = DB {
-            pool: pool,
+        let pool = Pool::builder().max_size(16).build(manager).context("Failed to build DB pool")?;
+        Ok(DB {
+            pool,
             broken_for_test: AtomicBool::new(false),
-            connected: Arc::new(Mutex::new(None))
-        };
-
-        diesel::sql_query("PRAGMA foreign_keys = ON;")
-            .execute(&mut *db.conn()?.lock())
-            .context("Failed to enable foreign keys")?;
-
-        Ok(db)
+        })
     }
 
     /// Connect to SQLite database with a file path
-    pub fn connect_db_file( db_file: &Path ) -> DBResult<DB> {
+    pub fn open_db_file( db_file: &Path ) -> DBResult<DB> {
         let db_url = format!("sqlite://{}", db_file.to_str().ok_or(anyhow!("Invalid DB file path"))
             .context("Failed to connect DB file")?);
-        DB::connect_db_url(&db_url)
+        let res = DB::open_db_url(&db_url);
+        res
     }
 
     /// Get a connection from the pool
-    pub fn conn(&self) ->  DBResult<PooledConnection> {
-        // For testing
+    pub fn conn(&self) -> DBResult<PooledConnection> {
         if self.broken_for_test.load(std::sync::atomic::Ordering::Relaxed) {
-            let bad_pool = Pool::builder().build(ConnectionManager::<SqliteConnection>::new("sqlite:///dev/urandom")).context("Failed to build 'broken' DB pool")?;
-            return bad_pool.get()
-                .map(|v| Arc::new(Mutex::new(v)))
-                .map_err(|e| anyhow!("Failed to get connection from pool: {:?}", e).into());
-        };
-
-        // Use cached connection if available (e.g. for transactions)
-        if let Some(conn) = self.connected.lock().as_ref() {
-            return Ok(conn.clone());
+            let bad_manager = ConnectionManager::<SqliteConnection>::new("sqlite:///dev/urandom");
+            let bad_pool = Pool::builder().build(bad_manager).context("TEST ERROR: Failed to build 'broken' DB pool")?;
+            return bad_pool.get().map_err(|e| anyhow!("TEST ERROR: Failed to get connection from 'broken' pool: {:?}", e).into());
         }
-
-        // Otherwise get a new connection from the pool
-        let res = self.pool.get()
-            .map(|v| Arc::new(Mutex::new(v)))
-            .map_err(|e| DBError::Other(anyhow!("Failed to get connection from pool: {:?}", e)))?;
-        self.connected.lock().replace(res.clone());
-
-        Ok(res)
+        let mut conn = self.pool.get().context("Failed to get connection from pool")?;
+        diesel::sql_query(r#"
+            PRAGMA foreign_keys = ON;
+            PRAGMA journal_mode = WAL;
+            PRAGMA wal_autocheckpoint = 1000;
+            PRAGMA wal_checkpoint(TRUNCATE);
+            PRAGMA synchronous = NORMAL;
+            PRAGMA busy_timeout = 5000;
+        "#).execute(&mut conn).context("Failed to set DB pragmas")?;
+        Ok(conn)
     }
 
     /// Return list of any pending migrations
     pub fn pending_migration_names(&self) -> DBResult<Vec<String>> {
-        Ok(MigrationHarness::pending_migrations(&mut *self.conn()?.lock(), MIGRATIONS)
+        Ok(MigrationHarness::pending_migrations(&mut self.conn()?, MIGRATIONS)
             .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?
             .iter().map(|m| m.name().to_string()).collect())
     }
 
     /// Run a named migration
-    pub fn apply_migration(&self, migration_name: &str) -> EmptyDBResult {
-        self.conn()?.lock().transaction(|lock| {
-            let pending = MigrationHarness::pending_migrations(&mut *lock, MIGRATIONS)
+    pub fn apply_migration(&self, conn: &mut PooledConnection, migration_name: &str) -> EmptyDBResult {
+        conn.transaction(|conn| {   // uses savepoints instead when needed
+            let pending = MigrationHarness::pending_migrations(conn, MIGRATIONS)
                 .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?;
             let migration = pending.iter().find(|m| m.name().to_string() == migration_name)
                 .ok_or_else(|| anyhow!("Migration not found: {}", migration_name))?;
 
             tracing::info!("Applying migration: {}", migration.name());
-            diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(&mut *lock)?;
-            MigrationHarness::run_migration(&mut *lock, &**migration)
+            diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(conn)?;
+            MigrationHarness::run_migration(conn, &**migration)
                 .map_err(|e| anyhow!("Failed to apply migration: {:?}", e))?;
-            diesel::sql_query("PRAGMA foreign_keys = ON;").execute(&mut *lock)?;
+            diesel::sql_query("PRAGMA foreign_keys = ON;").execute(conn)?;
             Ok(())
         })
     }
@@ -127,47 +112,7 @@ impl DB {
     }
 }
 
-// ---------------- Transactions ----------------
-
-pub fn begin_transaction(conn: &PooledConnection) -> DBResult<()> {
-    diesel::r2d2::PoolTransactionManager::begin_transaction(&mut *conn.lock())
-        .map_err(|e| anyhow!("Failed to begin transaction: {:?}", e).into())
-}
-
-pub fn commit_transaction(conn: &PooledConnection) -> DBResult<()> {
-    diesel::r2d2::PoolTransactionManager::commit_transaction(&mut *conn.lock())
-        .map_err(|e| anyhow!("Failed to commit transaction: {:?}", e).into())
-}
-
-pub fn rollback_transaction(conn: &PooledConnection) -> DBResult<()> {
-    diesel::r2d2::PoolTransactionManager::rollback_transaction(&mut *conn.lock())
-        .map_err(|e| anyhow!("Failed to rollback transaction: {:?}", e).into())
-}
-
-// ---------------- Savepoints ----------------
-
-/// Start a new named savepoint
-pub fn create_savepoint(conn: &PooledConnection, name: &str) -> DBResult<()> {
-    diesel::RunQueryDsl::execute(diesel::sql_query(&format!("SAVEPOINT {};", name)), &mut *conn.lock())
-        .map_err(|e| anyhow!("Failed to create savepoint: {:?}", e).into())
-        .map(|_| ())    // discard row count
-}
-
-// Release (commit if not explicitly rolled back) a savepoint
-pub fn release_savepoint(conn: &PooledConnection, name: &str) -> DBResult<()> {
-    diesel::RunQueryDsl::execute(diesel::sql_query(&format!("RELEASE SAVEPOINT {};", name)), &mut *conn.lock())
-        .map_err(|e| anyhow!("Failed to release savepoint: {:?}", e).into())
-        .map(|_| ())
-}
-
-/// Rollback to a savepoint. Remember to release the savepoint afterwards!
-pub fn rollback_to_savepoint(conn: &PooledConnection, name: &str) -> DBResult<()> {
-    diesel::RunQueryDsl::execute(diesel::sql_query(&format!("ROLLBACK TO SAVEPOINT {};", name)), &mut *conn.lock())
-        .map_err(|e| anyhow!("Failed to rollback to savepoint: {:?}", e).into())
-        .map(|_| ())
-}
-
-// ---------------- Query traits ----------------
+// ---------------- Paging ----------------
 
 pub struct DBPaging {
     pub page_num: u32,
@@ -195,29 +140,29 @@ pub trait DbBasicQuery<P, I>: Sized
           I: Send + Sync,
 {
     /// Insert a new object into the database.
-    fn insert(db: &DB, item: &I) -> DBResult<Self>;
+    fn insert(conn: &mut PooledConnection, item: &I) -> DBResult<Self>;
 
     /// Insert multiple objects into the database.
-    fn insert_many(db: &DB, items: &[I]) -> DBResult<Vec<Self>>;
+    fn insert_many(conn: &mut PooledConnection, items: &[I]) -> DBResult<Vec<Self>>;
 
     /// Get a single object by its primary key.
     /// Returns None if no object with the given ID was found.
-    fn get(db: &DB, pk: &P) -> DBResult<Self>;
+    fn get(conn: &mut PooledConnection, pk: &P) -> DBResult<Self>;
 
     /// Get multiple objects by their primary keys.
-    fn get_many(db: &DB, ids: &[P]) -> DBResult<Vec<Self>>;
+    fn get_many(conn: &mut PooledConnection, ids: &[P]) -> DBResult<Vec<Self>>;
 
     /// Get all nodes of type Self, with no filtering, paginated.
-    fn get_all(db: &DB, pg: DBPaging) -> DBResult<Vec<Self>>;
+    fn get_all(conn: &mut PooledConnection, pg: DBPaging) -> DBResult<Vec<Self>>;
 
     /// Update objects, replaces the entire object except for the primary key.
-    fn update_many(db: &DB, items: &[Self]) -> DBResult<Vec<Self>>;
+    fn update_many(conn: &mut PooledConnection, items: &[Self]) -> DBResult<Vec<Self>>;
 
     /// Delete a single object from the database.
-    fn delete(db: &DB, id: &P) -> DBResult<bool>;
+    fn delete(conn: &mut PooledConnection, id: &P) -> DBResult<bool>;
 
     /// Delete multiple objects from the database.
-    fn delete_many(db: &DB, ids: &[P]) -> DBResult<usize>;
+    fn delete_many(conn: &mut PooledConnection, ids: &[P]) -> DBResult<usize>;
 }
 
 mod basic_query;
@@ -228,7 +173,7 @@ crate::implement_basic_query_traits!(models::Message, models::MessageInsert, mes
 
 pub trait DbQueryByUser: Sized {
     /// Get all objects of type Self that belong to given user.
-    fn get_by_user(db: &DB, uid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
+    fn get_by_user(conn: &mut PooledConnection, uid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
 }
 crate::implement_query_by_user_traits!(models::Video, videos, added_time.desc());
 crate::implement_query_by_user_traits!(models::Comment, comments, created.desc());
@@ -238,7 +183,7 @@ crate::implement_query_by_user_traits!(models::Message, messages, created.desc()
 
 pub trait DbQueryByVideo: Sized {
     /// Get all objects of type Self that are linked to given video.
-    fn get_by_video(db: &DB, vid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
+    fn get_by_video(conn: &mut PooledConnection, vid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
 }
 crate::implement_query_by_video_traits!(models::Comment, comments, video_id, created.desc());
 crate::implement_query_by_video_traits!(models::Message, messages, video_id, created.desc());

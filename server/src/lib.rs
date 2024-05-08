@@ -1,9 +1,10 @@
-use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::{JoinHandle, self}};
+use std::{sync::{atomic::{AtomicBool, Ordering}, Arc}, thread::{self, JoinHandle}};
 
 use anyhow::Context;
 use database::DB;
+use diesel::Connection;
 use lib_clapshot_grpc::GrpcBindAddr;
-use crate::{api_server::server_state::ServerState, database::{begin_transaction, commit_transaction, create_savepoint, release_savepoint, rollback_to_savepoint, rollback_transaction}, grpc::{caller::OrganizerCaller, grpc_client::OrganizerURI}};
+use crate::{api_server::server_state::ServerState, grpc::{caller::OrganizerCaller, grpc_client::OrganizerURI}};
 
 pub mod video_pipeline;
 pub mod api_server;
@@ -140,7 +141,7 @@ fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyho
     use anyhow::bail;
 
     let db_was_missing = !db_file.exists();
-    let db = Arc::new(database::DB::connect_db_file(&db_file).unwrap());
+    let db = Arc::new(database::DB::open_db_file(&db_file).unwrap());
 
     let pending_migrations = db.pending_migration_names()?;
 
@@ -157,25 +158,22 @@ fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyho
             std::io::copy(&mut fh, &mut gzip_writer).context("Error copying DB file to backup")?;
         }
 
-        begin_transaction(&db.conn()?)?;
-        create_savepoint(&db.conn()?, "before_any_migrations")?;
-        for m in &pending_migrations {
-            match db.apply_migration(m) {
-                Ok(_) => {
-                    tracing::info!(file=%db_file.display(), "Applied migration {}", m);
-                },
-                Err(e) => {
-                    tracing::error!(file=%db_file.display(), "Error applying migration. Rolling back everything.");
-                    rollback_to_savepoint(&db.conn()?, "before_any_migrations")?;
-                    release_savepoint(&db.conn()?, "before_any_migrations")?;
-                    rollback_transaction(&db.conn()?)?;
-                    bail!("Error applying migration {}: {:?}", m, e);
-                },
+        db.conn()?.transaction::<(), _, _>(|conn| {
+            for m in &pending_migrations {
+                match db.apply_migration(conn, m) {
+                    Ok(_) => {
+                        tracing::info!(file=%db_file.display(), "Applied migration {}", m);
+                    },
+                    Err(e) => {
+                        tracing::error!(file=%db_file.display(), "Error applying migration. Rolling back everything.");
+                        bail!("Error applying migration {}: {:?}", m, e);
+                    },
+                }
             }
-        }
-        tracing::info!(file=%db_file.display(), "All migrations applied. Committing.");
-        release_savepoint(&db.conn()?, "before_any_migrations")?;
-        commit_transaction(&db.conn()?)?;
+            tracing::info!(file=%db_file.display(), "All migrations applied. Committing.");
+            Ok(())
+        })?;
+
     } else {
         if !pending_migrations.is_empty() {
             eprintln!("Database migrations needed. Run `clapshot-server --migrate`");

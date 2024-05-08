@@ -509,14 +509,15 @@ async fn run_api_server_async(
                         Ok(session_cnt) => { user_was_online = session_cnt>0 },
                         Err(e) => tracing::error!(user=user_id, details=%e, "Failed to send user notification."),
                     }
-                    if !(matches!(m.topic, UserMessageTopic::Progress | UserMessageTopic::VideoAdded | UserMessageTopic::VideoUpdated))                    {
+                    if !(matches!(m.topic, UserMessageTopic::Progress | UserMessageTopic::VideoAdded | UserMessageTopic::VideoUpdated)) {
                         let msg = models::MessageInsert {
                             seen: msg.seen || user_was_online,
                             ..msg
                         };
-                        if let Err(e) = models::Message::insert(&server_state.db, &msg) {
-                            tracing::error!(details=%e, "Failed to save user notification in DB.");
-                        }
+                        server_state.db.conn()
+                            .and_then(|mut conn| models::Message::insert(&mut conn, &msg))
+                            .map_err(|e| tracing::error!(details=%e, "Failed to save user notification in DB."))
+                            .ok();
                     }
                 };
             }
