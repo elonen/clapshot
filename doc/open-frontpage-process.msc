@@ -1,0 +1,80 @@
+msc {
+  hscale = "1.5", wordwraparcs = "1";
+
+  Browser, CLIENT, Nginx, Filesystem, SERVER, ORG, Sqlite, AUTH;
+  Nginx rbox AUTH [label="Linux (or BSD) Server"];
+  Browser rbox CLIENT [label="User's computer"];
+  Browser note SERVER [label="(Red means encrypted, HTTPS or WSS)", textcolour="red", linecolour="red"];
+
+
+  # Phase 1: Initial Page Load
+  Browser note AUTH [label="Phase 1: Initial Page Load", textbgcolour="aqua"];
+
+  Browser:>Nginx [label="HTTPS GET /", linecolour="red"];
+  Nginx<<>>Filesystem [label="read file"];
+  Nginx>>Browser [label="return `index.html`", linecolour="red"];
+
+  Browser>>CLIENT [label="Start client JS"];
+  CLIENT>>Browser [label="show UI HTML"];
+
+  Browser:>Nginx [label="HTTPS GET js, css, images", linecolour="red"];
+  Nginx<<>>Filesystem [label="read files"];
+  Nginx>>Browser [label="return assets", linecolour="red"];
+
+  # Phase 2: WebSocket Session Initialization
+  Browser note AUTH [label="Phase 2: WebSocket Session Initialization", textbgcolour="aqua"];
+
+  CLIENT:>Nginx [label="HTTPS GET `/clapshot_client.conf.json`", linecolour="red"];
+  Nginx<<>>Filesystem [label="read file"];
+  Nginx>>CLIENT [label="return config JSON", linecolour="red"];
+
+  CLIENT>>CLIENT [label="Parse WSS_URL from config"];
+
+  CLIENT:>Nginx [label="Connect wss://WSS_URL", linecolour="red"];
+  Nginx:>AUTH [label="HTTP authn / authz"];
+  AUTH>>Nginx [label="HTTP headers: 200 OK + userid"];
+  Nginx:>SERVER [label="proxy wss://WSS_URL to ws://127.0.0.1"];
+  SERVER:>CLIENT [label="protobuf over WSS: Welcome", linecolour="red"];
+
+  # Phase 3: Interaction with Organizer and Database
+  Browser note AUTH [label="Phase 3: Interaction with Organizer and Database", textbgcolour="aqua"];
+
+  SERVER=>ORG [label="gRPC on_start_user_session()"];
+  ORG=>SERVER [label="gRPC client_define_actions"];
+  SERVER:>CLIENT [label="protobuf over WSS: DefineActions", linecolour="red"];
+  CLIENT:>SERVER [label="protobuf over WSS: ListMyVideos", linecolour="red"];
+  SERVER=>ORG [label="gRPC navigate_page()"];
+  ORG<=>Sqlite [label="Query videos"];
+  ORG=>SERVER [label="gRPC client_show_page()"];
+  SERVER:>CLIENT [label="protobuf over WSS: ShowPage", linecolour="red"];
+  CLIENT>>Browser [label="Display video list"];
+
+  # Phase 4: Thumbnail Retrieval
+  Browser note AUTH [label="Phase 4: Thumbnail Retrieval", textbgcolour="aqua"];
+
+  Browser:>Nginx [label="HTTPS GET thumbnail images", linecolour="red"];
+  Nginx:>AUTH [label="authn+authz request for image URLs"];
+  AUTH>>Nginx [label="200 OK"];
+  Nginx<<>>Filesystem [label="read files"];
+  Nginx>>Browser [label="return images", linecolour="red"];
+
+  ...;
+  ...;
+
+  # Phase 5: Show a video
+  Browser note AUTH [label="Phase 5: Show a video", textbgcolour="aqua"];
+  Browser:>CLIENT [label="User clicks video"];
+  CLIENT:>Browser [label="Exec `PageItem.open_action` from ORG"];
+  CLIENT:>SERVER [label="protobuf over WSS: OpenVideo (id)"];
+
+  SERVER=>ORG [label="gRPC authz_user_action()"];
+  ORG=>SERVER [label="ok"];
+
+  SERVER:>CLIENT [label="protobuf over WSS: OpenVideo (URL + comments)", linecolour="red"];
+  CLIENT:>Browser [label="HTML5 video tag"];
+  Browser:>Nginx [label="HTTPS GET video file", linecolour="red"];
+  Nginx:>AUTH [label="authn+authz request for video file"];
+  AUTH>>Nginx [label="200 OK"];
+  Nginx<<>>Filesystem [label="stream file"];
+  Nginx>>Browser [label="stream video", linecolour="red"];
+}

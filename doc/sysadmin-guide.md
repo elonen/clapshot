@@ -47,9 +47,8 @@ above does, too.
 
 Most modern real-world deployments will likely use some more advanced authentication mechanism, such as OAuth, Kerberos etc, but htadmin is a good starting point.
 
-See [/Dockerfile](Dockerfile),
-[/test/docker-entry_htadmin.sh](test/docker-entry_htadmin.sh) and
-[client/debian/additional_files/clapshot+htadmin.nginx.conf](client/debian/additional_files/clapshot+htadmin.nginx.conf) for details on how the integration works.
+See [clapshot+htadmin.nginx.conf](client/debian/additional_files/clapshot+htadmin.nginx.conf) (Nginx config example) and [Dockerfile.demo](Dockerfile.demo) +
+[docker-entry_htadmin.sh](test/docker-entry_htadmin.sh) for details on how the integration works.
 
 Authorization is also supposed to be handled on web server, at least for now.
 See for example https://github.com/elonen/ldap_authz_proxy on how to authorize users against Active Directory/LDAP groups using Nginx. I wrote it to complement Nginx spnego authn, which uses Kerberos and thus doesn't really have a concept of groups.

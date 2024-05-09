@@ -10,6 +10,7 @@ Clapshot is an open-source, self-hosted tool for collaborative video review and 
 ![Review UI screenshot](doc/video-commenting.webp)
 
 **Key Features:**
+
 - Video ingestions by HTTP video uploads, or shared folders
 - Video transcoding with FFMPEG
 - Commenting, drawing annotations, and threaded replies
@@ -18,7 +19,7 @@ Clapshot is an open-source, self-hosted tool for collaborative video review and 
 - Authentication agnostic, you can use *OAuth, JWS, Kerberos, Okta* etc. using Nginx username passthrough
 - **[NEW]** Extensible "Organizer" plugins for custom integrations, workflow, and access control
 
-**When not to use it:** If you don't require local hosting, commercial cloud services may be more suitable and provide more features. Some networking and Linux experience is recommended for setup.
+**When not to use Clapshot:** If you don't require local hosting or are not adept in networking and Linux, commercial cloud services may be more suitable and provide more feature.
 
 ![Video listing screenshot](doc/video-list.webp)
 
@@ -39,7 +40,7 @@ Clapshot is an open-source, self-hosted tool for collaborative video review and 
 
 Access the web UI at `http://127.0.0.1:8080`.
 
-**User Management:** The basic auth version uses [htadmin](https://github.com/soster/htadmin) for user management. Default credentials are show in terminal.
+**User Management:** The basic auth version uses [PHP htadmin](https://github.com/soster/htadmin) for user management. Default credentials are show in terminal.
 
 These Docker images are demos only and _not_ meant for production. Here's a better way to deploy the system:
 
@@ -56,11 +57,31 @@ Change the default admin password and manage users in Htadmin as needed.
 ## Configuration and Operation
 
 See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on
-- building and unit tests
+
 - configuring Nginx reverse proxy (for HTTPS and auth)
 - using *systemd* for process management
 - performing database migrations
 - implementing advanced authentication methods
+- building manually and running unit tests
+
+## Architecture Overview
+
+Main components:
+
+- **Clapshot Client** – Single Page Application (SPA) that runs in the browser. Connects to Clapshot Server via Websocket. Written in *Svelte*.
+- **Clapshot Server** – Linux daemon that handles most server-side logic. Binary written in *Rust*. Listens on `localhost` to the reverse proxy for plaintext HTTP and WSS.
+- **Clapshot Organizer(s)** – Plugin(s) that organize videos and UI, e.g. to a custom folder hierarchy. Written in e.g. in *Python* (or something else). See below for details.
+
+Production deployments also depend on:
+
+- **Web Browser** – Chrome works best. Loads and shows the Client.
+- **Nginx Web Server** – SSL reverse proxy between Client and Server + static asset delivery for browser. Also routes session auth to Authentication Proxy.
+- **Authentication Proxy** – Some auxilliary HTTP daemon that auths users and return a **user id** and **username** in HTTP headers. In the demo this is `/var/www/.htpasswd` + [PHP htadmin](https://github.com/soster/htadmin), but you can also use combinations like [Okta](https://www.okta.com/) + [Vouch](https://github.com/vouch/vouch-proxy) + [LDAP Authz Proxy](https://github.com/elonen/ldap_authz_proxy) or something equally advanced.
+- **Sqlite DB** – Stores video metadata, comments, user messages etc. Both Clapshot Server and Organizer(s) access this. This is just a file, not a daemon.
+- **ffmpeg** and **mediainfo** – Clapshot Server processes video files with commands.
+- **File System** – Video files, HTML, JavaScript, CSS, thumbnail images etc, also `clapshot.sqlite`.
+
+See [sequence diagram](doc/generated/open-frontpage-process.svg) for details on how these interact when a user opens the main page.
 
 ## Organizer Plugin System (New in 0.6.0):
 Clapshot now includes an extensible "Organizer" plugin system. Organizer plugins can be used for custom UIs, virtuak folders, enforcing access control based on your business logic, and integrating with existing systems (e.g. LDAP, project management databases, etc).
@@ -85,3 +106,5 @@ Main app code is copyleft, libraries and plugins are permissive (to allow non-fr
 
 - Clapshot Server and Client are licensed under the **GNU General Public License, GPLv2**.
 - gRPC/proto3 libraries and example organizer plugins are under the **MIT License**.
+
+This licensing split allows you to implement proprietary UIs and workflows through custom Organizer plugins without releasing them to the public.
