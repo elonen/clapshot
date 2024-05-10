@@ -16,7 +16,7 @@ RUN useradd -m ${USER} --uid=${UID} --gid=${GID} || true
 
 # Install cargo chef (Rust build cache for Docker)
 USER ${UID}:${GID}
-RUN cargo install cargo-chef
+# RUN cargo install cargo-chef
 RUN cargo install cargo-deb
 USER root
 
@@ -36,6 +36,7 @@ RUN apt-get -qy install sqlite3 >/dev/null
 RUN apt-get -qy install libssl-dev >/dev/null
 RUN apt-get -qy install libsqlite3-dev >/dev/null
 RUN apt-get -qy install protobuf-compiler >/dev/null
+RUN apt-get -qy install python3.11-venv >/dev/null
 
 # Switch to regular user
 RUN mkdir -p /app
@@ -48,13 +49,14 @@ FROM chef AS planner
 
 RUN mkdir -p /app/server
 WORKDIR /app/server
-COPY --chown=${UID}:${GID} server/Cargo.toml .
-RUN cargo chef prepare --recipe-path recipe.json
 
-RUN mkdir -p /app/protobuf/libs/rust
-WORKDIR /app/protobuf/libs/rust
-COPY --chown=${UID}:${GID} ../protobuf/libs/rust/Cargo.toml .
-RUN cargo chef prepare --recipe-path recipe.json
+# COPY --chown=${UID}:${GID} server/Cargo.toml .
+# RUN cargo chef prepare --recipe-path recipe.json
+#
+# RUN mkdir -p /app/protobuf/libs/rust
+# WORKDIR /app/protobuf/libs/rust
+# COPY --chown=${UID}:${GID} ../protobuf/libs/rust/Cargo.toml .
+# RUN cargo chef prepare --recipe-path recipe.json
 
 # ----------------------------------
 
@@ -62,16 +64,16 @@ FROM chef AS builder
 
 # Prebuild dependencies (build cache)
 WORKDIR /app/protobuf/libs/rust
-COPY --from=planner /app/protobuf/libs/rust/recipe.json ./
-RUN cargo chef cook --recipe-path recipe.json
+# COPY --from=planner /app/protobuf/libs/rust/recipe.json ./
+# RUN cargo chef cook --recipe-path recipe.json
 
 WORKDIR /app/server
-COPY --from=planner /app/server/recipe.json ./
-RUN cargo chef cook --recipe-path recipe.json
+# COPY --from=planner /app/server/recipe.json ./
+# RUN cargo chef cook --recipe-path recipe.json
 
 # Copy dep sources
-COPY --chown=${UID}:${GID} protobuf/proto /app/protobuf/proto
-COPY --chown=${UID}:${GID} protobuf/libs/rust /app/protobuf/libs/rust
+COPY --chown=${UID}:${GID} protobuf /app/protobuf
+COPY --chown=${UID}:${GID} organizer /app/organizer
 COPY --chown=${UID}:${GID} server /app/server
 
 # -- config entrypoint --

@@ -1,4 +1,5 @@
 .PHONY: deps clean test docker test run run-local run-docker default debian-local
+SHELL := /bin/bash
 
 PLUGIN_BIN=../organizer/basic_folders/run-py-org.sh
 
