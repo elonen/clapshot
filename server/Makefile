@@ -1,8 +1,6 @@
 .PHONY: deps clean test docker test run run-local run-docker default debian-local
 
 PLUGIN_BIN=../organizer/basic_folders/run-py-org.sh
-#PLUGIN_BIN=./org_basic_folders
-#../organizer/basic_folders/_venv/bin/clapshot-organizer-basic-folders
 
 UID=$(shell id -u)
 GID=$(shell id -g)
@@ -35,7 +33,7 @@ ${SERVER_CMD}: ${RUST_DEPS}
 clean:
 	cargo clean
 	rm -rf dist_deb || sudo rm -rf dist_deb
-	#cd docs; make proper
+	rm -f organizer_tests.log
 
 
 docker: ${DEV_DATADIR}
@@ -64,14 +62,27 @@ debian-docker: docker
 
 
 test-local:
+	(cd ../organizer; make)
+	
 	@if [ "${CI}" ]; then \
 		echo "!! Running in CI: No-default-features = skip expensive tests"; \
 		cargo test --no-default-features | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"; \
 	else \
 		cargo test | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"; \
 	fi
-	# (cd ../organizer; make)
-	# TEST_ORG_CMD="${PLUGIN_BIN}" cargo test  test_organizer  | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"
+	
+	@echo "---------- Testing Organizer ----------\n"
+	@# Run Organizer tests through Server (so it tests database and gRPC realistically).
+	@# The `cargo test test_organizer` writes the log to a file, so we'll create a temp file for it.
+	@LOGFILE=$$(mktemp -u); \
+	tail -F "$$LOGFILE" 2>/dev/null & tail_pid=$$!; \
+	set -o pipefail; \
+	TEST_ORG_CMD="../organizer/basic_folders/run-py-org.sh" \
+	TEST_ORG_LOG="$$LOGFILE" \
+	cargo test test_organizer | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)" || { status=$$?; kill $$tail_pid; rm "$$LOGFILE"; exit $$status; }; \
+	kill $$tail_pid 2>/dev/null; \
+	rm -f -- "$$LOGFILE"
+
 
 test-docker: docker
 	docker run --rm -e CI="${CI}" ${DOCKER_IMG_NAME}:latest make test-local

@@ -82,14 +82,14 @@ pub(crate) async fn try_get_parsed<T>(ws: &mut WsClient) -> Option<T>
 #[macro_export]
 macro_rules! expect_client_cmd {
     ($ws:expr, $variant:ident) => {{
-        println!("Expecting client command '{}'...", stringify!($variant));
+        println!("Client expecting command '{}'...", stringify!($variant));
         match crate::api_server::test_utils::expect_parsed::<proto::client::ServerToClientCmd>($ws).await.cmd {
             Some(lib_clapshot_grpc::proto::client::server_to_client_cmd::Cmd::$variant(v)) => {
                 println!("...got '{}' ok.", stringify!($variant));
                 println!(". . .");
                 v
             },
-            _ => panic!("Expected client command '{}' BUT GOT SOMETHING ELSE.", stringify!($variant)),
+            _ => panic!("Client expected command '{}' BUT GOT SOMETHING ELSE.", stringify!($variant)),
         }
     }}
 }

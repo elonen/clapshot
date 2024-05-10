@@ -3,3 +3,4 @@ DEV_DATADIR*
 dist_deb
 Dockerfile
 recipe.json
+organizer_tests.log

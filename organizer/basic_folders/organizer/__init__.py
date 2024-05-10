@@ -31,8 +31,7 @@ class OrganizerInbound(org.OrganizerInboundBase):
     srv: org.OrganizerOutboundStub  # connection back to Clapshot server
     log: Logger
     db: sqlalchemy.Engine
-
-    DbNewSession: sqlalchemy.orm.sessionmaker
+    db_new_session: sqlalchemy.orm.sessionmaker     # callable session factory
 
     def __init__(self, logger, debug):
         self.log = logger
@@ -51,7 +50,7 @@ class OrganizerInbound(org.OrganizerInboundBase):
         await connect_back_to_server(self, server_info)
         await open_database(self, server_info)
 
-        self.folders_helper = FoldersHelper(self.DbNewSession, self.srv, self.log)
+        self.folders_helper = FoldersHelper(self.db_new_session, self.srv, self.log)
         self.pages_helper = PagesHelper(self.folders_helper, self.srv)
         self.actions_helper = ActiondefsHelper()
 

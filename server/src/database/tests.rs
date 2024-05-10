@@ -29,11 +29,11 @@ fn _dump_db(conn: &mut PooledConnection) {
 ///
 /// Contents are roughly as follows:
 /// ```text
-/// <Video(id=HASH0 orig_filename=test0.mp4 added_by_userid=user.num1 ...)>
+/// <Video(id=B1DE0 orig_filename=test0.mp4 added_by_userid=user.num1 ...)>
 /// <Video(id=1111 orig_filename=test1.mp4 added_by_userid=user.num2 ...)>
 /// <Video(id=22222 orig_filename=test2.mp4 added_by_userid=user.num1 ...)>
-/// <Video(id=HASH3 orig_filename=test3.mp4 added_by_userid=user.num2 ...)>
-/// <Video(id=HASH4 orig_filename=test4.mp4 added_by_userid=user.num1 ...)>
+/// <Video(id=B1DE3 orig_filename=test3.mp4 added_by_userid=user.num2 ...)>
+/// <Video(id=B1DE4 orig_filename=test4.mp4 added_by_userid=user.num1 ...)>
 /// <Comment(id='1' video=HASH0 parent=None user_id='user.num1' comment='Comment 0' has-drawing=True ...)>
 /// <Comment(id='2' video=1111 parent=None user_id='user.num2' comment='Comment 1' has-drawing=True ...)>
 /// <Comment(id='3' video=22222 parent=None user_id='user.num1' comment='Comment 2' has-drawing=True ...)>
@@ -57,7 +57,7 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Ve
     }
 
     // Make some videos
-    let hashes = vec!["HASH0", "11111", "22222", "HASH3", "HASH4"];
+    let hashes = vec!["B1DE0", "11111", "22222", "B1DE3", "B1DE4"];
     let mkvid = |i: usize| {
         let v = VideoInsert {
             id: hashes[i].to_string(),
@@ -184,11 +184,11 @@ fn test_fixture_state() -> anyhow::Result<()>
         assert_eq!(Video::get(conn, &v.id)?.id, v.id);
         let comments = Comment::get_by_video(conn, &v.id, DBPaging::default())?;
         assert_eq!(comments.len(), match v.id.as_str() {
-            "HASH0" => 5,
+            "B1DE0" => 5,
             "11111" => 2,
             "22222" => 1,
-            "HASH3" => 0,
-            "HASH4" => 0,
+            "B1DE3" => 0,
+            "B1DE4" => 0,
             _ => panic!("Unexpected video id"),
         });
     }

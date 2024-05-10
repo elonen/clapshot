@@ -26,6 +26,8 @@ DEV_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev
 PROTOLIB=clapshot_grpc-0.0.0+dev.tar.gz
 
 
+$(VENV): setup
+
 deps/$(PROTOLIB):
 	@echo "Building Clapshot gRPC/proto Python library..."
 	cd ../../protobuf/libs/python && make
@@ -38,8 +40,7 @@ setup: deps/$(PROTOLIB)
 	@$(PIP) install -U pip
 	@$(PIP) install -r requirements.txt
 	@$(PIP) install build
-
-$(VENV): setup
+	@$(PIP) install deps/$(PROTOLIB)
 
 install: $(VENV)
 	@echo "Installing the application..."

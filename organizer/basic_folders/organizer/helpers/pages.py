@@ -39,7 +39,7 @@ class PagesHelper:
         videos_by_id = {v.id: v for v in video_list.items}
 
         async def video_to_page_item(vid_id: str, popup_actions: list[str]) -> clap.PageItemFolderListingItem:
-            assert re.match(r"^[0-9a-f]+$", vid_id), f"Unexpected video ID format: {vid_id}"
+            assert re.match(r"^[0-9a-fA-F]+$", vid_id), f"Unexpected video ID format: {vid_id}"
             return clap.PageItemFolderListingItem(
                 video=videos_by_id[vid_id],
                 open_action=clap.ScriptCall(

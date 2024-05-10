@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
 
@@ -8,8 +10,9 @@ import sqlalchemy
 from organizer.utils import is_admin
 from .database.models import DbFolder, DbFolderItems, DbVideo
 
+import organizer
 
-async def move_to_folder(oi, req: org.MoveToFolderRequest) -> clap.Empty:
+async def move_to_folder(oi: organizer.OrganizerInbound, req: org.MoveToFolderRequest) -> clap.Empty:
     """
     Organizer method (gRPC/protobuf)
 
@@ -20,7 +23,7 @@ async def move_to_folder(oi, req: org.MoveToFolderRequest) -> clap.Empty:
         oi.log.warning("move_to_folder called with empty list of items. Bug in client?")
         return clap.Empty()
 
-    with oi.DbNewSession() as dbs:
+    with oi.db_new_session() as dbs:
         with dbs.begin_nested():
             dst_folder = dbs.query(DbFolder).filter(DbFolder.id == int(req.dst_folder_id)).one_or_none()
             max_sort_order = dbs.query(sqlalchemy.func.max(DbFolderItems.sort_order)).filter(DbFolderItems.folder_id == int(req.dst_folder_id)).scalar() or 0
@@ -71,7 +74,7 @@ async def move_to_folder(oi, req: org.MoveToFolderRequest) -> clap.Empty:
     return clap.Empty()
 
 
-async def reorder_items(oi, req: org.ReorderItemsRequest) -> clap.Empty:
+async def reorder_items(oi: organizer.OrganizerInbound, req: org.ReorderItemsRequest) -> clap.Empty:
     """
     Organizer (gRPC/protobuf)
     Called when user reorders items in a folder in the client UI.
@@ -82,7 +85,7 @@ async def reorder_items(oi, req: org.ReorderItemsRequest) -> clap.Empty:
         return clap.Empty()
 
     if parent_folder_id := req.listing_data.get("folder_id"):
-        with oi.DbNewSession() as dbs:
+        with oi.db_new_session() as dbs:
             with dbs.begin_nested():
 
                 # Check destination folder

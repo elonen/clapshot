@@ -13,9 +13,10 @@ mod integration_test
     use std::{thread, time::Duration};
 
     use assert_fs::prelude::PathCopy;
+    use chrono::format;
     use futures::Future;
     use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, ListMyVideos};
-    use lib_clapshot_grpc::proto::org;
+    use lib_clapshot_grpc::proto::org::{self, RunTestResponse};
     use rust_decimal::prelude::*;
 
     use crossbeam_channel;
@@ -34,6 +35,7 @@ mod integration_test
     use tracing;
     use tracing::{error, info, warn, instrument};
     use tracing_test::traced_test;
+    use std::io::Write;
 
 
     #[test]
@@ -377,7 +379,24 @@ mod integration_test
         {
             Some(cmd) => {
 
+                // `cargo test` captures stdout/stderr, so we can't list the test to console,
+                // put them in a log file instead. Open & truncate here, so it's empty if
+                // listing fails.
+                let log_path = std::env::var("TEST_ORG_LOG").unwrap_or("organizer_tests.log".into());
+                let log = Arc::new(Mutex::new(std::io::BufWriter::new(
+                    std::fs::File::create(&log_path).expect(format!("Failed to create log file '{}'", &log_path).as_str()))));
+
+                fn write_log<W: Write + Send>(writer: &Arc<Mutex<W>>, s: &str) {
+                    let mut writer = writer.lock().unwrap();
+                    writeln!(writer, "{}", s).unwrap();
+                    writer.flush().ok();
+                    println!("{}", s);
+                }
+
+                let test_results: Arc<Mutex<Vec<(String, org::RunTestResponse)>>> = Arc::new(Mutex::new(Vec::new()));
+
                 // Connect to organizer and list its test names
+                write_log(&log, "    Retrieving organizer tests...");
                 let test_names: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
                 {
                     let test_names = test_names.clone();
@@ -388,41 +407,47 @@ mod integration_test
                                     Ok(res) => { test_names.lock().unwrap().extend(res.into_inner().test_names); },
                                     Err(e) => match e.code() {
                                         tonic::Code::Unimplemented | tonic::Code::NotFound => {} ,
-                                        _ => panic!("Organizer list_tests failed: {:?}", e),
+                                        _ => {
+                                            panic!("Organizer list_tests failed: {:?}", e);
+                                        },
                                     }};
                             },
-                            None => { panic!("Organizer connection failed"); }
+                            None => {
+                                panic!("Organizer connection failed!");
+                            }
                         }
                     }
                 }
 
                 println!("\n\n^^^ (that was just a call listing organizer tests, now running them...) ^^^");
 
-                // Call gRPC run_test() for each test name
-                let had_errors = Arc::new(AtomicBool::new(false));
+                // Call gRPC run_test() for each test name. Store results in test_results.
                 let test_names: Vec<String> = test_names.lock().unwrap().iter().map(|s| s.clone()).collect();
+                write_log(&log, format!("    Running {} organizer tests", test_names.len()).as_str());
+
                 for (i, test_name) in test_names.iter().enumerate()
                 {
                     println!("\n\n\n------------ Running organizer test {}/{}: '{}'... ------------\n\n\n", i+1, test_names.len()+1, test_name);
-                    let had_errors = had_errors.clone();
 
                     let (_db, temp_dir, _videos, _comments) = crate::database::tests::make_test_db();
+                    let test_results = test_results.clone();
+                    let log = log.clone();
 
                     cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone()), Some(temp_dir)]
                         match org_conn {
                             Some(mut org_conn) => {
                                 match org_conn.run_test(org::RunTestRequest { test_name: test_name.clone() }).await {
                                     Ok(res) => {
-                                        let res = res.into_inner();
-                                        tracing::info!("output from organizer:\n------\n{}\n------\n", res.output);
-                                        if let Some(err) = res.error {
-                                            tracing::error!("error output from organizer:\n------\n{}\n------\n", err);
-                                            had_errors.store(true, std::sync::atomic::Ordering::Relaxed);
-                                        }
+                                        let mut res = res.into_inner().clone();
+                                        res.error = res.error.as_ref().filter(|s| !s.is_empty()).cloned(); // Remove empty error strings (assume they are not errors)
+                                        test_results.lock().unwrap().push((test_name.clone(), res));
+                                        write_log(&log, format!("    Org test '{}' ... ok", test_name).as_str());
                                     },
                                     Err(e) => {
-                                        tracing::error!("run_test failed: {:?}", e);
-                                        had_errors.store(true, std::sync::atomic::Ordering::Relaxed);
+                                        write_log(&log, format!("    Org test '{}' ... FAILED", test_name).as_str());
+                                        test_results.lock().unwrap().push((test_name.clone(), RunTestResponse {
+                                            output: "gRPC call to org.run_test() failed".to_string(),
+                                            error: Some(format!("{:?}", e)),}));
                                     }
                                 }
                             }
@@ -430,8 +455,25 @@ mod integration_test
                         }
                     }
                 }
-                if had_errors.load(std::sync::atomic::Ordering::Relaxed) {
-                    return Err(anyhow::anyhow!("Some organizer tests failed"));
+
+                // Write test results to log file and print to console, mimicking cargo test output
+                let test_results = test_results.lock().unwrap();
+                for (test_name, res) in test_results.iter()
+                {
+                    if let Some(err) = &res.error {
+                        write_log(&log, format!("\n\n").as_str());
+                        write_log(&log, format!("==================== FAILED ORG TEST: '{}' ====================", test_name).as_str());
+                        write_log(&log, format!("(NOTE! For Clapshot Server -captured logs, see the cargo test output for integration_test::test_organizer!)").as_str());
+                        write_log(&log, format!("\n---------------- RunTestResponse.output ----------------").as_str());
+                        write_log(&log, format!("{}", res.output).as_str());
+                        write_log(&log, format!("\n---------------- RunTestResponse.error ----------------").as_str());
+                        write_log(&log, format!("{}", err).as_str());
+                        write_log(&log, format!("\n\n").as_str());
+                    }
+                }
+                if test_results.iter().any(|(_, res)| res.error.is_some()) {
+                    write_log(&log, format!("### Some organizer tests failed ###").as_str());
+                    panic!("Some organizer tests failed, output also logged into '{}'", log_path);
                 }
             },
             None => {

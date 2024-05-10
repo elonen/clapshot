@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 import clapshot_grpc.clapshot as clap
 import clapshot_grpc.clapshot.organizer as org
 
 from .database.operations import db_check_and_fix_integrity, db_check_for_folder_loops, db_check_pending_migrations, db_apply_migration, db_test_orm_mappings
+
+import organizer
 
 
 async def check_migrations(oi, req: org.CheckMigrationsRequest) -> org.CheckMigrationsResponse:
@@ -18,7 +22,7 @@ async def check_migrations(oi, req: org.CheckMigrationsRequest) -> org.CheckMigr
     return org.CheckMigrationsResponse(current_schema_ver=cur_ver,pending_migrations=pending)
 
 
-async def apply_migration(oi, req: org.ApplyMigrationRequest) -> org.ApplyMigrationResponse:
+async def apply_migration(oi: organizer.OrganizerInbound, req: org.ApplyMigrationRequest) -> org.ApplyMigrationResponse:
     """
     Organizer method (gRPC/protobuf)
 
@@ -26,12 +30,12 @@ async def apply_migration(oi, req: org.ApplyMigrationRequest) -> org.ApplyMigrat
     previously returned by check_migrations().
     """
     oi.log.info(f"apply_migration('{req.uuid}')")
-    with oi.DbNewSession() as dbs:
+    with oi.db_new_session() as dbs:
         db_apply_migration(dbs, req.uuid)
         return org.ApplyMigrationResponse()
 
 
-async def after_migrations(oi, _: org.AfterMigrationsRequest) -> clap.Empty:
+async def after_migrations(oi: organizer.OrganizerInbound, _: org.AfterMigrationsRequest) -> clap.Empty:
     """
     Organizer method (gRPC/protobuf)
 
@@ -39,7 +43,7 @@ async def after_migrations(oi, _: org.AfterMigrationsRequest) -> clap.Empty:
       => Do some "fsck"-type operations on the database.
     """
     log = oi.log.getChild("after_migration")
-    with oi.DbNewSession() as dbs:
+    with oi.db_new_session() as dbs:
         db_test_orm_mappings(dbs, log)
         db_check_for_folder_loops(dbs, log)
         db_check_and_fix_integrity(dbs, log)

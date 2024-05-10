@@ -17,12 +17,12 @@ from organizer.utils import is_admin
 
 class FoldersHelper:
     def __init__(self, db_new_session: sqlalchemy.orm.sessionmaker, srv: org.OrganizerOutboundStub, log):
-        self.DbNewSession = db_new_session
+        self.db_new_session = db_new_session
         self.srv = srv
         self.log = log
 
 
-    async def get_current_folder_path(self, ses: org.UserSessionData, cookie_override: Optional[str]) -> List[DbFolder]:
+    async def get_current_folder_path(self, ses: org.UserSessionData, cookie_override: Optional[str]=None) -> List[DbFolder]:
         """
         Get current folder path from cookies & DB.
 
@@ -33,7 +33,7 @@ class FoldersHelper:
         """
         res: List[DbFolder] = []
         ck = ses.cookies or {}
-        with self.DbNewSession() as dbs:
+        with self.db_new_session() as dbs:
             try:
                 if folder_ids := json.loads((cookie_override or ck.get("folder_path")) or '[]'):
                     assert all(isinstance(i, int) for i in folder_ids), "Folder path cookie contains non-integer IDs"
@@ -74,7 +74,7 @@ class FoldersHelper:
         if folder.user_id != user_id and not is_admin(user_id):
             raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot fetch contents of another user's folder")
 
-        with self.DbNewSession() as dbs:
+        with self.db_new_session() as dbs:
             folder_items = dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder.id).order_by(DbFolderItems.sort_order).all()
 
             # Get DbFolder and DbVideo objects for all folder items

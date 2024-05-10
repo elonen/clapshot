@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from grpclib import GRPCError
 import grpclib
@@ -12,9 +14,10 @@ from organizer.utils import parse_json_args
 
 from .database.models import DbFolder
 
+import organizer
 
 
-async def on_start_user_session(oi, req: org.OnStartUserSessionRequest) -> org.OnStartUserSessionResponse:
+async def on_start_user_session(oi: organizer.OrganizerInbound, req: org.OnStartUserSessionRequest) -> org.OnStartUserSessionResponse:
     """
     Organizer method (gRPC/protobuf)
 
@@ -29,7 +32,7 @@ async def on_start_user_session(oi, req: org.OnStartUserSessionRequest) -> org.O
     return org.OnStartUserSessionResponse()
 
 
-async def navigate_page(oi, req: org.NavigatePageRequest) -> org.ClientShowPageRequest:
+async def navigate_page(oi: organizer.OrganizerInbound, req: org.NavigatePageRequest) -> org.ClientShowPageRequest:
     """
     Organizer method (gRPC/protobuf)
 
@@ -43,7 +46,7 @@ async def navigate_page(oi, req: org.NavigatePageRequest) -> org.ClientShowPageR
     return await oi.pages_helper.construct_navi_page(ses, None)
 
 
-async def cmd_from_client(oi, cmd: org.CmdFromClientRequest) -> clap.Empty:
+async def cmd_from_client(oi: organizer.OrganizerInbound, cmd: org.CmdFromClientRequest) -> clap.Empty:
     """
     Organizer method (gRPC/protobuf)
 
@@ -59,7 +62,7 @@ async def cmd_from_client(oi, cmd: org.CmdFromClientRequest) -> clap.Empty:
     if cmd.cmd == "new_folder":
         args = parse_json_args(cmd.args)
         parent_folder = (await oi.folders_helper.get_current_folder_path(cmd.ses, None))[-1]
-        with oi.DbNewSession() as dbs:
+        with oi.db_new_session() as dbs:
             try:
                 # Create folder & refresh user's view
                 args = parse_json_args(cmd.args)
@@ -106,7 +109,7 @@ async def cmd_from_client(oi, cmd: org.CmdFromClientRequest) -> clap.Empty:
         if not args or not args.get("id") or not args.get("new_name"):
             raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "rename_folder command missing 'id' or 'new_name' argument")
         folder_id = int(args["id"])
-        with oi.DbNewSession() as dbs:
+        with oi.db_new_session() as dbs:
             with dbs.begin_nested():
                 fld = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
                 if not fld:
@@ -127,7 +130,7 @@ async def cmd_from_client(oi, cmd: org.CmdFromClientRequest) -> clap.Empty:
 
         # Delete the folder and its contents, gather video IDs to delete later (after transaction, to avoid DB locks)
         videos_to_delete = []
-        with oi.DbNewSession() as dbs:
+        with oi.db_new_session() as dbs:
             with dbs.begin_nested():
                 videos_to_delete = await oi.folders_helper.trash_folder_recursive(dbs, folder_id, cmd.ses.user.id)
 
@@ -145,7 +148,7 @@ async def cmd_from_client(oi, cmd: org.CmdFromClientRequest) -> clap.Empty:
     return clap.Empty()
 
 
-async def connect_back_to_server(oi, server_info: org.ServerInfo):
+async def connect_back_to_server(oi: organizer.OrganizerInbound, server_info: org.ServerInfo):
     """
     Helper. Connect back to the Clapshot server, using the TCP or Unix socket address provided in the handshake.
     """
