@@ -179,7 +179,7 @@ message Icon {
         FaClass fa_class = 1;
         string img_url = 2;
     }
-    optional float size = 3;
+    optional float size = 3;        // default: 1.5 (em)
 }
 
 // ---------------------------------------------------------

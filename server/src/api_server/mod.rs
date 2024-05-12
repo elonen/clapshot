@@ -303,7 +303,7 @@ async fn handle_ws_session(
 }
 
 /// Extract user id, name and clapshot_cookies from HTTP headers (set by nginx)
-fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String, HashMap<String, String>)
+fn parse_auth_headers(hdrs: &HeaderMap, default_name: &str) -> (String, String, HashMap<String, String>)
 {
     fn try_get_first_named_hdr<T>(hdrs: &HeaderMap, names: T) -> Option<String>
         where T: IntoIterator<Item=&'static str> {
@@ -319,8 +319,8 @@ fn parse_auth_headers(hdrs: &HeaderMap) -> (String, String, HashMap<String, Stri
     let user_id = match try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Id", "X_Remote_User_Id", "HTTP_X_REMOTE_USER_ID"]) {
         Some(id) => id,
         None => {
-            tracing::warn!("Missing X-Remote-User-Id in HTTP headers. Using 'anonymous' instead.");
-            "anonymous".into()
+            tracing::warn!("Missing X-Remote-User-Id in HTTP headers. Using '{}' instead.", default_name);
+            default_name.into()
         }};
     let user_name = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Name", "X_Remote_User_Name", "HTTP_X_REMOTE_USER_NAME"])
         .unwrap_or_else(|| user_id.clone());
@@ -418,7 +418,7 @@ async fn run_api_server_async(
         .map (move|hdrs: HeaderMap, ws: warp::ws::Ws| {
 
             // Get user ID and username (from reverse proxy)
-            let (user_id, user_name, app_cookies) = parse_auth_headers(&hdrs);
+            let (user_id, user_name, app_cookies) = parse_auth_headers(&hdrs, &server_state.default_user);
 
             // Increment session counter
             let sid = {

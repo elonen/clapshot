@@ -51,7 +51,7 @@ class OrganizerInbound(org.OrganizerInboundBase):
         await open_database(self, server_info)
 
         self.folders_helper = FoldersHelper(self.db_new_session, self.srv, self.log)
-        self.pages_helper = PagesHelper(self.folders_helper, self.srv)
+        self.pages_helper = PagesHelper(self.folders_helper, self.srv, self.db_new_session, self.log)
         self.actions_helper = ActiondefsHelper()
 
         return clap.Empty()

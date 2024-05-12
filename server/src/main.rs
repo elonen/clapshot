@@ -1,8 +1,8 @@
 use docopt::Docopt;
 use serde::Deserialize;
-use tracing::{error};
-use std::{path::{PathBuf}};
-use anyhow::{bail};
+use tracing::error;
+use std::path::PathBuf;
+use anyhow::bail;
 use clapshot_server::{PKG_NAME, PKG_VERSION, run_clapshot, grpc::{grpc_client::prepare_organizer, grpc_server::make_grpc_server_bind}};
 
 mod log;
@@ -41,6 +41,9 @@ Options:
 
  --cors <origins>     Allowed CORS origins, separated by commas.
                       Defaults to allowing url-base only.
+
+--default-user <str>  Use this user id if auth headers are not found.
+                      Mainly useful for debugging. [default: anonymous]
 
  -d --debug           Enable debug logging
  -h --help            Show this screen
@@ -86,6 +89,7 @@ struct Args {
     flag_url_base: String,
     flag_data_dir: PathBuf,
     flag_cors: Option<String>,
+    flag_default_user: Option<String>,
     flag_debug: bool,
     flag_version: bool,
 }
@@ -130,6 +134,8 @@ fn main() -> anyhow::Result<()>
         .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
         .unwrap_or_default();
 
+    let default_user = args.flag_default_user.clone().unwrap_or("anonymous".to_string());
+
     // Run the server (blocking)
     if let Err(e) = run_clapshot(
         args.flag_data_dir.to_path_buf(),
@@ -142,6 +148,7 @@ fn main() -> anyhow::Result<()>
         grpc_server_bind,
         if args.flag_workers == 0 { num_cpus::get() } else { args.flag_workers },
         target_bitrate,
+        default_user,
         args.flag_poll,
         args.flag_poll * 5.0)
     {

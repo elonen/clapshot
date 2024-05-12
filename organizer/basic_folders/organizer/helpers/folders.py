@@ -60,7 +60,7 @@ class FoldersHelper:
                 res = []
 
             # Make sure root folder is always in the path
-            user_root = await db_get_or_create_user_root_folder(dbs, ses, self.srv, self.log)
+            user_root = await db_get_or_create_user_root_folder(dbs, ses.user, self.srv, self.log)
             if not res or res[0].id != user_root.id:
                 res.insert(0, user_root)
 

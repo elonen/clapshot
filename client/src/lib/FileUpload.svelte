@@ -26,7 +26,7 @@ function afterUpload()
         statusTxt = "";
         uploadingNow = false;
         if (form) { form.reset(); }
-        progressBar.value = 0;
+        if (progressBar) progressBar.value = 0;
     }, 3000);
 }
 
@@ -35,14 +35,13 @@ function progressHandler(event: ProgressEvent<XMLHttpRequestEventTarget>)
     uploadingNow = true;
     // loaded_total = "Uploaded " + event.loaded + " bytes of " + event.total;
     var percent = (event.loaded / event.total) * 100;
-    if (progressBar)
-        progressBar.value = Math.round(percent);
+    if (progressBar) progressBar.value = Math.round(percent);
     statusTxt = Math.round(percent) + "% uploaded... please wait";
 }
 
 function completeHandler(event: ProgressEvent<XMLHttpRequestEventTarget>) {
     statusTxt = (event.target as any).responseText;
-    progressBar.value = 100;
+    if (progressBar) progressBar.value = 100;
     afterUpload();
 }
 

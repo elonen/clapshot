@@ -1,9 +1,9 @@
 <script lang="ts">
 
 import {dndzone, TRIGGERS, SOURCES, SHADOW_ITEM_MARKER_PROPERTY_NAME} from "svelte-dnd-action";
-import VideoListPopup from './VideoListPopup.svelte';
-import VideoListVideoTile from "./VideoListVideoTile.svelte";
-import VideoListFolder from "./VideoListFolder.svelte";
+import PopupMenu from './PopupMenu.svelte';
+import VideoTile from "./VideoTile.svelte";
+import FolderTile from "./FolderTile.svelte";
 
 import { folderItemsToIDs, type VideoListDefItem } from "./types";
 import { createEventDispatcher, tick } from "svelte";
@@ -181,7 +181,7 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
     if (actions.length === 0)
         return;
 
-    let popup = new VideoListPopup({
+    let popup = new PopupMenu({
         target: popupContainer ,
         props: {
             menuLines: actions,
@@ -232,12 +232,13 @@ function isShadowItem(item: any) {
                     <div in:fade={{duration:200}} class='custom-dnd-shadow-item'></div>
                 {:else}
                     {#if item.obj.video }
-                        <VideoListVideoTile item={item.obj.video} />
+                        <VideoTile item={item.obj.video} />
                     {:else if item.obj.folder }
-                        <VideoListFolder
-                            id={item.obj.folder['id']}
-                            name={item.obj.folder['title']}
-                            preview_items={item.obj.folder['previewItems'] }
+                        <FolderTile
+                            id={item.obj.folder.id}
+                            name={item.obj.folder.title}
+                            preview_items={item.obj.folder.previewItems }
+                            visualization={item.obj.vis}
                             on:drop-items-into={(e) => {
                                 dispatch("move-to-folder", {
                                     dstFolderId: e.detail.folderId,

@@ -196,6 +196,7 @@ macro_rules! api_test {
                 &url_base.clone(),
                 None,
                 grpc_srv_listening_flag.clone(),
+                "anonymous".to_string(),
                 terminate_flag.clone());
 
             let bind_addr: std::net::IpAddr = "127.0.0.1".parse().unwrap();

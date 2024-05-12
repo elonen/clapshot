@@ -149,21 +149,22 @@ def db_check_for_folder_loops(dbs: Session, log: Logger) -> bool:
             return False
 
 
-async def db_get_or_create_user_root_folder(dbs: Session, ses: org.UserSessionData, srv: Optional[org.OrganizerOutboundStub], log: Logger) -> DbFolder:
+async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, srv: Optional[org.OrganizerOutboundStub], log: Logger) -> DbFolder:
     """
     Find the folder with no parent for the user.
     If none is found, create one and move all non-parent videos to it.
     """
     with dbs.begin_nested():
-        res = dbs.query(DbFolder).filter(DbFolder.user_id == ses.user.id).outerjoin(DbFolderItems, DbFolder.id == DbFolderItems.subfolder_id).filter(DbFolderItems.subfolder_id == None)
-        cnt, ret = res.count(), res.first()
+        assert user and user.id, "User ID must be set"
+        res = dbs.query(DbFolder).filter(DbFolder.user_id == user.id).outerjoin(DbFolderItems, DbFolder.id == DbFolderItems.subfolder_id).filter(DbFolderItems.subfolder_id.is_(None)).all()
+        cnt, ret = len(res), (res[0] if res else None)
 
         if cnt > 1:
             # Should not happen, otherwise DB is in an inconsistent state
-            log.error(f"Multiple root folders found for user {ses.user.id}. Please fix database manually.")
+            log.error(f"Multiple root folders found for user {user.id}. Please fix database manually.")
             if srv:
                 await srv.client_show_user_message(org.ClientShowUserMessageRequest(
-                    user_persist=ses.user.id,
+                    user_persist=user.id,
                     msg = clap.UserMessage(
                         message="Multiple root folders in DB. Contact support.",
                         details="Each user should have exactly one root folder. This DB issue may hide some of your videos until fixed.",
@@ -171,8 +172,8 @@ async def db_get_or_create_user_root_folder(dbs: Session, ses: org.UserSessionDa
         elif cnt == 0:
             # Create a root folder & move all orphan videos to it
             assert ret is None
-            log.info(f"No root folder for user '{ses.user.id}', creating one now.")
-            ret = DbFolder(user_id=ses.user.id, title=f"Home for {ses.user.name}")
+            log.info(f"No root folder for user '{user.id}', creating one now.")
+            ret = DbFolder(user_id=user.id, title=f"Home for {user.name}")
             dbs.add(ret)
             dbs.flush() # make sure the ret.id is set
 
@@ -184,6 +185,6 @@ async def db_get_or_create_user_root_folder(dbs: Session, ses: org.UserSessionDa
             SELECT :root_folder_id, v.id FROM videos v
             LEFT JOIN bf_folder_items bfi ON v.id = bfi.video_id AND bfi.video_id IS NOT NULL
             WHERE v.user_id = :user_id AND bfi.video_id IS NULL;
-        ''')), {"user_id": ses.user.id, "root_folder_id": ret.id})
+        ''')), {"user_id": user.id, "root_folder_id": ret.id})
 
         return ret

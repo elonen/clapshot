@@ -37,6 +37,7 @@ impl ClapshotInit {
         n_workers: usize,
         target_bitrate: u32,
         poll_interval: f32,
+        default_user: String,
         resubmit_delay: f32,
         terminate_flag: Arc<AtomicBool>)
         -> anyhow::Result<Self>
@@ -70,6 +71,7 @@ impl ClapshotInit {
                 &url_base,
                 organizer_uri.clone(),
                 grpc_srv_listening_flag.clone(),
+                default_user,
                 terminate_flag.clone());
             let grpc_srv = if (&organizer_uri).is_some() { Some(grpc_server_bind.clone()) } else { None };
             let ub = url_base.clone();
@@ -198,6 +200,7 @@ pub fn run_clapshot(
     grpc_server_bind: GrpcBindAddr,
     n_workers: usize,
     target_bitrate: u32,
+    default_user: String,
     poll_interval: f32,
     resubmit_delay: f32
 ) -> anyhow::Result<()> {
@@ -217,6 +220,7 @@ pub fn run_clapshot(
         n_workers,
         target_bitrate,
         poll_interval,
+        default_user,
         resubmit_delay,
         terminate_flag.clone()
     )?;

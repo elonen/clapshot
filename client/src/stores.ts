@@ -1,6 +1,6 @@
 import { writable, type Writable } from 'svelte/store';
 import type { IndentedComment, UserMenuItem } from '@/types';
-import type { VideoListDefItem } from '@/lib/video_list/types';
+import type { VideoListDefItem } from '@/lib/asset_browser/types';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
 export let videoPlaybackUrl: Writable<string|null> = writable(null);

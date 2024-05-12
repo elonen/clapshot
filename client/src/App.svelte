@@ -13,8 +13,8 @@ import CommentInput from '@/lib/CommentInput.svelte';
 import UserMessage from '@/lib/UserMessage.svelte';
 import FileUpload from '@/lib/FileUpload.svelte';
 import VideoPlayer from '@/lib/VideoPlayer.svelte';
-import {folderItemsToIDs, type VideoListDefItem} from "@/lib/video_list/types";
-import VideoList from "@/lib/video_list/VideoList.svelte";
+import {folderItemsToIDs, type VideoListDefItem} from "@/lib/asset_browser/types";
+import FolderListing from './lib/asset_browser/FolderListing.svelte';
 import LocalStorageCookies from './cookies';
 import RawHtmlItem from './lib/RawHtmlItem.svelte';
 import { ClientToServerCmd } from '@clapshot_protobuf/typescript/dist/src/client';
@@ -707,10 +707,10 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
             <div transition:slide class="flex-1 flex flex-col {debugLayout?'border-2 border-purple-600':''}">
                 <div class="flex-1 bg-cyan-900">
                     <VideoPlayer
-                    bind:this={videoPlayer} src={$videoPlaybackUrl}
-                    on:seeked={onVideoSeeked}
-                    on:collabReport={onCollabReport}
-                    on:commentPinClicked={onCommentPinClicked}
+                        bind:this={videoPlayer} src={$videoPlaybackUrl}
+                        on:seeked={onVideoSeeked}
+                        on:collabReport={onCollabReport}
+                        on:commentPinClicked={onCommentPinClicked}
                     />
                 </div>
                 <div class="flex-none w-full p-2 {debugLayout?'border-2 border-green-500':''}">
@@ -754,43 +754,45 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
             <div class="organizer_page">
                 {#each $curPageItems as pit}
                     {#if pit.html }
-                        <div>
+                        <div class="text-slate-500">
                             <RawHtmlItem html={pit.html} />
                         </div>
                     {:else if pit.folderListing}
                         <div class="my-6">
-                            <VideoList
-                                listingData={pit.folderListing.listingData}
-                                items={pit.folderListing.items.map((it)=>({
-                                    id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
-                                    obj: it }))}
-                                dragDisabled = {pit.folderListing.allowReordering ? false : true}
-                                listPopupActions = {pit.folderListing.popupActions}
-                                on:open-item = {openVideoListItem}
-                                on:reorder-items = {onReorderItems}
-                                on:move-to-folder = {onMoveItemsToFolder}
-                                on:popup-action = {onVideoListPopupAction}
-                            />
-                        </div>
-                        <!-- ========== upload widget ============= -->
-                        {#if pit.folderListing.allowUpload }
-                            <div class="h-24 border-4 border-dashed border-gray-700">
-                                <FileUpload
-                                    postUrl={uploadUrl}
-                                    listingData={pit.folderListing.listingData ?? {}}
-                                    videoAddedAction={pit.folderListing.videoAddedAction}
-                                >
-                                    <div class="flex flex-col justify-center items-center h-full">
-                                        <div class="text-2xl text-gray-700">
-                                            <i class="fas fa-upload"></i>
-                                        </div>
-                                        <div class="text-xl text-gray-700">
-                                            Drop video files here to upload
-                                        </div>
-                                    </div>
-                                </FileUpload>
+                            <div class="my-6">
+                                <FolderListing
+                                    listingData={pit.folderListing.listingData}
+                                    items={pit.folderListing.items.map((it)=>({
+                                        id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
+                                        obj: it }))}
+                                    dragDisabled = {pit.folderListing.allowReordering ? false : true}
+                                    listPopupActions = {pit.folderListing.popupActions}
+                                    on:open-item = {openVideoListItem}
+                                    on:reorder-items = {onReorderItems}
+                                    on:move-to-folder = {onMoveItemsToFolder}
+                                    on:popup-action = {onVideoListPopupAction}
+                                />
                             </div>
-                        {/if}
+                            <!-- ========== upload widget ============= -->
+                            {#if pit.folderListing.allowUpload }
+                                <div class="h-24 border-4 border-dashed border-gray-700">
+                                    <FileUpload
+                                        postUrl={uploadUrl}
+                                        listingData={pit.folderListing.listingData ?? {}}
+                                        videoAddedAction={pit.folderListing.videoAddedAction}
+                                    >
+                                        <div class="flex flex-col justify-center items-center h-full">
+                                            <div class="text-2xl text-gray-700">
+                                                <i class="fas fa-upload"></i>
+                                            </div>
+                                            <div class="text-xl text-gray-700">
+                                                Drop video files here to upload
+                                            </div>
+                                        </div>
+                                    </FileUpload>
+                                </div>
+                            {/if}
+                        </div>
                     {/if}
                 {/each}
             </div>
@@ -832,7 +834,13 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
     }
 
     :global(.organizer_page h2){
-        font-size: 200%;
+        font-size: 2.5rem;
+        line-height: 2rem;
+    }
+
+    :global(.organizer_page h3){
+        font-size: 1.5rem;
+        line-height: 2rem;
     }
 
 </style>

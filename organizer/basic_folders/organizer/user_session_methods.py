@@ -59,11 +59,11 @@ async def cmd_from_client(oi: organizer.OrganizerInbound, cmd: org.CmdFromClient
 
     => These command names are organizer-specific and could be named anything.
     """
-    if cmd.cmd == "new_folder":
-        args = parse_json_args(cmd.args)
-        parent_folder = (await oi.folders_helper.get_current_folder_path(cmd.ses, None))[-1]
-        with oi.db_new_session() as dbs:
-            try:
+    try:
+        if cmd.cmd == "new_folder":
+            args = parse_json_args(cmd.args)
+            parent_folder = (await oi.folders_helper.get_current_folder_path(cmd.ses, None))[-1]
+            with oi.db_new_session() as dbs:
                 # Create folder & refresh user's view
                 args = parse_json_args(cmd.args)
                 if new_folder_name := args.get("name"):
@@ -74,76 +74,86 @@ async def cmd_from_client(oi: organizer.OrganizerInbound, cmd: org.CmdFromClient
                 else:
                     oi.log.error("new_folder command missing 'name' argument")
                     raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "new_folder command missing 'name' argument")
-            except Exception as e:
-                oi.log.error(f"Failed to create folder: {e}")
-                raise GRPCError(GrpcStatus.INTERNAL, "Failed to create folder")
 
-    elif cmd.cmd == "open_folder":
-        # Validate & parse argument JSON
-        open_args = parse_json_args(cmd.args)
-        assert isinstance(open_args, dict), "open_folder argument not a dict"
-        folder_id = open_args.get("id")
-        assert folder_id, "open_folder arg 'id' missing"
-        assert isinstance(folder_id, int), "open_folder arg 'id' not an int"
+        elif cmd.cmd == "open_folder":
+            # Validate & parse argument JSON
+            open_args = parse_json_args(cmd.args)
+            assert isinstance(open_args, dict), "open_folder argument not a dict"
+            folder_id = open_args.get("id")
+            assert folder_id, "open_folder arg 'id' missing"
+            assert isinstance(folder_id, int), "open_folder arg 'id' not an int"
 
-        # Construct new breadcrumb trail
-        trail = [f.id for f in (await oi.folders_helper.get_current_folder_path(cmd.ses, None))]
-        if folder_id in trail:
-            trail = trail[:trail.index(folder_id)+1] # go up in current trail => remove all after this folder
+            # Construct new breadcrumb trail
+            trail = [f.id for f in (await oi.folders_helper.get_current_folder_path(cmd.ses, None))]
+            if folder_id in trail:
+                trail = trail[:trail.index(folder_id)+1] # go up in current trail => remove all after this folder
+            else:
+                trail.append(folder_id) # add folder id at the end
+
+            # Update folder path cookie
+            new_cookie = json.dumps(trail)
+            oi.log.debug(f"Setting new folder_path cookie: {new_cookie}")
+            await oi.srv.client_set_cookies(org.ClientSetCookiesRequest(
+                cookies = {PATH_COOKIE_NAME: new_cookie},
+                sid = cmd.ses.sid))
+
+            # Update page to view the opened folder
+            page = await oi.pages_helper.construct_navi_page(cmd.ses, new_cookie)
+            await oi.srv.client_show_page(page)
+
+        elif cmd.cmd == "rename_folder":
+            args = parse_json_args(cmd.args)  # {"id": 123, "new_name": "New name"}
+            if not args or not args.get("id") or not args.get("new_name"):
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "rename_folder command missing 'id' or 'new_name' argument")
+            folder_id = int(args["id"])
+            with oi.db_new_session() as dbs:
+                with dbs.begin_nested():
+                    fld = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
+                    if not fld:
+                        raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{args['id']}' not found")
+                    if fld.user_id not in (cmd.ses.user.id,"admin"):
+                        raise GRPCError(GrpcStatus.PERMISSION_DENIED, f"Cannot rename another user's folder")
+                    fld.title = args["new_name"]
+
+            oi.log.debug(f"Renamed folder '{fld.id}' to '{fld.title}'")
+            page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
+            await oi.srv.client_show_page(page)
+
+        elif cmd.cmd == "trash_folder":
+            args = parse_json_args(cmd.args) # {"id": 123}
+            if not args or not args.get("id"):
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "trash_folder command missing 'id' argument")
+            folder_id = int(args["id"])
+
+            # Delete the folder and its contents, gather video IDs to delete later (after transaction, to avoid DB locks)
+            videos_to_delete = []
+            with oi.db_new_session() as dbs:
+                with dbs.begin_nested():
+                    videos_to_delete = await oi.folders_helper.trash_folder_recursive(dbs, folder_id, cmd.ses.user.id)
+
+            # Trash the videos
+            for vi in videos_to_delete:
+                oi.log.debug(f"Trashing video '{vi}'")
+                await oi.srv.delete_video(org.DeleteVideoRequest(id=vi))  # this cleans up the video's files, too
+
+            page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
+            await oi.srv.client_show_page(page)
+
         else:
-            trail.append(folder_id) # add folder id at the end
+            raise GRPCError(GrpcStatus.INVALID_ARGUMENT, f"Unknown organizer command: {cmd.cmd}")
 
-        # Update folder path cookie
-        new_cookie = json.dumps(trail)
-        oi.log.debug(f"Setting new folder_path cookie: {new_cookie}")
-        await oi.srv.client_set_cookies(org.ClientSetCookiesRequest(
-            cookies = {PATH_COOKIE_NAME: new_cookie},
-            sid = cmd.ses.sid))
+    except GRPCError as e:
 
-        # Update page to view the opened folder
-        page = await oi.pages_helper.construct_navi_page(cmd.ses, new_cookie)
-        await oi.srv.client_show_page(page)
-
-    elif cmd.cmd == "rename_folder":
-        args = parse_json_args(cmd.args)  # {"id": 123, "new_name": "New name"}
-        if not args or not args.get("id") or not args.get("new_name"):
-            raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "rename_folder command missing 'id' or 'new_name' argument")
-        folder_id = int(args["id"])
-        with oi.db_new_session() as dbs:
-            with dbs.begin_nested():
-                fld = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
-                if not fld:
-                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{args['id']}' not found")
-                if fld.user_id not in (cmd.ses.user.id,"admin"):
-                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, f"Cannot rename another user's folder")
-                fld.title = args["new_name"]
-
-        oi.log.debug(f"Renamed folder '{fld.id}' to '{fld.title}'")
-        page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
-        await oi.srv.client_show_page(page)
-
-    elif cmd.cmd == "trash_folder":
-        args = parse_json_args(cmd.args) # {"id": 123}
-        if not args or not args.get("id"):
-            raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "trash_folder command missing 'id' argument")
-        folder_id = int(args["id"])
-
-        # Delete the folder and its contents, gather video IDs to delete later (after transaction, to avoid DB locks)
-        videos_to_delete = []
-        with oi.db_new_session() as dbs:
-            with dbs.begin_nested():
-                videos_to_delete = await oi.folders_helper.trash_folder_recursive(dbs, folder_id, cmd.ses.user.id)
-
-        # Trash the videos
-        for vi in videos_to_delete:
-            oi.log.debug(f"Trashing video '{vi}'")
-            await oi.srv.delete_video(org.DeleteVideoRequest(id=vi))  # this cleans up the video's files, too
-
-        page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
-        await oi.srv.client_show_page(page)
-
-    else:
-        raise GRPCError(GrpcStatus.INVALID_ARGUMENT, f"Unknown organizer command: {cmd.cmd}")
+        # Intercept some known sessison errors and show them to the user nicely
+        if e.status in (GrpcStatus.INVALID_ARGUMENT, GrpcStatus.PERMISSION_DENIED, GrpcStatus.ALREADY_EXISTS):
+            await oi.srv.client_show_user_message(org.ClientShowUserMessageRequest(sid = cmd.ses.sid,
+                msg = clap.UserMessage(
+                    message=str(e.message),
+                    user_id=cmd.ses.user.id,
+                    type=clap.UserMessageType.ERROR,
+                    details=str(e.details) if e.details else None)))
+        else:
+            raise e
 
     return clap.Empty()
 

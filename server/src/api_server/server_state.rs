@@ -25,6 +25,7 @@ pub struct ServerState {
     pub videos_dir: PathBuf,
     pub upload_dir: PathBuf,
     pub url_base: String,
+    pub default_user: String,
 
     sid_to_session: SessionMap,
     user_id_to_senders: SenderListMap,
@@ -45,6 +46,7 @@ impl ServerState {
          url_base: &str,
          organizer_uri: Option<OrganizerURI>,
          grpc_srv_listening_flag: Arc<AtomicBool>,
+         default_user: String,
          terminate_flag: Arc<AtomicBool>) -> ServerState
     {
         ServerState {
@@ -54,6 +56,7 @@ impl ServerState {
             grpc_srv_listening_flag,
             terminate_flag,
             url_base: url_base.to_string(),
+            default_user,
             sid_to_session: Arc::new(RwLock::new(HashMap::<String, UserSession>::new())),
             user_id_to_senders: Arc::new(RwLock::new(HashMap::<String, SenderList>::new())),
             video_id_to_senders: Arc::new(RwLock::new(HashMap::<String, SenderList>::new())),

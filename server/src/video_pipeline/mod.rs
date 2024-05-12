@@ -56,7 +56,7 @@ pub struct DetailedMsg {
 
 /// Calculate hash identifier (video_id) for the submitted video,
 /// based on filename, user_id, size and sample of the file contents.
-fn calc_video_id(file_path: &PathBuf, user_id: &str) -> anyhow::Result<String> {
+fn calc_video_id(file_path: &PathBuf, user_id: &str, upload_cookies: HashMap<String, String>) -> anyhow::Result<String> {
     let mut file_hash = Sha256::new();
     let fname = file_path.file_name()
         .ok_or(anyhow!("Bad filename: {:?}", file_path))?.to_str()
@@ -65,6 +65,17 @@ fn calc_video_id(file_path: &PathBuf, user_id: &str) -> anyhow::Result<String> {
     file_hash.update(fname.as_bytes());
     file_hash.update(user_id.as_bytes());
     file_hash.update(&file_path.metadata()?.len().to_be_bytes());
+
+    // Add cookies to hash, if any. This allows the same file to be uploaded
+    // multiple times with different cookies, e.g. into different folders.
+    if !upload_cookies.is_empty() {
+        let mut cookies = upload_cookies.iter().collect::<Vec<_>>();
+        cookies.sort();
+        for (k, v) in cookies {
+            file_hash.update(k.as_bytes());
+            file_hash.update(v.as_bytes());
+        }
+    }
 
     // Read max 32k of contents
     let file = std::fs::File::open(file_path)?;
@@ -115,7 +126,7 @@ fn ingest_video(
                     tracing::info!("User already has this video.");
                     user_msg_tx.send(UserMessage {
                         topic: UserMessageTopic::Ok,
-                        msg: "You already have this video".to_string(),
+                        msg: "File already exists".to_string(),
                         details: None,
                         user_id: Some(new_owner.clone()),
                         video_id: None  // Don't pass video id here, otherwise the pre-existing video would be deleted!
@@ -400,7 +411,7 @@ pub fn run_forever(
                         let (vid, ing_res) = match md_res {
                             MetadataResult::Ok(md) => {
                                 tracing::debug!("Got metadata for {:?}", md.src_file);
-                                match calc_video_id(&md.src_file, &md.user_id) {
+                                match calc_video_id(&md.src_file, &md.user_id, md.upload_cookies.clone()) {
                                     Err(e) => {
                                         (None, Err(DetailedMsg {
                                             msg: "Video hashing error".into(),
