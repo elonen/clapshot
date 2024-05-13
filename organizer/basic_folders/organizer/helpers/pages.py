@@ -8,10 +8,9 @@ import clapshot_grpc.clapshot.organizer as org
 import sqlalchemy
 
 from organizer.database.operations import db_get_or_create_user_root_folder
-from organizer.utils import is_admin
 
 from .folders import FoldersHelper
-from organizer.database.models import DbVideo, DbFolder
+from organizer.database.models import DbUser, DbVideo, DbFolder
 
 
 class PagesHelper:
@@ -37,10 +36,10 @@ class PagesHelper:
         if html := _make_breadcrumbs_html(folder_path):
             pg_items.append(clap.PageItem(html=html))
 
-        folder_db_items = await self.folders_helper.fetch_folder_contents(cur_folder, ses.user.id)
+        folder_db_items = await self.folders_helper.fetch_folder_contents(cur_folder, ses)
         pg_items.extend(await self._make_folder_listing(folder_db_items, cur_folder, parent_folder, ses))
 
-        if is_admin(ses.user.id) and len(folder_path) == 1:
+        if ses.is_admin and len(folder_path) == 1:
             await self._admin_show_all_user_homes(ses, cur_folder, pg_items)
 
         return org.ClientShowPageRequest(sid=ses.sid, page_items=pg_items)
@@ -54,22 +53,23 @@ class PagesHelper:
         pg_items.append(clap.PageItem(html="<h3><strong>ADMIN</strong> – User Folders</h3>"))
         pg_items.append(clap.PageItem(html="<p>The following users currently have a home folder and/or videos.<br/>Uploading videos or moving items to these folders will transfer ownership to that user.<br/>Trashing a user's home folder will delete everything they have.</p>"));
 
-        all_users = await self._fetch_all_users()
+        with self.db_new_session() as dbs:
+            all_users: list[DbUser] = dbs.query(DbUser).order_by(DbUser.id).distinct().all()
 
         folders = []
         with self.db_new_session() as dbs:
-            for uinfo in all_users:
+            for user in all_users:
 
-                if uinfo.id == ses.user.id:
+                if user.id == ses.user.id:
                     continue    # skip self, the view should already show user's own root folder
 
-                users_folder = await db_get_or_create_user_root_folder(dbs, uinfo, self.srv, self.log)
-                assert users_folder, f"User {uinfo.id} has no root folder (should've been autocreated)"
+                users_folder = await db_get_or_create_user_root_folder(dbs, clap.UserInfo(id=user.id, name=user.name), self.srv, self.log)
+                assert users_folder, f"User {user.id} has no root folder (should've been autocreated)"
 
                 folders.append(clap.PageItemFolderListingItem(
                         folder=clap.PageItemFolderListingFolder(
                             id=str(users_folder.id),
-                            title=uinfo.id,
+                            title=user.id,
                             preview_items=[]),
                         vis=clap.PageItemFolderListingItemVisualization(
                             icon=clap.Icon(
@@ -91,20 +91,6 @@ class PagesHelper:
                     video_added_action=None)
 
             pg_items.append(clap.PageItem(folder_listing=user_folder_listing))
-
-
-    async def _fetch_all_users(self) -> list[clap.UserInfo]:
-        """
-        Fetch all users that have folder(s) or videos in the database.
-        """
-        with self.db_new_session() as dbs:
-            users_with_folders = set(uid[0] for uid in dbs.query(DbFolder.user_id).distinct().all())
-            users_with_videos = set(uid[0] for uid in dbs.query(DbVideo.user_id).distinct().all())
-            user_ids = users_with_folders.union(users_with_videos)
-
-            usernames = dbs.query(DbVideo.user_id, DbVideo.user_name).distinct().all()  # user_name is a denormalized field, might have multiple values, so...
-            user_ids_to_names = {uid: uname for uid, uname in usernames} # ...this maps each id to the last name seen
-            return [clap.UserInfo(id=uid, name=(user_ids_to_names.get(uid) or uid)) for uid in sorted(user_ids)]
 
 
     async def _make_folder_listing(
@@ -142,7 +128,7 @@ class PagesHelper:
         listing_items: list[clap.PageItemFolderListingItem] = []
         for itm in folder_db_items:
             if isinstance(itm, DbFolder):
-                listing_items.append(await self.folders_helper.folder_to_page_item(itm, popup_actions, ses.user.id))
+                listing_items.append(await self.folders_helper.folder_to_page_item(itm, popup_actions, ses))
             elif isinstance(itm, DbVideo):
                 listing_items.append(await video_to_page_item(itm.id, popup_actions))
             else:

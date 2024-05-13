@@ -12,7 +12,6 @@ import clapshot_grpc.clapshot.organizer as org
 
 from organizer.database.models import DbFolder, DbFolderItems, DbVideo
 from organizer.database.operations import db_get_or_create_user_root_folder
-from organizer.utils import is_admin
 
 
 class FoldersHelper:
@@ -67,11 +66,11 @@ class FoldersHelper:
         return res
 
 
-    async def fetch_folder_contents(self, folder: DbFolder, user_id: str) -> List[DbVideo | DbFolder]:
+    async def fetch_folder_contents(self, folder: DbFolder, ses: org.UserSessionData) -> List[DbVideo | DbFolder]:
         """
         Fetch the contents of a folder from the database, sorted by the order in the folder.
         """
-        if folder.user_id != user_id and not is_admin(user_id):
+        if folder.user_id != ses.user.id and not ses.is_admin:
             raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot fetch contents of another user's folder")
 
         with self.db_new_session() as dbs:
@@ -105,7 +104,7 @@ class FoldersHelper:
             return res
 
 
-    async def trash_folder_recursive(self, dbs: Session, folder_id: int, user_id: str) -> List[str]:
+    async def trash_folder_recursive(self, dbs: Session, folder_id: int, ses: org.UserSessionData) -> List[str]:
         """
         Trash a folder and unbind its contents recursively.
         Returns a list of all video IDs that are to be deleted.
@@ -113,7 +112,7 @@ class FoldersHelper:
         fld = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
         if not fld:
             raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{folder_id}' not found")
-        if fld.user_id != user_id and not is_admin(user_id):
+        if fld.user_id != ses.user.id and not ses.is_admin:
             raise GRPCError(GrpcStatus.PERMISSION_DENIED, f"Cannot trash another user's folder")
 
         folder_items = dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder_id).all()
@@ -123,7 +122,7 @@ class FoldersHelper:
 
         # Recurse to subfolders
         for fi in [it.subfolder_id for it in folder_items if it.subfolder_id]:
-            video_ids.extend(await self.trash_folder_recursive(dbs, fi, user_id))
+            video_ids.extend(await self.trash_folder_recursive(dbs, fi, ses))
 
         # Remove content bindings
         dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder_id).delete()
@@ -133,11 +132,11 @@ class FoldersHelper:
         return video_ids
 
 
-    async def folder_to_page_item(self, fld: DbFolder, popup_actions: List[str], user_id: str) -> clap.PageItemFolderListingItem:
+    async def folder_to_page_item(self, fld: DbFolder, popup_actions: List[str], ses: org.UserSessionData) -> clap.PageItemFolderListingItem:
         """
         Convert a folder node to a page item.
         """
-        pv_items = await self.preview_items_for_folder(fld, user_id)
+        pv_items = await self.preview_items_for_folder(fld, ses)
 
         return clap.PageItemFolderListingItem(
             folder=clap.PageItemFolderListingFolder(
@@ -150,12 +149,12 @@ class FoldersHelper:
             popup_actions=popup_actions)
 
 
-    async def preview_items_for_folder(self, fld: DbFolder, user_id: str) -> List[clap.PageItemFolderListingItem]:
+    async def preview_items_for_folder(self, fld: DbFolder, ses: org.UserSessionData) -> List[clap.PageItemFolderListingItem]:
         """
         Get preview items for a folder.
         Used in folder listings to show a preview of the folder contents (contained videos and subfolders).
         """
-        contained_items = await self.fetch_folder_contents(fld, user_id)
+        contained_items = await self.fetch_folder_contents(fld, ses)
 
         contained_videos = [itm for itm in contained_items if isinstance(itm, DbVideo)][:4]  # Client UI currently only shows max 4 items, don't bother with more
         video_objs: org.DbVideoList = await self.srv.db_get_videos(org.DbGetVideosRequest(ids=org.IdList(ids=[v.id for v in contained_videos])))
@@ -178,14 +177,14 @@ class FoldersHelper:
         Create a new folder in the parent folder.
         """
         assert parent_folder is not None, "Cannot create root folders with this function"
-        if parent_folder.user_id != ses.user.id and not is_admin(ses.user.id):
+        if parent_folder.user_id != ses.user.id and not ses.is_admin:
             raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot create folder in another user's folder")
         if len(new_folder_name) > 255:
             raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "Folder name too long")
         if not new_folder_name:
             GRPCError(GrpcStatus.INVALID_ARGUMENT, "Folder name cannot be empty")
 
-        if new_folder_name in [f.title for f in await self.fetch_folder_contents(parent_folder, ses.user.id)]:
+        if new_folder_name in [f.title for f in await self.fetch_folder_contents(parent_folder, ses)]:
             raise GRPCError(GrpcStatus.ALREADY_EXISTS, "Item with this name already exists in the this folder")
 
         with dbs.begin_nested():

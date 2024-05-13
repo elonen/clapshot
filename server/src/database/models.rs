@@ -6,15 +6,34 @@ use chrono::naive::serde::{ts_seconds, ts_seconds_option};
 use chrono::TimeZone;
 use timeago;
 
+#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, AsChangeset, Clone)]
+#[diesel(treat_none_as_null = true)]
+pub struct User {
+    pub id: String,
+    pub name: String,
+
+    #[serde(with = "ts_seconds")]
+    pub created: chrono::NaiveDateTime,
+}
+
+#[derive(Serialize, Deserialize, Debug, Insertable)]
+#[diesel(table_name = users)]
+pub struct UserInsert {
+    pub id: String,
+    pub name: String,
+}
+
+
+
 #[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
 #[diesel(treat_none_as_null = true)]
 #[diesel(table_name = videos)]
 #[diesel(primary_key(id))]
+#[diesel(belongs_to(User, foreign_key = user_id))]
 
 pub struct Video {
     pub id: String,
-    pub user_id: Option<String>,
-    pub user_name: Option<String>,
+    pub user_id: String,
 
     #[serde(with = "ts_seconds")]
     pub added_time: chrono::NaiveDateTime,
@@ -31,10 +50,10 @@ pub struct Video {
 
 #[derive(Serialize, Deserialize, Debug, Insertable)]
 #[diesel(table_name = videos)]
+#[diesel(belongs_to(User, foreign_key = user_id))]
 pub struct VideoInsert {
     pub id: String,
-    pub user_id: Option<String>,
-    pub user_name: Option<String>,
+    pub user_id: String,
     pub recompression_done: Option<chrono::NaiveDateTime>,
     pub thumb_sheet_cols: Option<i32>,
     pub thumb_sheet_rows: Option<i32>,
@@ -49,7 +68,9 @@ pub struct VideoInsert {
 // -------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Associations, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
+#[diesel(belongs_to(User, foreign_key = user_id))]
 #[diesel(belongs_to(Video, foreign_key = video_id))]
+
 #[diesel(treat_none_as_null = true)]
 pub struct Comment {
     pub id: i32,
@@ -62,8 +83,8 @@ pub struct Comment {
     #[serde(with = "ts_seconds_option")]
     pub edited: Option<chrono::NaiveDateTime>,
 
-    pub user_id: String,
-    pub user_name: String,
+    pub user_id: Option<String>,
+    pub username_ifnull: String,
     pub comment: String,
     pub timecode: Option<String>,
     pub drawing: Option<String>,
@@ -71,12 +92,13 @@ pub struct Comment {
 
 #[derive(Serialize, Deserialize, Debug, Insertable)]
 #[diesel(belongs_to(Video, foreign_key = video_id))]
+#[diesel(belongs_to(User, foreign_key = user_id))]
 #[diesel(table_name = comments)]
 pub struct CommentInsert {
     pub video_id: String,
     pub parent_id: Option<i32>,
-    pub user_id: String,
-    pub user_name: String,
+    pub user_id: Option<String>,
+    pub username_ifnull: String,
     pub comment: String,
     pub timecode: Option<String>,
     pub drawing: Option<String>,
@@ -85,6 +107,7 @@ pub struct CommentInsert {
 // -------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, Associations, AsChangeset, Clone)]
+#[diesel(belongs_to(User, foreign_key = user_id))]
 #[diesel(belongs_to(Video, foreign_key = video_id))]
 #[diesel(belongs_to(Comment, foreign_key = comment_id))]
 #[diesel(treat_none_as_null = true)]
@@ -105,6 +128,7 @@ pub struct Message {
 
 #[derive(Serialize, Deserialize, Debug, Default, Insertable, Clone, Associations, AsChangeset)]
 #[diesel(table_name = messages)]
+#[diesel(belongs_to(User, foreign_key = user_id))]
 #[diesel(belongs_to(Video, foreign_key = video_id))]
 #[diesel(belongs_to(Comment, foreign_key = comment_id))]
 pub struct MessageInsert {

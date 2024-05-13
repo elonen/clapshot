@@ -1,4 +1,6 @@
 from __future__ import annotations
+from logging import Logger
+from typing import Optional
 
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
@@ -7,7 +9,6 @@ import clapshot_grpc.clapshot as clap
 import clapshot_grpc.clapshot.organizer as org
 
 import sqlalchemy
-from organizer.utils import is_admin
 from .database.models import DbFolder, DbFolderItems, DbVideo
 
 import organizer
@@ -30,27 +31,29 @@ async def move_to_folder(oi: organizer.OrganizerInbound, req: org.MoveToFolderRe
 
             if not dst_folder:
                 raise GRPCError(GrpcStatus.NOT_FOUND, "Destination folder not found")
-            if dst_folder.user_id != req.ses.user.id and not is_admin(req.ses.user.id):
+            if dst_folder.user_id != req.ses.user.id and not req.ses.is_admin:
                 raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot move items to another user's folder")
 
             for it in req.ids:
                 # Move a folder
                 if it.folder_id:
-                    fld_to_move = dbs.query(DbFolder).filter(DbFolder.id == int(it.folder_id)).one_or_none()
+                    fld_to_move: Optional[DbFolder] = dbs.query(DbFolder).filter(DbFolder.id == int(it.folder_id)).one_or_none()
 
                     if not fld_to_move:
                         raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder id '{it.folder_id}' not found")
                     if fld_to_move.id == dst_folder.id:
                         raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "Cannot move a folder into itself")
-                    if fld_to_move.user_id != req.ses.user.id and not is_admin(req.ses.user.id):
+                    if fld_to_move.user_id != req.ses.user.id and not req.ses.is_admin:
                         raise GRPCError(GrpcStatus.PERMISSION_DENIED, f"Cannot move another user's folder")
 
-                    fld_to_move.user_id = dst_folder.user_id  # transfer ownership
                     cnt = dbs.query(DbFolderItems).filter(DbFolderItems.subfolder_id == fld_to_move.id).update({"folder_id": dst_folder.id, "sort_order": max_sort_order+1})
                     if cnt == 0:
                         raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder with ID '{fld_to_move.id}' is a root folder? Cannot move.")
-                    else:
-                        oi.log.debug(f"Moved folder '{fld_to_move.id}' to folder '{dst_folder.id}'")
+
+                    assert dst_folder.user_id, "Destination folder has no user ID, cannot transfer ownership"
+                    await _recursive_set_folder_owner(dbs, fld_to_move.id, dst_folder.user_id, set(), oi.log)
+
+                    oi.log.debug(f"Moved folder '{fld_to_move.id}' to folder '{dst_folder.id}'")
 
                 # Move a video
                 elif it.video_id:
@@ -58,7 +61,7 @@ async def move_to_folder(oi: organizer.OrganizerInbound, req: org.MoveToFolderRe
 
                     if not vid_to_move:
                         raise GRPCError(GrpcStatus.NOT_FOUND, f"Video '{it.video_id}' not found")
-                    if vid_to_move.user_id != req.ses.user.id and not is_admin(req.ses.user.id):
+                    if vid_to_move.user_id != req.ses.user.id and not req.ses.is_admin:
                         raise GRPCError(GrpcStatus.PERMISSION_DENIED, f"Cannot move another user's video")
 
                     vid_to_move.user_id = dst_folder.user_id  # transfer ownership
@@ -92,7 +95,7 @@ async def reorder_items(oi: organizer.OrganizerInbound, req: org.ReorderItemsReq
                 parent_folder = dbs.query(DbFolder).filter(DbFolder.id == int(parent_folder_id)).one_or_none()
                 if not parent_folder:
                     raise GRPCError(GrpcStatus.NOT_FOUND, f"Parent folder {parent_folder_id} not found")
-                if parent_folder.user_id != req.ses.user.id and not is_admin(req.ses.user.id):
+                if parent_folder.user_id != req.ses.user.id and not req.ses.is_admin:
                     raise GRPCError(GrpcStatus.PERMISSION_DENIED, f"Cannot reorder items in another user's folder")
 
                 # Reorder items
@@ -109,3 +112,30 @@ async def reorder_items(oi: organizer.OrganizerInbound, req: org.ReorderItemsReq
                 return clap.Empty()
     else:
         raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "No folder ID in UI listing, cannot reorder")
+
+
+async def _recursive_set_folder_owner(dbs: sqlalchemy.orm.Session, folder_id: int, new_owner_id: str, seen: set[int], log: Logger) -> None:
+    """
+    Set the owner of a folder and all its subfolders + videos recursively.
+    """
+    assert isinstance(folder_id, int), f"Unexpected subfolder ID type on: {folder_id} ({type(folder_id)})"
+
+    if folder_id in seen:
+        log.warning(f"Folder loop detected! THIS SHOULD NOT HAPPEN. Skipping folder '{folder_id}'")
+        return
+    seen.add(folder_id)
+
+    # Update folder itself
+    log.debug(f"Setting owner of folder '{folder_id}' to '{new_owner_id}'")
+    dbs.query(DbFolder).filter(DbFolder.id == folder_id).update({"user_id": new_owner_id})
+
+    # Update videos in this folder
+    log.debug(f"Setting owner of folder '{folder_id}' videos to '{new_owner_id}'")
+    videos_subq = dbs.query(DbFolderItems.video_id).filter(DbFolderItems.folder_id == folder_id, DbFolderItems.video_id != None).subquery()
+    dbs.query(DbVideo).filter(DbVideo.id.in_(sqlalchemy.select(videos_subq))).update({"user_id": new_owner_id})
+
+    # Update subfolders
+    sub_ids = dbs.query(DbFolderItems.subfolder_id).filter(DbFolderItems.folder_id == folder_id, DbFolderItems.subfolder_id != None).all()
+    for subi in sub_ids:
+        log.debug(f"Recursing to subfolder '{subi[0]}'")
+        await _recursive_set_folder_owner(dbs, subi[0], new_owner_id, seen, log)

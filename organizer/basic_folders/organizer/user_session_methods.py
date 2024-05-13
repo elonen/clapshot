@@ -129,7 +129,7 @@ async def cmd_from_client(oi: organizer.OrganizerInbound, cmd: org.CmdFromClient
             videos_to_delete = []
             with oi.db_new_session() as dbs:
                 with dbs.begin_nested():
-                    videos_to_delete = await oi.folders_helper.trash_folder_recursive(dbs, folder_id, cmd.ses.user.id)
+                    videos_to_delete = await oi.folders_helper.trash_folder_recursive(dbs, folder_id, cmd.ses)
 
             # Trash the videos
             for vi in videos_to_delete:

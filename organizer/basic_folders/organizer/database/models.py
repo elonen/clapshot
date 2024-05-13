@@ -46,11 +46,11 @@ class DbSchemaMigrations(Base):
 
 
 # Not managed by the organizer migrations, but by the clapshot.server module.
+
 class DbVideo(Base):
     __tablename__ = "videos"
     id: Mapped[str] = mapped_column(primary_key=True)
     user_id: Mapped[str] = mapped_column()
-    user_name: Mapped[str] = mapped_column()
     added_time: Mapped[datetime] = mapped_column(insert_default=sqlalchemy.func.now())
     recompression_done: Mapped[Optional[datetime]] = mapped_column()
     orig_filename: Mapped[str] = mapped_column()
@@ -61,3 +61,10 @@ class DbVideo(Base):
     title: Mapped[str] = mapped_column()
     thumb_sheet_cols: Mapped[int] = mapped_column()
     thumb_sheet_rows: Mapped[int] = mapped_column()
+
+
+class DbUser(Base):
+    __tablename__ = "users"
+    id: Mapped[str] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column()
+    created: Mapped[datetime] = mapped_column(insert_default=sqlalchemy.func.now())

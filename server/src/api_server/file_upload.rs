@@ -33,7 +33,7 @@ pub async fn handle_multipart_upload(
     body: impl warp::Stream<Item = Result<impl bytes::Buf, warp::Error>> + Unpin)
         -> Result<warp::reply::WithStatus<String>, Infallible>
 {
-    let (user_id, user_name, cookies) = parse_auth_headers(&hdrs, &server.default_user);
+    let (user_id, user_name, is_admin, cookies) = parse_auth_headers(&hdrs, &server.default_user);
 
     // Check from organizer if user is allowed to upload.
     // Allow by default if organizer is not configured or doesn't care.
@@ -49,7 +49,8 @@ pub async fn handle_multipart_upload(
 
             let org_session = proto::org::UserSessionData {
                 sid: "<upload--not-set>".to_string(),
-                user: Some(proto::UserInfo { id: user_id.clone(), name: Some(user_name.clone()) }),
+                user: Some(proto::UserInfo { id: user_id.clone(), name: user_name.clone() }),
+                is_admin,
                 cookies: cookies.clone()
             };
 

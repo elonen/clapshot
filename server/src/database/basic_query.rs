@@ -71,14 +71,14 @@ macro_rules! implement_basic_query_traits {
 
 #[macro_export]
 macro_rules! implement_query_by_user_traits {
-    ($model:ty, $table:ident, $order_by:expr) => {
+    ($model:ty, $table:ident, $user_field:ident, $order_by:expr) => {
 
         impl DbQueryByUser for $model {
 
             fn get_by_user(conn: &mut PooledConnection, uid: &str, pg: DBPaging) -> DBResult<Vec<Self>> {
                 use schema::$table::dsl::*;
                 to_db_res($table
-                    .filter(user_id.eq(uid))
+                    .filter($user_field.eq(uid))
                     .order($order_by)
                     .then_order_by(id.asc())
                     .offset(pg.offset())

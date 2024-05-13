@@ -1,10 +1,50 @@
+use anyhow::Context;
 use diesel::prelude::*;
 use chrono::offset::Local;
 use crate::database::{models, schema, DBResult, EmptyDBResult, to_db_res};
 
-use super::PooledConnection;
+use super::{error::DBError, DbBasicQuery, PooledConnection};
 
 // ------------------- Model-specific custom operations -------------------
+
+impl models::User {
+    pub fn set_name(conn: &mut PooledConnection, uid: &str, new_name: &str) -> EmptyDBResult
+    {
+        use schema::users::dsl::*;
+        diesel::update(users.filter(id.eq(uid)))
+            .set(name.eq(new_name))
+            .execute(conn)?;
+        Ok(())
+    }
+
+    /// Get a user by ID, or create a new user if it doesn't exist.
+    ///
+    /// # Arguments
+    /// * `conn` - Database connection
+    /// * `user_id` - ID of the user
+    /// * `username` - Name of the user, if you want to update it. If None, and user is being created, the name will be set to the user_id.
+    pub fn get_or_create(conn: &mut PooledConnection, user_id: &str, username: Option<&str>) -> DBResult<models::User>
+    {
+        match models::User::get(conn, &user_id.to_string()) {
+            Ok(u) => {
+                // Update name and admin status if needed
+                if let Some(username) = username {
+                    models::User::set_name(conn, &u.id, &username).context("Failed to update user name")?;
+                }
+                models::User::get(conn, &u.id)
+            },
+            Err(DBError::NotFound()) => {
+                // User not found, create a new user
+                let new_user = models::UserInsert {
+                    id: user_id.to_string(),
+                    name: username.unwrap_or(user_id).to_string(),
+                };
+                models::User::insert(conn, &new_user)
+            },
+            Err(e) => { Err(e) }
+        }
+    }
+}
 
 
 impl models::Video {

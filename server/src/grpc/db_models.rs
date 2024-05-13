@@ -34,8 +34,7 @@ impl crate::database::models::Video
     {
         Ok(Self {
             id: v.id.clone(),
-            user_id: v.added_by.as_ref().map(|u| u.id.clone()),
-            user_name: v.added_by.as_ref().map(|u| u.name.clone()).unwrap_or_default(),
+            user_id: v.user_id.clone(),
             added_time: v.added_time.as_ref().map(|t| proto3_to_datetime(t)).flatten().ok_or(DBError::Other(anyhow::anyhow!("Bad added_time")))?,
             recompression_done: v.processing_metadata.as_ref().map(|m| m.recompression_done.as_ref().map(|x| proto3_to_datetime(x))).flatten().flatten(),
             thumb_sheet_cols: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.cols as i32)).flatten(),
@@ -56,13 +55,6 @@ impl crate::database::models::Video
                 duration: dur as f64,
                 total_frames: total_frames as i64,
                 fps: fps.clone(),
-            }),
-            _ => None,
-        };
-        let added_by = match (&self.user_id, &self.user_name) {
-            (Some(user_id), user_name) => Some(proto::UserInfo {
-                id: user_id.clone(),
-                name: user_name.clone(),
             }),
             _ => None,
         };
@@ -99,7 +91,7 @@ impl crate::database::models::Video
         proto::Video {
             id: self.id.clone(),
             title: self.title.clone(),
-            added_by,
+            user_id: self.user_id.clone(),
             duration,
             added_time: Some(datetime_to_proto3(&self.added_time)),
             preview_data: preview_data,
@@ -116,8 +108,7 @@ impl crate::database::models::VideoInsert
     {
         Ok(Self {
             id: v.id.clone(),
-            user_id: v.added_by.as_ref().map(|u| u.id.clone()),
-            user_name: v.added_by.as_ref().map(|u| u.name.clone()).unwrap_or_default(),
+            user_id: v.user_id.clone(),
             recompression_done: v.processing_metadata.as_ref().map(|m| m.recompression_done.as_ref().map(|x| proto3_to_datetime(x))).flatten().flatten(),
             thumb_sheet_cols: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.cols as i32)).flatten(),
             thumb_sheet_rows: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.rows as i32)).flatten(),
@@ -135,38 +126,34 @@ impl crate::database::models::VideoInsert
 
 impl crate::database::models::Comment
 {
-    pub fn from_proto3(v: &proto::Comment) -> DBResult<Self>
+    pub fn from_proto3(c: &proto::Comment) -> DBResult<Self>
     {
-        let user = v.user.as_ref().ok_or(anyhow::anyhow!("Missing user"))?;
-        let created = v.created.as_ref().ok_or(anyhow::anyhow!("Missing created timestamp"))?;
+        //let user = v.user.as_ref().ok_or(anyhow::anyhow!("Missing user"))?;
+        let created = c.created.as_ref().ok_or(anyhow::anyhow!("Missing created timestamp"))?;
         Ok(Self {
-            id: v.id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid comment ID")))?,
-            video_id: v.video_id.clone(),
-            user_id: user.id.clone(),
-            user_name: user.name.clone().unwrap_or(user.id.clone()).clone(),
-            comment: v.comment.clone(),
-            timecode: v.timecode.clone(),
-            parent_id: v.parent_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid parent ID")))?,
+            id: c.id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid comment ID")))?,
+            video_id: c.video_id.clone(),
+            user_id: c.user_id.clone(),
+            username_ifnull: c.username_ifnull.clone(),
+            comment: c.comment.clone(),
+            timecode: c.timecode.clone(),
+            parent_id: c.parent_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid parent ID")))?,
             created: proto3_to_datetime(created).ok_or(anyhow::anyhow!("Invalid 'created' timestamp"))?,
-            edited: v.edited.as_ref().map(|t| proto3_to_datetime(t)).flatten(),
-            drawing: v.drawing.clone(),
+            edited: c.edited.as_ref().map(|t| proto3_to_datetime(t)).flatten(),
+            drawing: c.drawing.clone(),
         })
     }
 
     pub fn to_proto3(&self) -> proto::Comment
     {
-        let user = proto::UserInfo {
-            id: self.user_id.clone(),
-            name: Some(self.user_name.clone()),
-        };
-
         let created_timestamp = Some(datetime_to_proto3(&self.created));
         let edited_timestamp = self.edited.map(|edited| datetime_to_proto3(&edited));
 
         proto::Comment {
             id: self.id.to_string(),
             video_id: self.video_id.clone(),
-            user: Some(user),
+            user_id: self.user_id.clone(),
+            username_ifnull: self.username_ifnull.clone(),
             comment: self.comment.clone(),
             timecode: self.timecode.clone(),
             parent_id: self.parent_id.map(|id| id.to_string()),
@@ -179,20 +166,19 @@ impl crate::database::models::Comment
 
 impl crate::database::models::CommentInsert
 {
-    pub fn from_proto3(v: &proto::Comment) -> DBResult<Self>
+    pub fn from_proto3(c: &proto::Comment) -> DBResult<Self>
     {
-        if v.id != String::default() {
+        if c.id != String::default() {
             return Err(DBError::Other(anyhow::anyhow!("Comment ID must be empty for conversion to CommentInsert, which doesn't have 'id' field")));
         }
-        let user = v.user.as_ref().ok_or(anyhow::anyhow!("Missing user"))?;
         Ok(Self {
-            video_id: v.video_id.clone(),
-            user_id: user.id.clone(),
-            user_name: user.name.clone().unwrap_or(user.id.clone()).clone(),
-            comment: v.comment.clone(),
-            timecode: v.timecode.clone(),
-            parent_id: v.parent_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid parent ID")))?,
-            drawing: v.drawing.clone(),
+            video_id: c.video_id.clone(),
+            user_id: c.user_id.clone(),
+            username_ifnull: c.username_ifnull.clone(),
+            comment: c.comment.clone(),
+            timecode: c.timecode.clone(),
+            parent_id: c.parent_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid parent ID")))?,
+            drawing: c.drawing.clone(),
         })
     }
 }

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 import clapshot_grpc.clapshot.organizer as org
 import clapshot_grpc.clapshot as clap
 
-from .models import Base, DbFolder, DbFolderItems, DbSchemaMigrations, DbVideo
+from .models import Base, DbFolder, DbFolderItems, DbSchemaMigrations, DbUser, DbVideo
 from .migrations import ALL_MIGRATIONS
 
 def db_check_pending_migrations(db: Engine) -> tuple[str, list[org.Migration]]:
@@ -50,6 +50,9 @@ def db_test_orm_mappings(dbs: Session, log: Logger):
     with dbs.begin() as tx:
         rnd = uuid.uuid4().hex  # random string to avoid collisions
         test_video, test_user = f"video_{rnd}", f"user_{rnd}"
+
+        # Create user
+        dbs.execute(sqla_text("INSERT INTO users (id, name) VALUES (:id, :name)"), {"id": test_user, "name": f"Test user {rnd}"})
 
         # Insert a video by SQL, since we don't have a Video ORM class
         dbs.execute(sqla_text("INSERT INTO videos (id, user_id) VALUES (:id, :user_id)"), {"id": test_video, "user_id": test_user})
@@ -155,7 +158,13 @@ async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, s
     If none is found, create one and move all non-parent videos to it.
     """
     with dbs.begin_nested():
-        assert user and user.id, "User ID must be set"
+        assert user and user.id and user.name, "User ID and name must be set"
+
+        # DEBUG: Check that the user exists (DbUser table)
+        if not dbs.query(DbUser).filter(DbUser.id == user.id).one_or_none():
+            raise ValueError(f"User '{user.id}' not found in DbUser table")
+
+        # Find DbFolder(s) with no parent for the user
         res = dbs.query(DbFolder).filter(DbFolder.user_id == user.id).outerjoin(DbFolderItems, DbFolder.id == DbFolderItems.subfolder_id).filter(DbFolderItems.subfolder_id.is_(None)).all()
         cnt, ret = len(res), (res[0] if res else None)
 
@@ -173,7 +182,7 @@ async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, s
             # Create a root folder & move all orphan videos to it
             assert ret is None
             log.info(f"No root folder for user '{user.id}', creating one now.")
-            ret = DbFolder(user_id=user.id, title=f"Home for {user.name}")
+            ret = DbFolder(user_id=user.id, title=f"Home of '{user.name}'")
             dbs.add(ret)
             dbs.flush() # make sure the ret.id is set
 

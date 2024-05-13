@@ -77,7 +77,7 @@ impl DB {
             PRAGMA wal_autocheckpoint = 1000;
             PRAGMA wal_checkpoint(TRUNCATE);
             PRAGMA synchronous = NORMAL;
-            PRAGMA busy_timeout = 5000;
+            PRAGMA busy_timeout = 15000;
         "#).execute(&mut conn).context("Failed to set DB pragmas")?;
         Ok(conn)
     }
@@ -90,14 +90,14 @@ impl DB {
     }
 
     /// Run a named migration
-    pub fn apply_migration(&self, conn: &mut PooledConnection, migration_name: &str) -> EmptyDBResult {
+    pub fn apply_migration(&self, conn: &mut SqliteConnection, migration_name: &str) -> EmptyDBResult {
         conn.transaction(|conn| {   // uses savepoints instead when needed
             let pending = MigrationHarness::pending_migrations(conn, MIGRATIONS)
                 .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?;
             let migration = pending.iter().find(|m| m.name().to_string() == migration_name)
                 .ok_or_else(|| anyhow!("Migration not found: {}", migration_name))?;
 
-            tracing::info!("Applying migration: {}", migration.name());
+            tracing::info!("Applying (Clapshot server) DB migration: {}", migration.name());
             diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(conn)?;
             MigrationHarness::run_migration(conn, &**migration)
                 .map_err(|e| anyhow!("Failed to apply migration: {:?}", e))?;
@@ -146,7 +146,7 @@ pub trait DbBasicQuery<P, I>: Sized
     fn insert_many(conn: &mut PooledConnection, items: &[I]) -> DBResult<Vec<Self>>;
 
     /// Get a single object by its primary key.
-    /// Returns None if no object with the given ID was found.
+    /// Returns DBError::NotFound() if no object with the given ID was found.
     fn get(conn: &mut PooledConnection, pk: &P) -> DBResult<Self>;
 
     /// Get multiple objects by their primary keys.
@@ -166,6 +166,7 @@ pub trait DbBasicQuery<P, I>: Sized
 }
 
 mod basic_query;
+crate::implement_basic_query_traits!(models::User, models::UserInsert, users, String, created.desc());
 crate::implement_basic_query_traits!(models::Video, models::VideoInsert, videos, String, added_time.desc());
 crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32, created.desc());
 crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32, created.desc());
@@ -175,9 +176,10 @@ pub trait DbQueryByUser: Sized {
     /// Get all objects of type Self that belong to given user.
     fn get_by_user(conn: &mut PooledConnection, uid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
 }
-crate::implement_query_by_user_traits!(models::Video, videos, added_time.desc());
-crate::implement_query_by_user_traits!(models::Comment, comments, created.desc());
-crate::implement_query_by_user_traits!(models::Message, messages, created.desc());
+crate::implement_query_by_user_traits!(models::User, users, id, created.desc());
+crate::implement_query_by_user_traits!(models::Video, videos, user_id, added_time.desc());
+crate::implement_query_by_user_traits!(models::Comment, comments, user_id, created.desc());
+crate::implement_query_by_user_traits!(models::Message, messages, user_id, created.desc());
 
 
 

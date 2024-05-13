@@ -157,7 +157,7 @@ pub(crate) async fn connect_client_ws(ws_url: &str, user_id: &str) -> WsClient {
         .uri(ws_url)
         .header("Host", "127.0.0.1")
         .header("HTTP_X_REMOTE_USER_ID", user_id)
-        .header("HTTP_X_REMOTE_USER_NAME", "User Num1")
+        .header("HTTP_X_REMOTE_USER_NAME", format!("Username for {}", user_id))
         .header("Connection", "Upgrade")
         .header("Upgrade", "websocket")
         .header("Sec-WebSocket-Version", "13")

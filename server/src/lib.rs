@@ -153,28 +153,23 @@ fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyho
             // Make a gzipped backup
             let now = chrono::Local::now();
             let backup_path = db_file.with_extension(format!("backup-{}.sqlite.gz", now.format("%Y-%m-%dT%H_%M_%S")));
-            tracing::warn!(file=%db_file.display(), backup=%backup_path.display(), "Backing up database before migration.");
+            tracing::info!(file=%db_file.display(), backup=%backup_path.display(), "Backing up database before migration.");
             let backup_file = std::fs::File::create(&backup_path).context("Error creating DB backup file")?;
             let mut gzip_writer = flate2::write::GzEncoder::new(backup_file, flate2::Compression::fast());
             let mut fh = std::fs::File::open(&db_file).context("Error reading current DB file for backup")?;
             std::io::copy(&mut fh, &mut gzip_writer).context("Error copying DB file to backup")?;
         }
 
-        db.conn()?.transaction::<(), _, _>(|conn| {
-            for m in &pending_migrations {
-                match db.apply_migration(conn, m) {
-                    Ok(_) => {
-                        tracing::info!(file=%db_file.display(), "Applied migration {}", m);
-                    },
-                    Err(e) => {
-                        tracing::error!(file=%db_file.display(), "Error applying migration. Rolling back everything.");
-                        bail!("Error applying migration {}: {:?}", m, e);
-                    },
-                }
-            }
-            tracing::info!(file=%db_file.display(), "All migrations applied. Committing.");
-            Ok(())
-        })?;
+        for m in &pending_migrations {
+            db.conn()?.transaction::<(), _, _>(|conn| {
+                if let Err(e) = db.apply_migration(conn, m) {
+                    tracing::error!(file=%db_file.display(), "Error applying migration '{}'. Rolling back.", m);
+                    bail!("Error applying migration {}: {:?}", m, e);
+                };
+                Ok(())
+            })?;
+        }
+        tracing::info!(file=%db_file.display(), "All server migrations applied.");
 
     } else {
         if !pending_migrations.is_empty() {

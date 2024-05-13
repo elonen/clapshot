@@ -4,7 +4,7 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, videoId, videoFps, videoTitle, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions} from '@/stores';
+import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, videoId, videoFps, videoTitle, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin} from '@/stores';
 import {IndentedComment, type UserMenuItem, type StringMap} from "@/types";
 
 import CommentCard from '@/lib/CommentCard.svelte'
@@ -427,6 +427,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 }
                 $curUsername = cmd.welcome.user.name ?? cmd.welcome.user.id;
                 $curUserId = cmd.welcome.user.id;
+                $curUserIsAdmin = cmd.welcome.isAdmin;
             }
             // error
             else if (cmd.error) {
@@ -835,7 +836,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
 
     :global(.organizer_page h2){
         font-size: 2.5rem;
-        line-height: 2rem;
+        line-height: 3rem;
     }
 
     :global(.organizer_page h3){

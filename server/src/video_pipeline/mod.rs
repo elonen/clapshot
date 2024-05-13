@@ -121,8 +121,7 @@ fn ingest_video(
         match models::Video::get(&mut db.conn()?, &vid.into()) {
             Ok(v) => {
                 let new_owner = &md.user_id;
-                if v.user_id == Some(new_owner.clone()) {
-
+                if &v.user_id == new_owner {
                     tracing::info!("User already has this video.");
                     user_msg_tx.send(UserMessage {
                         topic: UserMessageTopic::Ok,
@@ -171,8 +170,7 @@ fn ingest_video(
     tracing::info!("Adding video to DB.");
     models::Video::insert(&mut db.conn()?, &models::VideoInsert {
         id: vid.to_string(),
-        user_id: Some(md.user_id.clone()),
-        user_name: Some(md.user_id.clone()),  // TODO: get username from somewhere
+        user_id: md.user_id.clone(),
         recompression_done: None,
         thumb_sheet_cols: None,
         thumb_sheet_rows: None,
@@ -360,15 +358,15 @@ pub fn run_forever(
                         }}
                 };
 
-            match (&v.user_id, video_file) {
-                (Some(user_id), Some(video_file)) => {
+            match video_file {
+                Some(video_file) => {
                     let req = video_compressor::CmprInput {
                         src: video_file,
                         video_dst: None,
                         thumb_dir: Some(videos_dir.join(&v.id).join("thumbs")),
                         video_bitrate: 0,
                         video_id: v.id.clone(),
-                        user_id: user_id.clone(),
+                        user_id: v.user_id.clone(),
                     };
                     cmpr_in.send(req).unwrap_or_else(|e| {
                             tracing::error!(details=?e, "Error sending legacy thumbnailing request to compressor.");

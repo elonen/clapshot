@@ -29,7 +29,7 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
             dependencies=[
                 org.MigrationDependency(
                     name="clapshot.server",
-                    min_ver="2023-04-18-190209_change_video_primkey",
+                    min_ver="2024-05-13-093800_add_users_table",
                     max_ver=None
                 ),
                 org.MigrationDependency(
@@ -44,7 +44,7 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
                 CREATE TABLE bf_folders (
                     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                     created DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
-                    user_id VARCHAR(255) NOT NULL,
+                    user_id VARCHAR(255) NOT NULL REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED,
                     title VARCHAR(255) NOT NULL
                 );
 

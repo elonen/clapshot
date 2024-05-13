@@ -14,7 +14,7 @@ message Empty {}
 message Video {
     string id = 1;
     optional string title = 2;
-    optional UserInfo added_by = 3;
+    string user_id = 3;
     optional VideoDuration duration = 4;
     optional google.protobuf.Timestamp added_time = 5;
     optional VideoPreviewData preview_data = 6;
@@ -53,10 +53,11 @@ message VideoPreviewData {
 message Comment {
     string id = 1;
     string video_id = 2;
-    UserInfo user = 3;
-    string comment = 4;
-    optional string timecode = 5;       // e.g. "00:00:00.000"
-    optional string parent_id = 6;      // parent comment, null if top-level
+    optional string user_id = 3;
+    string username_ifnull = 4;         // Denormalize display name, in case user_id is null
+    string comment = 5;
+    optional string timecode = 6;       // e.g. "00:00:00.000"
+    optional string parent_id = 7;      // parent comment, null if top-level
     optional string drawing = 12;       // data-uri of an image
     optional google.protobuf.Timestamp created = 100;
     optional google.protobuf.Timestamp edited = 101;
@@ -160,8 +161,8 @@ message ActionDef {
 // ---------------------------------------------------------
 
 message UserInfo {
-    string id = 1;                   // e.g. "user:123", "alice.smith", "alice.smith@example.com" etc. depending on used authn backend.
-    optional string name = 2;        // e.g. "Alice Smith"
+    string id = 1;             // e.g. "user:123", "alice.smith", "alice.smith@example.com" etc. depending on used authn backend.
+    string name = 2;           // e.g. "Alice Smith"
 }
 
 message Color {

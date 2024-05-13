@@ -14,6 +14,7 @@ export let curPageItems: Writable<Proto3.PageItem[]> = writable([]);
 
 export let curUsername: Writable<string|null> = writable(null);
 export let curUserId: Writable<string|null> = writable(null);
+export let curUserIsAdmin: Writable<boolean> = writable(false);
 export let curUserPic: Writable<string|null> = writable(null);
 
 export let videoIsReady: Writable<boolean> = writable(false);

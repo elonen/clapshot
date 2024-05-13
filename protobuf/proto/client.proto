@@ -14,6 +14,7 @@ import "google/protobuf/timestamp.proto";
 message ServerToClientCmd {
     message Welcome {
         UserInfo user = 1;
+        bool is_admin = 2;      // FYI for the client UI, server will enforce the actual permissions
     }
     message Error {
         string msg = 1;

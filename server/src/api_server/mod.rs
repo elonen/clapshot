@@ -89,16 +89,28 @@ async fn handle_ws_session(
         sid: String,
         user_id: String,
         username: String,
+        is_admin: bool,
         cookies: HashMap<String, String>,
         server: ServerState)
 {
     let (msgq_tx, mut msgq_rx) = tokio::sync::mpsc::unbounded_channel();
 
+    let user = match server.db.conn().and_then(|mut conn|
+        models::User::get_or_create(&mut conn, &user_id, Some(&username)))
+    {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::error!(details=%e, "Error getting user info from DB. Closing session.");
+            return;
+        }
+    };
+
     let mut ses = UserSession {
         sid: sid.clone(),
         sender: msgq_tx,
-        user_id: user_id.clone(),
-        user_name: username.clone(),
+        user_id: user.id.clone(),
+        user_name: user.name.clone(),
+        is_admin,
         cur_video_id: None,
         cur_collab_id: None,
         video_session_guard: None,
@@ -108,8 +120,9 @@ async fn handle_ws_session(
             sid: sid.clone(),
             user: Some(proto::UserInfo {
                 id: user_id.clone(),
-                name: Some(username.clone()),
+                name: username.clone(),
             }),
+            is_admin,
             cookies,
         }
     };
@@ -120,7 +133,8 @@ async fn handle_ws_session(
     // Let the client know user's id and name
     if let Err(e) = server.emit_cmd(
         client_cmd!(Welcome, {
-            user: Some(proto::UserInfo { id: user_id, name: Some(username) }),
+            user: Some(proto::UserInfo { id: user_id, name: username }),
+            is_admin: is_admin
         }),
         SendTo::MsgSender(&ses.sender)
     ) {
@@ -303,7 +317,18 @@ async fn handle_ws_session(
 }
 
 /// Extract user id, name and clapshot_cookies from HTTP headers (set by nginx)
-fn parse_auth_headers(hdrs: &HeaderMap, default_name: &str) -> (String, String, HashMap<String, String>)
+/// If any of the headers are missing, default values are used:
+/// - If X-Remote-User-Id is missing, `default_user_id` is used.
+/// - If X-Remote-User-Name is missing, the user ID is used as the name.
+/// - If X-Remote-User-Is-Admin is missing, user is admin iff user_id == "admin",
+///   otherwise, if the header is present, it must be "true" or "1" to be an admin.
+///
+/// # Arguments
+/// * `hdrs` - HTTP headers
+/// * `default_user_id` - Default user ID to use if X-Remote-User-Id is missing
+///
+/// * Returns: (user_id: String, user_name: String, is_admin: bool, clapshot_cookies: HashMap<String, String>)
+fn parse_auth_headers(hdrs: &HeaderMap, default_user_id: &str) -> (String, String, bool, HashMap<String, String>)
 {
     fn try_get_first_named_hdr<T>(hdrs: &HeaderMap, names: T) -> Option<String>
         where T: IntoIterator<Item=&'static str> {
@@ -319,14 +344,17 @@ fn parse_auth_headers(hdrs: &HeaderMap, default_name: &str) -> (String, String, 
     let user_id = match try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Id", "X_Remote_User_Id", "HTTP_X_REMOTE_USER_ID"]) {
         Some(id) => id,
         None => {
-            tracing::warn!("Missing X-Remote-User-Id in HTTP headers. Using '{}' instead.", default_name);
-            default_name.into()
+            tracing::warn!("Missing X-Remote-User-Id in HTTP headers. Using '{}' instead.", default_user_id);
+            default_user_id.into()
         }};
     let user_name = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Name", "X_Remote_User_Name", "HTTP_X_REMOTE_USER_NAME"])
         .unwrap_or_else(|| user_id.clone());
 
     let cookies_str = try_get_first_named_hdr(&hdrs, vec!["X-Clapshot-Cookies", "X_Clapshot_Cookies", "HTTP_X_CLAPSHOT_COOKIES"])
         .unwrap_or_else(|| "{}".into());
+
+    let is_admin: bool = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Is-Admin", "X_Remote_User_Is_Admin", "HTTP_X_REMOTE_USER_IS_ADMIN"])
+        .map(|s| s.to_lowercase() == "true" || s == "1").unwrap_or(user_id == "admin");
 
     let app_cookies = match cookies_str.parse::<serde_json::Value>() {
         Ok(c) => {
@@ -344,7 +372,7 @@ fn parse_auth_headers(hdrs: &HeaderMap, default_name: &str) -> (String, String, 
         }
     };
 
-    (user_id, user_name, app_cookies)
+    (user_id, user_name, is_admin, app_cookies)
 }
 
 /// Handle HTTP requests, read authentication headers and dispatch to WebSocket handler.
@@ -418,7 +446,7 @@ async fn run_api_server_async(
         .map (move|hdrs: HeaderMap, ws: warp::ws::Ws| {
 
             // Get user ID and username (from reverse proxy)
-            let (user_id, user_name, app_cookies) = parse_auth_headers(&hdrs, &server_state.default_user);
+            let (user_id, user_name, is_admin, app_cookies) = parse_auth_headers(&hdrs, &server_state.default_user);
 
             // Increment session counter
             let sid = {
@@ -428,12 +456,13 @@ async fn run_api_server_async(
             };
 
             let server_state = server_state.clone();
-            ws.on_upgrade(|ws| async {
+            let is_admin = is_admin.clone();
+            ws.on_upgrade(move |ws| async move {
                 // Diesel SQLite calls are blocking, so run a thread per user session
                 // even though we're using async/await
-                tokio::task::spawn_blocking( move || {
+                tokio::task::spawn_blocking(move || {
                     let _span = tracing::info_span!("ws_session", sid=%sid, user=%user_id).entered();
-                    block_on(handle_ws_session(ws, sid, user_id, user_name, app_cookies, server_state));
+                    block_on(handle_ws_session(ws, sid, user_id, user_name, is_admin, app_cookies, server_state));
                 }).await.unwrap_or_else(|e| {
                     tracing::error!(details=%e, "Error joining handle_ws_session thread."); });
             })

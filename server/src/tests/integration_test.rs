@@ -440,8 +440,11 @@ mod integration_test
                                     Ok(res) => {
                                         let mut res = res.into_inner().clone();
                                         res.error = res.error.as_ref().filter(|s| !s.is_empty()).cloned(); // Remove empty error strings (assume they are not errors)
+                                        write_log(&log, format!("    Org test '{}' ... {}",
+                                                test_name,
+                                                if res.error.is_none() { "ok" } else { "FAILED" }
+                                            ).as_str());
                                         test_results.lock().unwrap().push((test_name.clone(), res));
-                                        write_log(&log, format!("    Org test '{}' ... ok", test_name).as_str());
                                     },
                                     Err(e) => {
                                         write_log(&log, format!("    Org test '{}' ... FAILED", test_name).as_str());

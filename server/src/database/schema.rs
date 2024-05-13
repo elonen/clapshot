@@ -1,10 +1,17 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    users (id) {
+        id -> Text,
+        name -> Text,
+        created -> Timestamp,
+    }
+}
+
+diesel::table! {
     videos (id) {
         id -> Text,
-        user_id -> Nullable<Text>,
-        user_name -> Nullable<Text>,
+        user_id -> Text,
         added_time -> Timestamp,
         recompression_done -> Nullable<Timestamp>,
         thumb_sheet_cols -> Nullable<Integer>,
@@ -25,8 +32,8 @@ diesel::table! {
         parent_id -> Nullable<Integer>,
         created -> Timestamp,
         edited -> Nullable<Timestamp>,
-        user_id -> Text,
-        user_name -> Text,
+        user_id -> Nullable<Text>,
+        username_ifnull -> Text,
         comment -> Text,
         timecode -> Nullable<Text>,
         drawing -> Nullable<Text>,

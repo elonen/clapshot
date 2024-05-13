@@ -1,7 +1,7 @@
 use tracing_test::traced_test;
 use crate::database::*;
 
-use models::{Video, VideoInsert, Message, MessageInsert, Comment, CommentInsert};
+use models::{User, Video, VideoInsert, Message, MessageInsert, Comment, CommentInsert};
 
 
 fn _dump_db(conn: &mut PooledConnection) {
@@ -59,10 +59,14 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Ve
     // Make some videos
     let hashes = vec!["B1DE0", "11111", "22222", "B1DE3", "B1DE4"];
     let mkvid = |i: usize| {
+
+        let user_id = format!("user.num{}", 1 + i % 2);
+        let username = format!("User Number{}", 1 + i % 2);
+        let user = User::get_or_create(conn, &user_id, Some(&username)).expect("Failed to create user");
+
         let v = VideoInsert {
             id: hashes[i].to_string(),
-            user_id: Some(format!("user.num{}", 1 + i % 2)),
-            user_name: Some(format!("User Number{}", 1 + i % 2)),
+            user_id: user.id.clone(),
             orig_filename: Some(format!("test{}.mp4", i)),
             title: Some(format!("test{}.mp4", i)),
             recompression_done: Some(chrono::NaiveDateTime::default()),
@@ -73,8 +77,8 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Ve
             fps: Some(format!("{}", i * i)),
             raw_metadata_all: Some(format!("{{all: {{video: {}}}}}", i)),
         };
-        Video::insert(conn, &v).unwrap();
-        Video::get(conn, &v.id.into()).unwrap()
+        Video::insert(conn, &v).expect("Failed to insert video");
+        Video::get(conn, &v.id.into()).expect("Failed to get video")
     };
     let videos = (0..5).map(mkvid).collect::<Vec<_>>();
 
@@ -84,15 +88,15 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Ve
             video_id: vid.to_string(),
             parent_id,
             timecode: None,
-            user_id: format!("user.num{}", 1 + i % 2),
-            user_name: format!("User Number{}", 1 + i % 2),
+            user_id: Some(format!("user.num{}", 1 + i % 2)),
+            username_ifnull: format!("User Number{}", 1 + i % 2),
             comment: format!("Comment {}", i),
             drawing: Some(format!("drawing_{}.webp", i)),
         };
-        let c = Comment::insert(conn, &c).unwrap();
+        let c = Comment::insert(conn, &c).expect("Failed to insert comment");
         let dp = data_dir.join("videos").join(vid).join("drawings");
-        std::fs::create_dir_all(&dp).unwrap();
-        std::fs::write(dp.join(&c.drawing.clone().unwrap()), "IMAGE_DATA").unwrap();
+        std::fs::create_dir_all(&dp).expect("Failed to create drawing directory");
+        std::fs::write(dp.join(&c.drawing.clone().unwrap()), "IMAGE_DATA").expect("Failed to write drawing");
         c
     };
     let mut comments = (0..5)
@@ -108,12 +112,12 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<Video>, Ve
         video_id: videos[0].id.clone(),
         parent_id: None,
         timecode: None,
-        user_id: "user.num1".to_string(),
-        user_name: "User Number1".to_string(),
+        user_id: Some("user.num1".to_string()),
+        username_ifnull: "User Number1".to_string(),
         comment: "Comment_with_empty_drawing".to_string(),
         drawing: Some("".into()),
     };
-    let cmt = models::Comment::insert(conn, &c).unwrap();
+    let cmt = models::Comment::insert(conn, &c).expect("Failed to insert comment");
     comments.push(cmt);
 
     // _dump_db(conn);   // Uncomment to debug database contents
@@ -231,7 +235,7 @@ fn test_comment_delete() -> anyhow::Result<()> {
         video_id: com[1].video_id.clone(),
         parent_id: None,
         user_id: com[1].user_id.clone(),
-        user_name: "name".to_string(),
+        username_ifnull: "name".to_string(),
         comment: "re-add".to_string(),
         timecode: None,
         drawing: None,

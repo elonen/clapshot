@@ -81,6 +81,7 @@ function removeThumbScrubber(e: MouseEvent)
 
 <div class="w-full aspect-video mx-auto rounded-md overflow-hidden"
   style="background-image: url('{thumbPosterUrl}'); background-size: cover; background-position: 0 0; {extra_styles}"
+  role="img"
   on:blur={()=>{}}
   on:focus={()=>{}}
   on:mouseover={installThumbScrubber}

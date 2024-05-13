@@ -148,15 +148,14 @@ pub async fn del_video_and_cleanup(video_id: &str, ses: Option<&mut UserSession>
 
         // Check authorization against user session, if provided
         if let Some(ses) = &ses {
-            let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
+            let default_perm = ses.user_id == (&v).user_id || ses.is_admin;
             org_authz_with_default(&ses.org_session, "delete video", true, server, &ses.organizer,
                 default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Delete)).await?;
         }
 
         models::Video::delete(&mut server.db.conn()?, &v.id)?;
-        let mut details = format!("Added by '{}' ({}) on {}. Filename was {}.",
-            v.user_name.clone().unwrap_or_default(),
-            v.user_id.clone().unwrap_or_default(),
+        let mut details = format!("Added by '{}' on {}. Filename was {}.",
+            v.user_id.clone(),
             v.added_time,
             v.orig_filename.clone().unwrap_or_default());
 
@@ -194,8 +193,8 @@ pub async fn del_video_and_cleanup(video_id: &str, ses: Option<&mut UserSession>
             cleanup_errors = true;
         }
 
-        if let Some(user_id) = ses.as_ref().map(|s| &s.user_id).or(v.user_id.as_ref()) {
-            send_user_ok!(&user_id.clone(), &server, Topic::Video(&v.id),
+        if let Some(ses) = ses {
+            send_user_ok!(&ses.user_id, &server, Topic::Video(&v.id),
                 if !cleanup_errors {"Video deleted."} else {"Video deleted, but cleanup had errors."},
                 details, true);
         }
@@ -211,7 +210,7 @@ pub async fn msg_del_video(data: &DelVideo, ses: &mut UserSession, server: &Serv
 
 pub async fn msg_rename_video(data: &RenameVideo, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     if let Some(v) = get_video_or_send_error(Some(&data.video_id), &Some(ses), server).await? {
-        let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
+        let default_perm = ses.user_id == (&v).user_id || ses.is_admin;
         org_authz_with_default(&ses.org_session, "rename video", true, server, &ses.organizer,
             default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Rename)).await?;
 
@@ -236,7 +235,7 @@ pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComm
 
     let video_id = match get_video_or_send_error(Some(&data.video_id), &Some(ses), server).await? {
         Some(v) => {
-            let default_perm = Some(ses.user_id.to_string()) == (&v).user_id || ses.user_id == "admin";
+            let default_perm = ses.user_id == (&v).user_id || ses.is_admin;
             org_authz_with_default(&ses.org_session, "comment video", true, server, &ses.organizer,
                 default_perm, AuthzTopic::Video(&v, authz_req::video_op::Op::Comment)).await?;
             v.id
@@ -288,8 +287,8 @@ pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComm
     let c = models::CommentInsert {
         video_id: video_id.to_string(),
         parent_id,
-        user_id: ses.user_id.clone(),
-        user_name: ses.user_name.clone(),
+        user_id: Some(ses.user_id.clone()),
+        username_ifnull: ses.user_name.clone(),
         comment: data.comment.clone(),
         timecode: data.timecode.clone(),
         drawing: drwn.clone(),
@@ -308,7 +307,7 @@ pub async fn msg_edit_comment(data: &EditComment, ses: &mut UserSession, server:
 
     match models::Comment::get(conn, &id) {
         Ok(old) => {
-            let default_perm = ses.user_id == old.user_id || ses.user_id == "admin";
+            let default_perm = Some(&ses.user_id) == old.user_id.as_ref() || ses.is_admin;
             org_authz_with_default(&ses.org_session, "edit comment", true, server, &ses.organizer,
                 default_perm, AuthzTopic::Comment(&old, authz_req::comment_op::Op::Edit)).await?;
 
@@ -335,12 +334,12 @@ pub async fn msg_del_comment(data: &DelComment, ses: &mut UserSession, server: &
     let id = i32::from_str(&data.comment_id)?;
     match models::Comment::get(&mut server.db.conn()?, &id) {
         Ok(cmt) => {
-            let default_perm = ses.user_id == cmt.user_id || ses.user_id == "admin";
+            let default_perm = Some(&ses.user_id) == cmt.user_id.as_ref() || ses.is_admin;
             org_authz_with_default(&ses.org_session, "delete comment", true, server, &ses.organizer,
                 default_perm, AuthzTopic::Comment(&cmt, authz_req::comment_op::Op::Delete)).await?;
 
             let vid = cmt.video_id;
-            if ses.user_id != cmt.user_id && ses.user_id != "admin" {
+            if Some(&ses.user_id) != cmt.user_id.as_ref() && !ses.is_admin {
                 send_user_error!(&ses.user_id, server, Topic::Video(&vid), "Failed to delete comment.", "You can only delete your own comments", true);
                 return Ok(());
             }

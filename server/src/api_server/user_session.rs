@@ -76,6 +76,7 @@ pub struct UserSession {
     pub sender: WsMsgSender,
     pub user_id: String,
     pub user_name: String,
+    pub is_admin: bool,
 
     pub cur_video_id: Option<String>,
     pub cur_collab_id: Option<String>,
