@@ -8,7 +8,7 @@ from .database.operations import db_check_and_fix_integrity, db_check_for_folder
 import organizer
 
 
-async def check_migrations(oi, req: org.CheckMigrationsRequest) -> org.CheckMigrationsResponse:
+async def check_migrations_impl(oi, req: org.CheckMigrationsRequest) -> org.CheckMigrationsResponse:
     """
     Organizer method (gRPC/protobuf)
 
@@ -22,7 +22,7 @@ async def check_migrations(oi, req: org.CheckMigrationsRequest) -> org.CheckMigr
     return org.CheckMigrationsResponse(current_schema_ver=cur_ver,pending_migrations=pending)
 
 
-async def apply_migration(oi: organizer.OrganizerInbound, req: org.ApplyMigrationRequest) -> org.ApplyMigrationResponse:
+async def apply_migration_impl(oi: organizer.OrganizerInbound, req: org.ApplyMigrationRequest) -> org.ApplyMigrationResponse:
     """
     Organizer method (gRPC/protobuf)
 
@@ -35,7 +35,7 @@ async def apply_migration(oi: organizer.OrganizerInbound, req: org.ApplyMigratio
         return org.ApplyMigrationResponse()
 
 
-async def after_migrations(oi: organizer.OrganizerInbound, _: org.AfterMigrationsRequest) -> clap.Empty:
+async def after_migrations_impl(oi: organizer.OrganizerInbound, _: org.AfterMigrationsRequest) -> clap.Empty:
     """
     Organizer method (gRPC/protobuf)
 

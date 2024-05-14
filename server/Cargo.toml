@@ -54,6 +54,7 @@ lib-clapshot-grpc = { path = "../protobuf/libs/rust" }
 crossbeam-channel = "0.5.8"
 docopt = "1.1.1"
 log = "0.4.17"
+regex = "1.10.4"
 signal-hook = "0.3.15"
 tracing = "0.1.38"
 tracing-subscriber = {version = "0.3.17", features = ["env-filter", "json", "fmt", "std", "time", "local-time"] }

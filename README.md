@@ -90,6 +90,10 @@ Clapshot now includes an extensible [Organizer Plugin system](doc/organizer-plug
 
 Organizers use gRPC to communicate with the Clapshot Server, and can be implemented in any language.
 
+The provided default/example organizer, called "basic_folders" (in *Python*), implements
+ - personal folder UI for users, and
+ - for admin, list of users and a way to manage their folder contents.
+
 ### Work In Progress
 
 The [Organizer API](protobuf/proto/organizer.proto) is still evolving, so you are invited to **provide feedback** and discuss the future development, but please **do not expect backwards compatibility** for now.

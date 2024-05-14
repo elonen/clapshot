@@ -43,7 +43,11 @@ Running the server without migrations enabled will detect that the database is o
 Clapshot server itself contains no authentication code. Instead, it trusts
 HTTP server (reverse proxy) to take care of that and to pass authenticated user ID
 and username in request headers. This is exactly what the basic auth / htadmin demo
-above does, too.
+above does, too:
+
+ - `X-Remote-User-Id` / `X_Remote_User_Id` / `HTTP_X_REMOTE_USER_ID` – Authenticated user's ID (e.g. "alice.brown")
+ - `X-Remote-User-Name` / `X_Remote_User_Name` / `HTTP_X_REMOTE_USER_NAME` – Display name for user (e.g. "Alice Brown")
+ - `X-Remote-User-Is-Admin` / `X_Remote_User_Is_Admin` / `HTTP_X_REMOTE_USER_IS_ADMIN` – If set to "1" or "true", user is a Clapshot admin
 
 Most modern real-world deployments will likely use some more advanced authentication mechanism, such as OAuth, Kerberos etc, but htadmin is a good starting point.
 

@@ -534,6 +534,7 @@ dependencies = [
  "prost",
  "r2d2",
  "rand",
+ "regex",
  "reqwest",
  "rust_decimal",
  "semver",

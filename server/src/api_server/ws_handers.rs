@@ -73,9 +73,11 @@ pub async fn msg_list_my_videos(data: &ListMyVideos , ses: &mut UserSession, ser
             Err(e) => {
                 if e.code() == tonic::Code::Unimplemented {
                     tracing::debug!("Organizer doesn't implement navigate_page(). Using default.");
+                } else if e.code() == tonic::Code::Aborted {
+                    tracing::debug!("Ignoring org.navigate_page() result because it GrpcStatus.ABORTED.");
                 } else {
                     tracing::error!(err=?e, "Error in organizer navigate_page() call");
-                    anyhow::bail!("Error in navigate_page() organizer call: {:?}", e);
+                    anyhow::bail!("Organizer error: {:?}", e);
                 }
             },
             Ok(res) => {
@@ -124,7 +126,8 @@ pub async fn msg_open_video(data: &OpenVideo, ses: &mut UserSession, server: &Se
 
 pub async fn send_open_video_cmd(server: &ServerState, session_id: &str, video_id: &str) -> Res<()> {
     server.link_session_to_video(session_id, video_id)?;
-    let v = models::Video::get(&mut server.db.conn()?, &video_id.into())?.to_proto3(&server.url_base);
+    let conn = &mut server.db.conn()?;
+    let v = models::Video::get(conn, &video_id.into())?.to_proto3(&server.url_base);
     if v.playback_url.is_none() {
         return Err(anyhow!("No video file"));
     }
@@ -132,7 +135,7 @@ pub async fn send_open_video_cmd(server: &ServerState, session_id: &str, video_i
         client_cmd!(OpenVideo, {video: Some(v)}),
         super::SendTo::UserSession(session_id))?;
     let mut cmts = vec![];
-    for mut c in models::Comment::get_by_video(&mut server.db.conn()?, video_id, DBPaging::default())? {
+    for mut c in models::Comment::get_by_video(conn, video_id, DBPaging::default())? {
         server.fetch_drawing_data_into_comment(&mut c).await?;
         cmts.push(c.to_proto3());
     }
@@ -332,7 +335,8 @@ pub async fn msg_edit_comment(data: &EditComment, ses: &mut UserSession, server:
 
 pub async fn msg_del_comment(data: &DelComment, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let id = i32::from_str(&data.comment_id)?;
-    match models::Comment::get(&mut server.db.conn()?, &id) {
+    let conn = &mut server.db.conn()?;
+    match models::Comment::get(conn, &id) {
         Ok(cmt) => {
             let default_perm = Some(&ses.user_id) == cmt.user_id.as_ref() || ses.is_admin;
             org_authz_with_default(&ses.org_session, "delete comment", true, server, &ses.organizer,
@@ -343,12 +347,12 @@ pub async fn msg_del_comment(data: &DelComment, ses: &mut UserSession, server: &
                 send_user_error!(&ses.user_id, server, Topic::Video(&vid), "Failed to delete comment.", "You can only delete your own comments", true);
                 return Ok(());
             }
-            let all_comm = models::Comment::get_by_video(&mut server.db.conn()?, &vid, DBPaging::default())?;
+            let all_comm = models::Comment::get_by_video(conn, &vid, DBPaging::default())?;
             if all_comm.iter().any(|c| c.parent_id.map(|i| i.to_string()) == Some(id.to_string())) {
                 send_user_error!(&ses.user_id, server, Topic::Video(&vid), "Failed to delete comment.", "Comment has replies. Cannot delete.", true);
                 return Ok(());
             }
-            models::Comment::delete(&mut server.db.conn()?, &id)?;
+            models::Comment::delete(conn, &id)?;
             server.emit_cmd(
                 client_cmd!(DelComment, {comment_id: id.to_string()}),
                 super::SendTo::VideoId(&vid))?;
@@ -461,9 +465,11 @@ pub async fn msg_move_to_folder(data: &proto::client::client_to_server_cmd::Move
         if let Err(e) = org.lock().await.move_to_folder(req).await {
             if e.code() == tonic::Code::Unimplemented {
                 tracing::debug!("Organizer doesn't implement move_to_folder(). Ignoring.");
+            } else if e.code() == tonic::Code::Aborted {
+                tracing::debug!("Ignoring org.move_to_folder() result because it GrpcStatus.ABORTED.");
             } else {
                 tracing::error!(err=?e, "Error in organizer move_to_folder() call");
-                anyhow::bail!("Error in move_to_folder() organizer call: {:?}", e);
+                anyhow::bail!("Organizer error: {:?}", e);
             }
         }
     } else { send_user_error!(&ses.user_id, server, Topic::None, "No organizer session."); }
@@ -480,9 +486,11 @@ pub async fn msg_reorder_items(data: &ReorderItems, ses: &mut UserSession, serve
         if let Err(e) = org.lock().await.reorder_items(req).await {
             if e.code() == tonic::Code::Unimplemented {
                 tracing::debug!("Organizer doesn't implement reorder_items(). Ignoring.");
+            } else if e.code() == tonic::Code::Aborted {
+                tracing::debug!("Ignoring org.reorder_items() result because it GrpcStatus.ABORTED.");
             } else {
                 tracing::error!(err=?e, "Error in organizer reorder_items() call");
-                anyhow::bail!("Error in reorder_items() organizer call: {:?}", e);
+                anyhow::bail!("Organizer error: {:?}", e);
             }
         }
     } else { send_user_error!(&ses.user_id, server, Topic::None, "No organizer session."); }
@@ -499,8 +507,12 @@ pub async fn msg_organizer_cmd(data: &proto::client::client_to_server_cmd::Organ
         };
         match org.lock().await.cmd_from_client(req).await {
             Err(e) => {
-                tracing::error!(err=?e, "Error in organizer navigate_page() call");
-                anyhow::bail!("Error in cmd_from_client() organizer call: {:?}", e);
+                if e.code() == tonic::Code::Aborted {
+                    tracing::debug!("Ignoring org.cmd_from_client() result because it GrpcStatus.ABORTED.");
+                } else {
+                    tracing::error!(err=?e, "Error in organizer cmd_from_client() call");
+                    anyhow::bail!("Organizer error: {:?}", e);
+                }
             },
             Ok(res) => { return Ok(()); }
         }
@@ -549,9 +561,11 @@ pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server
     if let Err(e) = res {
         // Ignore authz errors, they are already logged
         if let None = e.downcast_ref::<user_session::AuthzError>() {
-            let cmd_name = req.cmd.as_ref().map(|c| format!("{:?}", c)).unwrap_or_default();
-            tracing::warn!("[{}] '{cmd_name}' failed: {}", ses.sid, e);
-            send_user_error!(&ses.user_id, server, Topic::None, format!("{cmd_name} failed: {e}"));
+            let cmd_str = req.cmd.as_ref().map(|c| format!("{:?}", c)).unwrap_or_default();
+            tracing::warn!("[{}] '{cmd_str}' failed: {}", ses.sid, e);
+            // Assume name is regex '^[a-zA-Z0-9_]+' of cmd_str
+            let cmd_name = regex::Regex::new(r"^[a-zA-Z0-9_]+").unwrap().find(&cmd_str).map(|m| m.as_str()).unwrap_or(cmd_str.as_str());
+            send_user_error!(&ses.user_id, server, Topic::None, format!("{cmd_str} failed: {e}"));
         }
     }
     Ok(true)

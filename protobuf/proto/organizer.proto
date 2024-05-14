@@ -50,12 +50,22 @@ service OrganizerOutbound {
 
 // Calls that Clapshot server makes to Organizer
 service OrganizerInbound {
+
+    // Initialization calls
     rpc handshake(ServerInfo) returns (Empty);
 
     rpc check_migrations(CheckMigrationsRequest) returns (CheckMigrationsResponse); // This is called on startup, after handshake
     rpc apply_migration(ApplyMigrationRequest) returns (ApplyMigrationResponse); // Called if check_migrations returns any pending migrations
     rpc after_migrations(AfterMigrationsRequest) returns (Empty); // Called after all migrations to all modules have been applied
 
+    // Organizer should respond to all calls as quickly as possible.
+    // Two standard gRPC error returns status codes have special meaning:
+    // - `UNIMPLEMENTED` = Organizer does not support this call. The server will assume the default behavior.
+    // - `ABORTED` = Call failed, but server should not show it to the user (e.g. Organizer handled reporting).
+    //
+    // All other gRPC errors will be considered more serious, and the server will log them in detail and possibly show to the user.
+
+    // User session events
     rpc on_start_user_session(OnStartUserSessionRequest) returns (OnStartUserSessionResponse);
     rpc navigate_page(NavigatePageRequest) returns (ClientShowPageRequest);
     rpc authz_user_action(AuthzUserActionRequest) returns (AuthzResponse);
@@ -65,7 +75,7 @@ service OrganizerInbound {
     rpc move_to_folder(MoveToFolderRequest) returns (Empty);
     rpc reorder_items(ReorderItemsRequest) returns (Empty);
 
-    // Unit / integration tests
+    // Unit / integration tests (not called in production)
     rpc list_tests(Empty) returns (ListTestsResponse);
     rpc run_test(RunTestRequest) returns (RunTestResponse);
 }
@@ -75,8 +85,6 @@ service OrganizerInbound {
 message ServerInfo {
 
     message Database {
-        // Use direct database connection only as a last resort hack.
-        // gRPC API methods are more future-proof and robust.
         enum DatabaseType {
             SQLITE = 0;
         }

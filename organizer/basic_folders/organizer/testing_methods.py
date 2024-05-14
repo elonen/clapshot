@@ -21,7 +21,7 @@ from organizer.database.operations import db_get_or_create_user_root_folder
 from organizer.helpers.folders import FoldersHelper
 
 
-async def list_tests(oi: organizer.OrganizerInbound) -> org.ListTestsResponse:
+async def list_tests_impl(oi: organizer.OrganizerInbound) -> org.ListTestsResponse:
     """
     Organizer method (gRPC/protobuf)
 
@@ -37,7 +37,7 @@ async def list_tests(oi: organizer.OrganizerInbound) -> org.ListTestsResponse:
     return org.ListTestsResponse(test_names=test_names)
 
 
-async def run_test(oi, request: org.RunTestRequest) -> org.RunTestResponse:
+async def run_test_impl(oi, request: org.RunTestRequest) -> org.RunTestResponse:
     """
     Organizer method (gRPC/protobuf)
 
@@ -91,7 +91,7 @@ async def org_test__start_user_session(oi: organizer.OrganizerInbound):
     on_start_user_session() -- Just a simple test to check if the method doesn't crash.
     """
     user = oi.db_new_session().query(DbUser).first()
-    res = await oi.on_start_user_session(org.OnStartUserSessionRequest(
+    res = await organizer.on_start_user_session_impl(oi, org.OnStartUserSessionRequest(
         org.UserSessionData(
             sid="test_sid",user=clap.UserInfo(id=user.id, name=user.name),
             is_admin=False, cookies={})
@@ -104,7 +104,7 @@ async def org_test__navigate_page(oi: organizer.OrganizerInbound):
     navigate_page() -- Test that it returns a valid ClientShowPageRequest.
     """
     user = oi.db_new_session().query(DbUser).first()
-    res = await oi.navigate_page(org.NavigatePageRequest(
+    res = await organizer.navigate_page_impl(oi, org.NavigatePageRequest(
         ses=org.UserSessionData(sid="test_sid",user=clap.UserInfo(id=user.id, name=user.name), cookies={})
     ))
     assert isinstance(res, org.ClientShowPageRequest)
@@ -148,7 +148,7 @@ async def org_test__move_to_folder(oi: organizer.OrganizerInbound):
     assert someone_elses_video.user_id
     oi.log.info(f"Trying to move someone else's ({someone_elses_video.user_id}) video ({someone_elses_video.id}) to the root folder ({root_fld.id}) of current user ({user_id})")
     try:
-        await oi.move_to_folder(org.MoveToFolderRequest(
+        await organizer.move_to_folder_impl(oi, org.MoveToFolderRequest(
             ses,
             ids=[clap.FolderItemId(video_id=someone_elses_video.id)],
             dst_folder_id=str(root_fld.id),

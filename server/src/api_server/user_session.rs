@@ -167,6 +167,9 @@ pub async fn org_authz<'a>(
             if e.code() == tonic::Code::Unimplemented {
                 tracing::debug!(desc, user=user_id, "Organizer doesn't support authz");
                 None
+            } else if e.code() == tonic::Code::Aborted {
+                tracing::warn!(desc, user=user_id, "Organizer gRPC.ABORTED authz request. Unsupported behavior for authz_user_action. Denying by default.");
+                Some(false)
             } else {
                 error!(desc, user=&user_id, err=?e, "Error while authorizing user action");
                 try_send_error(&user_id, &server, format!("Internal error in authz: {}", desc), None, &op).ok();

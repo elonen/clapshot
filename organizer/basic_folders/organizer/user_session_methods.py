@@ -17,7 +17,7 @@ from .database.models import DbFolder
 import organizer
 
 
-async def on_start_user_session(oi: organizer.OrganizerInbound, req: org.OnStartUserSessionRequest) -> org.OnStartUserSessionResponse:
+async def on_start_user_session_impl(oi: organizer.OrganizerInbound, req: org.OnStartUserSessionRequest) -> org.OnStartUserSessionResponse:
     """
     Organizer method (gRPC/protobuf)
 
@@ -32,7 +32,7 @@ async def on_start_user_session(oi: organizer.OrganizerInbound, req: org.OnStart
     return org.OnStartUserSessionResponse()
 
 
-async def navigate_page(oi: organizer.OrganizerInbound, req: org.NavigatePageRequest) -> org.ClientShowPageRequest:
+async def navigate_page_impl(oi: organizer.OrganizerInbound, req: org.NavigatePageRequest) -> org.ClientShowPageRequest:
     """
     Organizer method (gRPC/protobuf)
 
@@ -46,7 +46,7 @@ async def navigate_page(oi: organizer.OrganizerInbound, req: org.NavigatePageReq
     return await oi.pages_helper.construct_navi_page(ses, None)
 
 
-async def cmd_from_client(oi: organizer.OrganizerInbound, cmd: org.CmdFromClientRequest) -> clap.Empty:
+async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromClientRequest) -> clap.Empty:
     """
     Organizer method (gRPC/protobuf)
 
@@ -63,17 +63,17 @@ async def cmd_from_client(oi: organizer.OrganizerInbound, cmd: org.CmdFromClient
         if cmd.cmd == "new_folder":
             args = parse_json_args(cmd.args)
             parent_folder = (await oi.folders_helper.get_current_folder_path(cmd.ses, None))[-1]
-            with oi.db_new_session() as dbs:
-                # Create folder & refresh user's view
-                args = parse_json_args(cmd.args)
-                if new_folder_name := args.get("name"):
+            # Create folder & refresh user's view
+            args = parse_json_args(cmd.args)
+            if new_folder_name := args.get("name"):
+                with oi.db_new_session() as dbs:
                     new_fld = await oi.folders_helper.create_folder(dbs, cmd.ses, parent_folder, new_folder_name)
-                    oi.log.debug(f"Folder {new_fld.id} ('{new_fld.title}') created & committed, refreshing client's page")
-                    navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
-                    await oi.srv.client_show_page(navi_page)
-                else:
-                    oi.log.error("new_folder command missing 'name' argument")
-                    raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "new_folder command missing 'name' argument")
+                oi.log.debug(f"Folder {new_fld.id} ('{new_fld.title}') created & committed, refreshing client's page")
+                navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
+                await oi.srv.client_show_page(navi_page)
+            else:
+                oi.log.error("new_folder command missing 'name' argument")
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "new_folder command missing 'name' argument")
 
         elif cmd.cmd == "open_folder":
             # Validate & parse argument JSON
