@@ -126,9 +126,8 @@ impl ClapshotInit {
         }
 
         tracing::info!("Got kill signal. Cleaning up.");
-        self.vpp_thread.take().unwrap().join().unwrap();
-        self.api_thread.take().unwrap().join().unwrap();
-
+        self.vpp_thread.take().and_then(|t| t.join().ok()).expect("VPP thread failed");
+        self.api_thread.take().and_then(|t| t.join().ok()).expect("API thread failed");
         Ok(())
     }
 }

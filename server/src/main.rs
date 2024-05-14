@@ -112,8 +112,7 @@ fn main() -> anyhow::Result<()>
         bail!("Data directory does not exist: {:?}", args.flag_data_dir);
     }
 
-    let url_base = args.flag_url_base.strip_suffix("/").unwrap_or("").to_string(); // strip trailing slash, if any
-
+    let url_base = args.flag_url_base.trim_end_matches('/').to_string();
     let time_offset = time::UtcOffset::current_local_offset().expect("should get local offset");
     let _log_guard = log::setup_logging(
         time_offset,

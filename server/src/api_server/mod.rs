@@ -482,12 +482,20 @@ async fn run_api_server_async(
     let cors_headers = ["x-file-name", "x-clapshot-cookies", "content-type", "upgrade", "sec-websocket-protocol", "sec-websocket-version"];
 
     let routes = if cors_origins.contains(&"*") {
-        tracing::warn!("CORS origin '*' is insecure, don't use in production!");
+        tracing::warn!(concat!(
+            "!! SECURITY RISK !! – Using CORS origin '*' allows any website to access your video annotation system. ",
+            "This exposes your users' videos to potential API attacks. ",
+            "Do NOT use '*' in production! ",
+            "Instead, specify the allowed origin, such as 'https://clapshot.example.com'."
+        ));
         routes.with(warp::cors().allow_methods(cors_methods).allow_headers(cors_headers)
             .allow_any_origin()).boxed()
     } else {
         if cors_origins.is_empty() {
             cors_origins.push(url_base.as_str());
+            tracing::info!("No CORS origins specified. Using url_base for it: '{}'", url_base);
+        } else {
+            tracing::info!("Using CORS origins: {:?}", cors_origins);
         }
         routes.with(warp::cors().allow_methods(cors_methods).allow_headers(cors_headers)
             .allow_origins(cors_origins)).boxed()
