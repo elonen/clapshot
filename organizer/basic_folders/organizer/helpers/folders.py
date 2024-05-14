@@ -95,11 +95,19 @@ class FoldersHelper:
                     raise ValueError("Folder item has neither video nor subfolder ID")
             res = [_get_item(fi) for fi in folder_items]
 
-            # If all items have sort_order 0 (default) sort them by type and title
+            # If all items have sort_order 0 (default) sort them by type and date (folders first, newest first)
             if all(fi.sort_order == 0 for fi in folder_items):
-                sorted_folders = sorted(subfolder_items, key=lambda f: f.title or str(f.id))
-                sorted_videos = sorted(video_items, key=lambda v: v.title or str(v.id))
+                sorted_folders = sorted(subfolder_items, key=lambda f: f.created, reverse=True)
+                sorted_videos = sorted(video_items, key=lambda v: v.added_time, reverse=True)
                 res = sorted_folders + sorted_videos
+
+                # Update the sort order in the DB
+                with dbs.begin_nested():
+                    for i, itm in enumerate(res):
+                        if isinstance(itm, DbVideo):
+                            dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder.id, DbFolderItems.video_id == itm.id).update({"sort_order": i+1})
+                        elif isinstance(itm, DbFolder):
+                            dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder.id, DbFolderItems.subfolder_id == itm.id).update({"sort_order": i+1})
 
             return res
 
