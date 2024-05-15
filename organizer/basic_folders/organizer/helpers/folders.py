@@ -1,5 +1,6 @@
+from datetime import datetime
 import json
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
@@ -68,46 +69,43 @@ class FoldersHelper:
 
     async def fetch_folder_contents(self, folder: DbFolder, ses: org.UserSessionData) -> List[DbVideo | DbFolder]:
         """
-        Fetch the contents of a folder from the database, sorted by the order in the folder.
+        Fetch the contents of a folder from the database, sorted by the specified criteria.
         """
         if folder.user_id != ses.user.id and not ses.is_admin:
             raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot fetch contents of another user's folder")
 
         with self.db_new_session() as dbs:
-            folder_items = dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder.id).order_by(DbFolderItems.sort_order).all()
+            folder_items = dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder.id).all()
 
             # Get DbFolder and DbVideo objects for all folder items
-            subfolder_ids = [fi.subfolder_id for fi in folder_items]
+            subfolder_ids = [fi.subfolder_id for fi in folder_items if fi.subfolder_id]
             subfolder_items = dbs.query(DbFolder).filter(DbFolder.id.in_(subfolder_ids)).all()
             subfolders_by_id = {f.id: f for f in subfolder_items}
 
-            video_ids = [fi.video_id for fi in folder_items]
+            video_ids = [fi.video_id for fi in folder_items if fi.video_id]
             video_items = dbs.query(DbVideo).filter(DbVideo.id.in_(video_ids)).all()
             videos_by_id = {v.id: v for v in video_items}
 
-            # Replace folder item IDs with actual objects
-            def _get_item(fi: DbFolderItems) -> DbVideo | DbFolder:
+            # Replace folder item IDs with actual objects and their sort_order
+            def _get_item(fi: DbFolderItems) -> Tuple[int, DbVideo | DbFolder]:
                 if fi.video_id:
-                    return videos_by_id[fi.video_id]
+                    return (fi.sort_order, videos_by_id[fi.video_id])
                 elif fi.subfolder_id:
-                    return subfolders_by_id[fi.subfolder_id]
+                    return (fi.sort_order, subfolders_by_id[fi.subfolder_id])
                 else:
                     raise ValueError("Folder item has neither video nor subfolder ID")
-            res = [_get_item(fi) for fi in folder_items]
 
-            # If all items have sort_order 0 (default) sort them by type and date (folders first, newest first)
-            if all(fi.sort_order == 0 for fi in folder_items):
-                sorted_folders = sorted(subfolder_items, key=lambda f: f.created, reverse=True)
-                sorted_videos = sorted(video_items, key=lambda v: v.added_time, reverse=True)
-                res = sorted_folders + sorted_videos
+            items_with_sort_order = [_get_item(fi) for fi in folder_items]
 
-                # Update the sort order in the DB
-                with dbs.begin_nested():
-                    for i, itm in enumerate(res):
-                        if isinstance(itm, DbVideo):
-                            dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder.id, DbFolderItems.video_id == itm.id).update({"sort_order": i+1})
-                        elif isinstance(itm, DbFolder):
-                            dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder.id, DbFolderItems.subfolder_id == itm.id).update({"sort_order": i+1})
+            # Sort by sort_order first, then by type, and then by .created or .added_time (newest first)
+            sorted_items = sorted(items_with_sort_order, key=lambda x: (
+                x[0],
+                isinstance(x[1], DbVideo),
+                -(getattr(x[1], 'added_time', getattr(x[1], 'created', datetime(1970, 1, 1))).timestamp())
+            ))
+
+            # Extract the sorted objects
+            res = [item[1] for item in sorted_items]
 
             return res
 
@@ -164,20 +162,22 @@ class FoldersHelper:
         """
         contained_items = await self.fetch_folder_contents(fld, ses)
 
-        contained_videos = [itm for itm in contained_items if isinstance(itm, DbVideo)][:4]  # Client UI currently only shows max 4 items, don't bother with more
-        video_objs: org.DbVideoList = await self.srv.db_get_videos(org.DbGetVideosRequest(ids=org.IdList(ids=[v.id for v in contained_videos])))
-        videos_by_id = {v.id: v for v in video_objs.items}
+        videos = [item for item in contained_items if isinstance(item, DbVideo)][:4]
+        folders = [item for item in contained_items if isinstance(item, DbFolder)][:4]
 
-        res = []
-        for itm in contained_items:
-            if isinstance(itm, DbFolder):
-                res.append(clap.PageItemFolderListingItem(
-                    folder=clap.PageItemFolderListingFolder(id=str(itm.id), title=itm.title or "<UNNAMED>")))
-            elif isinstance(itm, DbVideo):
-                res.append(clap.PageItemFolderListingItem(video=videos_by_id[itm.id]))
-            else:
-                raise ValueError(f"Unknown item type: {itm}")
-        return res
+        if videos:
+            video_details = await self.srv.db_get_videos(org.DbGetVideosRequest(ids=org.IdList(ids=[v.id for v in videos])))
+            videos_by_id = {v.id: v for v in video_details.items}
+
+        # Prepare result list with up to 4 items, prioritizing videos
+        result = [
+            clap.PageItemFolderListingItem(video=videos_by_id[v.id]) for v in videos
+        ] + [
+            clap.PageItemFolderListingItem(folder=clap.PageItemFolderListingFolder(id=str(f.id), title=f.title or "???"))
+            for f in folders[:4 - len(videos)]
+        ]
+
+        return result
 
 
     async def create_folder(self, dbs: Session, ses: org.UserSessionData, parent_folder: DbFolder, new_folder_name: str) -> DbFolder:
