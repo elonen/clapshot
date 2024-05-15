@@ -4,7 +4,7 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, videoId, videoFps, videoTitle, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin} from '@/stores';
+import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, videoId, videoFps, videoTitle, curPageId, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin} from '@/stores';
 import {IndentedComment, type UserMenuItem, type StringMap} from "@/types";
 
 import CommentCard from '@/lib/CommentCard.svelte'
@@ -28,6 +28,10 @@ let lastVideoProgressMsgTime = Date.now();  // used to hide video_progress_msg a
 
 let collabDialogAck = false;  // true if user has clicked "OK" on the collab dialog
 let lastCollabControllingUser: string | null = null;    // last user to control the video in a collab session
+
+let wsSocket: WebSocket | undefined;
+let sendQueue: any[] = [];
+
 
 function logAbbrev(...strs: any[]) {
     const maxLen = 180;
@@ -128,10 +132,9 @@ function onEditComment(e: any) {
     }});
 }
 
-function closeVideo() {
-    // Close current video, list all user's own videos.
-    // This is called from onClearAll event and history.back()
-    console.log("closeVideo");
+function resetUIState() {
+    // This is called from onClearAll event and popHistoryState (when history stack has no video or page id)
+    console.log("resetUIState");
     wsEmit({leaveCollab: {}});
     $collabId = null;
     $videoId = null;
@@ -140,13 +143,13 @@ function closeVideo() {
     $videoTitle = null;
     $allComments = [];
     $videoIsReady = false;
-    wsEmit({listMyVideos: {}});
+    curPageId.set(null); // Clear the current page ID
+    wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
     wsEmit({listMyMessages: {}});
 }
 
 function onClearAll(_e: any) {
-    history.pushState('/', '', '/');  // Clear URL
-    closeVideo();
+    resetUIState();
 }
 
 function onVideoSeeked(_e: any) {
@@ -179,30 +182,61 @@ function onCommentPinClicked(e: any) {
 }
 
 function popHistoryState(e: any) {
-    if (e.state && e.state !== '/')
-        wsEmit({openVideo: { videoId: e.state }});
-    else
-        closeVideo();
+    if (e.state) {
+        if (e.state.videoId) {
+            wsEmit({ openVideo: { videoId: e.state.videoId } });
+        } else if (e.state.pageId) {
+            // Handle virtual page navigation
+            curPageId.set(e.state.pageId);
+            wsEmit({ openNavigationPage: { pageId: e.state.pageId ?? undefined } });
+        } else {
+            resetUIState();
+        }
+    } else {
+        resetUIState();
+    }
 }
 
 // Parse URL to see if we have a video to open
 const urlParams = new URLSearchParams(window.location.search);
 urlParams.forEach((value, key) => {
-    if (key != "vid" && key != "collab") {
+    if (key != "vid" && key != "collab" && key != "page") {
         console.error("Got UNKNOWN URL parameter: '" + key + "'. Value= " + value);
         acts.add({mode: 'warn', message: "Unknown URL parameter: '" + key + "'", lifetime: 5});
     }
 });
 
-$videoId = urlParams.get('vid');
 const prevCollabId = $collabId;
+
+$videoId = urlParams.get('vid');
 $collabId = urlParams.get('collab');
-if ($videoId) {
-    if ($collabId)
-    history.pushState($videoId, '', '/?vid='+$videoId+'&collab='+$collabId);
-    else
-    history.pushState($videoId, '', '/?vid='+$videoId);
+
+const newVideoId = urlParams.get('vid');
+const newCollabId = urlParams.get('collab');
+const page_parm = urlParams.get('page');
+const newPageId = page_parm ? decodeURIComponent(page_parm) : null;
+
+if (newVideoId) {
+    $videoId = newVideoId;
+    $collabId = newCollabId;
+    if ($collabId) {
+        history.replaceState({$videoId}, '', `/?vid=${$videoId}&collab=${collabId}`);
+    } else {
+        history.replaceState({$videoId}, '', `/?vid=${$videoId}`);
+    }
+} else {
+    if ($curPageId != newPageId) {
+        curPageId.set(newPageId);
+        wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
+    }
 }
+/*
+} else if (newPageId) {
+    // Handle direct navigation to a virtual page
+    curPageId.set(newPageId); // Set the current page ID
+    wsEmit({ openNavigationPage: {pageId: $curPageId ?? undefined} });
+}
+*/
 
 let uploadUrl: string = "";
 
@@ -250,28 +284,24 @@ function refreshMyVideos()
         videoListRefreshScheduled = true;
         setTimeout(() => {
             videoListRefreshScheduled = false;
-            wsEmit({listMyVideos: {}});
+            wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
         }, 500);
     }
 }
 
-
-let wsSocket: WebSocket | undefined;
 
 function isConnected() {
     return wsSocket && wsSocket.readyState == wsSocket.OPEN;
 }
 
 function disconnect() {
-    closeVideo();
+    resetUIState();
     if (wsSocket) {
         wsSocket.close();
     }
     uiConnectedState = false;
 }
 
-
-let sendQueue: any[] = [];
 
 // Send message to server. If not connected, queue it.
 function wsEmit(cmd: ClientToServerCmd)
@@ -369,7 +399,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
         if ($videoId) {
             wsEmit({openVideo: { videoId: $videoId }});
         } else {
-            wsEmit({listMyVideos: {}});
+            wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
             wsEmit({listMyMessages: {}});
         }
     });
@@ -436,6 +466,15 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             }
             // showPage
             else if (cmd.showPage) {
+                const newPageId = cmd.showPage.pageId;
+
+                // Check if the page ID has changed
+                if (newPageId && newPageId !== $curPageId) {
+                    const newPageUrl = `/?page=${encodeURIComponent(newPageId)}`; // Using a URL parameter
+                    history.pushState({ pageId: newPageId }, '', newPageUrl);
+                    curPageId.set(newPageId); // Update the current page ID in the store
+                }
+
                 $curPageItems = [...cmd.showPage.pageItems];  // force svelte to re-render
             }
             // defineActions

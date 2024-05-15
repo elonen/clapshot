@@ -35,6 +35,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         let req = req.into_inner();
         to_rpc_empty(self.server.emit_cmd(client_cmd!(ShowPage, {
             page_items: req.page_items,
+            page_id: req.page_id,
         }), SendTo::UserSession(&req.sid)))
     }
 

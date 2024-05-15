@@ -7,10 +7,6 @@ import logo from "@/assets/clapshot-logo.svg";
 
 const dispatch = createEventDispatcher();
 
-function onClickBanner(): void {
-    dispatch("clear-all", {});
-}
-
 function onClickUser(): void {
     if (!$userMenuItems) return;
     let user_menu = document.getElementById("user-menu");
@@ -53,7 +49,7 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 
 		<!-- logo with "home" link -->
 		<span class="flex-0">
-			<a href="/" class="flex items-baseline cursor-pointer" on:click|preventDefault="{onClickBanner}">
+			<a href="/" class="flex items-baseline cursor-pointer">
 				<img src={logo} class="mr-3 h-6 sm:h-9 filter brightness-75" alt="Clapshot" />
 				<span class="self-center mt-1 text-4xl whitespace-nowrap text-gray-400" style="font-family: 'Yanone Kaffeesatz', sans-serif;">CLAPSHOT</span>
 			</a>

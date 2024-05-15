@@ -8,6 +8,7 @@ import clapshot_grpc.clapshot.organizer as org
 import sqlalchemy
 
 from organizer.database.operations import db_get_or_create_user_root_folder
+from organizer.utils import folder_path_to_uri_arg
 
 from .folders import FoldersHelper
 from organizer.database.models import DbUser, DbVideo, DbFolder
@@ -42,7 +43,8 @@ class PagesHelper:
         if ses.is_admin and len(folder_path) == 1:
             await self._admin_show_all_user_homes(ses, cur_folder, pg_items)
 
-        return org.ClientShowPageRequest(sid=ses.sid, page_items=pg_items)
+        page_id = folder_path_to_uri_arg([f.id for f in folder_path])
+        return org.ClientShowPageRequest(sid=ses.sid, page_items=pg_items, page_id=page_id)
 
 
     async def _admin_show_all_user_homes(self, ses: org.UserSessionData, cur_folder: DbFolder, pg_items: list[clap.PageItem]):

@@ -19,7 +19,7 @@ use crate::database::tests::make_test_db;
 use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_no_msg, write, open_video, connect_client_ws};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 
-use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, DelComment, DelVideo, EditComment, ListMyMessages, ListMyVideos, OpenVideo, RenameVideo};
+use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, DelComment, DelVideo, EditComment, ListMyMessages, OpenNavigationPage, OpenVideo, RenameVideo};
 use std::convert::TryFrom;
 
 // ---------------------------------------------------------------------------------------------
@@ -62,13 +62,13 @@ async fn test_api_push_msg()
 async fn test_api_list_user_videos()
 {
     api_test! {[ws, ts]
-        send_server_cmd!(ws, ListMyVideos, ListMyVideos{});
+        send_server_cmd!(ws, OpenNavigationPage, OpenNavigationPage{..Default::default()});
         let sp = expect_client_cmd!(&mut ws, ShowPage);
         assert_eq!(sp.page_items.len(), 2);
 
         // Break the database, make sure we get an error
         ts.db.break_db();
-        send_server_cmd!(ws, ListMyVideos, ListMyVideos{});
+        send_server_cmd!(ws, OpenNavigationPage, OpenNavigationPage{..Default::default()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }

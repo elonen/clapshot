@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::str::FromStr;
 use lib_clapshot_grpc::proto::client::ClientToServerCmd;
-use lib_clapshot_grpc::proto::client::client_to_server_cmd::{ListMyVideos, OpenVideo, DelVideo, RenameVideo, EditComment, DelComment, JoinCollab, LeaveCollab, CollabReport, ReorderItems};
+use lib_clapshot_grpc::proto::client::client_to_server_cmd::{OpenNavigationPage, OpenVideo, DelVideo, RenameVideo, EditComment, DelComment, JoinCollab, LeaveCollab, CollabReport, ReorderItems};
 use parking_lot::RwLock;
 type WsMsg = warp::ws::Message;
 
@@ -59,8 +59,8 @@ async fn get_video_or_send_error(video_id: Option<&str>, ses: &Option<&mut UserS
 // Command handlers
 // ---------------------------------------------------------------------
 
-/// Send user a list of all videos they have.
-pub async fn msg_list_my_videos(data: &ListMyVideos , ses: &mut UserSession, server: &ServerState) -> Res<()> {
+/// Send user a navigation page to browser the videos / folders they have (and/or something else, if Organizer handles it).
+pub async fn msg_open_navigation_page(data: &OpenNavigationPage , ses: &mut UserSession, server: &ServerState) -> Res<()> {
     org_authz_with_default(&ses.org_session, "list videos", true, server,
         &ses.organizer, true, AuthzTopic::Other(None, authz_req::other_op::Op::ViewHome)).await?;
 
@@ -68,6 +68,7 @@ pub async fn msg_list_my_videos(data: &ListMyVideos , ses: &mut UserSession, ser
     if let Some(org) = &ses.organizer {
         let req = proto::org::NavigatePageRequest {
             ses: Some(ses.org_session.clone()),
+            page_id: data.page_id.clone(),
         };
         match org.lock().await.navigate_page(req).await {
             Err(e) => {
@@ -84,6 +85,7 @@ pub async fn msg_list_my_videos(data: &ListMyVideos , ses: &mut UserSession, ser
                 server.emit_cmd(
                     client_cmd!(ShowPage, {
                         page_items: res.into_inner().page_items,
+                        page_id: data.page_id.clone(),
                     }),
                     super::SendTo::UserSession(&ses.sid))?;
                 return Ok(());
@@ -103,7 +105,7 @@ pub async fn msg_list_my_videos(data: &ListMyVideos , ses: &mut UserSession, ser
     let page = vec![heading, listing];
 
     server.emit_cmd(
-        client_cmd!(ShowPage, { page_items: page }),
+        client_cmd!(ShowPage, { page_items: page, page_id: data.page_id.clone()}),
         super::SendTo::UserSession(&ses.sid))?;
     Ok(())
 }
@@ -538,7 +540,7 @@ pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server
             Ok(())
         }
         Some(cmd) => match cmd {
-            Cmd::ListMyVideos(data) => msg_list_my_videos(&data, ses, server).await,
+            Cmd::OpenNavigationPage(data) => msg_open_navigation_page(&data, ses, server).await,
             Cmd::OpenVideo(data) => msg_open_video(&data, ses, server).await,
             Cmd::DelVideo(data) => msg_del_video(&data, ses, server).await,
             Cmd::RenameVideo(data) => msg_rename_video(&data, ses, server).await,

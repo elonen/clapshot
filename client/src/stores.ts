@@ -11,6 +11,7 @@ export let videoTitle: Writable<string|null> = writable("(no video loaded)");
 export let videoProgressMsg: Writable<string|null> = writable(null);
 
 export let curPageItems: Writable<Proto3.PageItem[]> = writable([]);
+export let curPageId: Writable<string|null> = writable(null);
 
 export let curUsername: Writable<string|null> = writable(null);
 export let curUserId: Writable<string|null> = writable(null);

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from base64 import b64decode
 import json
 from grpclib import GRPCError
 import grpclib
@@ -10,7 +11,7 @@ import clapshot_grpc.clapshot as clap
 import clapshot_grpc.clapshot.organizer as org
 
 from organizer.config import MODULE_NAME, PATH_COOKIE_NAME, VERSION
-from organizer.utils import parse_json_args
+from organizer.utils import parse_json_args, uri_arg_to_folder_path
 
 from .database.models import DbFolder
 
@@ -43,7 +44,20 @@ async def navigate_page_impl(oi: organizer.OrganizerInbound, req: org.NavigatePa
     view for this page, e.g. a folder tree or a list of categories, projects, even buttons etc.
     """
     ses = req.ses
-    return await oi.pages_helper.construct_navi_page(ses, None)
+
+    cookie_override = None
+    try:
+        cookie_override = json.dumps(uri_arg_to_folder_path(req.page_id or ""))
+    except ValueError as e:
+        oi.log.warning(f"Invalid folder path URI from client: '{req.page_id}'")
+
+    if req.page_id is None:
+        # When OrganizerInbound.navigate_page() is called without a page_id, it means the user has opened the main page
+        # without an URL parameter => we need to clear the folder_path cookie so other handlers don't push the wrong view.
+        if ses.cookies.pop(PATH_COOKIE_NAME, None):
+            await oi.srv.client_set_cookies(org.ClientSetCookiesRequest(cookies=ses.cookies, sid=ses.sid))
+
+    return await oi.pages_helper.construct_navi_page(ses, cookie_override)
 
 
 async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromClientRequest) -> clap.Empty:
@@ -91,14 +105,15 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                 trail.append(folder_id) # add folder id at the end
 
             # Update folder path cookie
-            new_cookie = json.dumps(trail)
-            oi.log.debug(f"Setting new folder_path cookie: {new_cookie}")
+            serialized_trail = json.dumps(trail)
+            cmd.ses.cookies[PATH_COOKIE_NAME] = serialized_trail
+            oi.log.debug(f"Setting new folder_path cookie: {serialized_trail}")
             await oi.srv.client_set_cookies(org.ClientSetCookiesRequest(
-                cookies = {PATH_COOKIE_NAME: new_cookie},
+                cookies = cmd.ses.cookies,
                 sid = cmd.ses.sid))
 
             # Update page to view the opened folder
-            page = await oi.pages_helper.construct_navi_page(cmd.ses, new_cookie)
+            page = await oi.pages_helper.construct_navi_page(cmd.ses, serialized_trail)
             await oi.srv.client_show_page(page)
 
         elif cmd.cmd == "rename_folder":

@@ -194,6 +194,7 @@ message OnStartUserSessionResponse {}
 
 message NavigatePageRequest {
     UserSessionData ses = 1;
+    optional string page_id = 2;
 }
 
 message CmdFromClientRequest {
@@ -284,6 +285,7 @@ message RunTestResponse {
 message ClientShowPageRequest {
     string sid = 1;
     repeated PageItem page_items = 2;
+    optional string page_id = 3;        // Arbitrary string to identify the page. When this changes, the client will consider it a new page in browser history
 }
 
 message ClientShowUserMessageRequest {

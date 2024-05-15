@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 import clapshot_grpc.clapshot as clap
 import clapshot_grpc.clapshot.organizer as org
 
+from organizer.config import PATH_COOKIE_NAME
 from organizer.database.models import DbFolder, DbFolderItems, DbVideo
 from organizer.database.operations import db_get_or_create_user_root_folder
 
@@ -35,7 +36,7 @@ class FoldersHelper:
         ck = ses.cookies or {}
         with self.db_new_session() as dbs:
             try:
-                if folder_ids := json.loads((cookie_override or ck.get("folder_path")) or '[]'):
+                if folder_ids := json.loads((cookie_override or ck.get(PATH_COOKIE_NAME)) or '[]'):
                     assert all(isinstance(i, int) for i in folder_ids), "Folder path cookie contains non-integer IDs"
 
                     folders_unordered = dbs.query(DbFolder).filter(DbFolder.id.in_(folder_ids)).all()
@@ -45,7 +46,7 @@ class FoldersHelper:
                         return [folders_by_id[id] for id in folder_ids if id in folders_by_id]
                     else:
                         self.log.warning("Some unknown folder IDs in folder_path cookie. Clearing it.")
-                        await self.srv.client_set_cookies(org.ClientSetCookiesRequest(cookies={"folder_path": ''}, sid=ses.sid))
+                        await self.srv.client_set_cookies(org.ClientSetCookiesRequest(cookies={PATH_COOKIE_NAME: ''}, sid=ses.sid))
                         await self.srv.client_show_user_message(org.ClientShowUserMessageRequest(
                             sid=ses.sid,
                             msg=clap.UserMessage(

@@ -15,7 +15,7 @@ mod integration_test
     use assert_fs::prelude::PathCopy;
     use chrono::format;
     use futures::Future;
-    use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, ListMyVideos};
+    use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, OpenNavigationPage};
     use lib_clapshot_grpc::proto::org::{self, RunTestResponse};
     use rust_decimal::prelude::*;
 
@@ -298,8 +298,8 @@ mod integration_test
                     }
                 }
 
-                println!("... doing list_my_videoos ...");
-                send_server_cmd!(ws, ListMyVideos, ListMyVideos {});
+                println!("... doing OpenNavigationPage ...");
+                send_server_cmd!(ws, OpenNavigationPage, OpenNavigationPage {..Default::default()});
 
                 match crate::api_server::test_utils::expect_parsed::<ServerToClientCmd>(&mut ws).await.cmd {
 
