@@ -11,7 +11,7 @@ import clapshot_grpc.clapshot as clap
 import clapshot_grpc.clapshot.organizer as org
 
 from organizer.config import MODULE_NAME, PATH_COOKIE_NAME, VERSION
-from organizer.utils import parse_json_args, uri_arg_to_folder_path
+from organizer.utils import parse_json_args, try_send_user_message, uri_arg_to_folder_path
 
 from .database.models import DbFolder
 
@@ -159,14 +159,16 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
 
     except GRPCError as e:
 
-        # Intercept some known sessison errors and show them to the user nicely
+        # Intercept some known session errors and show them to the user nicely
         if e.status in (GrpcStatus.INVALID_ARGUMENT, GrpcStatus.PERMISSION_DENIED, GrpcStatus.ALREADY_EXISTS):
-            await oi.srv.client_show_user_message(org.ClientShowUserMessageRequest(sid = cmd.ses.sid,
-                msg = clap.UserMessage(
-                    message=str(e.message),
-                    user_id=cmd.ses.user.id,
-                    type=clap.UserMessageType.ERROR,
-                    details=str(e.details) if e.details else None)))
+            if err := await try_send_user_message(oi.srv,
+                    org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
+                        msg=clap.UserMessage(
+                            message=str(e.message),
+                            user_id=cmd.ses.user.id,
+                            type=clap.UserMessageType.ERROR,
+                            details=str(e.details) if e.details else None))):
+                oi.log.error(f"Error calling client_show_user_message(): {err}")
         else:
             raise e
 

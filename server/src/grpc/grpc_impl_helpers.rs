@@ -42,9 +42,9 @@ impl TryInto<crate::database::DBPaging> for Option<&org::DbPaging> {
 impl From<DBError> for Status {
     fn from(e: DBError) -> Self {
         match e {
-            DBError::NotFound() => Status::not_found("DB item not found"),
-            DBError::BackendError(e) => Status::internal(format!("DB backend error: {}", e)),
-            DBError::Other(e) => Status::internal(format!("DB error: {}", e)),
+            DBError::NotFound() => Status::not_found("DB item not found (on Server)"),
+            DBError::BackendError(e) => Status::internal(format!("DB backend error (on Server): {}", e)),
+            DBError::Other(e) => Status::internal(format!("DB error (on Server): {}", e)),
         }
     }
 }

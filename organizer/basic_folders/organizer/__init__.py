@@ -1,5 +1,6 @@
 import json
 from logging import Logger
+import traceback
 
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
@@ -41,17 +42,32 @@ def organizer_grpc_handler(func):
             except sqlalchemy.exc.OperationalError as e:
                 raise GRPCError(GrpcStatus.RESOURCE_EXHAUSTED, f"DB error: {e}")
         except GRPCError as e:
-            # Intercept some known session errors and show them to the user nicely
-            if e.status in (GrpcStatus.INVALID_ARGUMENT, GrpcStatus.PERMISSION_DENIED, GrpcStatus.ALREADY_EXISTS, GrpcStatus.RESOURCE_EXHAUSTED):
-                await self.srv.client_show_user_message(org.ClientShowUserMessageRequest(sid=request.ses.sid,
-                    msg = clap.UserMessage(
-                        message=str(e.message),
-                        user_id=request.ses.user.id,
-                        type=clap.UserMessageType.ERROR,
-                        details=str(e.details) if e.details else None)))
-                raise GRPCError(GrpcStatus.ABORTED)   # Tell Clapshot server to ignore the result (we've shown the error to the user)
-            else:
+            # Pass some known errors through
+            if e.status in (GrpcStatus.ABORTED, GrpcStatus.UNIMPLEMENTED):
                 raise e
+            # Intercept some known session errors and show them to the user nicely
+            elif e.status in (GrpcStatus.INVALID_ARGUMENT, GrpcStatus.PERMISSION_DENIED, GrpcStatus.ALREADY_EXISTS, GrpcStatus.RESOURCE_EXHAUSTED):
+                user_msg_was_sent = False
+                try:
+                    await self.srv.client_show_user_message(org.ClientShowUserMessageRequest(sid=request.ses.sid,
+                        msg = clap.UserMessage(
+                            message=str(e.message),
+                            user_id=request.ses.user.id,
+                            type=clap.UserMessageType.ERROR,
+                            details=str(e.details) if e.details else None)))
+                    user_msg_was_sent = True
+                except Exception as e2:
+                    self.log.error("Error calling client_show_user_message(): {e2}")
+                if not user_msg_was_sent:
+                    raise GRPCError(GrpcStatus.ABORTED)   # Tell Clapshot server to ignore the result (we've shown the error to the user)
+            else:
+                self.log.error(f"%%%%% Unknown GRPCError in organizer_grpc_handler: {e}")
+                raise e
+        except Exception as e:
+            self.log.error(f"General error in organizer_grpc_handler: {e}")
+            self.log.error(traceback.format_exc())
+            raise e
+
     return wrapper
 
 

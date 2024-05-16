@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 import clapshot_grpc.clapshot.organizer as org
 import clapshot_grpc.clapshot as clap
 
+from organizer.utils import try_send_user_message
+
 from .models import Base, DbFolder, DbFolderItems, DbSchemaMigrations, DbUser, DbVideo
 from .migrations import ALL_MIGRATIONS
 
@@ -157,6 +159,8 @@ async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, s
     Find the folder with no parent for the user.
     If none is found, create one and move all non-parent videos to it.
     """
+    user_msg = None     # Queue any user message, as transaction will block it from being stored in the DB otherwise
+
     with dbs.begin_nested():
         assert user and user.id and user.name, "User ID and name must be set"
 
@@ -170,14 +174,18 @@ async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, s
 
         if cnt > 1:
             # Should not happen, otherwise DB is in an inconsistent state
-            log.error(f"Multiple root folders found for user {user.id}. Please fix database manually.")
-            if srv:
-                await srv.client_show_user_message(org.ClientShowUserMessageRequest(
-                    user_persist=user.id,
-                    msg = clap.UserMessage(
-                        message="Multiple root folders in DB. Contact support.",
-                        details="Each user should have exactly one root folder. This DB issue may hide some of your videos until fixed.",
-                        type=clap.UserMessageType.ERROR)))
+            log.error(f"Multiple root folders found for user {user.id}! Moving newer ones into the first created one.")
+            oldest_fld = min(res, key=lambda f: f.id)
+            for f in res:
+                if f.id != oldest_fld.id:
+                    dbs.add(DbFolderItems(folder_id=oldest_fld.id, subfolder_id=f.id))
+                    dbs.flush()
+            ret = oldest_fld
+            user_msg = clap.UserMessage(
+                message="Multiple root folders in DB. Please report to support.",
+                details="Users should have one root folder. This inconsistency was fixed, but your home view might contain unexpected folders.",
+                type=clap.UserMessageType.ERROR)
+
         elif cnt == 0:
             # Create a root folder & move all orphan videos to it
             assert ret is None
@@ -196,4 +204,10 @@ async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, s
             WHERE v.user_id = :user_id AND bfi.video_id IS NULL;
         ''')), {"user_id": user.id, "root_folder_id": ret.id})
 
-        return ret
+    if user_msg and srv:
+        if err := await try_send_user_message(srv, user_msg):
+            log.error(f"Error sending user message: {err}")
+    elif user_msg and not srv:
+        log.warning("No server connection to send user message: {user_msg}")
+
+    return ret

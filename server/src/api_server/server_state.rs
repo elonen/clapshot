@@ -131,7 +131,7 @@ impl ServerState {
                 models::Message::insert(&mut self.db.conn()?, &models::MessageInsert {
                     seen: msg.seen || sent_count > 0,
                     ..msg.clone()
-                })?;
+                }).map_err(|e| anyhow!("Failed to persist msg: {}", e))?;
             }
         };
         send_res.map(|_| ())

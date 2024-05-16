@@ -14,6 +14,7 @@ import clapshot_grpc.clapshot.organizer as org
 from organizer.config import PATH_COOKIE_NAME
 from organizer.database.models import DbFolder, DbFolderItems, DbVideo
 from organizer.database.operations import db_get_or_create_user_root_folder
+from organizer.utils import try_send_user_message
 
 
 class FoldersHelper:
@@ -47,12 +48,14 @@ class FoldersHelper:
                     else:
                         self.log.warning("Some unknown folder IDs in folder_path cookie. Clearing it.")
                         await self.srv.client_set_cookies(org.ClientSetCookiesRequest(cookies={PATH_COOKIE_NAME: ''}, sid=ses.sid))
-                        await self.srv.client_show_user_message(org.ClientShowUserMessageRequest(
-                            sid=ses.sid,
-                            msg=clap.UserMessage(
-                                message="Some unknown folder IDs in folder_path cookie. Clearing it.",
-                                user_id=ses.user.id,
-                                type=clap.UserMessageType.ERROR)))
+                        if err := await try_send_user_message(self.srv,
+                                org.ClientShowUserMessageRequest(
+                                    sid=ses.sid,
+                                    msg=clap.UserMessage(
+                                        message="Some unknown folder IDs in folder_path cookie. Clearing it.",
+                                        user_id=ses.user.id,
+                                        type=clap.UserMessageType.ERROR))):
+                            self.log.error(f"Error calling client_show_user_message(): {err}")
 
                 self.log.debug("No folder_path cookie found. Returning empty folder path.")
                 res = []
