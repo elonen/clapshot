@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use lib_clapshot_grpc::proto::org::OrganizerInfo;
 use parking_lot::{RwLock, MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::atomic::AtomicBool;
 
@@ -35,19 +36,20 @@ pub struct ServerState {
 
     pub organizer_uri: Option<OrganizerURI>,
     pub organizer_has_connected: Arc<AtomicBool>,
+    pub organizer_info: Arc<Mutex<Option<OrganizerInfo>>>
 }
 
 impl ServerState {
 
     pub fn new(
         db: Arc<DB>,
-         videos_dir: &Path,
-         upload_dir: &Path,
-         url_base: &str,
-         organizer_uri: Option<OrganizerURI>,
-         grpc_srv_listening_flag: Arc<AtomicBool>,
-         default_user: String,
-         terminate_flag: Arc<AtomicBool>) -> ServerState
+        videos_dir: &Path,
+        upload_dir: &Path,
+        url_base: &str,
+        organizer_uri: Option<OrganizerURI>,
+        grpc_srv_listening_flag: Arc<AtomicBool>,
+        default_user: String,
+        terminate_flag: Arc<AtomicBool>) -> ServerState
     {
         ServerState {
             db,
@@ -64,6 +66,7 @@ impl ServerState {
             collab_id_to_video_id: Arc::new(RwLock::new(HashMap::<String, String>::new())),
             organizer_uri,
             organizer_has_connected: Arc::new(AtomicBool::new(false)),
+            organizer_info: Arc::new(Mutex::new(None)),
         }
     }
 

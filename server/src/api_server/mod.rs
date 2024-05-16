@@ -8,6 +8,7 @@ use lib_clapshot_grpc::proto;
 use lib_clapshot_grpc::proto::org::OnStartUserSessionResponse;
 use tracing::debug;
 use warp::Filter;
+use core::panic;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -415,7 +416,15 @@ async fn run_api_server_async(
                 wait_time = std::cmp::min(wait_time * 2, Duration::from_secs(4));
                 if server.terminate_flag.load(Relaxed) { return; }
             }
-            tracing::debug!("org->srv connected");
+            if let Some(org_info) = server.organizer_info.lock().await.as_ref() {
+                tracing::info!(
+                    org_name = &org_info.name,
+                    description = &org_info.description,
+                    version = org_info.version.as_ref().map(|v| format!("{}.{}.{}", v.major, v.minor, v.patch)),
+                    "org->srv connected, bidirectional gRPC established.");
+            } else {
+                panic!("Organizer connected, but no info received. This is a bug in server code.");
+            }
             Some(hdl)
         },
         None => None,

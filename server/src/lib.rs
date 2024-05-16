@@ -93,10 +93,10 @@ impl ClapshotInit {
                 let org = OrganizerCaller::new(ouri);
                 tracing::info!("Connecting gRPC srv->org...");
                 org.handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind)?;
-                tracing::info!("Bidirectional gRPC established.");
+                tracing::info!("srv->org handshake done (org->srv not connected yet).");
             }
             None => {
-                tracing::info!("No organizer URI provided, skipping gRPC.");
+                tracing::info!("No Organizer URI provided, skipping gRPC.");
             }
         };
 

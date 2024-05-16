@@ -43,6 +43,7 @@ async def after_migrations_impl(oi: organizer.OrganizerInbound, _: org.AfterMigr
       => Do some "fsck"-type operations on the database.
     """
     log = oi.log.getChild("after_migration")
+    log.info("Running post-migration checks...")
     with oi.db_new_session() as dbs:
         db_test_orm_mappings(dbs, log)
         db_check_for_folder_loops(dbs, log)

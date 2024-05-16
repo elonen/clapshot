@@ -448,7 +448,7 @@ pub fn run_forever(
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                         }
                     },
-                    Err(e) => { tracing::warn!("Metadata reader is dead ('{:?}'). Exit.", e); break; },
+                    Err(e) => { tracing::info!("Metadata reader disconnected ('{:?}'). Exit.", e); break; },
                 }
             },
             // Incoming file from monitor
@@ -461,7 +461,8 @@ pub fn run_forever(
                             terminate_flag.store(true, std::sync::atomic::Ordering::Relaxed);
                         });
                     },
-                    Err(e) => { tracing::warn!("Metadata reader is dead ('{:?}'). Exit.", e); break; },
+                    Err(e) => {
+                        tracing::info!("Metadata reader disconnected ('{:?}'). Exit.", e); break; },
                 }
             },
             // Video compressor progress

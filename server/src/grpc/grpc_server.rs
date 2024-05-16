@@ -1,11 +1,11 @@
-use std::{sync::atomic::Ordering::Relaxed, path::Path};
+use std::{path::Path, sync::atomic::Ordering::Relaxed};
 use anyhow::Context;
 use tonic::{Request, Response, Status};
 use crate::{api_server::{server_state::ServerState, ws_handers::del_video_and_cleanup, SendTo}, client_cmd, database::{DbBasicQuery, DbQueryByUser, DbQueryByVideo}, grpc::grpc_impl_helpers::{paged_vec, rpc_expect_field}};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::database::models;
 
-use lib_clapshot_grpc::{proto, run_grpc_server, GrpcBindAddr, RpcResult};
+use lib_clapshot_grpc::{proto::{self}, run_grpc_server, GrpcBindAddr, RpcResult};
 use lib_clapshot_grpc::proto::org;
 
 pub struct OrganizerOutboundImpl {
@@ -17,9 +17,10 @@ pub struct OrganizerOutboundImpl {
 #[tonic::async_trait]
 impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
 {
-    async fn handshake(&self, _req: tonic::Request<org::OrganizerInfo>) -> RpcResult<proto::Empty>
+    async fn handshake(&self, req: tonic::Request<org::OrganizerInfo>) -> RpcResult<proto::Empty>
     {
         tracing::debug!("org->srv handshake received");
+        self.server.organizer_info.lock().await.replace(req.into_inner());
         self.server.organizer_has_connected.store(true, Relaxed);
         Ok(Response::new(proto::Empty {}))
     }
@@ -285,9 +286,7 @@ pub async fn run_org_to_srv_grpc_server(bind: GrpcBindAddr, server: ServerState)
     let terminate_flag = server.terminate_flag.clone();
     let server_listening_flag = server.grpc_srv_listening_flag.clone();
 
-    let service = org::organizer_outbound_server::OrganizerOutboundServer::new(OrganizerOutboundImpl {
-        server,
-    });
+    let service = org::organizer_outbound_server::OrganizerOutboundServer::new(OrganizerOutboundImpl { server });
 
     run_grpc_server(bind, service, span, server_listening_flag, terminate_flag).await
 }
