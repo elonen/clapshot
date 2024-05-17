@@ -22,6 +22,7 @@ message ServerToClientCmd {
     message ShowPage {
         repeated PageItem page_items = 1;
         optional string page_id = 2;
+        optional string page_title = 3;
     }
     message DefineActions {
         map<string, ActionDef> actions = 1;

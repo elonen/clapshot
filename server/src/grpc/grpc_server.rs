@@ -37,6 +37,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         to_rpc_empty(self.server.emit_cmd(client_cmd!(ShowPage, {
             page_items: req.page_items,
             page_id: req.page_id,
+            page_title: req.page_title,
         }), SendTo::UserSession(&req.sid)))
     }
 

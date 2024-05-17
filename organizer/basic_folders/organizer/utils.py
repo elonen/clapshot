@@ -22,7 +22,7 @@ def folder_path_to_uri_arg(folder_path: list[int]) -> str:
     """
     Convert a list of folder IDs to a URI string.
     """
-    return "-".join(str(f) for f in folder_path)
+    return ".".join(str(f) for f in folder_path)
 
 
 def uri_arg_to_folder_path(uri: str|None) -> list[int]:
@@ -31,9 +31,9 @@ def uri_arg_to_folder_path(uri: str|None) -> list[int]:
     """
     if not uri:
         return []
-    if not re.match(r"^\d+(?:-\d+)*$", uri):
+    if not re.match(r"^\d+(?:\.\d+)*$", uri):
         raise ValueError("Invalid folder path URI")
-    return [int(f) for f in uri.split("-")]
+    return [int(f) for f in uri.split(".")]
 
 
 async def try_send_user_message(srv: org.OrganizerOutboundStub, msg_req: org.ClientShowUserMessageRequest) -> GRPCError|None:

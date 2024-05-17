@@ -286,6 +286,7 @@ message ClientShowPageRequest {
     string sid = 1;
     repeated PageItem page_items = 2;
     optional string page_id = 3;        // Arbitrary string to identify the page. When this changes, the client will consider it a new page in browser history
+    optional string page_title = 4;     // shown in browser tab
 }
 
 message ClientShowUserMessageRequest {

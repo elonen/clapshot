@@ -132,9 +132,8 @@ function onEditComment(e: any) {
     }});
 }
 
-function resetUIState() {
-    // This is called from onClearAll event and popHistoryState (when history stack has no video or page id)
-    console.log("resetUIState");
+function closeVideoIfOpen() {
+    console.debug("closeVideoIfOpen()");
     wsEmit({leaveCollab: {}});
     $collabId = null;
     $videoId = null;
@@ -143,13 +142,6 @@ function resetUIState() {
     $videoTitle = null;
     $allComments = [];
     $videoIsReady = false;
-    curPageId.set(null); // Clear the current page ID
-    wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
-    wsEmit({listMyMessages: {}});
-}
-
-function onClearAll(_e: any) {
-    resetUIState();
 }
 
 function onVideoSeeked(_e: any) {
@@ -181,23 +173,28 @@ function onCommentPinClicked(e: any) {
     }
 }
 
-function popHistoryState(e: any) {
+function popHistoryState(e: PopStateEvent) {
+    console.debug("popHistoryState called. e.state=", e.state);
     if (e.state) {
         if (e.state.videoId) {
+            console.debug("popHistoryState: Opening video: ", e.state.videoId);
             wsEmit({ openVideo: { videoId: e.state.videoId } });
+            return;
         } else if (e.state.pageId) {
-            // Handle virtual page navigation
-            curPageId.set(e.state.pageId);
-            wsEmit({ openNavigationPage: { pageId: e.state.pageId ?? undefined } });
-        } else {
-            resetUIState();
+            console.debug("popHistoryState: Opening page: ", e.state.pageId);
+            wsEmit({openNavigationPage: {pageId: e.state.pageId ?? undefined}});
+            return;
         }
-    } else {
-        resetUIState();
     }
+    console.debug("popHistoryState: Resetting UI view due to empty state");
+    closeVideoIfOpen();
+    wsEmit({openNavigationPage: {pageId: undefined}});
 }
 
-// Parse URL to see if we have a video to open
+// On full page load, parse URL parameters to see if we have a
+// video or page ID to open directly.
+const prevCollabId = $collabId;
+
 const urlParams = new URLSearchParams(window.location.search);
 urlParams.forEach((value, key) => {
     if (key != "vid" && key != "collab" && key != "page") {
@@ -206,37 +203,16 @@ urlParams.forEach((value, key) => {
     }
 });
 
-const prevCollabId = $collabId;
+console.debug("Parsing URL params: ", urlParams);
 
 $videoId = urlParams.get('vid');
 $collabId = urlParams.get('collab');
 
-const newVideoId = urlParams.get('vid');
-const newCollabId = urlParams.get('collab');
-const page_parm = urlParams.get('page');
-const newPageId = page_parm ? decodeURIComponent(page_parm) : null;
+const encodedPageParm = urlParams.get('page');
+$curPageId = encodedPageParm ? decodeURIComponent(encodedPageParm) : null;
+history.replaceState({}, '', './');
 
-if (newVideoId) {
-    $videoId = newVideoId;
-    $collabId = newCollabId;
-    if ($collabId) {
-        history.replaceState({$videoId}, '', `/?vid=${$videoId}&collab=${collabId}`);
-    } else {
-        history.replaceState({$videoId}, '', `/?vid=${$videoId}`);
-    }
-} else {
-    if ($curPageId != newPageId) {
-        curPageId.set(newPageId);
-        wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
-    }
-}
-/*
-} else if (newPageId) {
-    // Handle direct navigation to a virtual page
-    curPageId.set(newPageId); // Set the current page ID
-    wsEmit({ openNavigationPage: {pageId: $curPageId ?? undefined} });
-}
-*/
+
 
 let uploadUrl: string = "";
 
@@ -295,7 +271,8 @@ function isConnected() {
 }
 
 function disconnect() {
-    resetUIState();
+    closeVideoIfOpen();
+    $curPageId = null;
     if (wsSocket) {
         wsSocket.close();
     }
@@ -466,15 +443,24 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             }
             // showPage
             else if (cmd.showPage) {
-                const newPageId = cmd.showPage.pageId;
+                const newPageId = cmd.showPage.pageId ?? null;  // turn undefined into null
+                console.debug("showPage. newPageId=", newPageId, "$curPageId=", $curPageId);
 
-                // Check if the page ID has changed
-                if (newPageId && newPageId !== $curPageId) {
-                    const newPageUrl = `/?page=${encodeURIComponent(newPageId)}`; // Using a URL parameter
-                    history.pushState({ pageId: newPageId }, '', newPageUrl);
-                    curPageId.set(newPageId); // Update the current page ID in the store
+                // Record page ID in browser history
+                if (newPageId !== $curPageId) {   // Changed id looks like a new page to user
+                    if (newPageId !== null) {
+                        console.debug("[Browser history] Pushing new page state: ", newPageId);
+                        history.pushState({pageId: newPageId}, '', `/?page=${encodeURIComponent(newPageId)}`);
+                        document.title = "Clapshot - " + (cmd.showPage.pageTitle ?? newPageId);
+                    } else {
+                        console.debug("[Browser history] Pushing empty state (default page)");
+                        history.pushState({pageId: null}, '', './');
+                        document.title = "Clapshot - Home";
+                    }
                 }
 
+                $curPageId = newPageId;
+                closeVideoIfOpen();  // No-op if no video is open
                 $curPageItems = [...cmd.showPage.pageItems];  // force svelte to re-render
             }
             // defineActions
@@ -541,6 +527,14 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     if (!v.duration) throw Error("No duration");
                     if (!v.title) throw Error("No title");
 
+                    $curPageId = null;  // Clear the current page ID, so popHistoryState will know to reopen it if needed
+
+                    if ($videoId != v.id) {
+                        console.debug("[Browser history] Pushing new video state: ", v.id);
+                        history.pushState({videoId: v.id}, '', `/?vid=${v.id}`);
+                        document.title = "Clapshot - " + (v.title ?? v.id);
+                    }
+
                     $videoPlaybackUrl = v.playbackUrl;
                     $videoOrigUrl = v.origUrl ?? null;
                     $videoId = v.id;
@@ -551,8 +545,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
 
                     if ($collabId)
                         wsEmit({joinCollab: { collabId: $collabId, videoId: $videoId! }});
-                    else
-                        history.pushState($videoId, '', '/?vid=' + $videoId);  // Point URL to video
+
                 } catch(error) {
                     acts.add({mode: 'danger', message: 'Bad video open request. See log.', lifetime: 5});
                     console.error("Invalid video open request. Error: ", error);
@@ -722,7 +715,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
 <main>
     <span id="popup-container"></span>
     <div class="flex flex-col bg-[#101016] w-screen h-screen {debugLayout?'border-2 border-yellow-300':''}">
-        <div class="flex-none w-full"><NavBar on:clear-all={onClearAll} on:basic-auth-logout={disconnect} /></div>
+        <div class="flex-none w-full"><NavBar on:basic-auth-logout={disconnect} /></div>
         <div class="flex-grow w-full overflow-auto {debugLayout?'border-2 border-cyan-300':''}">
             <Notifications />
 

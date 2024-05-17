@@ -44,7 +44,7 @@ class PagesHelper:
             await self._admin_show_all_user_homes(ses, cur_folder, pg_items)
 
         page_id = folder_path_to_uri_arg([f.id for f in folder_path])
-        return org.ClientShowPageRequest(sid=ses.sid, page_items=pg_items, page_id=page_id)
+        return org.ClientShowPageRequest(sid=ses.sid, page_items=pg_items, page_id=page_id, page_title=cur_folder.title)
 
 
     async def _admin_show_all_user_homes(self, ses: org.UserSessionData, cur_folder: DbFolder, pg_items: list[clap.PageItem]):

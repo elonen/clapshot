@@ -82,10 +82,12 @@ pub async fn msg_open_navigation_page(data: &OpenNavigationPage , ses: &mut User
                 }
             },
             Ok(res) => {
+                let res = res.into_inner();
                 server.emit_cmd(
                     client_cmd!(ShowPage, {
-                        page_items: res.into_inner().page_items,
+                        page_items: res.page_items,
                         page_id: data.page_id.clone(),
+                        page_title: res.page_title,
                     }),
                     super::SendTo::UserSession(&ses.sid))?;
                 return Ok(());
@@ -105,7 +107,7 @@ pub async fn msg_open_navigation_page(data: &OpenNavigationPage , ses: &mut User
     let page = vec![heading, listing];
 
     server.emit_cmd(
-        client_cmd!(ShowPage, { page_items: page, page_id: data.page_id.clone()}),
+        client_cmd!(ShowPage, { page_items: page, page_id: data.page_id.clone(), page_title: Some("Your Videos".to_string())}),
         super::SendTo::UserSession(&ses.sid))?;
     Ok(())
 }
