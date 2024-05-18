@@ -11,8 +11,6 @@ else
   PLATFORM_STR = --platform linux/$(TARGET_ARCH)
 endif
 
-DEMO_PLATFORMS = linux/amd64,linux/arm64
-
 
 default:
 	@echo "Make target 'debian-docker' explicitly."
@@ -22,14 +20,11 @@ clean-debian:
 	rm -rf dist_deb
 
 debian-docker:
+	@for plat in arm64 amd64; do \
+		cd server; export TARGET_ARCH=$$plat; make debian-docker; cd ..; \
+		cd organizer; export TARGET_ARCH=$$plat; make debian-docker; cd ..; \
+	done
 	(cd client; make debian-docker)
-	(cd server; make debian-docker)
-	(cd organizer; make debian-docker)
-	@if [ "${ARCH}" != "x86_64" ]; then \
-		echo "We're running on non-x86_64 architecture. Building x86_64 deb, too."; \
-		(cd server; export TARGET_ARCH=amd64; make debian-docker); \
-		(cd organizer; export TARGET_ARCH=amd64; make debian-docker); \
-	fi
 	mkdir -p dist_deb
 	cp client/dist_deb/* dist_deb/
 	cp server/dist_deb/* dist_deb/
@@ -52,9 +47,9 @@ test:
 	(cd client; make test-docker)
 	(cd server; make test-docker)
 
-#run-docker: clean-debian debian-docker
+
 run-docker: debian-docker
-	DOCKER_BUILDKIT=1 docker build -t clapshot-comb --build-arg UID=${UID} --build-arg GID=${GID} -f Dockerfile.demo .
+	DOCKER_BUILDKIT=1 docker build -t clapshot-comb --build-arg UID=${UID} --build-arg GID=${GID} --pull -f Dockerfile.demo .
 	# Add a simple test video to incoming already
 	mkdir -p test/VOLUME/data/incoming
 	cp server/src/tests/assets/60fps-example.mp4 test/VOLUME/data/incoming/
@@ -64,13 +59,13 @@ run-docker: debian-docker
 build-docker-demo: debian-docker
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
 	$(eval PVER=$(shell jq -r '.version' client/package.json))
-	DOCKER_BUILDKIT=1 docker build --platform $(DEMO_PLATFORMS) --pull \
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t clapshot:${PVER}-demo \
 		-t elonen/clapshot:${PVER}-demo \
 		-t elonen/clapshot:latest-demo \
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo .
 
-	DOCKER_BUILDKIT=1 docker build --platform $(DEMO_PLATFORMS) --pull \
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t clapshot:${PVER}-demo-htadmin \
 		-t elonen/clapshot:${PVER}-demo-htadmin \
 		-t elonen/clapshot:latest-demo-htadmin \
@@ -81,13 +76,13 @@ build-docker-demo-and-push-hub: debian-docker
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
 	$(eval PVER=$(shell jq -r '.version' client/package.json))
 
-	DOCKER_BUILDKIT=1 docker build --platform $(DEMO_PLATFORMS) --pull \
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t elonen/clapshot:${PVER}-demo \
 		-t elonen/clapshot:latest-demo \
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo \
 		--push .
 
-	DOCKER_BUILDKIT=1 docker build --platform $(DEMO_PLATFORMS) --pull \
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t elonen/clapshot:${PVER}-demo-htadmin \
 		-t elonen/clapshot:latest-demo-htadmin \
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htadmin \
