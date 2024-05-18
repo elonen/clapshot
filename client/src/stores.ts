@@ -23,6 +23,8 @@ export let videoIsReady: Writable<boolean> = writable(false);
 export let allComments: Writable<IndentedComment[]> = writable([]);
 export let userMessages: Writable<Proto3.UserMessage[]> = writable([]);
 
+export let connectionErrors: Writable<string[]> = writable([]);
+
 export let collabId: Writable<string|null> = writable(null);
 export let userMenuItems: Writable<UserMenuItem[]> = writable([]);
 export let selectedTiles: Writable<{[key: string]: VideoListDefItem}> = writable({});

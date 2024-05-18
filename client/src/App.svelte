@@ -4,7 +4,7 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, videoId, videoFps, videoTitle, curPageId, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin} from '@/stores';
+import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, videoId, videoFps, videoTitle, curPageId, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors} from '@/stores';
 import {IndentedComment, type UserMenuItem, type StringMap} from "@/types";
 
 import CommentCard from '@/lib/CommentCard.svelte'
@@ -45,6 +45,15 @@ function logAbbrev(...strs: any[]) {
     console.log(...abbreviated);
 }
 
+// Show last 5 connection errors and log everything to console
+function show_connection_error(msg: string) {
+    connectionErrors.update((errs) => {
+        let t = new Date().toLocaleTimeString();
+        errs.push(`[${t}] ${msg}`);
+        return errs.slice(-10);
+    });
+    console.error("[CONNECTION ERROR]", msg);
+}
 
 // Messages from CommentInput component
 function onCommentInputButton(e: any) {
@@ -210,8 +219,15 @@ $collabId = urlParams.get('collab');
 
 const encodedPageParm = urlParams.get('page');
 $curPageId = encodedPageParm ? decodeURIComponent(encodedPageParm) : null;
-history.replaceState({}, '', './');
 
+if ($videoId && $collabId)
+    history.replaceState({videoId: $videoId}, '', `/?vid=${$videoId}&collab=${$collabId}`);
+else if ($videoId)
+    history.replaceState({videoId: $videoId}, '', `/?vid=${$videoId}`);
+else if ($curPageId)
+    history.replaceState({pageId: $curPageId}, '', `/?page=${encodeURIComponent($curPageId)}`);
+else
+    history.replaceState({}, '', './');
 
 
 let uploadUrl: string = "";
@@ -225,7 +241,7 @@ let uploadUrl: string = "";
 const CONF_FILE = "clapshot_client.conf.json";
 function handleErrors(response: any) {
     if (!response.ok)
-    throw Error("HTTP error: " + response.status);
+        throw Error("HTTP error: " + response.status);
     return response;
 }
 fetch(CONF_FILE)
@@ -238,8 +254,10 @@ fetch(CONF_FILE)
         if (!(key in json))
             throw Error("Missing key '" + key + "' in client config file '" + CONF_FILE + "'");
     }
-
+    console.log("Config file '" + CONF_FILE + "' parsed: ", json);
     uploadUrl = json.upload_url;
+
+    console.log("Connecting to WS API at: " + json.ws_url);
     connectWebsocket(json.ws_url);
 
     $userMenuItems = json.user_menu_extra_items;
@@ -248,8 +266,7 @@ fetch(CONF_FILE)
     }
 })
 .catch(error => {
-    console.error("Failed to read config:", error)
-    acts.add({mode: 'danger', message: "Failed to read config. " + error, lifetime: 50});
+    show_connection_error(`Failed to read config file '${CONF_FILE}': ${error}`);
 });
 
 
@@ -260,7 +277,12 @@ function refreshMyVideos()
         videoListRefreshScheduled = true;
         setTimeout(() => {
             videoListRefreshScheduled = false;
-            wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
+            if (!$videoId) {
+                console.debug("refreshMyVideos timer fired, no videoId. Requesting openNavigationPage.");
+                wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
+            } else {
+                console.debug("refreshMyVideos timer fired, videoId present. Ignoring.");
+            }
         }, 500);
     }
 }
@@ -313,7 +335,7 @@ let reconnectDelay = 100;  // for exponential backoff
 
 
 function connectWebsocket(wsUrl: string) {
-    const auth_url = wsUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/api\/.*$/, "/api/health");
+    const http_health_url = wsUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/api\/.*$/, "/api/health");
     let req_init: RequestInit = {
         method: 'GET',
         headers: {
@@ -331,27 +353,31 @@ function connectWebsocket(wsUrl: string) {
     }
 
     try {
-        return fetch(auth_url, req_init)
+        return fetch(http_health_url, req_init)
         .then(response => {
             if (response.ok) {
                 console.log("Authentication check OK. Connecting to WS API");
                 return connectWebsocketAfterAuthCheck(wsUrl);
-            } else if (response.status === 401 || response.status === 403) {
-                console.log("Auth failed. Status: " + response.status);
-                if (reconnectDelay > 1500) {
-                    // Force full reload to show login page
-                    window.location.reload();
-                }
             } else {
-                throw new Error(`HTTP auth check ERROR: ${response.status}`);
+                if (response.status === 401 || response.status === 403) {
+                    if (reconnectDelay > 1500)    // don't reload too often, just retry the fetch
+                        window.location.reload();
+                    else
+                        scheduleReconnect();
+                }
+                show_connection_error(`Auth error at '${http_health_url}': ${response.status} - ${response.statusText}`);
             }
-            scheduleReconnect();
         })
         .catch(error => {
-            console.error('HTTP auth check failed:', error);
+            if (error.name === 'TypeError' && error.message == 'Failed to fetch') {
+            show_connection_error(`Network error fetching '${http_health_url}'`);
+            } else {
+                show_connection_error(`Failed to fetch '${http_health_url}': ${error}`);
+            }
             scheduleReconnect();
         });
     } catch (error) {
+        show_connection_error(`Connect to '${wsUrl}' failed: ${error}`);
         scheduleReconnect();
     }
 }
@@ -370,12 +396,13 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
     wsSocket.addEventListener("open", function (_event) {
         reconnectDelay = 100;
         uiConnectedState = true;
+        connectionErrors.set([]);
 
-        console.log("Socket connected");
-        //acts.add({mode: 'info', message: 'Connected.', lifetime: 1.5});
         if ($videoId) {
+            console.debug(`Socket connected, videoId=${videoId}. Requesting openVideo`);
             wsEmit({openVideo: { videoId: $videoId }});
         } else {
+            console.debug("Socket connected, no videoId. Requesting openNavigationPage");
             wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
             wsEmit({listMyMessages: {}});
         }
@@ -729,7 +756,19 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
             <div class="fa-2x block">
                 <i class="fas fa-spinner connecting-spinner"></i>
             </div>
-
+            <div class="m-16 text-xs">
+                {#if $connectionErrors.length > 0}
+                    <details class="connection-errors">
+                        <summary class="connection-errors cursor-pointer text-slate-600">View connection errors</summary>
+                        <ul>
+                            {#each $connectionErrors as ce}
+                            <li><code>{ce}</code></li>
+                            {/each}
+                        </ul>
+                        <p class="m-4 text-sm"><em>See browser JS console for more details.</em></p>
+                    </details>
+                {/if}
+            </div>
         </div>
 
         {:else if $videoId}
@@ -874,6 +913,21 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
     :global(.organizer_page h3){
         font-size: 1.5rem;
         line-height: 2rem;
+    }
+
+    summary.connection-errors {
+        padding: 1rem;
+        color: #323946;
+        font-size: 1rem;
+    }
+    details[open] summary.connection-errors {
+        color: #323946;
+        margin-bottom: 1rem;
+        border-bottom: 1px solid #323946;
+    }
+    details[open] {
+        margin-bottom: 1rem;
+        border-bottom: 1px solid #323946;
     }
 
 </style>
