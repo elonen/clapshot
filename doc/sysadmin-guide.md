@@ -21,7 +21,7 @@ Preferred deployment and upgrade method is to install server and client as Debia
 the Debian package contains a systemd service file that demonizes it, and config file `/etc/clapshot-server.conf` that is translated into the appropriate CLI options automatically.
 
 Server should be put behind a reverse proxy in production, but
-can be developed and tested without one. The server .deb package contains an example Nginx config file (`/usr/share/doc/clapshot-server/examples/`) that
+can be developed and tested without one. The client .deb package contains an example Nginx config file (`/usr/share/doc/clapshot-client/examples/`) that
 
  1. reverse proxies the server API (websocket),
  2. serves out frontend files (.html .js .css),
@@ -32,11 +32,8 @@ While the server uses mostly Websocket, there's a `/api/health` endpoint that ca
 
 ### Database upgrades
 
-Some releases require database migrations. If you're upgrading from a previous version, **make a backup of your database** (`clapshot.sqlite`) and then either add line `migrate = true` to `/etc/clapshot-server.conf` (Debian package) or use `--migrate` option when running the server manually.
-
-Once the server is started with migrate enabled, it will run database migrations on startup. After that, you can remove the `migrate` option and restart the server.
-
-Running the server without migrations enabled will detect that the database is out of date, log an error and exit.
+Running a new version of Clapshot Server (and/or Organizer) will often upgrade database schemas on first start.
+See [upgrading.md](Upgrading Guid) for details about upgrading.
 
 ### Advanced Authentication
 

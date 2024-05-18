@@ -66,6 +66,8 @@ See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on
 - implementing advanced authentication methods
 - building manually and running unit tests
 
+See [Upgrading Guid](doc/upgrading.md) for instructions when installing a new release over an old one.
+
 ## Architecture Overview
 
 Main components:

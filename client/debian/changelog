@@ -1,9 +1,12 @@
 clapshot-client (0.6.0) bookworm; urgency=low
 
-  * New communication API
   * Support for folders and custom UI views (requires an Organizer plugin in the backend)
+  * 'Download original video' button in the player
+  * New communication API, lots of changes under the hood
+  * Connection errors now shown in the "connecting..." page
+  * Updated dependencies, bump Svelte and Vite versions
 
- -- Jarno Elonen <elonen@iki.fi>  Mon, 6 May 2024 19:45:00 +0200
+ -- Jarno Elonen <elonen@iki.fi>  Sat, 18 May 2024 17:00:00 +0200
 
 clapshot-client (0.5.6) bullseye; urgency=low
 
