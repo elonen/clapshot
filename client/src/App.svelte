@@ -206,7 +206,7 @@ const prevCollabId = $collabId;
 
 const urlParams = new URLSearchParams(window.location.search);
 urlParams.forEach((value, key) => {
-    if (key != "vid" && key != "collab" && key != "page") {
+    if (key != "vid" && key != "collab" && key != "p") {
         console.error("Got UNKNOWN URL parameter: '" + key + "'. Value= " + value);
         acts.add({mode: 'warn', message: "Unknown URL parameter: '" + key + "'", lifetime: 5});
     }
@@ -217,7 +217,7 @@ console.debug("Parsing URL params: ", urlParams);
 $videoId = urlParams.get('vid');
 $collabId = urlParams.get('collab');
 
-const encodedPageParm = urlParams.get('page');
+const encodedPageParm = urlParams.get('p');
 $curPageId = encodedPageParm ? decodeURIComponent(encodedPageParm) : null;
 
 if ($videoId && $collabId)
@@ -225,7 +225,7 @@ if ($videoId && $collabId)
 else if ($videoId)
     history.replaceState({videoId: $videoId}, '', `/?vid=${$videoId}`);
 else if ($curPageId)
-    history.replaceState({pageId: $curPageId}, '', `/?page=${encodeURIComponent($curPageId)}`);
+    history.replaceState({pageId: $curPageId}, '', `/?p=${encodeURIComponent($curPageId)}`);
 else
     history.replaceState({}, '', './');
 
@@ -477,7 +477,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 if (newPageId !== $curPageId) {   // Changed id looks like a new page to user
                     if (newPageId !== null) {
                         console.debug("[Browser history] Pushing new page state: ", newPageId);
-                        history.pushState({pageId: newPageId}, '', `/?page=${encodeURIComponent(newPageId)}`);
+                        history.pushState({pageId: newPageId}, '', `/?p=${encodeURIComponent(newPageId)}`);
                         document.title = "Clapshot - " + (cmd.showPage.pageTitle ?? newPageId);
                     } else {
                         console.debug("[Browser history] Pushing empty state (default page)");
