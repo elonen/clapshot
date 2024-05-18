@@ -35,5 +35,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh auth login --with-token <<< "${GITHUB_TOKEN}"
           gh release create "${{ github.ref_name }}" dist_deb/*.deb --draft --title "Release ${{ github.ref_name }}" --notes "Release ${{ github.ref_name }}"
