@@ -63,7 +63,7 @@ function dateObjToISO(d: Date|undefined): string {
     {#if msg.details }
         <span class="text-xs text-gray-500 pl-2 border-l border-gray-400"></span>
         {#if showDetails}
-            <i class="fa fa-chevron-up text-[#cca] cursor-pointer"
+            <i class="fa fa-chevron-down text-[#cca] cursor-pointer"
                 tabindex="0"
                 role="link"
                 on:keyup={e=> {if (e.key==='Enter') showDetails=false; }}
@@ -74,7 +74,7 @@ function dateObjToISO(d: Date|undefined): string {
                 {msg.details}
             </div>
         {:else}
-            <i class="fa fa-chevron-down text-[#cca] cursor-pointer"
+            <i class="fa fa-chevron-right text-[#cca] cursor-pointer"
                 tabindex="0"
                 role="link"
                 on:keyup={e=> {if (e.key==='Enter') showDetails=true; }}

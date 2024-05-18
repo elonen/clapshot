@@ -905,6 +905,12 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
         margin: 2em;
     }
 
+    :global(.organizer_page h1){
+        font-size: 2.5rem;
+        line-height: 3rem;
+        font-weight: 700;
+    }
+
     :global(.organizer_page h2){
         font-size: 2.5rem;
         line-height: 3rem;

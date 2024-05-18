@@ -36,6 +36,8 @@ class PagesHelper:
 
         if html := _make_breadcrumbs_html(folder_path):
             pg_items.append(clap.PageItem(html=html))
+        else:
+            pg_items.append(clap.PageItem(html="<h3>Home</h3>"))
 
         folder_db_items = await self.folders_helper.fetch_folder_contents(cur_folder, ses)
         pg_items.extend(await self._make_folder_listing(folder_db_items, cur_folder, parent_folder, ses))
@@ -147,7 +149,9 @@ class PagesHelper:
         pg_items = []
 
         if len(folder_listing.items) == 0:
-            pg_items.append(clap.PageItem(html="<h3 style='margin-top: 1em;'>Folder is empty.</h3>"))
+            pg_items.append(clap.PageItem(html="<p style='margin-top: 1em;'><i class='far fa-circle-question text-blue-400'></i> Right-click on space below to <strong>create a folder</strong>, or use the drop zone to <strong>upload videos</strong>.</p>"))
+            pg_items.append(clap.PageItem(html="<p>After that, drag items to <strong>reorder</strong>, or drop them <strong>into folders</strong>. Hold shift to multi-select.</p>"))
+
 
         pg_items.append(clap.PageItem(folder_listing=folder_listing))
         return pg_items
@@ -174,4 +178,4 @@ def _make_breadcrumbs_html(folder_path: list[DbFolder]) -> Optional[str]:
     for (_, title) in breadcrumbs[-1:]:
         breadcrumbs_html.append(f"<strong>{html_escape(title)}</strong>")
 
-    return ("<p>" + " ▶ ".join(breadcrumbs_html) + "</p>") if len(breadcrumbs) > 1 else None
+    return ("<h3>" + " ▶ ".join(breadcrumbs_html) + "</h3>") if len(breadcrumbs) > 1 else None
