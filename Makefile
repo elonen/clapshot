@@ -11,6 +11,8 @@ else
   PLATFORM_STR = --platform linux/$(TARGET_ARCH)
 endif
 
+DEMO_PLATFORMS = linux/amd64,linux/arm64
+
 
 default:
 	@echo "Make target 'debian-docker' explicitly."
@@ -58,15 +60,35 @@ run-docker: debian-docker
 	cp server/src/tests/assets/60fps-example.mp4 test/VOLUME/data/incoming/
 	docker run --rm -it -p 0.0.0.0:8080:80 --mount type=bind,source="$$(pwd)"/test/VOLUME,target=/mnt/clapshot-data  clapshot-comb
 
+
 build-docker-demo: debian-docker
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
 	$(eval PVER=$(shell jq -r '.version' client/package.json))
-	docker build -t clapshot:${PVER}-demo --build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo .
-	docker build -t clapshot:${PVER}-demo-htadmin --build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htadmin
+	DOCKER_BUILDKIT=1 docker build --platform $(DEMO_PLATFORMS) --pull \
+		-t clapshot:${PVER}-demo \
+		-t elonen/clapshot:${PVER}-demo \
+		-t elonen/clapshot:latest-demo \
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo .
 
-	docker tag clapshot:${PVER}-demo clapshot:latest-demo
-	docker tag clapshot:${PVER}-demo-htadmin clapshot:latest-demo-htadmin
-	docker tag clapshot:${PVER}-demo elonen/clapshot:${PVER}-demo
-	docker tag clapshot:latest-demo elonen/clapshot:latest-demo
-	docker tag clapshot:${PVER}-demo-htadmin elonen/clapshot:${PVER}-demo-htadmin
-	docker tag clapshot:latest-demo-htadmin elonen/clapshot:latest-demo-htadmin
+	DOCKER_BUILDKIT=1 docker build --platform $(DEMO_PLATFORMS) --pull \
+		-t clapshot:${PVER}-demo-htadmin \
+		-t elonen/clapshot:${PVER}-demo-htadmin \
+		-t elonen/clapshot:latest-demo-htadmin \
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htadmin
+
+
+build-docker-demo-and-push-hub: debian-docker
+	@which jq || (echo "ERROR: Please install jq first." && exit 1)
+	$(eval PVER=$(shell jq -r '.version' client/package.json))
+
+	DOCKER_BUILDKIT=1 docker build --platform $(DEMO_PLATFORMS) --pull \
+		-t elonen/clapshot:${PVER}-demo \
+		-t elonen/clapshot:latest-demo \
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo \
+		--push .
+
+	DOCKER_BUILDKIT=1 docker build --platform $(DEMO_PLATFORMS) --pull \
+		-t elonen/clapshot:${PVER}-demo-htadmin \
+		-t elonen/clapshot:latest-demo-htadmin \
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htadmin \
+		--push .
