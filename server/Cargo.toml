@@ -103,6 +103,7 @@ pbjson = "0.6.0"
 pbjson-types = "0.6.0"
 portpicker = "0.1.1"
 flate2 = "1.0.25"
+tar = "0.4.40"
 
 [dev-dependencies]
 assert_fs = "1.0.13"

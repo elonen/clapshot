@@ -1,8 +1,9 @@
-use std::{sync::{atomic::{AtomicBool, Ordering}, Arc}, thread::{self, JoinHandle}};
+use std::{fs::File, sync::{atomic::{AtomicBool, Ordering}, Arc}, thread::{self, JoinHandle}};
 
 use anyhow::Context;
 use database::DB;
 use diesel::Connection;
+use flate2::{write::GzEncoder, Compression};
 use lib_clapshot_grpc::GrpcBindAddr;
 use crate::{api_server::server_state::ServerState, grpc::{caller::OrganizerCaller, grpc_client::OrganizerURI}};
 
@@ -148,15 +149,32 @@ fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyho
 
     // Check & apply database migrations
     if  (migrate || db_was_missing) && !pending_migrations.is_empty() {
-        if !db_was_missing {
-            // Make a gzipped backup
+        if db_file.exists() {
+            // Make a tar.gz backup
             let now = chrono::Local::now();
-            let backup_path = db_file.with_extension(format!("backup-{}.sqlite.gz", now.format("%Y-%m-%dT%H_%M_%S")));
+            let backup_path = db_file.with_extension(format!("backup-{}.tar.gz", now.format("%Y-%m-%dT%H_%M_%S")));
             tracing::info!(file=%db_file.display(), backup=%backup_path.display(), "Backing up database before migration.");
-            let backup_file = std::fs::File::create(&backup_path).context("Error creating DB backup file")?;
-            let mut gzip_writer = flate2::write::GzEncoder::new(backup_file, flate2::Compression::fast());
-            let mut fh = std::fs::File::open(&db_file).context("Error reading current DB file for backup")?;
-            std::io::copy(&mut fh, &mut gzip_writer).context("Error copying DB file to backup")?;
+
+            let backup_file = File::create(&backup_path).context("Error creating DB backup file")?;
+            let gzip_writer = GzEncoder::new(backup_file, Compression::fast());
+            let mut tar_builder = tar::Builder::new(gzip_writer);
+
+            // Add the main .sqlite file to the tar archive
+            tar_builder.append_path_with_name(&db_file, db_file.file_name().unwrap())
+                .context("Error adding main DB file to tar archive")?;
+
+            // Add .sqlite-* files to the tar archive
+            let db_file_prefix = db_file.to_string_lossy().into_owned();
+            for entry in std::fs::read_dir(db_file.parent().unwrap()).context("Error reading DB directory")? {
+                let entry = entry.context("Error reading DB directory entry")?;
+                let path = entry.path();
+                if path.to_string_lossy().starts_with(&db_file_prefix) && path != db_file {
+                    tar_builder.append_path_with_name(&path, path.file_name().unwrap())
+                        .context("Error adding WAL/SHM files to tar archive")?;
+                }
+            }
+
+            tar_builder.finish().context("Error finishing tar archive")?;
         }
 
         for m in &pending_migrations {
