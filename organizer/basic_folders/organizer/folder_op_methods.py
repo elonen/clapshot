@@ -5,8 +5,8 @@ from typing import Optional
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
 
-import clapshot_grpc.clapshot as clap
-import clapshot_grpc.clapshot.organizer as org
+import clapshot_grpc.proto.clapshot as clap
+import clapshot_grpc.proto.clapshot.organizer as org
 
 import sqlalchemy
 from .database.models import DbFolder, DbFolderItems, DbVideo

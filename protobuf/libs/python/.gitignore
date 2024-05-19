@@ -3,4 +3,4 @@ _venv
 build
 dist
 pkg_tmp
-
+*.egg-info

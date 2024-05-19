@@ -3,8 +3,8 @@ from typing import Optional
 import json
 from html import escape as html_escape
 
-import clapshot_grpc.clapshot as clap
-import clapshot_grpc.clapshot.organizer as org
+import clapshot_grpc.proto.clapshot as clap
+import clapshot_grpc.proto.clapshot.organizer as org
 import sqlalchemy
 
 from organizer.database.operations import db_get_or_create_user_root_folder

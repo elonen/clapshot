@@ -8,13 +8,13 @@ from grpclib.const import Status as GrpcStatus
 import sqlalchemy
 from sqlalchemy.orm import Session
 
-import clapshot_grpc.clapshot as clap
-import clapshot_grpc.clapshot.organizer as org
+import clapshot_grpc.proto.clapshot as clap
+import clapshot_grpc.proto.clapshot.organizer as org
+from clapshot_grpc.utilities import try_send_user_message
 
 from organizer.config import PATH_COOKIE_NAME
 from organizer.database.models import DbFolder, DbFolderItems, DbVideo
 from organizer.database.operations import db_get_or_create_user_root_folder
-from organizer.utils import try_send_user_message
 
 
 class FoldersHelper:

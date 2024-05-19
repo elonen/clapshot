@@ -7,11 +7,12 @@ import grpclib
 import grpclib.client
 from grpclib.const import Status as GrpcStatus
 
-import clapshot_grpc.clapshot as clap
-import clapshot_grpc.clapshot.organizer as org
+import clapshot_grpc.proto.clapshot as clap
+import clapshot_grpc.proto.clapshot.organizer as org
+from clapshot_grpc.utilities import try_send_user_message, parse_json_dict
 
 from organizer.config import MODULE_NAME, PATH_COOKIE_NAME, VERSION
-from organizer.utils import parse_json_args, try_send_user_message, uri_arg_to_folder_path
+from organizer.utils import uri_arg_to_folder_path
 
 from .database.models import DbFolder
 
@@ -24,7 +25,6 @@ async def on_start_user_session_impl(oi: organizer.OrganizerInbound, req: org.On
 
     Called by the server when a user session is started, to define custom actions for the client.
     """
-    oi.log.info("on_start_user_session")
     assert req.ses.sid, "No session ID"
     await oi.srv.client_define_actions(org.ClientDefineActionsRequest(
         sid = req.ses.sid,
@@ -75,10 +75,10 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
     """
     try:
         if cmd.cmd == "new_folder":
-            args = parse_json_args(cmd.args)
+            args = parse_json_dict(cmd.args)
             parent_folder = (await oi.folders_helper.get_current_folder_path(cmd.ses, None))[-1]
             # Create folder & refresh user's view
-            args = parse_json_args(cmd.args)
+            args = parse_json_dict(cmd.args)
             if new_folder_name := args.get("name"):
                 with oi.db_new_session() as dbs:
                     new_fld = await oi.folders_helper.create_folder(dbs, cmd.ses, parent_folder, new_folder_name)
@@ -91,7 +91,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
 
         elif cmd.cmd == "open_folder":
             # Validate & parse argument JSON
-            open_args = parse_json_args(cmd.args)
+            open_args = parse_json_dict(cmd.args)
             assert isinstance(open_args, dict), "open_folder argument not a dict"
             folder_id = open_args.get("id")
             assert folder_id, "open_folder arg 'id' missing"
@@ -117,7 +117,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             await oi.srv.client_show_page(page)
 
         elif cmd.cmd == "rename_folder":
-            args = parse_json_args(cmd.args)  # {"id": 123, "new_name": "New name"}
+            args = parse_json_dict(cmd.args)  # {"id": 123, "new_name": "New name"}
             if not args or not args.get("id") or not args.get("new_name"):
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "rename_folder command missing 'id' or 'new_name' argument")
             folder_id = int(args["id"])
@@ -135,7 +135,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             await oi.srv.client_show_page(page)
 
         elif cmd.cmd == "trash_folder":
-            args = parse_json_args(cmd.args) # {"id": 123}
+            args = parse_json_dict(cmd.args) # {"id": 123}
             if not args or not args.get("id"):
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "trash_folder command missing 'id' argument")
             folder_id = int(args["id"])
@@ -173,32 +173,3 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             raise e
 
     return clap.Empty()
-
-
-async def connect_back_to_server(oi: organizer.OrganizerInbound, server_info: org.ServerInfo):
-    """
-    Helper. Connect back to the Clapshot server, using the TCP or Unix socket address provided in the handshake.
-    """
-    try:
-        if tcp := server_info.backchannel.tcp:
-            backchannel = grpclib.client.Channel(host=tcp.host, port=tcp.port)
-        else:
-            backchannel = grpclib.client.Channel(path=server_info.backchannel.unix.path)
-
-        oi.log.info("Connecting back to Clapshot server...")
-        oi.srv = org.OrganizerOutboundStub(backchannel)
-        await oi.srv.handshake(org.OrganizerInfo(
-            version=org.SemanticVersionNumber(major=int(VERSION.split(".")[0]), minor=int(VERSION.split(".")[1]), patch=int(VERSION.split(".")[2])),
-            name=MODULE_NAME,
-            description="Basic folders for the UI",
-            hard_dependencies=[
-                org.OrganizerDependency(
-                    name="clapshot.server",
-                    min_ver=org.SemanticVersionNumber(major=0, minor=5, patch=6))
-            ],
-        ))
-        oi.log.info("Clapshot server connected.")
-
-    except ConnectionRefusedError as e:
-        oi.log.error(f"Return connection to Clapshot server refused: {e}")
-        raise GRPCError(GrpcStatus.UNKNOWN, "Failed to connect back to you (the Clapshot server)")

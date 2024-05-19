@@ -10,10 +10,10 @@ import sqlalchemy
 from sqlalchemy import Engine, text as sqla_text
 from sqlalchemy.orm import Session
 
-import clapshot_grpc.clapshot.organizer as org
-import clapshot_grpc.clapshot as clap
+import clapshot_grpc.proto.clapshot.organizer as org
+import clapshot_grpc.proto.clapshot as clap
 
-from organizer.utils import try_send_user_message
+from clapshot_grpc.utilities import try_send_user_message
 
 from .models import Base, DbFolder, DbFolderItems, DbSchemaMigrations, DbUser, DbVideo
 from .migrations import ALL_MIGRATIONS
@@ -205,7 +205,7 @@ async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, s
         ''')), {"user_id": user.id, "root_folder_id": ret.id})
 
     if user_msg and srv:
-        if err := await try_send_user_message(srv, user_msg):
+        if err := await try_send_user_message(srv, org.ClientShowUserMessageRequest(user_persist=user.id, msg=user_msg)):
             log.error(f"Error sending user message: {err}")
     elif user_msg and not srv:
         log.warning("No server connection to send user message: {user_msg}")

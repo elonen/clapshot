@@ -5,17 +5,21 @@ import traceback
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
 
-import clapshot_grpc.clapshot as clap
-import clapshot_grpc.clapshot.organizer as org
+import clapshot_grpc.proto.clapshot as clap
+import clapshot_grpc.proto.clapshot.organizer as org
+
+from clapshot_grpc.errors import organizer_grpc_handler
+from clapshot_grpc.connect import connect_back_to_server, open_database
+
 import sqlalchemy
 import sqlalchemy.exc
 
 from functools import wraps
 
-from organizer.database.connection import open_database
+from organizer.config import VERSION, MODULE_NAME
 
 from .migration_methods import check_migrations_impl, apply_migration_impl, after_migrations_impl
-from .user_session_methods import connect_back_to_server, on_start_user_session_impl, navigate_page_impl, cmd_from_client_impl
+from .user_session_methods import on_start_user_session_impl, navigate_page_impl, cmd_from_client_impl
 from .folder_op_methods import move_to_folder_impl, reorder_items_impl
 from .testing_methods import list_tests_impl, run_test_impl
 
@@ -29,46 +33,6 @@ try:
 except ImportError:
     def override(func):  # type: ignore
         return func
-
-
-
-
-def organizer_grpc_handler(func):
-    @wraps(func)
-    async def wrapper(self, request):
-        try:
-            try:
-                return await func(self, request)
-            except sqlalchemy.exc.OperationalError as e:
-                raise GRPCError(GrpcStatus.RESOURCE_EXHAUSTED, f"DB error: {e}")
-        except GRPCError as e:
-            # Pass some known errors through
-            if e.status in (GrpcStatus.ABORTED, GrpcStatus.UNIMPLEMENTED):
-                raise e
-            # Intercept some known session errors and show them to the user nicely
-            elif e.status in (GrpcStatus.INVALID_ARGUMENT, GrpcStatus.PERMISSION_DENIED, GrpcStatus.ALREADY_EXISTS, GrpcStatus.RESOURCE_EXHAUSTED):
-                user_msg_was_sent = False
-                try:
-                    await self.srv.client_show_user_message(org.ClientShowUserMessageRequest(sid=request.ses.sid,
-                        msg = clap.UserMessage(
-                            message=str(e.message),
-                            user_id=request.ses.user.id,
-                            type=clap.UserMessageType.ERROR,
-                            details=str(e.details) if e.details else None)))
-                    user_msg_was_sent = True
-                except Exception as e2:
-                    self.log.error("Error calling client_show_user_message(): {e2}")
-                if not user_msg_was_sent:
-                    raise GRPCError(GrpcStatus.ABORTED)   # Tell Clapshot server to ignore the result (we've shown the error to the user)
-            else:
-                self.log.error(f"%%%%% Unknown GRPCError in organizer_grpc_handler: {e}")
-                raise e
-        except Exception as e:
-            self.log.error(f"General error in organizer_grpc_handler: {e}")
-            self.log.error(traceback.format_exc())
-            raise e
-
-    return wrapper
 
 
 
@@ -92,8 +56,11 @@ class OrganizerInbound(org.OrganizerInboundBase):
         self.log.info(f"Got handshake from server.")
         self.log.debug(f"Server info: {json.dumps(server_info.to_dict())}")
 
-        await connect_back_to_server(self, server_info)
-        await open_database(self, server_info)
+        srv_dep = org.OrganizerDependency(name="clapshot.server", min_ver=org.SemanticVersionNumber(major=0, minor=6, patch=0))
+        self.srv = await connect_back_to_server(server_info, MODULE_NAME, VERSION.split("."), "Basic folders for the UI", [srv_dep], self.log)
+
+        debug_sql = False  # set to True to log all SQL queries
+        self.db, self.db_new_session = await open_database(server_info, debug_sql, self.log)
 
         self.folders_helper = FoldersHelper(self.db_new_session, self.srv, self.log)
         self.pages_helper = PagesHelper(self.folders_helper, self.srv, self.db_new_session, self.log)

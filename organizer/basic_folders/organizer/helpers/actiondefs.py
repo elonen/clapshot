@@ -1,5 +1,5 @@
 from textwrap import dedent
-import clapshot_grpc.clapshot as clap
+import clapshot_grpc.proto.clapshot as clap
 
 class ActiondefsHelper:
     def __init__(self):

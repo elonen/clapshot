@@ -5,8 +5,9 @@ import re
 from docopt import docopt
 import grpclib.server
 
+from clapshot_grpc.logger import make_organizer_logger
+
 from .config import VERSION
-from .helpers.logger import make_logger
 from . import OrganizerInbound
 
 
@@ -40,7 +41,7 @@ async def async_main():
     flag_debug, flag_json, flag_tcp = arguments["--debug"], arguments["--json"], arguments["--tcp"]
 
     bind_addr = arguments["<bind>"]
-    logger=make_logger("bf", debug=flag_debug, json=flag_json)
+    logger=make_organizer_logger("bf", debug=flag_debug, json=flag_json)
 
     server = grpclib.server.Server([OrganizerInbound(logger, flag_debug)])
     if flag_tcp:

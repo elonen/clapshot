@@ -2,9 +2,14 @@ import json
 import logging
 import sys
 
-def make_logger(name: str, debug: bool = False, json: bool = False) -> logging.Logger:
+
+def make_organizer_logger(name: str, debug: bool = False, json: bool = False) -> logging.Logger:
     """
-    Create a logger with the given name.
+    Create a Clapshot Server -compatible logger for an Organizer plugin.
+
+    The embeds organizer log entries within its own log best when the log is in a certain format.
+    This function creates a standard logger that outputs in that format.
+
     :param name: Name of the logger
     :param debug: Whether to enable debug logging
     :param json: Whether to log in JSON format

@@ -20,9 +20,9 @@ clean-debian:
 	rm -rf dist_deb
 
 debian-docker:
-	@for plat in arm64 amd64; do \
-		cd server; export TARGET_ARCH=$$plat; make debian-docker; cd ..; \
-		cd organizer; export TARGET_ARCH=$$plat; make debian-docker; cd ..; \
+	for plat in arm64 amd64; do \
+		cd server; TARGET_ARCH=$$plat  make debian-docker; cd ..; \
+		cd organizer; TARGET_ARCH=$$plat  make debian-docker; cd ..; \
 	done
 	(cd client; make debian-docker)
 	mkdir -p dist_deb

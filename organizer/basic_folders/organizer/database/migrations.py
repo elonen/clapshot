@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from textwrap import dedent
 
-import clapshot_grpc.clapshot.organizer as org
-import clapshot_grpc.clapshot as clap
+import clapshot_grpc.proto.clapshot.organizer as org
+import clapshot_grpc.proto.clapshot as clap
 
 
 # List of all specified migrations.

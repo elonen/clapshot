@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import clapshot_grpc.clapshot as clap
-import clapshot_grpc.clapshot.organizer as org
+import clapshot_grpc.proto.clapshot as clap
+import clapshot_grpc.proto.clapshot.organizer as org
 
 from .database.operations import db_check_and_fix_integrity, db_check_for_folder_loops, db_check_pending_migrations, db_apply_migration, db_test_orm_mappings
 

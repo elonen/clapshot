@@ -11,8 +11,8 @@ from typing import Tuple
 
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
-import clapshot_grpc.clapshot.organizer as org
-import clapshot_grpc.clapshot as clap
+import clapshot_grpc.proto.clapshot.organizer as org
+import clapshot_grpc.proto.clapshot as clap
 
 import organizer
 from organizer.config import PATH_COOKIE_NAME
