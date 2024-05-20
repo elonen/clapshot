@@ -4,6 +4,7 @@ use tracing::error;
 use std::path::PathBuf;
 use anyhow::bail;
 use clapshot_server::{PKG_NAME, PKG_VERSION, run_clapshot, grpc::{grpc_client::prepare_organizer, grpc_server::make_grpc_server_bind}};
+use std::sync::Arc;
 
 mod log;
 
@@ -114,11 +115,13 @@ fn main() -> anyhow::Result<()>
 
     let url_base = args.flag_url_base.trim_end_matches('/').to_string();
     let time_offset = time::UtcOffset::current_local_offset().expect("should get local offset");
-    let _log_guard = log::setup_logging(
+
+    let _logger = Arc::new(log::ClapshotLogger::new(
         time_offset,
         args.flag_debug,
         &args.flag_log.clone().unwrap_or_default(),
-        args.flag_json);
+        args.flag_json,
+    )?);
 
     let grpc_server_bind = make_grpc_server_bind(&args.flag_org_out_tcp, &args.flag_data_dir)?;
 
