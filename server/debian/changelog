@@ -1,3 +1,9 @@
+clapshot-server (0.6.1) bookworm; urgency=high
+
+  * Fix broken migration script that lost comments.
+
+ -- Jarno Elonen <elonen@iki.fi>  Sat, 20 May 2024 12:20:00 +0200
+
 clapshot-server (0.6.0) bullseye; urgency=low
 
   * New communication API

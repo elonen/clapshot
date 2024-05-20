@@ -13,7 +13,7 @@ class CustomInstall(install):
 
 setup(
     name='clapshot_organizer_basic_folders',
-    version='0.6.0',
+    version='0.6.1',
     packages=find_packages(),
     include_package_data=True,
 
