@@ -92,7 +92,7 @@ Clapshot now includes an extensible [Organizer Plugin system](doc/organizer-plug
 
 Organizers use gRPC to communicate with the Clapshot Server, and can be implemented in any language.
 
-The provided default/example organizer, called “basic_folders” (in *Python*), implements:
+The provided default/example organizer, called “[basic_folders](organizer/basic_folders/README.md)” (in *Python*), implements:
  - personal folders for users, and
  - for admin, a list of users and a way to manage their folder contents.
 
