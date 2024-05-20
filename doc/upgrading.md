@@ -30,6 +30,6 @@ Here's the procedure to restore them, in case you got burnt by this before the b
 5. Dump comments from the backup into a text file: `sqlite3 ./clapshot.sqlite ".dump --data-only comments" > comments-restore.sql`
 6. Check that the comments are there: `less comments-restore.sql`
 7. Insert them back to current DB: `sqlite3 ../clapshot.sqlite ".read ./comments-restore.sql"`
-8. Verify: `sqlite3 ../clapshot.sqlite "select count(*) from comments;"` (this should now return something else then "0")
+8. Verify: `sqlite3 ../clapshot.sqlite "select count(*) from comments;"` (this should now return the correct number of comments)
 
 You can now remove the temp directory `db-restore-temp`, no need to restart the server.
