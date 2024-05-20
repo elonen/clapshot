@@ -26,7 +26,7 @@ async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFol
 
     with oi.db_new_session() as dbs:
         dst_folder = dbs.query(DbFolder).filter(DbFolder.id == int(req.dst_folder_id)).one_or_none()
-        max_sort_order = dbs.query(sqlalchemy.func.max(DbFolderItems.sort_order)).filter(DbFolderItems.folder_id == int(req.dst_folder_id)).scalar() or 0
+        min_sort_order = dbs.query(sqlalchemy.func.min(DbFolderItems.sort_order)).filter(DbFolderItems.folder_id == int(req.dst_folder_id)).scalar() or 0
 
     if not dst_folder:
         raise GRPCError(GrpcStatus.NOT_FOUND, "Destination folder not found")
@@ -47,7 +47,7 @@ async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFol
                     raise GRPCError(GrpcStatus.PERMISSION_DENIED, f"Cannot move another user's folder")
 
                 with dbs.begin_nested():
-                    cnt = dbs.query(DbFolderItems).filter(DbFolderItems.subfolder_id == fld_to_move.id).update({"folder_id": dst_folder.id, "sort_order": max_sort_order+1})
+                    cnt = dbs.query(DbFolderItems).filter(DbFolderItems.subfolder_id == fld_to_move.id).update({"folder_id": dst_folder.id, "sort_order": min_sort_order-1})
                     if cnt == 0:
                         raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder with ID '{fld_to_move.id}' is a root folder? Cannot move.")
                     assert dst_folder.user_id, "Destination folder has no user ID, cannot transfer ownership"
@@ -67,9 +67,9 @@ async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFol
 
                 with dbs.begin_nested():
                     vid_to_move.user_id = dst_folder.user_id  # transfer ownership
-                    cnt = dbs.query(DbFolderItems).filter(DbFolderItems.video_id == vid_to_move.id).update({"folder_id": dst_folder.id, "sort_order": max_sort_order+1})
+                    cnt = dbs.query(DbFolderItems).filter(DbFolderItems.video_id == vid_to_move.id).update({"folder_id": dst_folder.id, "sort_order": min_sort_order-1})
                     if cnt == 0:  # not in any folder yet => insert it
-                        dbs.add(DbFolderItems(folder_id=dst_folder.id, video_id=vid_to_move.id, sort_order=max_sort_order+1))
+                        dbs.add(DbFolderItems(folder_id=dst_folder.id, video_id=vid_to_move.id, sort_order=min_sort_order-1))
                     else:
                         oi.log.debug(f"Moved video '{vid_to_move.id}' to folder '{dst_folder.id}'")
 
