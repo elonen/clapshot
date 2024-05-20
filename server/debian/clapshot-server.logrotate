@@ -1,0 +1,15 @@
+/var/log/clapshot.log
+{
+    monthly
+    maxsize 10M
+    missingok
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 0640 www-data www-data
+    sharedscripts
+    postrotate
+        systemctl kill -s USR1 clapshot-server.service
+    endscript
+}

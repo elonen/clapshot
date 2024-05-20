@@ -16,4 +16,4 @@ for (k,v) in cfg.items('general'):
 print(res)
 EOF`
 
-bash -c "clapshot-server $ARGS"
+exec bash -c "clapshot-server $ARGS"

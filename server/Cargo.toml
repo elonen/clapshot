@@ -12,11 +12,11 @@ readme = "README.md"
 [package.metadata.deb]
 
 maintainer = "Jarno Elonen <elonen@iki.fi>"
-copyright = "2022-2023, Jarno Elonen <elonen@iki.fi>"
+copyright = "2022-2024, Jarno Elonen <elonen@iki.fi>"
 section = "unknown"
 changelog = "debian/changelog"
 
-depends = "$auto, python3, ffmpeg, mediainfo"
+depends = "$auto, python3, ffmpeg, mediainfo, logrotate, psmisc"
 
 extended-description = """\
 Clapshot is a multiuser web app for reviewing and commenting video files.
@@ -30,6 +30,7 @@ assets = [
     ["README.md", "usr/share/doc/clapshot-server/README", "644"],
     ["LICENSE", "usr/share/doc/clapshot-server/LICENSE.GPL2", "644"],
     ["debian/additional_files/clapshot-server.conf", "usr/share/doc/clapshot-server/examples/", "644"],
+    ["debian/clapshot-server.logrotate", "etc/logrotate.d/clapshot-server", "644"],
 
     ["debian/additional_files/clapshot-server.conf", "etc/", "644"],
     ["debian/additional_files/run-with-conf.sh", "usr/share/clapshot-server/", "755"],
