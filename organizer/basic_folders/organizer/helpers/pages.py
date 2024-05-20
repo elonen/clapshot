@@ -147,13 +147,11 @@ class PagesHelper:
             video_added_action="on_video_added")
 
         pg_items = []
-
+        pg_items.append(clap.PageItem(folder_listing=folder_listing))
         if len(folder_listing.items) == 0:
-            pg_items.append(clap.PageItem(html="<p style='margin-top: 1em;'><i class='far fa-circle-question text-blue-400'></i> Right-click on space below to <strong>create a folder</strong>, or use the drop zone to <strong>upload videos</strong>.</p>"))
+            pg_items.append(clap.PageItem(html="<p style='margin-top: 1em;'><i class='far fa-circle-question text-blue-400'></i> Use the drop zone to <strong>upload videos</strong>, or right-click on the empty space above to <strong>create a folder</strong>.</p>"))
             pg_items.append(clap.PageItem(html="<p>After that, drag items to <strong>reorder</strong>, or drop them <strong>into folders</strong>. Hold shift to multi-select.</p>"))
 
-
-        pg_items.append(clap.PageItem(folder_listing=folder_listing))
         return pg_items
 
 

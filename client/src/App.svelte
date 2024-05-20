@@ -831,20 +831,6 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
                         </div>
                     {:else if pit.folderListing}
                         <div class="my-6">
-                            <div class="my-6">
-                                <FolderListing
-                                    listingData={pit.folderListing.listingData}
-                                    items={pit.folderListing.items.map((it)=>({
-                                        id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
-                                        obj: it }))}
-                                    dragDisabled = {pit.folderListing.allowReordering ? false : true}
-                                    listPopupActions = {pit.folderListing.popupActions}
-                                    on:open-item = {openVideoListItem}
-                                    on:reorder-items = {onReorderItems}
-                                    on:move-to-folder = {onMoveItemsToFolder}
-                                    on:popup-action = {onVideoListPopupAction}
-                                />
-                            </div>
                             <!-- ========== upload widget ============= -->
                             {#if pit.folderListing.allowUpload }
                                 <div class="h-24 border-4 border-dashed border-gray-700">
@@ -864,6 +850,21 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
                                     </FileUpload>
                                 </div>
                             {/if}
+                            <!-- ========== folder widge ============= -->
+                            <div class="my-6">
+                                <FolderListing
+                                    listingData={pit.folderListing.listingData}
+                                    items={pit.folderListing.items.map((it)=>({
+                                        id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
+                                        obj: it }))}
+                                    dragDisabled = {pit.folderListing.allowReordering ? false : true}
+                                    listPopupActions = {pit.folderListing.popupActions}
+                                    on:open-item = {openVideoListItem}
+                                    on:reorder-items = {onReorderItems}
+                                    on:move-to-folder = {onMoveItemsToFolder}
+                                    on:popup-action = {onVideoListPopupAction}
+                                />
+                            </div>
                         </div>
                     {/if}
                 {/each}
