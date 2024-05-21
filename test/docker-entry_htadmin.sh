@@ -52,7 +52,7 @@ EOF
 
 cat <<-EOF
 ---  Browse http://${URL_BASE}         for Clapshot
----  or     http://${URL_BASE}htadmin  for user management
+---  or     http://${URL_BASE}htadmin/  for user management
 ---
 ---  Default users:
 ---   - admin:admin     (can edit other people's videos)

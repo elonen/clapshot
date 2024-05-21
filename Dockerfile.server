@@ -22,7 +22,7 @@ USER root
 
 # Install system packages
 RUN apt-get -qy update
-RUN apt-get -qy install acl sudo >/dev/null
+RUN apt-get -qy install acl sudo logrotate >/dev/null
 
 # Install system packages
 RUN apt-get -qy update >/dev/null

@@ -5,7 +5,7 @@ FROM debian:bookworm-slim AS base
 # Install system packages
 RUN apt-get -qy update
 
-RUN apt-get -qy install acl sudo python3.11 >/dev/null
+RUN apt-get -qy install acl sudo logrotate python3.11 >/dev/null
 RUN apt-get -qy install sqlite3 ffmpeg mediainfo nginx >/dev/null
 
 # Add regular user (to match local user ID)

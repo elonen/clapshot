@@ -53,7 +53,7 @@ For a simple production setup with password authentication on a Debian 12 host:
 1. Prepare a Debian 12 with a mounted block device (or just directory) at `/mnt/clapshot-data`.
 2. Download [Clapshot Debian Bookworm Deployment Script](https://gist.github.com/elonen/80a721f13bb4ec1378765270094ed5d5)
 3. Run the script as root to install and auto-configure Clapshot.
-4. **!! Change the default admin password and delete example users in Htadmin !!**
+4. **!! Change the default `admin` and `htadmin` passwords, and delete example users in Htadmin !!**
 
 ## Configuration and Operation
 
