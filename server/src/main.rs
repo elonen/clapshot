@@ -1,159 +1,165 @@
-use docopt::Docopt;
-use serde::Deserialize;
-use tracing::error;
-use std::path::PathBuf;
 use anyhow::bail;
-use clapshot_server::{PKG_NAME, PKG_VERSION, run_clapshot, grpc::{grpc_client::prepare_organizer, grpc_server::make_grpc_server_bind}};
-use std::sync::Arc;
+use clap::Parser;
+use clapshot_server::{
+    grpc::{grpc_client::prepare_organizer, grpc_server::make_grpc_server_bind},
+    run_clapshot, PKG_NAME, PKG_VERSION,
+};
+use std::{path::PathBuf, sync::Arc};
+use tracing::error;
+use indoc::indoc;
 
 mod log;
 
-const USAGE: &'static str = r#"
-Clapshot server - backend of a video annotation tool
+#[derive(Parser, Debug)]
+#[command(
+    name = PKG_NAME,
+    version = PKG_VERSION,
+    about = "Clapshot Server - backend of a video annotation tool",
+    long_about = indoc! {"
+        Clapshot Server - backend of a video annotation tool
 
-Monitors <path>/incoming for new videos, processes them, and stores them in <path>/videos.
-Then serves the annotations and comments via an asyncronous HTTP + Socket.IO API.
-Use a proxy server to serve files in /videos and to secure the API with HTTPS/WSS.
+        This is a small HTTP + WS server that listen to Client API requests,
+        delegates some of them to an Organizer plugins, and transcodes videos.
 
-Usage:
-{NAME} [options] (--url-base <url>) (--data-dir <path>)
-{NAME} (-h | --help)
-
-Required:
-
- --url-base <url>     Base URL of the API server, e.g. https://example.com/clapshot/.
-                      This depends on your proxy server configuration.
- --data-dir <path>    Directory for database, /incoming, /videos and /rejected
-
-Options:
-
- -p --port <port>     Port to listen on [default: 8095]
- -H --host <host>     Host to listen on [default: 127.0.0.1]
-
- -P --poll <sec>      Polling interval for incoming folder [default: 3.0]
-
- -l --log <file>      Log to file instead of stdout
- -j --json            Log in JSON format
- -w --workers <n>     Max number of workers for video processing [default: 0]
-                      (0 = number of CPU cores)
-
- -b --bitrate <vbr>   Target (max) bitrate for transcoding, in Mbps [default: 2.5]
- --migrate            Migrate database to latest version. Make a backup first.
-
- --cors <origins>     Allowed CORS origins, separated by commas.
-                      Defaults to allowing url-base only.
-
---default-user <str>  Use this user id if auth headers are not found.
-                      Mainly useful for debugging. [default: anonymous]
-
- -d --debug           Enable debug logging
- -h --help            Show this screen
- -v --version         Show version and exit
-
-Organizer:
-
-Plugin system for organizing videos and users. Clapshot server can connect to
-a custom Organizer through gRPC, which then connects back to the server,
-establishing bidirectional gRPC. Recommended way to run an Organizer
-is to use --org-cmd, which allows integrated logging and shutdown.
-Unix sockets are used by default, and you don't usually need to
-specify --org-in-uri or --org-out-tcp.
-
- --org-cmd <cmd>       Shell command to start Organizer plugin.
-                       The command should block until SIGTERM, and log to
-                       stdout/stderr without timestamps. Unless --org-uri is a HTTP(S) URI,
-                       the command will get a Unix socket path as an argument when
-                       Clapshot server calls it.
-
- --org-in-uri <uri>    Custom endpoint for srv->org connections.
-                       E.g. `/path/to/plugin.sock` or `http://[::1]:50051`
-                       If `--org-cmd` is given, this defaults to a temp .sock in datadir.
-
- --org-out-tcp <addr>  Listen in TCP address port for org->srv connections.
-                       Default is to use a Unix socket in datadir. E.g. `[::1]:50052`
-
-"#;
-
-#[derive(Debug, Deserialize)]
+        It monitors `<data_dir>/incoming` for new videos, processes them, and stores them in `<data_dir>/videos`.
+        Use a proxy server to serve files from `videos` folder, and to secure the API with HTTPS/WSS.
+        "},
+)]
 struct Args {
-    flag_port: u16,
-    flag_host: String,
-    flag_poll: f32,
-    flag_log: Option<String>,
-    flag_json: bool,
-    flag_workers: usize,
-    flag_bitrate: f32,
-    flag_migrate: bool,
-    flag_org_cmd: Option<String>,
-    flag_org_in_uri: Option<String>,
-    flag_org_out_tcp: Option<String>,
-    flag_url_base: String,
-    flag_data_dir: PathBuf,
-    flag_cors: Option<String>,
-    flag_default_user: Option<String>,
-    flag_debug: bool,
-    flag_version: bool,
+    /// Directory for database, /incoming, /videos and /rejected
+    #[arg(short='D', long, required=true, value_name="DIR" )]
+    data_dir: PathBuf,
+
+    /// Base URL of the API server, e.g. `https://clapshot.example.com`.
+    /// This depends on your proxy server, and is usually different from `--host` and `--port`.
+    #[arg(short='U', long, required=true, value_name="URL")]
+    url_base: String,
+
+
+    /// TCP port to listen on
+    #[arg(short='p', long, default_value_t = 8095)]
+    port: u16,
+
+    /// Host to listen on
+    #[arg(short='H', long, default_value_t = String::from("127.0.0.1"))]
+    host: String,
+
+    /// Allowed CORS Origins, separated by commas.
+    /// Defaults to the value of `url_base`.
+    #[arg(long, value_name="ORIGINS")]
+    cors: Option<String>,
+
+
+    /// Polling interval for incoming folder
+    #[arg(short='P', long, default_value_t = 3.0, value_name="SECONDS")]
+    poll: f32,
+
+    /// Max number of workers for video processing
+    /// (0 = number of CPU cores)
+    #[arg(short, long, default_value_t = 0, value_name="NUM")]
+    workers: usize,
+
+    /// Target (max) bitrate for transcoding, in Mbps
+    #[arg(short, long, default_value_t = 2.5, value_name="MBITS")]
+    bitrate: f32,
+
+
+    /// Migrate database to latest version. Makes an automatic backup.
+    #[arg(long)]
+    migrate: bool,
+
+
+    /// Log to file instead of stdout
+    #[arg(short, long, value_name="FILE")]
+    log: Option<String>,
+
+    /// Enable debug logging
+    #[arg(short, long)]
+    debug: bool,
+
+    /// Log in JSON format
+    #[arg(short, long)]
+    json: bool,
+
+
+    /// Use this user id if auth headers are not found.
+    /// Mainly useful for debugging.
+    #[arg(long, default_value = "anonymous", value_name="USER")]
+    default_user: String,
+
+
+    /// Shell command to start Organizer plugin.
+    /// The command should block until SIGTERM, and log to stdout/stderr without timestamps.
+    /// Unless --org-uri is a HTTP(S) URI, the command will get a Unix socket path as an argument when Clapshot server calls it.
+    #[arg(long, value_name="CMD")]
+    org_cmd: Option<String>,    // TODO: turn into a Vec<String> to allow multiple plugins
+
+    /// Custom endpoint for srv->org connections.
+    /// E.g. `/path/to/plugin.sock` or `http://[::1]:50051`
+    /// If `--org-cmd` is given, this defaults to a temp .sock in datadir.
+    #[arg(long, value_name="URI")]
+    org_in_uri: Option<String>,
+
+    /// Listen in TCP address port for org->srv connections.
+    /// Default is to use a Unix socket in datadir. E.g. `[::1]:50052`
+    #[arg(long, value_name="BIND")]
+    org_out_tcp: Option<String>,
 }
 
-fn main() -> anyhow::Result<()>
-{
-    let args: Args = Docopt::new(USAGE.replace("{NAME}", PKG_NAME))
-        .and_then(|d| d.deserialize())
-        .unwrap_or_else(|e| e.exit());
+fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
 
-    if args.flag_version { println!("{}", PKG_VERSION); return Ok(()); }
-    // if args.flag_debug { println!("Debug enabled; parsed command line: {:#?}", args); }
+    if args.bitrate < 0.1 {
+        bail!("Bitrate must be >= 0.1");
+    }
+    let target_bitrate = (args.bitrate * 1_000_000.0) as u32;
 
-    let target_bitrate = {
-        if args.flag_bitrate < 0.1 { bail!("Bitrate must be >= 0.1"); }
-        (args.flag_bitrate * 1_000_000.0) as u32
-    };
-
-    if !(&args.flag_data_dir).exists() {
-        bail!("Data directory does not exist: {:?}", args.flag_data_dir);
+    if !args.data_dir.exists() {
+        bail!("Data directory does not exist: {:?}", args.data_dir);
     }
 
-    let url_base = args.flag_url_base.trim_end_matches('/').to_string();
+    let url_base = args.url_base.trim_end_matches('/').to_string();
     let time_offset = time::UtcOffset::current_local_offset().expect("should get local offset");
 
     let _logger = Arc::new(log::ClapshotLogger::new(
         time_offset,
-        args.flag_debug,
-        &args.flag_log.clone().unwrap_or_default(),
-        args.flag_json,
+        args.debug,
+        &args.log.clone().unwrap_or_default(),
+        args.json,
     )?);
 
-    let grpc_server_bind = make_grpc_server_bind(&args.flag_org_out_tcp, &args.flag_data_dir)?;
+    let grpc_server_bind = make_grpc_server_bind(&args.org_out_tcp, &args.data_dir)?;
 
     let (org_uri, _org_hdl) = prepare_organizer(
-        &args.flag_org_in_uri,
-        &args.flag_org_cmd,
-        args.flag_debug,
-        args.flag_json,
-        &args.flag_data_dir)?;
+        &args.org_in_uri,
+        &args.org_cmd,
+        args.debug,
+        args.json,
+        &args.data_dir,
+    )?;
 
-    let cors_origins: Vec<String> = args.flag_cors
+    let cors_origins: Vec<String> = args.cors
         .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
         .unwrap_or_default();
 
-    let default_user = args.flag_default_user.clone().unwrap_or("anonymous".to_string());
+    let default_user = args.default_user.clone();
 
     // Run the server (blocking)
     if let Err(e) = run_clapshot(
-        args.flag_data_dir.to_path_buf(),
-        args.flag_migrate,
+        args.data_dir.to_path_buf(),
+        args.migrate,
         url_base,
         cors_origins,
-        args.flag_host,
-        args.flag_port,
+        args.host,
+        args.port,
         org_uri,
         grpc_server_bind,
-        if args.flag_workers == 0 { num_cpus::get() } else { args.flag_workers },
+        if args.workers == 0 { num_cpus::get() } else { args.workers },
         target_bitrate,
         default_user,
-        args.flag_poll,
-        args.flag_poll * 5.0)
-    {
+        args.poll,
+        args.poll * 5.0,
+    ) {
         error!("run_clapshot() failed: {}", e);
     }
 
