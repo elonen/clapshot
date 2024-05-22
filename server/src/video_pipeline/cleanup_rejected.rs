@@ -3,10 +3,10 @@ use anyhow::{anyhow, bail};
 use tracing;
 
 
-/// Clean up after a video processing error. Attempts to preserve the original file
+/// Clean up after a processing error. Attempts to preserve the original file
 /// by moving it under the rejected directory. Then deletes any dangling files that were
 /// created during the failed ingestion.
-pub fn clean_up_rejected_file(data_dir: &Path, src_file: &Path, video_id: Option<String>) -> anyhow::Result<()>
+pub fn clean_up_rejected_file(data_dir: &Path, src_file: &Path, media_file_id: Option<String>) -> anyhow::Result<()>
 {
     // Create rejected directory if it doesn't exist
     let rejected_dir = data_dir.join("rejected");
@@ -19,8 +19,8 @@ pub fn clean_up_rejected_file(data_dir: &Path, src_file: &Path, video_id: Option
         std::fs::rename(src_file, &move_to)?;
     } else {
         // If the destination file already exists, make a subdirectory for the new one.
-        // Use video id if available, otherwise an UUID4.
-        let extra_dir = match &video_id {
+        // Use media file id if available, otherwise an UUID4.
+        let extra_dir = match &media_file_id {
             Some(id) => rejected_dir.join(id),
             None => rejected_dir.join( uuid::Uuid::new_v4().to_string() ),
         };

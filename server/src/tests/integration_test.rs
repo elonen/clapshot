@@ -23,11 +23,11 @@ mod integration_test
     use crossbeam_channel::{Receiver, RecvTimeoutError, unbounded, select};
 
     use crate::api_server::tests::expect_user_msg;
-    use crate::database::schema::videos::{thumb_sheet_cols, thumb_sheet_rows};
+    use crate::database::schema::media_files::{thumb_sheet_cols, thumb_sheet_rows};
     use crate::{expect_client_cmd, send_server_cmd};
     use crate::grpc::grpc_client::prepare_organizer;
     use crate::video_pipeline::{metadata_reader, IncomingFile};
-    use crate::api_server::test_utils::{connect_client_ws, open_video, write};
+    use crate::api_server::test_utils::{connect_client_ws, open_media_file, write};
     use lib_clapshot_grpc::{GrpcBindAddr, proto};
     use lib_clapshot_grpc::proto::client::ServerToClientCmd;
     use lib_clapshot_grpc::proto::client::server_to_client_cmd as s2c;
@@ -151,7 +151,7 @@ mod integration_test
 
     #[test]
     #[traced_test]
-    fn test_video_ingest_no_transcode() -> anyhow::Result<()>
+    fn test_media_ingest_no_transcode() -> anyhow::Result<()>
     {
         cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None]
             // Copy test file to incoming dir
@@ -161,34 +161,34 @@ mod integration_test
 
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::VideoAdded).await;    // notification to client (with upload folder info etc)
-            let vid = msg.refs.unwrap().video_id.unwrap();
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
+            let vid = msg.refs.unwrap().media_file_id.unwrap();
 
             thread::sleep(Duration::from_secs_f32(0.5));
             let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
-            let vid2 = msg.refs.unwrap().video_id.unwrap();
+            let vid2 = msg.refs.unwrap().media_file_id.unwrap();
             assert_eq!(vid, vid2);
 
             crate::api_server::test_utils::wait_for_thumbnails(&mut ws).await;
 
-            // Open video from server and check metadata
-            let video = open_video(&mut ws, &vid).await.video.unwrap();
-            assert_eq!(video.processing_metadata.unwrap().orig_filename.as_str(), mp4_file);
+            // Open media file from server and check metadata
+            let media_file = open_media_file(&mut ws, &vid).await.media_file.unwrap();
+            assert_eq!(media_file.processing_metadata.unwrap().orig_filename.as_str(), mp4_file);
 
             // Double slashes in the path are an error (empty path component)
-            let video_url = video.playback_url.unwrap();
-            let after_https = video_url.split("://").nth(1).unwrap();
+            let media_url = media_file.playback_url.unwrap();
+            let after_https = media_url.split("://").nth(1).unwrap();
             assert!(!after_https.contains("//"));
 
-            let orig_url = video.orig_url.unwrap();
-            assert!(orig_url == video_url);  // No transcoding, so should be the same
+            let orig_url = media_file.orig_url.unwrap();
+            assert!(orig_url == media_url);  // No transcoding, so should be the same
 
-            // Check that video was moved to videos dir and symlinked
+            // Check that media file was moved to the media dir and symlinked
             assert!(data_dir.path().join("videos").join(&vid).join("orig").join(mp4_file).is_file());
             assert!(!incoming_dir.join(mp4_file).exists());
 
             // Add a comment
-            send_server_cmd!(ws, AddComment, AddComment { video_id: vid, comment: "Test comment".to_string(), ..Default::default() });
+            send_server_cmd!(ws, AddComment, AddComment { media_file_id: vid, comment: "Test comment".to_string(), ..Default::default() });
 
             let mut got_new_comment = false;
             for _ in 0..3 {
@@ -244,12 +244,12 @@ mod integration_test
 
             // Wait for file to be processed
             thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::VideoAdded).await;    // notification to client (with upload folder info etc)
-            let vid = msg.refs.unwrap().video_id.unwrap();
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
+            let vid = msg.refs.unwrap().media_file_id.unwrap();
 
             thread::sleep(Duration::from_secs_f32(0.5));
             let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
-            let vid2 = msg.refs.unwrap().video_id.unwrap();
+            let vid2 = msg.refs.unwrap().media_file_id.unwrap();
             assert_eq!(vid, vid2);
 
             // Check that it's being transcoded
@@ -267,7 +267,7 @@ mod integration_test
 
             'waitloop: for _ in 0..(120*5)
             {
-                // Wait until server sends video updated messages about
+                // Wait until server sends media updated messages about
                 // transcoding and thumbnail generation being done
                 // before we try to open and check metadata.
                 if !(got_thumbnail_report && got_transcode_report) {
@@ -276,7 +276,7 @@ mod integration_test
                             // Got progress report?
                             got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
 
-                            if m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::VideoUpdated as i32) {
+                            if m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::MediaFileUpdated as i32) {
                                 // Got transcoding update message?
                                 if m.msgs.iter().any(|msg| msg.clone().message.to_ascii_lowercase().contains("transcod")) {
                                     got_transcode_report = true;
@@ -321,8 +321,8 @@ mod integration_test
                             _ => panic!("Expected folder listing for page item 1"),
                         };
                         let v = match fl.items[0].item.clone().unwrap() {
-                            proto::page_item::folder_listing::item::Item::Video(v) => v,
-                            _ => panic!("Expected video"),
+                            proto::page_item::folder_listing::item::Item::MediaFile(v) => v,
+                            _ => panic!("Expected media file"),
                         };
                         assert_eq!(v.id, vid);
 

@@ -47,70 +47,70 @@ impl models::User {
 }
 
 
-impl models::Video {
+impl models::MediaFile {
 
-    /// Set the recompressed flag for a video.
+    /// Set the recompressed flag for a media file.
     ///
     /// # Arguments
     /// * `db` - Database
-    /// * `vid` - Id of the video
+    /// * `vid` - Id of the media file
     pub fn set_recompressed(conn: &mut PooledConnection, vid: &str) -> EmptyDBResult
     {
-        use schema::videos::dsl::*;
-        diesel::update(videos.filter(id.eq(vid)))
+        use schema::media_files::dsl::*;
+        diesel::update(media_files.filter(id.eq(vid)))
             .set(recompression_done.eq(Local::now().naive_local()))
             .execute(conn)?;
         Ok(())
     }
 
-    /// Set thumbnail sheet dimensions for a video.
+    /// Set thumbnail sheet dimensions for a media file.
     ///
     /// # Arguments
     /// * `db` - Database
-    /// * `vid` - Id of the video
+    /// * `vid` - Id of the media file
     /// * `cols` - Width of the thumbnail sheet
     /// * `rows` - Height of the thumbnail sheet
     pub fn set_thumb_sheet_dimensions(conn: &mut PooledConnection, vid: &str, cols: u32, rows: u32) -> EmptyDBResult
     {
-        use schema::videos::dsl::*;
-        diesel::update(videos.filter(id.eq(vid)))
+        use schema::media_files::dsl::*;
+        diesel::update(media_files.filter(id.eq(vid)))
             .set((thumb_sheet_cols.eq(cols as i32), thumb_sheet_rows.eq(rows as i32)))
             .execute(conn)?;
         Ok(())
     }
 
-    /// Rename a video (title).
+    /// Rename a media file (title).
     ///
     /// # Arguments
     /// * `db` - Database
-    /// * `vid` - Id of the video
+    /// * `vid` - Id of the media file
     /// * `new_name` - New title
     ///
     /// # Returns
     /// * `EmptyResult`
-    /// * `Err(NotFound)` - Video not found
+    /// * `Err(NotFound)` - MediaFile not found
     /// * `Err(Other)` - Other error
     pub fn rename(conn: &mut PooledConnection, vid: &str, new_name: &str) -> EmptyDBResult
     {
-        use schema::videos::dsl::*;
-        diesel::update(videos.filter(id.eq(vid)))
+        use schema::media_files::dsl::*;
+        diesel::update(media_files.filter(id.eq(vid)))
             .set(title.eq(new_name))
             .execute(conn)?;
         Ok(())
     }
 
-    /// Get all videos that don't have thumbnails yet.
+    /// Get all media files that don't have thumbnails yet.
     ///
     /// # Returns
-    /// * `Vec<models::Video>` - List of Video objects
-    pub fn get_all_with_missing_thumbnails(conn: &mut PooledConnection) -> DBResult<Vec<models::Video>>
+    /// * `Vec<models::MediaFile>` - List of MediaFile objects
+    pub fn get_all_with_missing_thumbnails(conn: &mut PooledConnection) -> DBResult<Vec<models::MediaFile>>
     {
         use models::*;
-        use schema::videos::dsl::*;
-        to_db_res(videos.filter(
+        use schema::media_files::dsl::*;
+        to_db_res(media_files.filter(
                 thumb_sheet_cols.is_null().or(
                 thumb_sheet_rows.is_null()))
-            .order_by(added_time.desc()).load::<Video>(conn))
+            .order_by(added_time.desc()).load::<MediaFile>(conn))
     }
 }
 

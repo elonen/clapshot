@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use crate::{database::models::{self, Video, Comment}, grpc::grpc_client::OrganizerConnection, client_cmd};
+use crate::{database::models::{self, MediaFile, Comment}, grpc::grpc_client::OrganizerConnection, client_cmd};
 
 use super::{WsMsgSender, server_state::ServerState, SendTo};
 use lib_clapshot_grpc::proto;
@@ -8,7 +8,7 @@ use tracing::{debug, error};
 type Res<T> = anyhow::Result<T>;
 
 pub enum Topic<'a> {
-    Video(&'a str),
+    MediaFile(&'a str),
     Comment(i32),
     None
 }
@@ -16,8 +16,8 @@ pub enum Topic<'a> {
 #[macro_export]
 macro_rules! send_user_msg(
     ($msg_type:expr, $user_id:expr, $server:expr, $topic:expr, $msg:expr, $details:expr, $persist:expr) => {
-        let (comment_id, video_id) = match $topic {
-            Topic::Video(video_id) => (None, Some(video_id.into())),
+        let (comment_id, media_file_id) = match $topic {
+            Topic::MediaFile(media_file_id) => (None, Some(media_file_id.into())),
             Topic::Comment(comment_id) => (Some(comment_id.into()), None),
             Topic::None => (None, None)
         };
@@ -27,7 +27,7 @@ macro_rules! send_user_msg(
             user_id: $user_id.clone(),
             comment_id,
             seen: false,
-            video_id,
+            media_file_id,
             message: $msg.into(),
             details: $details.into()
         }, crate::api_server::SendTo::UserId(&$user_id), $persist)?;
@@ -56,7 +56,7 @@ macro_rules! send_user_ok(
 
 #[derive (Debug, Clone)]
 pub enum AuthzTopic<'a> {
-    Video(&'a Video, proto::org::authz_user_action_request::video_op::Op),
+    MediaFile(&'a MediaFile, proto::org::authz_user_action_request::media_file_op::Op),
     Comment(&'a Comment, proto::org::authz_user_action_request::comment_op::Op),
     Other(Option<&'a str>, proto::org::authz_user_action_request::other_op::Op)
 }
@@ -78,9 +78,9 @@ pub struct UserSession {
     pub user_name: String,
     pub is_admin: bool,
 
-    pub cur_video_id: Option<String>,
+    pub cur_media_file_id: Option<String>,
     pub cur_collab_id: Option<String>,
-    pub video_session_guard: Option<OpaqueGuard>,
+    pub media_session_guard: Option<OpaqueGuard>,
     pub collab_session_guard: Option<OpaqueGuard>,
 
     pub organizer: Option<Arc<tokio::sync::Mutex<OrganizerConnection>>>,
@@ -99,7 +99,7 @@ impl UserSession {
 
 fn try_send_error<'a>(user_id: &str, server: &ServerState, msg: String, details: Option<String>, op: &AuthzTopic<'a>) -> anyhow::Result<()> {
     let topic = match op {
-        AuthzTopic::Video(v, _op) => Topic::Video(&v.id),
+        AuthzTopic::MediaFile(v, _op) => Topic::MediaFile(&v.id),
         AuthzTopic::Comment(c, _op) => Topic::Comment(c.id),
         AuthzTopic::Other(_t, _op) => Topic::None,
     };
@@ -147,10 +147,10 @@ pub async fn org_authz<'a>(
 
     use proto::org::authz_user_action_request as authz_op;
     let pop = match op {
-        AuthzTopic::Video(v, op) => authz_op::Op::VideoOp(
-            authz_op::VideoOp {
+        AuthzTopic::MediaFile(v, op) => authz_op::Op::MediaFileOp(
+            authz_op::MediaFileOp {
                 op: op.into(),
-                video: Some(v.to_proto3(&server.url_base)) }),
+                media_file: Some(v.to_proto3(&server.url_base)) }),
         AuthzTopic::Comment(c, op) => authz_op::Op::CommentOp(
             authz_op::CommentOp {
                 op: op.into(),

@@ -167,7 +167,8 @@ pub trait DbBasicQuery<P, I>: Sized
 
 mod basic_query;
 crate::implement_basic_query_traits!(models::User, models::UserInsert, users, String, created.desc());
-crate::implement_basic_query_traits!(models::Video, models::VideoInsert, videos, String, added_time.desc());
+crate::implement_basic_query_traits!(models::MediaType, models::MediaType, media_types, String, precedence.desc());
+crate::implement_basic_query_traits!(models::MediaFile, models::MediaFileInsert, media_files, String, added_time.desc());
 crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32, created.desc());
 crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32, created.desc());
 
@@ -177,15 +178,15 @@ pub trait DbQueryByUser: Sized {
     fn get_by_user(conn: &mut PooledConnection, uid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
 }
 crate::implement_query_by_user_traits!(models::User, users, id, created.desc());
-crate::implement_query_by_user_traits!(models::Video, videos, user_id, added_time.desc());
+crate::implement_query_by_user_traits!(models::MediaFile, media_files, user_id, added_time.desc());
 crate::implement_query_by_user_traits!(models::Comment, comments, user_id, created.desc());
 crate::implement_query_by_user_traits!(models::Message, messages, user_id, created.desc());
 
 
 
-pub trait DbQueryByVideo: Sized {
-    /// Get all objects of type Self that are linked to given video.
-    fn get_by_video(conn: &mut PooledConnection, vid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
+pub trait DbQueryByMediaFile: Sized {
+    /// Get all objects of type Self that are linked to given media file.
+    fn get_by_media_file(conn: &mut PooledConnection, vid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
 }
-crate::implement_query_by_video_traits!(models::Comment, comments, video_id, created.desc());
-crate::implement_query_by_video_traits!(models::Message, messages, video_id, created.desc());
+crate::implement_query_by_media_file_traits!(models::Comment, comments, media_file_id, created.desc());
+crate::implement_query_by_media_file_traits!(models::Message, messages, media_file_id, created.desc());

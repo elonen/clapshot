@@ -1,7 +1,7 @@
 use std::{path::Path, sync::atomic::Ordering::Relaxed};
 use anyhow::Context;
 use tonic::{Request, Response, Status};
-use crate::{api_server::{server_state::ServerState, ws_handers::del_video_and_cleanup, SendTo}, client_cmd, database::{DbBasicQuery, DbQueryByUser, DbQueryByVideo}, grpc::grpc_impl_helpers::{paged_vec, rpc_expect_field}};
+use crate::{api_server::{server_state::ServerState, ws_handers::del_media_file_and_cleanup, SendTo}, client_cmd, database::{DbBasicQuery, DbQueryByUser, DbQueryByMediaFile}, grpc::grpc_impl_helpers::{paged_vec, rpc_expect_field}};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::database::models;
 
@@ -69,7 +69,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             let msg = models::MessageInsert {
                 user_id: username.to_string(),
                 seen: false,
-                video_id: msg_in.refs.clone().and_then(|r| r.video_id),
+                media_file_id: msg_in.refs.clone().and_then(|r| r.media_file_id),
                 comment_id: comment_id,
                 event_name: proto_msg_type_to_event_name((&msg_in).r#type()).to_string(),
                 message: msg_in.message.clone(),
@@ -88,17 +88,17 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             },
             Recipient::UserTemp(username) => { send_msg(&username, SendTo::UserId(&username), false) },
             Recipient::UserPersist(username) => { send_msg(&username, SendTo::UserId(&username), true) },
-            Recipient::VideoId(id) => { send_msg(&id, SendTo::VideoId(&id), false) },
+            Recipient::MediaFileId(id) => { send_msg(&id, SendTo::MediaFileId(&id), false) },
             Recipient::CollabSession(csi) => { send_msg(&csi, SendTo::Collab(&csi), false) },
         };
 
         to_rpc_empty(res)
     }
 
-    async fn client_open_video(&self, req: Request<org::ClientOpenVideoRequest>) -> RpcResult<proto::Empty>
+    async fn client_open_media_file(&self, req: Request<org::ClientOpenMediaFileRequest>) -> RpcResult<proto::Empty>
     {
         let req = req.into_inner();
-        to_rpc_empty(crate::api_server::ws_handers::send_open_video_cmd(&self.server, &req.sid, &req.id).await)
+        to_rpc_empty(crate::api_server::ws_handers::send_open_media_file_cmd(&self.server, &req.sid, &req.id).await)
     }
 
     async fn client_set_cookies(&self, req: Request<org::ClientSetCookiesRequest>) -> RpcResult<proto::Empty>
@@ -107,10 +107,10 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         to_rpc_empty(self.server.emit_cmd(client_cmd!(SetCookies, {cookies: req.cookies, expire_time: req.expire_time}), SendTo::UserSession(&req.sid)))
     }
 
-    async fn delete_video(&self, req: Request<org::DeleteVideoRequest>) -> RpcResult<proto::Empty>
+    async fn delete_media_file(&self, req: Request<org::DeleteMediaFileRequest>) -> RpcResult<proto::Empty>
     {
         let req = req.into_inner();
-        to_rpc_empty(del_video_and_cleanup(req.id.as_str(), None, &self.server).await)
+        to_rpc_empty(del_media_file_and_cleanup(req.id.as_str(), None, &self.server).await)
     }
 
     // ========================================================================
@@ -120,19 +120,19 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
     // few RPC calls, so there's quite a bit of matching and dense logic here.)
 
 
-    async fn db_get_videos(&self, req: Request<org::DbGetVideosRequest>) -> RpcResult<org::DbVideoList>
+    async fn db_get_media_files(&self, req: Request<org::DbGetMediaFilesRequest>) -> RpcResult<org::DbMediaFileList>
     {
-        use org::db_get_videos_request::Filter;
+        use org::db_get_media_files_request::Filter;
         let req = req.into_inner();
         let db = self.server.db.clone();
         let pg = req.paging.as_ref().try_into()?;
         let conn = &mut db.conn()?;
         let items = match rpc_expect_field(&req.filter, "filter")? {
-            Filter::All(_) => { models::Video::get_all(conn, pg)? },
-            Filter::Ids(ids) => { paged_vec(models::Video::get_many(conn, &ids.ids)?, pg) },
-            Filter::UserId(user_id) => { models::Video::get_by_user(conn, &user_id, pg)? },
+            Filter::All(_) => { models::MediaFile::get_all(conn, pg)? },
+            Filter::Ids(ids) => { paged_vec(models::MediaFile::get_many(conn, &ids.ids)?, pg) },
+            Filter::UserId(user_id) => { models::MediaFile::get_by_user(conn, &user_id, pg)? },
         };
-        Ok(Response::new(org::DbVideoList {
+        Ok(Response::new(org::DbMediaFileList {
             items: items.into_iter().map(|v| v.to_proto3(&self.server.url_base)).collect(),
             paging: req.paging,
         }))
@@ -154,7 +154,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
                 paged_vec(models::Comment::get_many(conn, &ids)?, pg)
             },
             Filter::UserId(user_id) => { models::Comment::get_by_user(conn, user_id, pg)? },
-            Filter::VideoId(video_id) => { models::Comment::get_by_video(conn, video_id, pg)? },
+            Filter::MediaFileId(media_file_id) => { models::Comment::get_by_media_file(conn, media_file_id, pg)? },
         };
         Ok(Response::new(org::DbCommentList {
             items: items.into_iter().map(|c| c.to_proto3()).collect(),
@@ -178,7 +178,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
                 paged_vec(models::Message::get_many(conn, &ids)?, pg)
             },
             Filter::UserId(user_id) => { models::Message::get_by_user(conn, user_id, pg)? },
-            Filter::VideoId(video_id) => { models::Message::get_by_video(conn, video_id, pg)? },
+            Filter::MediaFileId(media_file_id) => { models::Message::get_by_media_file(conn, media_file_id, pg)? },
             Filter::CommentId(comment_id) => {
                 let comment_id = comment_id.parse::<i32>()
                     .map_err(|e| Status::invalid_argument(format!("Invalid comment ID: {}", e)))?;
@@ -232,10 +232,10 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         }
         let conn = &mut self.server.db.conn()?;
         Ok(Response::new(org::DbUpsertResponse {
-            videos: upsert_type!([
-                conn, req.videos, models::Video, models::VideoInsert,
-                |it: &proto::Video| it.id.is_empty(),
-                |it: &models::Video| it.to_proto3(self.server.url_base.as_str())]),
+            media_files: upsert_type!([
+                conn, req.media_files, models::MediaFile, models::MediaFileInsert,
+                |it: &proto::MediaFile| it.id.is_empty(),
+                |it: &models::MediaFile| it.to_proto3(self.server.url_base.as_str())]),
             comments: upsert_type!([
                 conn, req.comments, models::Comment, models::CommentInsert,
                 |it: &proto::Comment| it.id.is_empty(),
@@ -263,7 +263,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         }
         let conn = &mut self.server.db.conn()?;
         Ok(Response::new(org::DbDeleteResponse {
-            videos_deleted: delete_type!([conn, req.video_ids, String, models::Video]),
+            media_files_deleted: delete_type!([conn, req.media_file_ids, String, models::MediaFile]),
             comments_deleted: delete_type!([conn, req.comment_ids, i32, models::Comment]),
             user_messages_deleted: delete_type!([conn, req.user_message_ids, i32, models::Message]),
         }))

@@ -9,8 +9,8 @@ pub fn proto_msg_type_to_event_name(t: proto::user_message::Type) -> &'static st
         proto::user_message::Type::Ok => "ok",
         proto::user_message::Type::Error => "error",
         proto::user_message::Type::Progress => "progress",
-        proto::user_message::Type::VideoUpdated => "video_updated",
-        proto::user_message::Type::VideoAdded => "video_added"
+        proto::user_message::Type::MediaFileUpdated => "media_file_updated",
+        proto::user_message::Type::MediaFileAdded => "media_file_added"
     }
 }
 
@@ -19,22 +19,23 @@ pub fn msg_event_name_to_proto_msg_type(t: &str) -> proto::user_message::Type {
         "ok" => proto::user_message::Type::Ok,
         "error" => proto::user_message::Type::Error,
         "progress" => proto::user_message::Type::Progress,
-        "video_updated" => proto::user_message::Type::VideoUpdated,
-        "video_added" => proto::user_message::Type::VideoAdded,
+        "media_file_updated" => proto::user_message::Type::MediaFileUpdated,
+        "media_file_added" => proto::user_message::Type::MediaFileAdded,
         _ => proto::user_message::Type::Ok,
     }
 }
 
 
-// ============================ Video ============================
+// ============================ MediaFile ============================
 
-impl crate::database::models::Video
+impl crate::database::models::MediaFile
 {
-    pub fn from_proto3(v: &proto::Video) -> DBResult<Self>
+    pub fn from_proto3(v: &proto::MediaFile) -> DBResult<Self>
     {
         Ok(Self {
             id: v.id.clone(),
             user_id: v.user_id.clone(),
+            media_type: Some(v.media_type.clone()),
             added_time: v.added_time.as_ref().map(|t| proto3_to_datetime(t)).flatten().ok_or(DBError::Other(anyhow::anyhow!("Bad added_time")))?,
             recompression_done: v.processing_metadata.as_ref().map(|m| m.recompression_done.as_ref().map(|x| proto3_to_datetime(x))).flatten().flatten(),
             thumb_sheet_cols: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.cols as i32)).flatten(),
@@ -48,10 +49,10 @@ impl crate::database::models::Video
         })
     }
 
-    pub fn to_proto3(&self, url_base: &str) -> proto::Video
+    pub fn to_proto3(&self, url_base: &str) -> proto::MediaFile
     {
         let duration = match (self.duration, self.total_frames, &self.fps) {
-            (Some(dur), Some(total_frames), Some(fps)) => Some(proto::VideoDuration {
+            (Some(dur), Some(total_frames), Some(fps)) => Some(proto::MediaFileDuration {
                 duration: dur as f64,
                 total_frames: total_frames as i64,
                 fps: fps.clone(),
@@ -59,7 +60,7 @@ impl crate::database::models::Video
             _ => None,
         };
         let processing_metadata = match (&self.orig_filename, &self.recompression_done, &self.raw_metadata_all.clone()) {
-            (Some(orig_filename), recompression_done, ffprobe_metadata_all) => Some(proto::VideoProcessingMetadata {
+            (Some(orig_filename), recompression_done, ffprobe_metadata_all) => Some(proto::MediaFileProcessingMetadata {
                 orig_filename: orig_filename.clone(),
                 recompression_done: recompression_done.map(|t| datetime_to_proto3(&t)),
                 ffprobe_metadata_all: ffprobe_metadata_all.clone(),
@@ -67,12 +68,12 @@ impl crate::database::models::Video
             _ => None,
         };
         let preview_data = if let (Some(cols), Some(rows)) = (self.thumb_sheet_cols, self.thumb_sheet_rows) {
-            let thumb_sheet = Some(proto::video_preview_data::ThumbSheet {
+            let thumb_sheet = Some(proto::media_file_preview_data::ThumbSheet {
                 url: format!("{}/videos/{}/thumbs/sheet-{}x{}.webp", url_base, &self.id, cols, rows),
                 rows: rows as u32,
                 cols: cols as u32,
             });
-            Some(proto::VideoPreviewData {
+            Some(proto::MediaFilePreviewData {
                 thumb_url: Some(format!("{}/videos/{}/thumbs/thumb.webp", url_base, &self.id)),
                 thumb_sheet,
             }
@@ -88,9 +89,10 @@ impl crate::database::models::Video
             None => orig_uri.clone()
         };
 
-        proto::Video {
+        proto::MediaFile {
             id: self.id.clone(),
             title: self.title.clone(),
+            media_type: self.media_type.clone().unwrap_or_default(),
             user_id: self.user_id.clone(),
             duration,
             added_time: Some(datetime_to_proto3(&self.added_time)),
@@ -102,13 +104,14 @@ impl crate::database::models::Video
     }
 }
 
-impl crate::database::models::VideoInsert
+impl crate::database::models::MediaFileInsert
 {
-    pub fn from_proto3(v: &proto::Video) -> DBResult<Self>
+    pub fn from_proto3(v: &proto::MediaFile) -> DBResult<Self>
     {
         Ok(Self {
             id: v.id.clone(),
             user_id: v.user_id.clone(),
+            media_type: Some(v.media_type.clone()),
             recompression_done: v.processing_metadata.as_ref().map(|m| m.recompression_done.as_ref().map(|x| proto3_to_datetime(x))).flatten().flatten(),
             thumb_sheet_cols: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.cols as i32)).flatten(),
             thumb_sheet_rows: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.rows as i32)).flatten(),
@@ -132,7 +135,7 @@ impl crate::database::models::Comment
         let created = c.created.as_ref().ok_or(anyhow::anyhow!("Missing created timestamp"))?;
         Ok(Self {
             id: c.id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid comment ID")))?,
-            video_id: c.video_id.clone(),
+            media_file_id: c.media_file_id.clone(),
             user_id: c.user_id.clone(),
             username_ifnull: c.username_ifnull.clone(),
             comment: c.comment.clone(),
@@ -151,7 +154,7 @@ impl crate::database::models::Comment
 
         proto::Comment {
             id: self.id.to_string(),
-            video_id: self.video_id.clone(),
+            media_file_id: self.media_file_id.clone(),
             user_id: self.user_id.clone(),
             username_ifnull: self.username_ifnull.clone(),
             comment: self.comment.clone(),
@@ -172,7 +175,7 @@ impl crate::database::models::CommentInsert
             return Err(DBError::Other(anyhow::anyhow!("Comment ID must be empty for conversion to CommentInsert, which doesn't have 'id' field")));
         }
         Ok(Self {
-            video_id: c.video_id.clone(),
+            media_file_id: c.media_file_id.clone(),
             user_id: c.user_id.clone(),
             username_ifnull: c.username_ifnull.clone(),
             comment: c.comment.clone(),
@@ -196,7 +199,7 @@ impl crate::database::models::Message
             id: id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid message ID")))?,
             event_name: proto_msg_type_to_event_name(v.r#type()).to_string(),
             user_id: user_id.clone(),
-            video_id: v.refs.as_ref().map(|r| r.video_id.clone()).flatten(),
+            media_file_id: v.refs.as_ref().map(|r| r.media_file_id.clone()).flatten(),
             comment_id: v.refs.as_ref().map(|r| r.comment_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid comment ID")))).transpose()?.flatten(),
             message: v.message.clone(),
             details: v.details.clone().unwrap_or_default(),
@@ -212,7 +215,7 @@ impl crate::database::models::Message
             r#type: msg_event_name_to_proto_msg_type(&self.event_name.as_str()).into(),
             user_id: Some(self.user_id.clone()),
             refs:Some(proto::user_message::Refs {
-                video_id: self.video_id.clone(),
+                media_file_id: self.media_file_id.clone(),
                 comment_id: self.comment_id.map(|id| id.to_string()),
             }),
             message: self.message.clone(),
@@ -235,7 +238,7 @@ impl crate::database::models::MessageInsert
         Ok(Self {
             event_name: proto_msg_type_to_event_name(v.r#type()).to_string(),
             user_id: user_id.clone(),
-            video_id: v.refs.as_ref().map(|r| r.video_id.clone()).flatten(),
+            media_file_id: v.refs.as_ref().map(|r| r.media_file_id.clone()).flatten(),
             comment_id: v.refs.as_ref().map(|r| r.comment_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid comment ID")))).transpose()?.flatten(),
             message: v.message.clone(),
             details: v.details.clone().unwrap_or_default(),
@@ -250,7 +253,7 @@ impl crate::database::models::MessageInsert
             r#type: msg_event_name_to_proto_msg_type(&self.event_name.as_str()).into(),
             user_id: Some(self.user_id.clone()),
             refs:Some(proto::user_message::Refs {
-                video_id: self.video_id.clone(),
+                media_file_id: self.media_file_id.clone(),
                 comment_id: self.comment_id.map(|id| id.to_string()),
             }),
             message: self.message.clone(),

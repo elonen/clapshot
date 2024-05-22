@@ -30,8 +30,8 @@ message ServerToClientCmd {
     message ShowMessages {
         repeated UserMessage msgs = 1;
     }
-    message OpenVideo {
-        Video video = 1;
+    message OpenMediaFile {
+        MediaFile media_file = 1;
     }
     message AddComments {
         repeated Comment comments = 1;
@@ -43,7 +43,7 @@ message ServerToClientCmd {
         string from_user = 1;
         bool paused = 2;
         bool loop = 3;
-        double seek_time_sec = 4;       // From start of video
+        double seek_time_sec = 4;       // From start of media file
         optional string drawing = 5;    // data-uri of an image
     }
     message SetCookies {
@@ -57,7 +57,7 @@ message ServerToClientCmd {
         ShowPage show_page = 30;
         DefineActions define_actions = 40;
         ShowMessages show_messages = 50;
-        OpenVideo open_video = 60;
+        OpenMediaFile open_media_file = 60;
         AddComments add_comments = 70;
         DelComment del_comment = 80;
         CollabEvent collab_event = 90;
@@ -69,18 +69,18 @@ message ClientToServerCmd {
     message OpenNavigationPage {
         optional string page_id = 1;
     }
-    message OpenVideo {
-        string video_id = 1;
+    message OpenMediaFile {
+        string media_file_id = 1;
     }
-    message DelVideo {
-        string video_id = 1;
+    message DelMediaFile {
+        string media_file_id = 1;
     }
-    message RenameVideo {
-        string video_id = 1;
+    message RenameMediaFile {
+        string media_file_id = 1;
         string new_name = 2;
     }
     message AddComment {
-        string video_id = 1;
+        string media_file_id = 1;
         string comment = 2;
         optional string timecode = 3;
         optional string parent_id = 4;
@@ -97,7 +97,7 @@ message ClientToServerCmd {
     }
     message JoinCollab {
         string collab_id = 1;
-        string video_id = 2;
+        string media_file_id = 2;
     }
     message LeaveCollab {
     }
@@ -125,9 +125,9 @@ message ClientToServerCmd {
 
     oneof cmd {
         OpenNavigationPage open_navigation_page = 10;
-        OpenVideo open_video = 20;
-        DelVideo del_video = 30;
-        RenameVideo rename_video = 40;
+        OpenMediaFile open_media_file = 20;
+        DelMediaFile del_media_file = 30;
+        RenameMediaFile rename_media_file = 40;
         AddComment add_comment = 50;
         EditComment edit_comment = 60;
         DelComment del_comment = 70;

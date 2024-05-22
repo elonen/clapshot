@@ -3,12 +3,12 @@ package clapshot.organizer;
 
 import public "common.proto";
 
-message DbGetVideosRequest {
+message DbGetMediaFilesRequest {
     optional DbPaging paging = 1;
     oneof filter {
-        Empty all = 10;             // All videos in the database. Make sure to set paging.
-        IdList ids = 11;            // List of video ids
-        string user_id = 12;        // Owner of the video
+        Empty all = 10;             // All media files in the database. Make sure to set paging.
+        IdList ids = 11;            // List of media file ids
+        string user_id = 12;        // Owner of the media file
     }
 }
 
@@ -18,7 +18,7 @@ message DbGetCommentsRequest {
         Empty all = 10;             // All comments in the database. Make sure to set paging.
         IdList ids = 11;            // List of comment ids
         string user_id = 12;        // User who posted the comment
-        string video_id = 13;       // Video the comments are attached to
+        string media_file_id = 13;  // MediaFile the comments are attached to
     }
 }
 
@@ -28,7 +28,7 @@ message DbGetUserMessagesRequest {
         Empty all = 10;             // All user messages in the database. Make sure to set paging.
         IdList ids = 11;            // List of message ids
         string user_id = 12;        // Message recipient
-        string video_id = 13;       // Video the message refers to
+        string media_file_id = 13;  // MediaFile the message refers to
         string comment_id = 14;     // Comment the message refers to
     }
 }
@@ -39,26 +39,26 @@ message DbGetUserMessagesRequest {
 // If an ID is not specified, a new object will be created,
 // otherwise the existing object will be replaced.
 message DbUpsertRequest {
-    repeated Video videos = 1;
+    repeated MediaFile media_files = 1;
     repeated Comment comments = 2;
     repeated UserMessage user_messages = 3;
 }
 
 message DbUpsertResponse {
     // These will have IDs, creation timestamps, etc. filled in.
-    repeated Video videos = 1;
+    repeated MediaFile media_files = 1;
     repeated Comment comments = 2;
     repeated UserMessage user_messages = 3;
 }
 
 message DbDeleteRequest {
-    repeated string video_ids = 1;
+    repeated string media_file_ids = 1;
     repeated string comment_ids = 2;
     repeated string user_message_ids = 3;
 }
 
 message DbDeleteResponse {
-    uint32 videos_deleted = 1;
+    uint32 media_files_deleted = 1;
     uint32 comments_deleted = 2;
     uint32 user_messages_deleted = 3;
 }
@@ -76,8 +76,8 @@ message IdList {
 
 // ---- Response messages ---
 
-message DbVideoList {
-    repeated Video items = 1;
+message DbMediaFileList {
+    repeated MediaFile items = 1;
     optional DbPaging paging = 2;  // Paging info for the result. Some queries may not do paging even if requested, so check for presence.
 }
 

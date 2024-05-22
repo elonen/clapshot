@@ -2,7 +2,7 @@
 import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-export let item: Proto3.Video;
+export let item: Proto3.MediaFile;
 export function data() { return item; }
 
 function fmt_date(d: Date | undefined) {

@@ -29,8 +29,8 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
             dependencies=[
                 org.MigrationDependency(
                     name="clapshot.server",
-                    min_ver="2024-05-13-093800_add_users_table",
-                    max_ver=None
+                    min_ver="2024-05-22-163000_add_media_type",
+                    max_ver="2024-05-22-163000_add_media_type"
                 ),
                 org.MigrationDependency(
                     name="clapshot.organizer.basic_folders",
@@ -56,7 +56,7 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
                     folder_id INTEGER NOT NULL REFERENCES bf_folders(id) ON UPDATE CASCADE ON DELETE CASCADE,
                     sort_order INTEGER NOT NULL DEFAULT 0,
 
-                    video_id VARCHAR(255) UNIQUE REFERENCES videos(id) ON UPDATE CASCADE ON DELETE CASCADE,
+                    video_id VARCHAR(255) UNIQUE REFERENCES media_files(id) ON UPDATE CASCADE ON DELETE CASCADE,
                     subfolder_id INTEGER UNIQUE REFERENCES bf_folders(id) ON UPDATE CASCADE ON DELETE CASCADE,
 
                     CHECK (
@@ -72,4 +72,28 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
                 ''')
     ),
 
+    MigrationEntry(
+        metadata = org.Migration(
+            uuid="rename_video_to_media_file_2024-05-22_2018",
+            version="0002_media_file_renamed",
+            dependencies=[
+                org.MigrationDependency(
+                    name="clapshot.server",
+                    min_ver="2024-05-22-163000_add_media_type",
+                    max_ver="2024-05-22-163000_add_media_type"
+                ),
+                org.MigrationDependency(
+                    name="clapshot.organizer.basic_folders",
+                    min_ver="0001_initial_schema",
+                    max_ver="0001_initial_schema"
+                )
+            ],
+            description="Rename video_id to media_file_id in bf_folder_items"
+        ),
+        up_sql= dedent('''
+                ALTER TABLE bf_folder_items RENAME COLUMN video_id TO media_file_id;
+                DROP INDEX IF EXISTS bf_folder_items_video_id;
+                CREATE INDEX bf_folder_items_media_file_id ON bf_folder_items(media_file_id);
+                '''),
+    ),
 ]

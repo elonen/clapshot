@@ -1,5 +1,5 @@
 use std::{process::Command, io::BufRead};
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use crossbeam_channel::{Sender, Receiver};
 use tracing;
 use threadpool::ThreadPool;
@@ -18,7 +18,7 @@ pub struct CmprInput {
     pub video_dst: Option<PathBuf>,
     pub thumb_dir: Option<PathBuf>,
     pub video_bitrate: u32,
-    pub video_id: String,
+    pub media_file_id: String,
     pub user_id: String,
 }
 
@@ -27,7 +27,7 @@ pub struct CmprOutput {
     pub success: bool,
     pub video_dst: Option<PathBuf>,
     pub thumb_dir: Option<PathBuf>,
-    pub video_id: String,
+    pub media_file_id: String,
     pub stdout: String,
     pub stderr: String,
     pub dmsg: DetailedMsg,
@@ -42,7 +42,7 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
         success: false,
         video_dst: args.video_dst.clone(),
         thumb_dir: args.thumb_dir.clone(),
-        video_id: args.video_id.clone(),
+        media_file_id: args.media_file_id.clone(),
         stdout: "".into(),
         stderr: "".into(),
         dmsg: DetailedMsg {
@@ -65,7 +65,7 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput) -> Cmpr
 fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutput
 {
     let _span = tracing::info_span!("run_ffmpeg_transcode",
-        video = %args.video_id,
+        media_file = %args.media_file_id,
         user = %args.user_id,
         thread = ?std::thread::current().id()).entered();
 
@@ -74,7 +74,7 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
         None => return err2cout("BUG: transcode called with no video destination", "", &args)
     };
 
-    tracing::info!(src=%args.src.display(), dst=%video_dst.display(), bitrate=%args.video_bitrate, "Compressing video");
+    tracing::info!(src=%args.src.display(), dst=%video_dst.display(), bitrate=%args.video_bitrate, "Transcoding media file");
 
     // Open a named pipe for ffmpeg to write progress reports to.
     // If this fails, ignore it and just don't show progress.
@@ -144,7 +144,7 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
         match ppipe_fname {
             None => std::thread::spawn(move || {}),
             Some(pfn) => {
-                let vid = args.video_id.clone();
+                let vid = args.media_file_id.clone();
                 let src = args.src.clone();
                 std::thread::spawn(move || {
                     let _span = tracing::info_span!("progress_thread",
@@ -245,7 +245,7 @@ fn run_ffmpeg_transcode( args: CmprInput, progress: ProgressSender ) -> CmprOutp
         success: err_msg.is_none(),
         video_dst: Some(video_dst),
         thumb_dir: None,
-        video_id: args.video_id.clone(),
+        media_file_id: args.media_file_id.clone(),
         stdout: stdout,
         stderr: stderr,
         dmsg: DetailedMsg {
@@ -285,7 +285,7 @@ fn count_frames( src: &PathBuf ) -> Option<i32>
 }
 
 
-/// Extract exactly THUMB_COUNT frames (THUMB_W x THUMB_H, letterboxed) that cover the whole video
+/// Extract exactly THUMB_COUNT frames (THUMB_W x THUMB_H, letterboxed) that cover the whole media file
 /// and save them as WEBP files (thumb_NN.webp) in the given directory.
 /// Copy the first frame also as thumb.webp (for fast preview without seeking).
 ///
@@ -295,7 +295,7 @@ fn count_frames( src: &PathBuf ) -> Option<i32>
 fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 {
     let _span = tracing::info_span!("run_ffmpeg_thumbnailer",
-        video = %args.video_id,
+        media_file = %args.media_file_id,
         user = %args.user_id,
         thread = ?std::thread::current().id()).entered();
 
@@ -304,7 +304,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
         None => return err2cout("BUG: thumbnailer called with no thumb_dir", "", &args)
     };
 
-    tracing::info!(src=%args.src.display(), dst=%thumb_dir.display(), "Thumbnailing video");
+    tracing::info!(src=%args.src.display(), dst=%thumb_dir.display(), "Thumbnailing media file");
 
     if !thumb_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&thumb_dir) {
@@ -349,7 +349,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
         }
     )};
 
-    // Create thumbnail sheet (preview of the whole video)
+    // Create thumbnail sheet (preview of the whole media file)
     let sheet_thread = {
         let src = args.src.clone();
         let thumb_dir = thumb_dir.clone();
@@ -427,7 +427,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
         success: comb_err.is_none(),
         video_dst: None,
         thumb_dir: Some(thumb_dir),
-        video_id: args.video_id.clone(),
+        media_file_id: args.media_file_id.clone(),
         stdout: comb_stdout,
         stderr: comb_stderr,
         dmsg: DetailedMsg {
@@ -447,7 +447,7 @@ fn run_ffmpeg_thumbnailer( args: CmprInput ) -> CmprOutput
 /// # Arguments
 /// * `inq` - Channel to receive incoming requests
 /// * `outq` - Channel to send results
-/// * `progress` - Channel to send transcoding progress updates. Tuple: (video_id, progress_msg)
+/// * `progress` - Channel to send transcoding progress updates. Tuple: (media_file_id, progress_msg)
 /// * `n_workers` - Number of worker threads to spawn for processing. This should be at most the number of CPU cores.
 pub fn run_forever(
     inq: Receiver<CmprInput>,

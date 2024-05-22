@@ -12,7 +12,7 @@ class ActiondefsHelper:
         return {
             "new_folder": self.make_new_folder_action(),
             "move_to_parent": self.make_move_to_parent_action(),
-            "on_video_added": self.make_on_video_added_action(),
+            "on_media_file_added": self.make_on_media_file_added_action(),
         }
 
     def make_new_folder_action(self) -> clap.ActionDef:
@@ -51,20 +51,20 @@ class ActiondefsHelper:
                     clapshot.moveToFolder(folderId, ids, listingData);
                 """).strip()))
 
-    def make_on_video_added_action(self) -> clap.ActionDef:
+    def make_on_media_file_added_action(self) -> clap.ActionDef:
         return clap.ActionDef(
             ui_props=None,  # not an UI action, just a callback
             action=clap.ScriptCall(
                 lang=clap.ScriptCallLang.JAVASCRIPT,
                 code=dedent("""
-                    var vid = _action_args.video_id;
+                    var vid = _action_args.media_file_id;
                     var listingData = _action_args.listing_data;
                     var folderId = listingData?.folder_id;
 
                     if (!folderId || !vid) {
-                        var msg = "on_video_added error: video_id missing, or folder_id from listingData.";
+                        var msg = "on_video_added error: media_file_id missing, or folder_id from listingData.";
                         alert(msg); console.error(msg);
                     } else {
-                        clapshot.moveToFolder(folderId, [{videoId: vid}], listingData);
+                        clapshot.moveToFolder(folderId, [{mediaFileId: vid}], listingData);
                     }
                 """).strip()))

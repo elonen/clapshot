@@ -23,17 +23,27 @@ pub struct UserInsert {
     pub name: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Insertable, Identifiable, QueryId, AsChangeset, Clone)]
+#[diesel(treat_none_as_null = true)]
+#[diesel(table_name = media_types)]
+#[diesel(primary_key(id))]
+pub struct MediaType {
+    pub id: String,
+    pub precedence: i32,
+    pub jq_script: String,
+    pub ffmpeg_options: String,
+}
 
 
 #[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
 #[diesel(treat_none_as_null = true)]
-#[diesel(table_name = videos)]
+#[diesel(table_name = media_files)]
 #[diesel(primary_key(id))]
-#[diesel(belongs_to(User, foreign_key = user_id))]
-
-pub struct Video {
+#[diesel(belongs_to(User, foreign_key=user_id))]
+pub struct MediaFile {
     pub id: String,
     pub user_id: String,
+    pub media_type: Option<String>,
 
     #[serde(with = "ts_seconds")]
     pub added_time: chrono::NaiveDateTime,
@@ -49,11 +59,12 @@ pub struct Video {
 }
 
 #[derive(Serialize, Deserialize, Debug, Insertable)]
-#[diesel(table_name = videos)]
+#[diesel(table_name = media_files)]
 #[diesel(belongs_to(User, foreign_key = user_id))]
-pub struct VideoInsert {
+pub struct MediaFileInsert {
     pub id: String,
     pub user_id: String,
+    pub media_type: Option<String>,
     pub recompression_done: Option<chrono::NaiveDateTime>,
     pub thumb_sheet_cols: Option<i32>,
     pub thumb_sheet_rows: Option<i32>,
@@ -69,12 +80,12 @@ pub struct VideoInsert {
 
 #[derive(Serialize, Deserialize, Debug, Associations, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
 #[diesel(belongs_to(User, foreign_key = user_id))]
-#[diesel(belongs_to(Video, foreign_key = video_id))]
+#[diesel(belongs_to(MediaFile, foreign_key = media_file_id))]
 
 #[diesel(treat_none_as_null = true)]
 pub struct Comment {
     pub id: i32,
-    pub video_id: String,
+    pub media_file_id: String,
     pub parent_id: Option<i32>,
 
     #[serde(with = "ts_seconds")]
@@ -91,11 +102,11 @@ pub struct Comment {
 }
 
 #[derive(Serialize, Deserialize, Debug, Insertable)]
-#[diesel(belongs_to(Video, foreign_key = video_id))]
+#[diesel(belongs_to(MediaFile, foreign_key = media_file_id))]
 #[diesel(belongs_to(User, foreign_key = user_id))]
 #[diesel(table_name = comments)]
 pub struct CommentInsert {
-    pub video_id: String,
+    pub media_file_id: String,
     pub parent_id: Option<i32>,
     pub user_id: Option<String>,
     pub username_ifnull: String,
@@ -108,7 +119,7 @@ pub struct CommentInsert {
 
 #[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, Associations, AsChangeset, Clone)]
 #[diesel(belongs_to(User, foreign_key = user_id))]
-#[diesel(belongs_to(Video, foreign_key = video_id))]
+#[diesel(belongs_to(MediaFile, foreign_key = media_file_id))]
 #[diesel(belongs_to(Comment, foreign_key = comment_id))]
 #[diesel(treat_none_as_null = true)]
 pub struct Message {
@@ -119,7 +130,7 @@ pub struct Message {
     pub created: chrono::NaiveDateTime,
 
     pub seen: bool,
-    pub video_id: Option<String>,
+    pub media_file_id: Option<String>,
     pub comment_id: Option<i32>,
     pub event_name: String,
     pub message: String,
@@ -129,12 +140,12 @@ pub struct Message {
 #[derive(Serialize, Deserialize, Debug, Default, Insertable, Clone, Associations, AsChangeset)]
 #[diesel(table_name = messages)]
 #[diesel(belongs_to(User, foreign_key = user_id))]
-#[diesel(belongs_to(Video, foreign_key = video_id))]
+#[diesel(belongs_to(MediaFile, foreign_key = media_file_id))]
 #[diesel(belongs_to(Comment, foreign_key = comment_id))]
 pub struct MessageInsert {
     pub user_id: String,
     pub seen: bool,
-    pub video_id: Option<String>,
+    pub media_file_id: Option<String>,
     pub comment_id: Option<i32>,
     pub event_name: String,
     pub message: String,

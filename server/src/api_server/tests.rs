@@ -16,10 +16,10 @@ use crate::api_server::server_state::ServerState;
 use crate::database::models::{self};
 use crate::database::tests::make_test_db;
 
-use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_no_msg, write, open_video, connect_client_ws};
+use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_no_msg, write, open_media_file, connect_client_ws};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 
-use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, DelComment, DelVideo, EditComment, ListMyMessages, OpenNavigationPage, OpenVideo, RenameVideo};
+use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, DelComment, DelMediaFile, EditComment, ListMyMessages, OpenNavigationPage, OpenMediaFile, RenameMediaFile};
 use std::convert::TryFrom;
 
 // ---------------------------------------------------------------------------------------------
@@ -42,7 +42,7 @@ async fn test_api_push_msg()
             msg: "test_msg".into(),
             user_id: Some("user.num1".into()),
             details: Some("test_details".into()),
-            video_id: None, topic: UserMessageTopic::Ok,
+            media_file_id: None, topic: UserMessageTopic::Ok,
         };
 
         ts.user_msg_tx.send(umsg.clone()).unwrap();
@@ -59,7 +59,7 @@ async fn test_api_push_msg()
 
 #[tokio::test]
 #[traced_test]
-async fn test_api_list_user_videos()
+async fn test_api_navigation_page()
 {
     api_test! {[ws, ts]
         send_server_cmd!(ws, OpenNavigationPage, OpenNavigationPage{..Default::default()});
@@ -83,38 +83,38 @@ async fn test_api_del_video()
 
         // Delete one successfully
         {
-            assert!(models::Video::get(conn, &ts.videos[0].id).is_ok());
+            assert!(models::MediaFile::get(conn, &ts.media_files[0].id).is_ok());
 
-            send_server_cmd!(ws, DelVideo, DelVideo{video_id: ts.videos[0].id.clone()});
+            send_server_cmd!(ws, DelMediaFile, DelMediaFile{media_file_id: ts.media_files[0].id.clone()});
             expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
 
             // Make sure the dir is gone
-            assert!(matches!(models::Video::get(conn, &ts.videos[0].id).unwrap_err(), DBError::NotFound()));
+            assert!(matches!(models::MediaFile::get(conn, &ts.media_files[0].id).unwrap_err(), DBError::NotFound()));
 
             // Make sure it's in trash, and DB row was backed up on disk
-            let trash_dir = ts.videos_dir.join("trash");
+            let trash_dir = ts.media_files_dir.join("trash");
             let first_trash_dir = trash_dir.read_dir().unwrap().next().unwrap().unwrap().path();
             let backup_path = first_trash_dir.join("db_backup.json");
-            assert!(backup_path.to_string_lossy().contains(&ts.videos[0].id));
+            assert!(backup_path.to_string_lossy().contains(&ts.media_files[0].id));
             assert!(backup_path.is_file());
             let backup_json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(backup_path).unwrap()).unwrap();
-            assert_eq!(backup_json["id"], ts.videos[0].id);
-            assert_eq!(backup_json["orig_filename"], ts.videos[0].orig_filename.clone().unwrap());
+            assert_eq!(backup_json["id"], ts.media_files[0].id);
+            assert_eq!(backup_json["orig_filename"], ts.media_files[0].orig_filename.clone().unwrap());
         }
 
         // Fail to delete a non-existent video
-        send_server_cmd!(ws, DelVideo, DelVideo{video_id: "non-existent".into()});
+        send_server_cmd!(ws, DelMediaFile, DelMediaFile{media_file_id: "non-existent".into()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Fail to delete someones else's video
-        assert!(models::Video::get(conn, &ts.videos[1].id).is_ok());
-        send_server_cmd!(ws, DelVideo, DelVideo{video_id: ts.videos[1].id.clone()});
+        assert!(models::MediaFile::get(conn, &ts.media_files[1].id).is_ok());
+        send_server_cmd!(ws, DelMediaFile, DelMediaFile{media_file_id: ts.media_files[1].id.clone()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
-        assert!(models::Video::get(conn, &ts.videos[1].id).is_ok());
+        assert!(models::MediaFile::get(conn, &ts.media_files[1].id).is_ok());
 
         // Break the database
         ts.db.break_db();
-        send_server_cmd!(ws, DelVideo, DelVideo{video_id: ts.videos[2].id.clone()});
+        send_server_cmd!(ws, DelMediaFile, DelMediaFile{media_file_id: ts.media_files[2].id.clone()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
@@ -122,35 +122,35 @@ async fn test_api_del_video()
 
 #[tokio::test]
 #[traced_test]
-async fn test_api_open_video()
+async fn test_api_open_media_file()
 {
     api_test! {[ws, ts]
-        for vid in &ts.videos {
-            let v = open_video(&mut ws, &vid.id).await.video.unwrap();
+        for vid in &ts.media_files {
+            let v = open_media_file(&mut ws, &vid.id).await.media_file.unwrap();
             assert_eq!(v.id, vid.id);
             assert_eq!(v.user_id.clone(), vid.user_id.clone());
             assert_eq!(v.processing_metadata.unwrap().orig_filename, vid.orig_filename.clone().unwrap());
             assert_eq!(v.title.unwrap(), vid.orig_filename.clone().unwrap());
 
             // Double slashes (=empty path component) in the path are an error
-            let video_url = v.playback_url.unwrap();
-            let after_https = video_url.split("://").nth(1).unwrap();
+            let media_url = v.playback_url.unwrap();
+            let after_https = media_url.split("://").nth(1).unwrap();
             assert!(!after_https.contains("//"));
         }
 
         // Break the database
         ts.db.break_db();
-        send_server_cmd!(ws, OpenVideo, OpenVideo{video_id: ts.videos[0].id.clone()});
+        send_server_cmd!(ws, OpenMediaFile, OpenMediaFile{media_file_id: ts.media_files[0].id.clone()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
 
 #[tokio::test]
 #[traced_test]
-async fn test_api_open_bad_video()
+async fn test_api_open_bad_media_file()
 {
     api_test! {[ws, ts]
-        send_server_cmd!(ws, OpenVideo, OpenVideo{video_id: "non-existent".into()});
+        send_server_cmd!(ws, OpenMediaFile, OpenMediaFile{media_file_id: "non-existent".into()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
      }
 }
@@ -166,27 +166,27 @@ pub async fn expect_user_msg(ws: &mut crate::api_server::test_utils::WsClient, e
 
 #[tokio::test]
 #[traced_test]
-async fn test_api_rename_video()
+async fn test_api_rename_media_file()
 {
     api_test! {[ws, ts]
-        let video = &ts.videos[0];
-        open_video(&mut ws, &video.id).await;
+        let media_file = &ts.media_files[0];
+        open_media_file(&mut ws, &media_file.id).await;
         let conn = &mut ts.db.conn().unwrap();
 
-        // Rename the video (with leading/trailing whitespace that will be trimmed)
-        send_server_cmd!(ws, RenameVideo, RenameVideo{video_id: video.id.clone(), new_name: "  New name  ".into()});
+        // Rename the media file (with leading/trailing whitespace that will be trimmed)
+        send_server_cmd!(ws, RenameMediaFile, RenameMediaFile{media_file_id: media_file.id.clone(), new_name: "  New name  ".into()});
         expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
 
-        // Make sure the video was renamed in the DB
-        let v = models::Video::get(conn, &video.id).unwrap();
+        // Make sure the media file was renamed in the DB
+        let v = models::MediaFile::get(conn, &media_file.id).unwrap();
         assert_eq!(v.title, Some("New name".to_string()));
 
         // Try to enter an invalid name
-        send_server_cmd!(ws, RenameVideo, RenameVideo{video_id: video.id.clone(), new_name: " /._  ".into()});
+        send_server_cmd!(ws, RenameMediaFile, RenameMediaFile{media_file_id: media_file.id.clone(), new_name: " /._  ".into()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Make sure name wasn't changed
-        let v = models::Video::get(conn, &video.id).unwrap();
+        let v = models::MediaFile::get(conn, &media_file.id).unwrap();
         assert_eq!(v.title, Some("New name".to_string()));
     }
 }
@@ -198,17 +198,17 @@ async fn test_api_rename_video()
 async fn test_api_add_plain_comment()
 {
     api_test! {[ws, ts]
-        let video = &ts.videos[0];
-        send_server_cmd!(ws, AddComment, AddComment{video_id: video.id.clone(), comment: "Test comment".into(), ..Default::default()});
+        let media = &ts.media_files[0];
+        send_server_cmd!(ws, AddComment, AddComment{media_file_id: media.id.clone(), comment: "Test comment".into(), ..Default::default()});
 
-        // No video opened by the client yet, so no response
+        // No media file opened by the client yet, so no response
         expect_no_msg(&mut ws).await;
-        open_video(&mut ws, &video.id).await;
+        open_media_file(&mut ws, &media.id).await;
 
         // Add another comment
         let drw_data = "data:image/webp;charset=utf-8;base64,SU1BR0VfREFUQQ==";  // "IMAGE_DATA"
 
-        send_server_cmd!(ws, AddComment, AddComment{video_id: video.id.clone(), comment: "Test comment 2".into(), drawing: Some(drw_data.into()), ..Default::default()});
+        send_server_cmd!(ws, AddComment, AddComment{media_file_id: media.id.clone(), comment: "Test comment 2".into(), drawing: Some(drw_data.into()), ..Default::default()});
 
         let c = expect_client_cmd!(&mut ws, AddComments);
         assert_eq!(c.comments.len(), 1);
@@ -219,13 +219,13 @@ async fn test_api_add_plain_comment()
         assert!(!models::Comment::get(&mut ts.db.conn().unwrap(), &cid).unwrap().drawing.unwrap().contains("data:image"));
         assert!(c.comments[0].clone().drawing.unwrap().starts_with("data:image/webp"));
 
-        // Add a comment to a nonexisting video
-        send_server_cmd!(ws, AddComment, AddComment{video_id: "bad_id".into(), comment: "Test comment 3".into(), ..Default::default()});
+        // Add a comment to a nonexisting media file
+        send_server_cmd!(ws, AddComment, AddComment{media_file_id: "bad_id".into(), comment: "Test comment 3".into(), ..Default::default()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
 
         // Break the database
         ts.db.break_db();
-        send_server_cmd!(ws, AddComment, AddComment{video_id: video.id.clone(), comment: "Test comment 4".into(), ..Default::default()});
+        send_server_cmd!(ws, AddComment, AddComment{media_file_id: media.id.clone(), comment: "Test comment 4".into(), ..Default::default()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
@@ -236,9 +236,9 @@ async fn test_api_add_plain_comment()
 async fn test_api_edit_comment()
 {
     api_test! {[ws, ts]
-        let video = &ts.videos[0];
+        let media = &ts.media_files[0];
         let com = &ts.comments[0];
-        open_video(&mut ws, &video.id).await;
+        open_media_file(&mut ws, &media.id).await;
 
         // Edit comment
         send_server_cmd!(ws, EditComment, EditComment{comment_id: com.id.to_string(), new_comment: "Edited comment".into(), ..Default::default()});
@@ -250,7 +250,7 @@ async fn test_api_edit_comment()
         assert_eq!(m.comments.len(), 1);
         assert_eq!(m.comments[0].id, com.id.to_string());
         assert_eq!(m.comments[0].comment, "Edited comment");
-        assert_eq!(m.comments[0].video_id, video.id);
+        assert_eq!(m.comments[0].media_file_id, media.id);
 
         assert!(m.comments[0].clone().drawing.unwrap().starts_with("data:image/webp"));
         let drw_data = String::from_utf8( data_url::DataUrl::process(m.comments[0].clone().drawing.unwrap().as_str()).unwrap().decode_to_vec().unwrap().0 ).unwrap();
@@ -278,16 +278,16 @@ async fn test_api_del_comment()
 {
     // Summary of comment thread used in this test:
     //
-    //   video[0]:
+    //   media_file[0]:
     //     comment[0] (user 1)
     //       comment[5] (user 2)
     //       comment[6] (user 1)
     //     comment[3] (user 2)
 
     api_test! {[ws, ts]
-        let video = &ts.videos[0];
+        let media = &ts.media_files[0];
         let com = &ts.comments[6];
-        open_video(&mut ws, &video.id).await;
+        open_media_file(&mut ws, &media.id).await;
 
         // Delete comment[6] (user 1)
         send_server_cmd!(ws, DelComment, DelComment{comment_id: com.id.to_string()});
@@ -330,8 +330,8 @@ async fn test_api_list_my_messages()
         assert_eq!(m.msgs.len(), 0);
 
         let msgs = [
-            models::MessageInsert { user_id: "user.num1".into(), message: "message1".into(), event_name: "ok".into(), video_id: Some("HASH0".into()), ..Default::default() },
-            models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "error".into(), video_id: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
+            models::MessageInsert { user_id: "user.num1".into(), message: "message1".into(), event_name: "ok".into(), media_file_id: Some("HASH0".into()), ..Default::default() },
+            models::MessageInsert { user_id: "user.num1".into(), message: "message2".into(), event_name: "error".into(), media_file_id: Some("HASH0".into()), details: "STACKTRACE".into(), ..Default::default() },
             models::MessageInsert { user_id: "user.num2".into(), message: "message3".into(), event_name: "ok".into(), ..Default::default() },
         ];
         let msgs = msgs.iter().map(|m| models::Message::insert(&mut ts.db.conn().unwrap(), &m).unwrap()).collect::<Vec<_>>();

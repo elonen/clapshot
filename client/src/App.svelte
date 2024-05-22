@@ -4,7 +4,7 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, videoId, videoFps, videoTitle, curPageId, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors} from '@/stores';
+import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, mediaFileId, videoFps, videoTitle, curPageId, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors} from '@/stores';
 import {IndentedComment, type UserMenuItem, type StringMap} from "@/types";
 
 import CommentCard from '@/lib/CommentCard.svelte'
@@ -24,7 +24,7 @@ let commentInput: CommentInput;
 let debugLayout: boolean = false;
 let uiConnectedState: boolean = false; // true if UI should look like we're connected to the server
 
-let lastVideoProgressMsgTime = Date.now();  // used to hide video_progress_msg after a few seconds
+let lastMediaFileProgressMsgTime = Date.now();  // used to hide video_progress_msg after a few seconds
 
 let collabDialogAck = false;  // true if user has clicked "OK" on the collab dialog
 let lastCollabControllingUser: string | null = null;    // last user to control the video in a collab session
@@ -47,7 +47,7 @@ function logAbbrev(...strs: any[]) {
 
 // Show last 5 connection errors and log everything to console
 function show_connection_error(msg: string) {
-    connectionErrors.update((errs) => {
+    connectionErrors.update((errs: string[]) => {
         let t = new Date().toLocaleTimeString();
         errs.push(`[${t}] ${msg}`);
         return errs.slice(-10);
@@ -59,13 +59,13 @@ function show_connection_error(msg: string) {
 function onCommentInputButton(e: any) {
 
     const PLAYBACK_REQ_SOURCE = "comment_input";
-    function resumeVideo() {
+    function resumePlayer() {
         // Only resume if playback was paused by comment input
         if (videoPlayer.getPlaybackState().request_source == PLAYBACK_REQ_SOURCE) {
             videoPlayer.setPlayback(true, PLAYBACK_REQ_SOURCE);
         }
     }
-    function pauseVideo() {
+    function pausePlayer() {
         videoPlayer.setPlayback(false, PLAYBACK_REQ_SOURCE);
     }
 
@@ -74,31 +74,31 @@ function onCommentInputButton(e: any) {
         if (e.detail.comment_text != "")
         {
             wsEmit({addComment: {
-                videoId: $videoId!,
+                mediaFileId: $mediaFileId!,
                 comment: e.detail.comment_text,
                 drawing: videoPlayer.getScreenshot(),
                 timecode: e.detail.is_timed ? videoPlayer.getCurTimecode() : "",
             }});
         }
-        resumeVideo();
+        resumePlayer();
     }
     else if (e.detail.action == "text_input") {
-        pauseVideo();   // auto-pause when typing a comment
+        pausePlayer();   // auto-pause when typing a comment
     }
     else if (e.detail.action == "color_select") {
-        pauseVideo();
+        pausePlayer();
         videoPlayer.onColorSelect(e.detail.color);
     }
     else if (e.detail.action == "draw") {
-        if (e.detail.is_draw_mode) { pauseVideo(); }
+        if (e.detail.is_draw_mode) { pausePlayer(); }
         videoPlayer.onToggleDraw(e.detail.is_draw_mode);
     }
     else if (e.detail.action == "undo") {
-        pauseVideo();
+        pausePlayer();
         videoPlayer.onDrawUndo();
     }
     else if (e.detail.action == "redo") {
-        pauseVideo();
+        pausePlayer();
         videoPlayer.onDrawRedo();
     }
 }
@@ -128,7 +128,7 @@ function onDeleteComment(e: any) {
 function onReplyComment(e: { detail: { parent_id: string; comment_text: string; }}) {
     console.log("onReplyComment: ", e.detail);
     wsEmit({addComment: {
-        videoId: $videoId!,
+        mediaFileId: $mediaFileId!,
         parentId: e.detail.parent_id,
         comment: e.detail.comment_text,
     }});
@@ -141,11 +141,11 @@ function onEditComment(e: any) {
     }});
 }
 
-function closeVideoIfOpen() {
-    console.debug("closeVideoIfOpen()");
+function closePlayerIfOpen() {
+    console.debug("closePlayerIfOpen()");
     wsEmit({leaveCollab: {}});
     $collabId = null;
-    $videoId = null;
+    $mediaFileId = null;
     $videoPlaybackUrl = null;
     $videoFps = null;
     $videoTitle = null;
@@ -153,7 +153,7 @@ function closeVideoIfOpen() {
     $videoIsReady = false;
 }
 
-function onVideoSeeked(_e: any) {
+function onPlayerSeeked(_e: any) {
     commentInput.forceDrawMode(false);  // Close draw mode when video frame is changed
 }
 
@@ -170,7 +170,7 @@ function onCollabReport(e: any) {
 function onCommentPinClicked(e: any) {
     // Find corresponding comment in the list, scroll to it and highlight
     let commentId = e.detail.id;
-    let c = $allComments.find(c => c.comment.id == commentId);
+    let c = $allComments.find((c: { comment: { id: any; }; }) => c.comment.id == commentId);
     if (c) {
         onDisplayComment({detail: {timecode: c.comment.timecode, drawing: c.comment.drawing}});
         let card = document.getElementById("comment_card_" + commentId);
@@ -185,9 +185,9 @@ function onCommentPinClicked(e: any) {
 function popHistoryState(e: PopStateEvent) {
     console.debug("popHistoryState called. e.state=", e.state);
     if (e.state) {
-        if (e.state.videoId) {
-            console.debug("popHistoryState: Opening video: ", e.state.videoId);
-            wsEmit({ openVideo: { videoId: e.state.videoId } });
+        if (e.state.mediaFileId) {
+            console.debug("popHistoryState: Opening video: ", e.state.mediaFileId);
+            wsEmit({ openMediaFile: { mediaFileId: e.state.mediaFileId } });
             return;
         } else if (e.state.pageId) {
             console.debug("popHistoryState: Opening page: ", e.state.pageId);
@@ -196,7 +196,7 @@ function popHistoryState(e: PopStateEvent) {
         }
     }
     console.debug("popHistoryState: Resetting UI view due to empty state");
-    closeVideoIfOpen();
+    closePlayerIfOpen();
     wsEmit({openNavigationPage: {pageId: undefined}});
 }
 
@@ -214,16 +214,16 @@ urlParams.forEach((value, key) => {
 
 console.debug("Parsing URL params: ", urlParams);
 
-$videoId = urlParams.get('vid');
+$mediaFileId = urlParams.get('vid');
 $collabId = urlParams.get('collab');
 
 const encodedPageParm = urlParams.get('p');
 $curPageId = encodedPageParm ? decodeURIComponent(encodedPageParm) : null;
 
-if ($videoId && $collabId)
-    history.replaceState({videoId: $videoId}, '', `/?vid=${$videoId}&collab=${$collabId}`);
-else if ($videoId)
-    history.replaceState({videoId: $videoId}, '', `/?vid=${$videoId}`);
+if ($mediaFileId && $collabId)
+    history.replaceState({mediaFileId: $mediaFileId}, '', `/?vid=${$mediaFileId}&collab=${$collabId}`);
+else if ($mediaFileId)
+    history.replaceState({mediaFileId: $mediaFileId}, '', `/?vid=${$mediaFileId}`);
 else if ($curPageId)
     history.replaceState({pageId: $curPageId}, '', `/?p=${encodeURIComponent($curPageId)}`);
 else
@@ -271,17 +271,17 @@ fetch(CONF_FILE)
 
 
 let videoListRefreshScheduled = false;
-function refreshMyVideos()
+function refreshMyMediaFiles()
 {
     if (!videoListRefreshScheduled) {
         videoListRefreshScheduled = true;
         setTimeout(() => {
             videoListRefreshScheduled = false;
-            if (!$videoId) {
-                console.debug("refreshMyVideos timer fired, no videoId. Requesting openNavigationPage.");
+            if (!$mediaFileId) {
+                console.debug("refreshMyMediaFiles timer fired, no mediaFileId. Requesting openNavigationPage.");
                 wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
             } else {
-                console.debug("refreshMyVideos timer fired, videoId present. Ignoring.");
+                console.debug("refreshMyMediaFiles timer fired, mediaFileId present. Ignoring.");
             }
         }, 500);
     }
@@ -293,7 +293,7 @@ function isConnected() {
 }
 
 function disconnect() {
-    closeVideoIfOpen();
+    closePlayerIfOpen();
     $curPageId = null;
     if (wsSocket) {
         wsSocket.close();
@@ -398,11 +398,11 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
         uiConnectedState = true;
         connectionErrors.set([]);
 
-        if ($videoId) {
-            console.debug(`Socket connected, videoId=${videoId}. Requesting openVideo`);
-            wsEmit({openVideo: { videoId: $videoId }});
+        if ($mediaFileId) {
+            console.debug(`Socket connected, mediaFileId=${mediaFileId}. Requesting openMediaFile`);
+            wsEmit({openMediaFile: { mediaFileId: $mediaFileId }});
         } else {
-            console.debug("Socket connected, no videoId. Requesting openNavigationPage");
+            console.debug("Socket connected, no mediaFileId. Requesting openNavigationPage");
             wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
             wsEmit({listMyMessages: {}});
         }
@@ -432,7 +432,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
         if (prevCollabId)
             wsEmit({leaveCollab: {}});
         if ($collabId)
-            wsEmit({joinCollab: { collabId: $collabId, videoId: $videoId! }});
+            wsEmit({joinCollab: { collabId: $collabId, mediaFileId: $mediaFileId! }});
     }
 
     // Incoming messages
@@ -448,7 +448,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 return;
             }
 
-            if (Date.now() - lastVideoProgressMsgTime > 5000) {
+            if (Date.now() - lastMediaFileProgressMsgTime > 5000) {
                 $videoProgressMsg = null; // timeout progress message after a while
             }
 
@@ -487,7 +487,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 }
 
                 $curPageId = newPageId;
-                closeVideoIfOpen();  // No-op if no video is open
+                closePlayerIfOpen();  // No-op if no video is open
                 $curPageItems = [...cmd.showPage.pageItems];  // force svelte to re-render
             }
             // defineActions
@@ -499,22 +499,22 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             else if (cmd.showMessages) {
                 for (const msg of cmd.showMessages.msgs) {
                     if ( msg.type === Proto3.UserMessage_Type.PROGRESS ) {
-                        if (msg.refs?.videoId == $videoId) {
+                        if (msg.refs?.mediaFileId == $mediaFileId) {
                             $videoProgressMsg = msg.message;
-                            lastVideoProgressMsgTime = Date.now();
+                            lastMediaFileProgressMsgTime = Date.now();
                         }
                     }
-                    else if ( msg.type === Proto3.UserMessage_Type.VIDEO_UPDATED ) {
-                        refreshMyVideos();
+                    else if ( msg.type === Proto3.UserMessage_Type.MEDIA_FILE_UPDATED ) {
+                        refreshMyMediaFiles();
                     }
-                    else if ( msg.type === Proto3.UserMessage_Type.VIDEO_ADDED ) {
+                    else if ( msg.type === Proto3.UserMessage_Type.MEDIA_FILE_ADDED ) {
                         console.log("Handling VIDEO_ADDED: ", msg);
-                        if (!msg.refs?.videoId) { console.error("VIDEO_ADDED message with no videoId. This is a bug."); }
+                        if (!msg.refs?.mediaFileId) { console.error("VIDEO_ADDED message with no mediaFileId. This is a bug."); }
 
                         // Parse details and extract JSON data (added by FileUpload) from msg
                         const uploadCookies = JSON.parse(msg.details ?? '{}');
                         const listingData = JSON.parse(uploadCookies.listing_data_json ?? '{}');
-                        const videoAddedAction = uploadCookies.video_added_action;
+                        const videoAddedAction = uploadCookies.media_file_added_action;
 
                         // Call organizer script if defined, otherwise refresh video list
                         if (videoAddedAction) {
@@ -525,12 +525,12 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                                 console.error(errorMsg);
                             } else {
                                 callOrganizerScript(action.action, {
-                                    video_id: msg.refs?.videoId,
+                                    video_id: msg.refs?.mediaFileId,
                                     listing_data: listingData,
                                 });
                             }
                         } else {
-                            refreshMyVideos();
+                            refreshMyMediaFiles();
                         }
                     }
                     else {
@@ -540,38 +540,38 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                             const severity = (msg.type == Proto3.UserMessage_Type.ERROR) ? 'danger' : 'info';
                             acts.add({mode: severity, message: msg.message, lifetime: 5});
                             if (severity == 'info') {
-                                refreshMyVideos();    // hack, rename and other such actions send info notifications
+                                refreshMyMediaFiles();    // hack, rename and other such actions send info notifications
                             }
                         };
                     }
                 }
             }
-            // openVideo
-            else if (cmd.openVideo) {
+            // openMediaFile
+            else if (cmd.openMediaFile) {
                 try {
-                    const v: Proto3.Video = cmd.openVideo.video!;
+                    const v: Proto3.MediaFile = cmd.openMediaFile.mediaFile!;
                     if (!v.playbackUrl) throw Error("No playback URL");
                     if (!v.duration) throw Error("No duration");
                     if (!v.title) throw Error("No title");
 
                     $curPageId = null;  // Clear the current page ID, so popHistoryState will know to reopen it if needed
 
-                    if ($videoId != v.id) {
-                        console.debug("[Browser history] Pushing new video state: ", v.id);
-                        history.pushState({videoId: v.id}, '', `/?vid=${v.id}`);
+                    if ($mediaFileId != v.id) {
+                        console.debug("[Browser history] Pushing new media file state: ", v.id);
+                        history.pushState({mediaFileId: v.id}, '', `/?vid=${v.id}`);
                         document.title = "Clapshot - " + (v.title ?? v.id);
                     }
 
                     $videoPlaybackUrl = v.playbackUrl;
                     $videoOrigUrl = v.origUrl ?? null;
-                    $videoId = v.id;
+                    $mediaFileId = v.id;
                     $videoFps = parseFloat(v.duration.fps);
                     if (isNaN($videoFps)) throw Error("Invalid FPS");
                     $videoTitle = v.title;
                     $allComments = [];
 
                     if ($collabId)
-                        wsEmit({joinCollab: { collabId: $collabId, videoId: $videoId! }});
+                        wsEmit({joinCollab: { collabId: $collabId, mediaFileId: $mediaFileId! }});
 
                 } catch(error) {
                     acts.add({mode: 'danger', message: 'Bad video open request. See log.', lifetime: 5});
@@ -583,11 +583,11 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
 
                 // Add/replace the new comments
                 for (const newComment of cmd.addComments.comments) {
-                    if (newComment.videoId != $videoId) {
+                    if (newComment.mediaFileId != $mediaFileId) {
                         console.warn("Comment not for current video. Ignoring.");
                         continue;
                     }
-                    $allComments = $allComments.filter((c) => c.comment.id !== newComment.id);
+                    $allComments = $allComments.filter((c: { comment: { id: string; }; }) => c.comment.id !== newComment.id);
                     $allComments.push({
                         comment: newComment,
                         indent: 0
@@ -624,7 +624,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             }
             // delComment
             else if (cmd.delComment) {
-                $allComments = $allComments.filter((c) => c.comment.id != cmd.delComment!.commentId);
+                $allComments = $allComments.filter((c: { comment: { id: string; }; }) => c.comment.id != cmd.delComment!.commentId);
             }
             // collabEvent
             else if (cmd.collabEvent) {
@@ -668,7 +668,7 @@ function onReorderItems(e: {detail: {ids: Proto3.FolderItemID[], listingData: St
     wsEmit({reorderItems: { listingData, ids }});
 }
 
-function openVideoListItem(e: { detail: { item: Proto3.PageItem_FolderListing_Item, listingData: StringMap }}): void {
+function openMediaFileListItem(e: { detail: { item: Proto3.PageItem_FolderListing_Item, listingData: StringMap }}): void {
     let {item, listingData} = e.detail;
     if (item.openAction) {
         callOrganizerScript(item.openAction, {
@@ -686,9 +686,9 @@ function openVideoListItem(e: { detail: { item: Proto3.PageItem_FolderListing_It
 // Expose some API functions to browser JS (=scripts from Server and Organizer)
 
 (window as any).clapshot = {
-    openVideo: (videoId: string) => { wsEmit({ openVideo: { videoId } }) },
-    renameVideo: (videoId: string, newName: string) => { wsEmit({ renameVideo: { videoId, newName } }) },
-    delVideo: (videoId: string) => { wsEmit({ delVideo: { videoId } }) },
+    openMediaFile: (mediaFileId: string) => { wsEmit({ openMediaFile: { mediaFileId } }) },
+    renameMediaFile: (mediaFileId: string, newName: string) => { wsEmit({ renameMediaFile: { mediaFileId, newName } }) },
+    delMediaFile: (mediaFileId: string) => { wsEmit({ delMediaFile: { mediaFileId } }) },
 
     callOrganizer: (cmd: string, args: Object) => { wsEmit({ organizerCmd: { cmd, args: JSON.stringify(args) } }) },
     itemsToIDs: (items: Proto3.PageItem_FolderListing_Item[]): Proto3.FolderItemID[] => { return folderItemsToIDs(items) },
@@ -724,11 +724,11 @@ function callOrganizerScript(script: Proto3.ScriptCall|undefined, action_args: O
     }
 }
 
-function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: VideoListDefItem[], listingData: StringMap }})
+function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, items: VideoListDefItem[], listingData: StringMap }})
 {
     let {action, items, listingData} = e.detail;
     let itemsObjs = items.map((it) => it.obj);
-    console.log("onVideoListPopupAction():", {action, itemsObjs, listingData});
+    console.log("onMediaFileListPopupAction():", {action, itemsObjs, listingData});
     callOrganizerScript(action.action, {
                 listing_data: listingData,
                 selected_items: itemsObjs
@@ -771,7 +771,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
             </div>
         </div>
 
-        {:else if $videoId}
+        {:else if $mediaFileId}
 
         <!-- ========== video review widgets ============= -->
         <div transition:slide class="flex h-full w-full {debugLayout?'border-2 border-blue-700':''}">
@@ -780,7 +780,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
                 <div class="flex-1 bg-cyan-900">
                     <VideoPlayer
                         bind:this={videoPlayer} src={$videoPlaybackUrl}
-                        on:seeked={onVideoSeeked}
+                        on:seeked={onPlayerSeeked}
                         on:collabReport={onCollabReport}
                         on:commentPinClicked={onCommentPinClicked}
                     />
@@ -837,7 +837,7 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
                                     <FileUpload
                                         postUrl={uploadUrl}
                                         listingData={pit.folderListing.listingData ?? {}}
-                                        videoAddedAction={pit.folderListing.videoAddedAction}
+                                        mediaFileAddedAction={pit.folderListing.mediaFileAddedAction}
                                     >
                                         <div class="flex flex-col justify-center items-center h-full">
                                             <div class="text-2xl text-gray-700">
@@ -855,14 +855,14 @@ function onVideoListPopupAction(e: { detail: { action: Proto3.ActionDef, items: 
                                 <FolderListing
                                     listingData={pit.folderListing.listingData}
                                     items={pit.folderListing.items.map((it)=>({
-                                        id: (it.video?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
+                                        id: (it.mediaFile?.id ?? it.folder?.id ?? "[BUG: BAD ITEM TYPE]"),
                                         obj: it }))}
                                     dragDisabled = {pit.folderListing.allowReordering ? false : true}
                                     listPopupActions = {pit.folderListing.popupActions}
-                                    on:open-item = {openVideoListItem}
+                                    on:open-item = {openMediaFileListItem}
                                     on:reorder-items = {onReorderItems}
                                     on:move-to-folder = {onMoveItemsToFolder}
-                                    on:popup-action = {onVideoListPopupAction}
+                                    on:popup-action = {onMediaFileListPopupAction}
                                 />
                             </div>
                         </div>

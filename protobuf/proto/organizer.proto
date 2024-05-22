@@ -11,7 +11,7 @@ import "google/protobuf/timestamp.proto";
 // This defines the gRPC API for Clapshot Organizer services.
 //
 // An **organizer plugin** is responsible for organizing
-// Clapshot videos into UI folders and enforcing access
+// media files into UI folders and enforcing access
 // control according to your particular business logic,
 // perhaps by looking up projects and ACL groups from
 // some LDAP or project management SQL database.
@@ -35,13 +35,13 @@ service OrganizerOutbound {
     rpc client_define_actions(ClientDefineActionsRequest) returns (Empty);  // Multiple calls will add/replace actions
     rpc client_show_page(ClientShowPageRequest) returns (Empty);
     rpc client_show_user_message(ClientShowUserMessageRequest) returns (Empty);
-    rpc client_open_video(ClientOpenVideoRequest) returns (Empty);
+    rpc client_open_media_file(ClientOpenMediaFileRequest) returns (Empty);
     rpc client_set_cookies(ClientSetCookiesRequest) returns (Empty);
 
-    rpc delete_video(DeleteVideoRequest) returns (Empty);   // Delete (trash) video cleanly from both database and filesystem
+    rpc delete_media_file(DeleteMediaFileRequest) returns (Empty);   // Delete (trash) media file cleanly from both database and filesystem
 
     // Database access (note: these may each happen in a separate DB connection / transaction)
-    rpc DbGetVideos(DbGetVideosRequest) returns (DbVideoList);
+    rpc DbGetMediaFiles(DbGetMediaFilesRequest) returns (DbMediaFileList);
     rpc DbGetComments(DbGetCommentsRequest) returns (DbCommentList);
     rpc DbGetUserMessages(DbGetUserMessagesRequest) returns (DbUserMessageList);
     rpc DbUpsert(DbUpsertRequest) returns (DbUpsertResponse);
@@ -222,21 +222,21 @@ message AuthzUserActionRequest {
         enum Op {
             LOGIN = 0;
             VIEW_HOME = 1;
-            UPLOAD_VIDEO = 2;
+            UPLOAD_MEDIA_FILE = 2;
             JOIN_COLLAB_SESSION = 10;
         }
         Op op = 1;
         optional string subject = 2;
     }
 
-    message VideoOp {
+    message MediaFileOp {
         enum Op {
             VIEW = 0;
             RENAME = 1;
             DELETE = 2;
             COMMENT = 3;
         }
-        Video video = 1;
+        MediaFile media_file = 1;
         Op op = 2;
     }
 
@@ -252,14 +252,14 @@ message AuthzUserActionRequest {
     UserSessionData ses = 1;
     oneof op {
         OtherOp other_op = 8;
-        VideoOp video_op = 9;
+        MediaFileOp media_file_op = 9;
         CommentOp comment_op = 10;
     }
 }
 
 message AuthzResponse {
     optional bool is_authorized = 1;     // If not set, leave authorization decision to server
-    optional string message = 2;         // e.g. "You are not authorized to view this video"
+    optional string message = 2;         // e.g. "You are not authorized to view this media file"
     optional string details = 3;         // e.g. "You are not a member of the project"
 }
 
@@ -295,7 +295,7 @@ message ClientShowUserMessageRequest {
         string sid = 100;               // send to client with this session ID
         string user_temp = 101;         // send to all session with this username
         string user_persist = 102;      // send to all sessions with this username, and store in DB
-        string video_id = 103;          // send to all clients watching this video
+        string media_file_id = 103;     // send to all clients watching this media file
         string collab_session = 104;    // send to all clients in this collaboration session
     }
 }
@@ -305,8 +305,8 @@ message ClientDefineActionsRequest {
     map<string, ActionDef> actions = 2; // e.g. "rename" -> {label: "Rename", icon: "edit"}
 }
 
-// Tell client of session `sid` to open video `id` in the video player
-message ClientOpenVideoRequest {
+// Tell client of session `sid` to open media file `id` in the player
+message ClientOpenMediaFileRequest {
     string sid = 1;
     string id = 2;
 }
@@ -317,6 +317,6 @@ message ClientSetCookiesRequest {
     optional google.protobuf.Timestamp expire_time = 3;
 }
 
-message DeleteVideoRequest {
+message DeleteMediaFileRequest {
     string id = 1;
 }

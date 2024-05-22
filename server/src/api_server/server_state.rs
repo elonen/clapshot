@@ -23,16 +23,16 @@ pub struct ServerState {
     pub grpc_srv_listening_flag: Arc<AtomicBool>,
     pub terminate_flag: Arc<AtomicBool>,
     pub db: Arc<DB>,
-    pub videos_dir: PathBuf,
+    pub media_files_dir: PathBuf,
     pub upload_dir: PathBuf,
     pub url_base: String,
     pub default_user: String,
 
     sid_to_session: SessionMap,
     user_id_to_senders: SenderListMap,
-    video_id_to_senders: SenderListMap,
+    media_file_id_to_senders: SenderListMap,
     collab_id_to_senders: SenderListMap,
-    collab_id_to_video_id: StringToStringMap,
+    collab_id_to_media_file_id: StringToStringMap,
 
     pub organizer_uri: Option<OrganizerURI>,
     pub organizer_has_connected: Arc<AtomicBool>,
@@ -43,7 +43,7 @@ impl ServerState {
 
     pub fn new(
         db: Arc<DB>,
-        videos_dir: &Path,
+        media_files_dir: &Path,
         upload_dir: &Path,
         url_base: &str,
         organizer_uri: Option<OrganizerURI>,
@@ -53,7 +53,7 @@ impl ServerState {
     {
         ServerState {
             db,
-            videos_dir: videos_dir.to_path_buf(),
+            media_files_dir: media_files_dir.to_path_buf(),
             upload_dir: upload_dir.to_path_buf(),
             grpc_srv_listening_flag,
             terminate_flag,
@@ -61,9 +61,9 @@ impl ServerState {
             default_user,
             sid_to_session: Arc::new(RwLock::new(HashMap::<String, UserSession>::new())),
             user_id_to_senders: Arc::new(RwLock::new(HashMap::<String, SenderList>::new())),
-            video_id_to_senders: Arc::new(RwLock::new(HashMap::<String, SenderList>::new())),
+            media_file_id_to_senders: Arc::new(RwLock::new(HashMap::<String, SenderList>::new())),
             collab_id_to_senders: Arc::new(RwLock::new(HashMap::<String, SenderList>::new())),
-            collab_id_to_video_id: Arc::new(RwLock::new(HashMap::<String, String>::new())),
+            collab_id_to_media_file_id: Arc::new(RwLock::new(HashMap::<String, String>::new())),
             organizer_uri,
             organizer_has_connected: Arc::new(AtomicBool::new(false)),
             organizer_info: Arc::new(Mutex::new(None)),
@@ -117,7 +117,7 @@ impl ServerState {
             SendTo::UserSession(sid) => { self.send_to_user_session(&sid, &msg) },
             SendTo::Collab(id) => { self.send_to_all_collab_users(&Some(id.into()), &msg) },
             SendTo::UserId(user_id) => { self.send_to_all_user_sessions(user_id, &msg) },
-            SendTo::VideoId(video_id) => { self.send_to_all_video_sessions(video_id, &msg) },
+            SendTo::MediaFileId(media_file_id) => { self.send_to_all_media_file_sessions(media_file_id, &msg) },
             SendTo::MsgSender(sender) => { sender.send(msg)?; Ok(1u32) },
         }
     }
@@ -149,7 +149,7 @@ impl ServerState {
         Ok(total_sent)
     }
 
-    /// Send a message to all sessions that are collaboratively viewing a video.
+    /// Send a message to all sessions that are collaboratively viewing a media file.
     /// Bails out with error if any of the senders fail.
     /// Returns the number of messages sent.
     pub fn send_to_all_collab_users(&self, collab_id: &Option<String>, msg: &super::Message) -> Res<u32> {
@@ -163,20 +163,20 @@ impl ServerState {
         Ok(total_sent)
     }
 
-    /// Register a new sender (API connection) as a viewer for a video.
-    /// One video can have multiple viewers (including the same user, using different connections).
+    /// Register a new sender (API connection) as a viewer for a media file.
+    /// One file can have multiple viewers (including the same user, using different connections).
     /// Returns a guard that will remove the sender when dropped.
-    pub fn link_session_to_video(&self, session_id: &str, video_id: &str) -> Res<()> {
+    pub fn link_session_to_media_file(&self, session_id: &str, media_file_id: &str) -> Res<()> {
         let mut map = self.sid_to_session.write();
         let ses = map.get_mut(session_id).ok_or_else(|| anyhow!("Session {} not found", session_id))?;
-        let grd: OpaqueGuard = self.add_sender_to_maplist(video_id, ses.sender.clone(), &self.video_id_to_senders);
-        ses.video_session_guard = Some(grd);
+        let grd: OpaqueGuard = self.add_sender_to_maplist(media_file_id, ses.sender.clone(), &self.media_file_id_to_senders);
+        ses.media_session_guard = Some(grd);
         Ok(())
     }
 
-    /// Remove video id mappings from all collabs that have no more viewers.
-    fn garbage_collect_collab_video_map(&self) {
-        let mut map = self.collab_id_to_video_id.write();
+    /// Remove media file id mappings from all collabs that have no more viewers.
+    fn garbage_collect_collab_media_file_map(&self) {
+        let mut map = self.collab_id_to_media_file_id.write();
         let senders = self.collab_id_to_senders.read();
         map.retain(|collab_id, _| !senders.get(collab_id).unwrap_or(&vec![]).is_empty());
     }
@@ -186,28 +186,28 @@ impl ServerState {
         senders.get(collab_id).unwrap_or(&vec![]).iter().any(|s| s.same_channel(sender))
     }
 
-    pub fn link_session_to_collab(&self, collab_id: &str, video_id: &str, sender: WsMsgSender) -> Res<OpaqueGuard> {
-        // GC collab video map. (This might not be the optimal way to do this but at least it
+    pub fn link_session_to_collab(&self, collab_id: &str, media_file_id: &str, sender: WsMsgSender) -> Res<OpaqueGuard> {
+        // GC collab media file map. (This might not be the optimal way to do this but at least it
         // will keep it from growing indefinitely.)
-        self.garbage_collect_collab_video_map();
+        self.garbage_collect_collab_media_file_map();
 
-        // Only the first joiner (creator) of a collab gets to set the video is.
-        let mut map = self.collab_id_to_video_id.write();
+        // Only the first joiner (creator) of a collab gets to set the media file is.
+        let mut map = self.collab_id_to_media_file_id.write();
         if !map.contains_key(collab_id) {
-            map.insert(collab_id.to_string(), video_id.to_string());
-        } else if map.get(collab_id).unwrap() != video_id {
-            return Err(anyhow!("Mismatching video id for pre-existing collab"));
+            map.insert(collab_id.to_string(), media_file_id.to_string());
+        } else if map.get(collab_id).unwrap() != media_file_id {
+            return Err(anyhow!("Mismatching media file id for pre-existing collab"));
         }
         Ok(self.add_sender_to_maplist(collab_id, sender, &self.collab_id_to_senders))
     }
 
-    /// Send a message to all sessions that are viewing a video.
+    /// Send a message to all sessions that are viewing a media file.
     /// Bails out with error if any of the senders fail.
     /// Returns the number of messages sent.
-    pub fn send_to_all_video_sessions(&self, video_id: &str, msg: &super::Message) -> Res<u32> {
+    pub fn send_to_all_media_file_sessions(&self, media_file_id: &str, msg: &super::Message) -> Res<u32> {
         let mut total_sent = 0u32;
-        let map = self.video_id_to_senders.read();
-        for sender in map.get(video_id).unwrap_or(&vec![]).iter() {
+        let map = self.media_file_id_to_senders.read();
+        for sender in map.get(media_file_id).unwrap_or(&vec![]).iter() {
             sender.send(msg.clone())?;
             total_sent += 1; };
         Ok(total_sent)
@@ -249,7 +249,7 @@ impl ServerState {
             if drawing != "" {
                 // If drawing is present, read it from disk and encode it into a data URI.
                 if !drawing.starts_with("data:") {
-                    let path = self.videos_dir.join(&c.video_id).join("drawings").join(&drawing);
+                    let path = self.media_files_dir.join(&c.media_file_id).join("drawings").join(&drawing);
                     if path.exists() {
                         let data = tokio::fs::read(path).await?;
                         *drawing = format!("data:image/webp;base64,{}", Base64GP::STANDARD_NO_PAD.encode(&data));

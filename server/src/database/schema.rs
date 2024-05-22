@@ -9,9 +9,19 @@ diesel::table! {
 }
 
 diesel::table! {
-    videos (id) {
+    media_types (id) {
+        id -> Text,
+        precedence -> Integer,
+        jq_script -> Text,
+        ffmpeg_options -> Text,
+    }
+}
+
+diesel::table! {
+    media_files (id) {
         id -> Text,
         user_id -> Text,
+        media_type -> Nullable<Text>,
         added_time -> Timestamp,
         recompression_done -> Nullable<Timestamp>,
         thumb_sheet_cols -> Nullable<Integer>,
@@ -28,7 +38,7 @@ diesel::table! {
 diesel::table! {
     comments (id) {
         id -> Integer,
-        video_id -> Text,
+        media_file_id -> Text,
         parent_id -> Nullable<Integer>,
         created -> Timestamp,
         edited -> Nullable<Timestamp>,
@@ -46,7 +56,7 @@ diesel::table! {
         user_id -> Text,
         created -> Timestamp,
         seen -> Bool,
-        video_id -> Nullable<Text>,
+        media_file_id -> Nullable<Text>,
         comment_id -> Nullable<Integer>,
         event_name -> Text,
         message -> Text,
@@ -57,7 +67,9 @@ diesel::joinable!(messages -> comments (comment_id));
 
 
 diesel::allow_tables_to_appear_in_same_query!(
+    users,
     comments,
     messages,
-    videos,
+    media_files,
+    media_types,
 );

@@ -1,6 +1,6 @@
 # Clapshot Server
 
-This is the server component for Clapshot, an open-source, self-hosted tool designed for collaborative video review and annotation. For a comprehensive overview and detailed documentation, please visit the [GitHub project page](https://github.com/elonen/clapshot).
+This is the server component for Clapshot, an open-source, self-hosted tool designed for collaborative video/media review and annotation. For a comprehensive overview and detailed documentation, please visit the [GitHub project page](https://github.com/elonen/clapshot).
 
 ## Overview
 

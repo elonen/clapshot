@@ -32,10 +32,10 @@ pub(crate) struct ApiTestState {
     pub(crate) db: Arc<DB>,
     pub(crate) user_msg_tx: crossbeam_channel::Sender<UserMessage>,
     pub(crate) upload_res_rx: crossbeam_channel::Receiver<IncomingFile>,
-    pub(crate) videos_dir: PathBuf,
+    pub(crate) media_files_dir: PathBuf,
     pub(crate) upload_dir: PathBuf,
     pub(crate) terminate_flag: Arc<AtomicBool>,
-    pub(crate) videos: Vec<models::Video>,
+    pub(crate) media_files: Vec<models::MediaFile>,
     pub(crate) comments: Vec<models::Comment>,
     pub(crate) url_base: String,
     pub(crate) port: u16,
@@ -119,7 +119,7 @@ pub (crate) async fn wait_for_thumbnails(ws: &mut WsClient) {
         match crate::api_server::test_utils::try_get_parsed::<proto::client::ServerToClientCmd>(ws).await
         .map(|c| c.cmd).flatten() {
             Some(proto::client::server_to_client_cmd::Cmd::ShowMessages(m)) => {
-                if m.msgs[0].r#type == proto::user_message::Type::VideoUpdated as i32 {
+                if m.msgs[0].r#type == proto::user_message::Type::MediaFileUpdated as i32 {
                     thumb_done = true;
                     break;
                 } else {
@@ -178,7 +178,7 @@ pub(crate) async fn connect_client_ws(ws_url: &str, user_id: &str) -> WsClient {
 macro_rules! api_test {
     ([$ws:ident, $state:ident] $($body:tt)*) => {
         {
-            let (db, data_dir, videos, comments) = make_test_db();
+            let (db, data_dir, media_files, comments) = make_test_db();
 
             let port = portpicker::pick_unused_port().expect("No TCP ports free");
             let (user_msg_tx, user_msg_rx) = crossbeam_channel::unbounded();
@@ -187,11 +187,11 @@ macro_rules! api_test {
             let terminate_flag = Arc::new(AtomicBool::new(false));
             let url_base = format!("http://127.0.0.1:{port}");
             let ws_url = url_base.replace("http", "ws") + "/api/ws";
-            let videos_dir = data_dir.join("videos");
+            let media_files_dir = data_dir.join("videos");
             let upload_dir = data_dir.join("upload");
 
             let server_state = ServerState::new( db.clone(),
-                &videos_dir.clone(),
+                &media_files_dir.clone(),
                 &upload_dir.clone(),
                 &url_base.clone(),
                 None,
@@ -200,7 +200,7 @@ macro_rules! api_test {
                 terminate_flag.clone());
 
             let bind_addr: std::net::IpAddr = "127.0.0.1".parse().unwrap();
-            let $state = ApiTestState { db, user_msg_tx, upload_res_rx, videos_dir, upload_dir, terminate_flag, videos, comments, url_base, port, ws_url };
+            let $state = ApiTestState { db, user_msg_tx, upload_res_rx, media_files_dir, upload_dir, terminate_flag, media_files, comments, url_base, port, ws_url };
             let api = async move { run_api_server_async(bind_addr, vec![], server_state, user_msg_rx, upload_res_tx, None, port).await; Ok(()) };
 
             let tst = tokio::spawn(async move {
@@ -218,29 +218,29 @@ macro_rules! api_test {
     }
 }
 
-/// Send an "open video" message to the server
+/// Send an "open media file" message to the server
 ///
 /// # Arguments
 /// * `ws` - WebSocket connection to the server
-/// * `vid` - ID of the video to open
+/// * `vid` - ID of the media file to open
 ///
 /// # Returns
-/// * OpenVideo message from the server
-pub(crate) async fn open_video(ws: &mut WsClient, vid: &str) -> proto::client::server_to_client_cmd::OpenVideo
+/// * OpenMediaFile message from the server
+pub(crate) async fn open_media_file(ws: &mut WsClient, vid: &str) -> proto::client::server_to_client_cmd::OpenMediaFile
 {
-    println!("--------- TEST: open_video '{}'...", vid);
+    println!("--------- TEST: open_media_file '{}'...", vid);
 
     use lib_clapshot_grpc::proto::client::client_to_server_cmd as cmd_enum;
-    send_server_cmd!(*ws, OpenVideo, cmd_enum::OpenVideo{ video_id: vid.into() });
+    send_server_cmd!(*ws, OpenMediaFile, cmd_enum::OpenMediaFile{ media_file_id: vid.into() });
 
-    let ov = expect_client_cmd!(ws, OpenVideo);
+    let ov = expect_client_cmd!(ws, OpenMediaFile);
 
     while let Some(msg) = read(ws).await {
         let cmd: proto::client::ServerToClientCmd = serde_json::from_str(&msg).expect("Failed to parse ServerToClientCmd from JSON");
         match cmd.cmd {
-            // Make sure the comments are for the video we opened
+            // Make sure the comments are for the media file we opened
             Some(proto::client::server_to_client_cmd::Cmd::AddComments(m)) => {
-                assert!(m.comments.iter().all(|c| c.video_id == vid));
+                assert!(m.comments.iter().all(|c| c.media_file_id == vid));
             },
             // Thumbnail generation can take a while, so ignore it if it happens to be in the queue
             Some(proto::client::server_to_client_cmd::Cmd::ShowMessages(m)) => {

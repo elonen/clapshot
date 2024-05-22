@@ -95,6 +95,7 @@ fn extract_variables<F>(json: serde_json::Value, args: &IncomingFile, get_file_s
     where F: FnOnce() -> Result<u64, String>
 {
     let tracks = json["media"]["track"].as_array().ok_or("No media tracks found")?;
+
     let video_track = tracks.iter().find(|t| t["@type"] == "Video").ok_or("No video track found")?;
     let fps = video_track["FrameRate"].as_str().ok_or("FPS not found")?;
     let frame_count = video_track["FrameCount"].as_str().ok_or("FrameCount not found")?;
@@ -133,7 +134,7 @@ fn read_metadata_from_file(args: &IncomingFile) -> Result<Metadata, String>
     extract_variables(json, args, || Ok(args.file_path.metadata().map_err(|e| format!("Failed to get file size: {:?}", e))?.len()))
 }
 
-/// Listens to inq for new videos to scan for metadata with Mediainfo shell command.
+/// Listens to inq for new files to scan for metadata with Mediainfo shell command.
 /// When a new file is received, it is processed and the result is sent to outq.
 /// Starts a thread pool of `n_workers` workers to support simultaneous processing of multiple files.
 /// Exits when inq is closed or outq stops accepting messages.

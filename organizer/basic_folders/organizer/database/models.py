@@ -29,11 +29,11 @@ class DbFolderItems(Base):
     folder_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bf_folders.id", ondelete="CASCADE", onupdate="CASCADE"))
     sort_order: Mapped[int] = mapped_column(default=0)
     # "Enum" -- one of these two columns must be set
-    video_id: Mapped[Optional[str]] = mapped_column(ForeignKey("videos.id", ondelete="CASCADE", onupdate="CASCADE"), unique=True, nullable=True)
+    media_file_id: Mapped[Optional[str]] = mapped_column(ForeignKey("media_files.id", ondelete="CASCADE", onupdate="CASCADE"), unique=True, nullable=True)
     subfolder_id: Mapped[Optional[int]] = mapped_column(ForeignKey("bf_folders.id", ondelete="CASCADE", onupdate="CASCADE"), unique=True, nullable=True)
 
     # Constraints
-    constraint_enum = sqlalchemy.CheckConstraint("(video_id IS NULL) != (subfolder_id IS NULL)", name="video_id_xor_subfolder_id")
+    constraint_enum = sqlalchemy.CheckConstraint("(media_file_id IS NULL) != (subfolder_id IS NULL)", name="media_file_id_xor_subfolder_id")
     constraint_self_ref = sqlalchemy.CheckConstraint("folder_id != subfolder_id", name="folder_id_ne_subfolder_id")
     __table_args__ = (constraint_enum, constraint_self_ref)
 
@@ -47,10 +47,11 @@ class DbSchemaMigrations(Base):
 
 # Not managed by the organizer migrations, but by the clapshot.server module.
 
-class DbVideo(Base):
-    __tablename__ = "videos"
+class DbMediaFile(Base):
+    __tablename__ = "media_files"
     id: Mapped[str] = mapped_column(primary_key=True)
     user_id: Mapped[str] = mapped_column()
+    media_type: Mapped[str] = mapped_column()
     added_time: Mapped[datetime] = mapped_column(insert_default=sqlalchemy.func.now())
     recompression_done: Mapped[Optional[datetime]] = mapped_column()
     orig_filename: Mapped[str] = mapped_column()

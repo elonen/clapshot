@@ -13,8 +13,9 @@ export let visualization: Proto3.PageItem_FolderListing_Item_Visualization|undef
 
 const dispatch = createEventDispatcher();
 
-function contentPreviewItems(data: any[]): Proto3.PageItem_FolderListing_Item[] {
-    let items = data.filter(it=>("video" in it)) as Proto3.PageItem_FolderListing_Item[];
+function contentPreviewItems(data: Proto3.PageItem_FolderListing_Item[]): Proto3.PageItem_FolderListing_Item[] {
+    //let items = data.filter(it=>(it.mediaFile !== undefined)) as Proto3.PageItem_FolderListing_Item[];
+    let items = data;
     if (items.length > 4) { items = items.slice(0,4); }
     return items;
 }
@@ -104,14 +105,14 @@ function setCssVariables(node: HTMLDivElement, variables: { [x: string]: any; ba
             <div class="flex-1 bg-[#0002] p-0.5 rounded-md shadow-inner overflow-clip leading-none text-[0px]">
                 <div class="grid grid-cols-2 gap-1">
                 {#each contentPreviewItems(preview_items) as prev, _i}
-                    {#if prev.video?.previewData?.thumbUrl }
+                    {#if prev.mediaFile?.previewData?.thumbUrl }
                         <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md">
                             <ScrubbableVideoThumb
                                 extra_styles="border-radius: 0rem; height: 100%; width: auto; transform: translate(-50%, -50%); left: 50%; top: 50%; position: absolute; filter: opacity(66%);"
-                                thumbPosterUrl={prev.video.previewData?.thumbUrl}
-                                thumbSheetUrl={prev.video.previewData?.thumbSheet?.url}
-                                thumbSheetRows={prev.video.previewData?.thumbSheet?.rows}
-                                thumbSheetCols={prev.video.previewData?.thumbSheet?.cols}
+                                thumbPosterUrl={prev.mediaFile.previewData?.thumbUrl}
+                                thumbSheetUrl={prev.mediaFile.previewData?.thumbSheet?.url}
+                                thumbSheetRows={prev.mediaFile.previewData?.thumbSheet?.rows}
+                                thumbSheetCols={prev.mediaFile.previewData?.thumbSheet?.cols}
                             />
                         </div>
                     {:else if prev.folder }

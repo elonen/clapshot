@@ -16,7 +16,7 @@ import clapshot_grpc.proto.clapshot as clap
 
 import organizer
 from organizer.config import PATH_COOKIE_NAME
-from organizer.database.models import DbFolder, DbUser, DbVideo
+from organizer.database.models import DbFolder, DbUser, DbMediaFile
 from organizer.database.operations import db_get_or_create_user_root_folder
 from organizer.helpers.folders import FoldersHelper
 
@@ -124,13 +124,13 @@ async def org_test__authz_user_action(oi: organizer.OrganizerInbound):
 
 async def org_test__move_to_folder(oi: organizer.OrganizerInbound):
     """
-    move_to_folder() -- Test several scenarios of moving folders and videos between folders.
+    move_to_folder() -- Test several scenarios of moving folders and media files between folders.
     """
-    videos = await oi.srv.db_get_videos(org.DbGetVideosRequest(all=clap.Empty()))
-    assert len(videos.items) > 0, "No videos found in the test database"
+    media_files = await oi.srv.db_get_media_files(org.DbGetMediaFilesRequest(all=clap.Empty()))
+    assert len(media_files.items) > 0, "No media files found in the test database"
 
-    users_video = videos.items[0]
-    (user_id, user_name) = (users_video.user_id, f"Name of {users_video.user_id}")
+    users_file = media_files.items[0]
+    (user_id, user_name) = (users_file.user_id, f"Name of {users_file.user_id}")
 
     ses = org.UserSessionData(sid="test_sid",user=clap.UserInfo(id=user_id, name=user_name), is_admin=False, cookies={})
 
@@ -139,18 +139,18 @@ async def org_test__move_to_folder(oi: organizer.OrganizerInbound):
     assert len(fld_path) > 0, "Folder path should always contain at least the root folder"
     root_fld = fld_path[0]
 
-    # Organizer should have moved all orphan videos to the root folder, so the user's video should be there now
+    # Organizer should have moved all orphan media files to the root folder, so the user's media file should be there now
     root_cont = await oi.folders_helper.fetch_folder_contents(root_fld, ses)
-    assert any(v.id == users_video.id for v in root_cont), "Video should have been auto-moved to the root folder"
+    assert any(v.id == users_file.id for v in root_cont), "Video should have been auto-moved to the root folder"
 
-    # 1) First, try to move someone else's video to the root folder (should fail)
-    someone_elses_video = [v for v in videos.items if v.user_id != user_id][0]
-    assert someone_elses_video.user_id
-    oi.log.info(f"Trying to move someone else's ({someone_elses_video.user_id}) video ({someone_elses_video.id}) to the root folder ({root_fld.id}) of current user ({user_id})")
+    # 1) First, try to move someone else's media file to the root folder (should fail)
+    someone_elses_file = [v for v in media_files.items if v.user_id != user_id][0]
+    assert someone_elses_file.user_id
+    oi.log.info(f"Trying to move someone else's ({someone_elses_file.user_id}) file ({someone_elses_file.id}) to the root folder ({root_fld.id}) of current user ({user_id})")
     try:
         await organizer.move_to_folder_impl(oi, org.MoveToFolderRequest(
             ses,
-            ids=[clap.FolderItemId(video_id=someone_elses_video.id)],
+            ids=[clap.FolderItemId(media_file_id=someone_elses_file.id)],
             dst_folder_id=str(root_fld.id),
             listing_data={}))
         assert False, "Expected GRPCError (permission denied)"
@@ -158,38 +158,38 @@ async def org_test__move_to_folder(oi: organizer.OrganizerInbound):
         assert e.status == GrpcStatus.PERMISSION_DENIED
 
     root_cont = await oi.folders_helper.fetch_folder_contents(root_fld, ses)
-    assert any(v.id == users_video.id for v in root_cont), "Video should still be in the root folder"
+    assert any(v.id == users_file.id for v in root_cont), "Video should still be in the root folder"
 
-    # 2) Next, create a new subfolder and move the video there. This should succeed.
+    # 2) Next, create a new subfolder and move the file there. This should succeed.
     subfld = await oi.folders_helper.create_folder(oi.db_new_session(), ses, root_fld, "Test Subfolder")
 
-    oi.log.info(f"Moving user's ({user_id}) video ({users_video.id}) to the subfolder ({subfld.id})")
+    oi.log.info(f"Moving user's ({user_id}) file ({users_file.id}) to the subfolder ({subfld.id})")
     await oi.move_to_folder(org.MoveToFolderRequest(
         ses,
-        ids=[clap.FolderItemId(video_id=users_video.id)],
+        ids=[clap.FolderItemId(media_file_id=users_file.id)],
         dst_folder_id=str(subfld.id),
         listing_data={}))
 
     root_cont = await oi.folders_helper.fetch_folder_contents(root_fld, ses)
-    assert not any(v.id == users_video.id for v in root_cont), "Video not be in the root folder anymore"
+    assert not any(v.id == users_file.id for v in root_cont), "Video not be in the root folder anymore"
     subfld_cont = await oi.folders_helper.fetch_folder_contents(subfld, ses)
-    assert any(v.id == users_video.id for v in subfld_cont), "Video should be in the subfolder now"
+    assert any(v.id == users_file.id for v in subfld_cont), "Video should be in the subfolder now"
 
 
 
 async def org_test__reorder_items(oi: organizer.OrganizerInbound):
     """
-    reorder_items() -- Test reordering of folders and videos within a folder in various ways.
+    reorder_items() -- Test reordering of folders and files within a folder in various ways.
     """
-    # Fetch a video from the test database, and get the user ID
-    videos = await oi.srv.db_get_videos(org.DbGetVideosRequest(all=clap.Empty()))
-    assert len(videos.items) > 0, "No videos found in the test database"
-    users_video = videos.items[0]
-    (user_id, user_name) = (users_video.user_id, f"Name of {users_video.user_id}")
+    # Fetch a file from the test database, and get the user ID
+    media_files = await oi.srv.db_get_media_files(org.DbGetMediaFilesRequest(all=clap.Empty()))
+    assert len(media_files.items) > 0, "No media files found in the test database"
+    users_file = media_files.items[0]
+    (user_id, user_name) = (users_file.user_id, f"Name of {users_file.user_id}")
 
     ses = org.UserSessionData(sid="test_sid",user=clap.UserInfo(id=user_id, name=user_name), is_admin=False, cookies={})
 
-    # Get folder path (+ create root folder + move orphan videos to root folder)
+    # Get folder path (+ create root folder + move orphan media files to root folder)
     fld_path = await oi.folders_helper.get_current_folder_path(ses)
     assert len(fld_path) > 0, "Folder path should always contain at least the root folder"
     root_fld = fld_path[0]
@@ -198,27 +198,27 @@ async def org_test__reorder_items(oi: organizer.OrganizerInbound):
     subfld1 = await oi.folders_helper.create_folder(oi.db_new_session(), ses, root_fld, "Test Subfolder 1")
     subfld2 = await oi.folders_helper.create_folder(oi.db_new_session(), ses, root_fld, "Test Subfolder 2")
 
-    # Move any other videos to subfld1, so they don't interfere with the reorder test.
-    other_videos = [v for v in videos.items if v.id != users_video.id and v.user_id == user_id]
-    for v in other_videos:
+    # Move any other media files to subfld1, so they don't interfere with the reorder test.
+    other_files = [v for v in media_files.items if v.id != users_file.id and v.user_id == user_id]
+    for v in other_files:
         await oi.move_to_folder(org.MoveToFolderRequest(
             ses,
-            ids=[clap.FolderItemId(video_id=v.id)],
+            ids=[clap.FolderItemId(media_file_id=v.id)],
             dst_folder_id=str(subfld1.id),
             listing_data={}))
 
     # Also create a third folder, but this time inside subfld2. This shouldn't affect the reorder test.
     await oi.folders_helper.create_folder(oi.db_new_session(), ses, subfld2, "Test Subsubfolder")
 
-    test_orders: list[list[DbFolder | clap.Video]] = [
-        [subfld1, subfld2, users_video],
-        [users_video, subfld2, subfld1],
-        [subfld2, users_video, subfld1],
+    test_orders: list[list[DbFolder | clap.MediaFile]] = [
+        [subfld1, subfld2, users_file],
+        [users_file, subfld2, subfld1],
+        [subfld2, users_file, subfld1],
     ]
     for i, new_obj_order in enumerate(test_orders):
         new_order = [clap.FolderItemId(folder_id=str(fi.id))
                      if isinstance(fi, DbFolder)
-                     else clap.FolderItemId(video_id=fi.id) for fi in new_obj_order]
+                     else clap.FolderItemId(media_file_id=fi.id) for fi in new_obj_order]
         await oi.reorder_items(org.ReorderItemsRequest(ses, ids=new_order, listing_data={"folder_id": str(root_fld.id)}))
         cont = [fi.id for fi in await oi.folders_helper.fetch_folder_contents(root_fld, ses)]
         new_order_ids = [fi.id for fi in new_obj_order]
@@ -345,19 +345,19 @@ async def org_test__cmd_from_client__trash_folder(oi: organizer.OrganizerInbound
 
 async def org_test__admin_owner_transfer(oi: organizer.OrganizerInbound):
     """
-    Test move_to_folder() as an admin -- Admin can move any folder or video to any user's folder.
+    Test move_to_folder() as an admin -- Admin can move any folder or media file to any user's folder.
        When moving a folder into another user's folder, ownership of the source folder and all its contents
        are transferred to the destination folder's owner.
     """
-    # Fetch a video from the test database
-    videos = await oi.srv.db_get_videos(org.DbGetVideosRequest(all=clap.Empty()))
-    assert len(videos.items) > 0, "No videos found in the test database"
+    # Fetch a media file from the test database
+    media_files = await oi.srv.db_get_media_files(org.DbGetMediaFilesRequest(all=clap.Empty()))
+    assert len(media_files.items) > 0, "No media files found in the test database"
 
-    video_owners = {v.id: v.user_id for v in videos.items}
+    media_owners = {v.id: v.user_id for v in media_files.items}
 
-    # Get user for the video
-    src_video = videos.items[0]
-    src_user = clap.UserInfo(id=src_video.user_id, name=f"Name of {src_video.user_id}")
+    # Get user for the media file
+    src_media = media_files.items[0]
+    src_user = clap.UserInfo(id=src_media.user_id, name=f"Name of {src_media.user_id}")
     src_user_ses = org.UserSessionData(sid="test_sid", user=src_user, is_admin=False, cookies={})
 
     # Create a folder + a subfolder for the source user
@@ -366,14 +366,14 @@ async def org_test__admin_owner_transfer(oi: organizer.OrganizerInbound):
         src_fld = await oi.folders_helper.create_folder(dbs, src_user_ses, src_root_fld, "Ownertransfer Test Folder")
         src_subfld = await oi.folders_helper.create_folder(dbs, src_user_ses, src_fld, "Ownertransfer Test Subfolder")
 
-    # Move the video to the subfolder
+    # Move the file to the subfolder
     await oi.move_to_folder(org.MoveToFolderRequest(
         src_user_ses,
-        ids=[clap.FolderItemId(video_id=src_video.id)],
+        ids=[clap.FolderItemId(media_file_id=src_media.id)],
         dst_folder_id=str(src_subfld.id),
         listing_data={}))
 
-    assert src_video.user_id == src_user.id
+    assert src_media.user_id == src_user.id
     assert src_fld.user_id == src_user.id
     assert src_subfld.user_id == src_user.id
 
@@ -393,10 +393,10 @@ async def org_test__admin_owner_transfer(oi: organizer.OrganizerInbound):
     assert dst_root_fld.user_id == dst_user.id
     assert dst_fld.user_id == dst_user.id
 
-    # No ownership transfer should've happened yet, check that video_owners matches
-    new_owners = await oi.srv.db_get_videos(org.DbGetVideosRequest(all=clap.Empty()))
+    # No ownership transfer should've happened yet, check that media_file_owners matches
+    new_owners = await oi.srv.db_get_media_files(org.DbGetMediaFilesRequest(all=clap.Empty()))
     for v in new_owners.items:
-        assert video_owners[v.id] == v.user_id
+        assert media_owners[v.id] == v.user_id
 
     # As an admin, move the source user's folder into the destination user's folder
     admin_ses = org.UserSessionData(sid="test_sid_admin", user=clap.UserInfo(id="test.admin", name="The Admin"), is_admin=True, cookies={})
@@ -414,13 +414,13 @@ async def org_test__admin_owner_transfer(oi: organizer.OrganizerInbound):
     with oi.db_new_session() as dbs:
         src_fld = dbs.query(DbFolder).filter(DbFolder.id == src_fld.id).one_or_none()
         src_subfld = dbs.query(DbFolder).filter(DbFolder.id == src_subfld.id).one_or_none()
-        src_video = dbs.query(DbVideo).filter(DbVideo.id == src_video.id).one_or_none()
+        src_media = dbs.query(DbMediaFile).filter(DbMediaFile.id == src_media.id).one_or_none()
         assert src_fld is not None
         assert src_subfld is not None
-        assert src_video is not None
+        assert src_media is not None
         assert src_fld.user_id == dst_user.id
         assert src_subfld.user_id == dst_user.id
-        assert src_video.user_id == dst_user.id
+        assert src_media.user_id == dst_user.id
 
     # Check that the folder hierarchy is intact, but in `dst_fld`.
     dst_fld_cont = await oi.folders_helper.fetch_folder_contents(dst_fld, dst_user_ses)
@@ -430,10 +430,10 @@ async def org_test__admin_owner_transfer(oi: organizer.OrganizerInbound):
     assert src_fld_cont[0].id == src_subfld.id
     subfld_cont = await oi.folders_helper.fetch_folder_contents(src_subfld, dst_user_ses)
     assert len(subfld_cont) == 1
-    assert subfld_cont[0].id == src_video.id
+    assert subfld_cont[0].id == src_media.id
 
-    # Check that the example video's ownership was transferred, but not other videos
-    video_owners[src_video.id] = dst_user.id    # Update the expected owner
-    new_owners = await oi.srv.db_get_videos(org.DbGetVideosRequest(all=clap.Empty()))
+    # Check that the example file's ownership was transferred, but not other files
+    media_owners[src_media.id] = dst_user.id    # Update the expected owner
+    new_owners = await oi.srv.db_get_media_files(org.DbGetMediaFilesRequest(all=clap.Empty()))
     for v in new_owners.items:
-        assert video_owners[v.id] == v.user_id
+        assert media_owners[v.id] == v.user_id

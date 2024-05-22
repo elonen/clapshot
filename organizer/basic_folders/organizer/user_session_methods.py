@@ -39,8 +39,8 @@ async def navigate_page_impl(oi: organizer.OrganizerInbound, req: org.NavigatePa
 
     Called by the server to request organizer to construct a navigation page for the client to display.
 
-    In contrast to individual video pages, this is the "folder view" page, which without any
-    Organizer, just shows a list of all videos for the user. An Organizer can define a custom
+    In contrast to individual media file players, this is the "folder view" page, which without any
+    Organizer, just shows a list of all media for the user. An Organizer can define a custom
     view for this page, e.g. a folder tree or a list of categories, projects, even buttons etc.
     """
     ses = req.ses
@@ -140,16 +140,16 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "trash_folder command missing 'id' argument")
             folder_id = int(args["id"])
 
-            # Delete the folder and its contents, gather video IDs to delete later (after transaction, to avoid DB locks)
-            videos_to_delete = []
+            # Delete the folder and its contents, gather media file IDs to delete later (after transaction, to avoid DB locks)
+            media_to_delete = []
             with oi.db_new_session() as dbs:
                 with dbs.begin_nested():
-                    videos_to_delete = await oi.folders_helper.trash_folder_recursive(dbs, folder_id, cmd.ses)
+                    media_to_delete = await oi.folders_helper.trash_folder_recursive(dbs, folder_id, cmd.ses)
 
-            # Trash the videos
-            for vi in videos_to_delete:
-                oi.log.debug(f"Trashing video '{vi}'")
-                await oi.srv.delete_video(org.DeleteVideoRequest(id=vi))  # this cleans up the video's files, too
+            # Trash the media files
+            for vi in media_to_delete:
+                oi.log.debug(f"Trashing media file '{vi}'")
+                await oi.srv.delete_media_file(org.DeleteMediaFileRequest(id=vi))  # this cleans up the media's files on disk, too
 
             page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
             await oi.srv.client_show_page(page)

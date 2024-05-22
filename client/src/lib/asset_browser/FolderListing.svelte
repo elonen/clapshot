@@ -1,6 +1,6 @@
 <script lang="ts">
 
-import {dndzone, TRIGGERS, SOURCES, SHADOW_ITEM_MARKER_PROPERTY_NAME} from "svelte-dnd-action";
+import {dndzone, TRIGGERS, SOURCES, SHADOW_ITEM_MARKER_PROPERTY_NAME, type DndEvent} from "svelte-dnd-action";
 import PopupMenu from './PopupMenu.svelte';
 import VideoTile from "./VideoTile.svelte";
 import FolderTile from "./FolderTile.svelte";
@@ -231,8 +231,8 @@ function isShadowItem(item: any) {
                 {#if isShadowItem(item)}
                     <div in:fade={{duration:200}} class='custom-dnd-shadow-item'></div>
                 {:else}
-                    {#if item.obj.video }
-                        <VideoTile item={item.obj.video} />
+                    {#if item.obj.mediaFile }
+                        <VideoTile item={item.obj.mediaFile} />
                     {:else if item.obj.folder }
                         <FolderTile
                             id={item.obj.folder.id}

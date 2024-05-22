@@ -54,9 +54,9 @@ pub struct DetailedMsg {
 }
 
 
-/// Calculate hash identifier (video_id) for the submitted video,
+/// Calculate hash identifier (media_file_id) for the submitted files,
 /// based on filename, user_id, size and sample of the file contents.
-fn calc_video_id(file_path: &PathBuf, user_id: &str, upload_cookies: HashMap<String, String>) -> anyhow::Result<String> {
+fn calc_media_file_id(file_path: &PathBuf, user_id: &str, upload_cookies: HashMap<String, String>) -> anyhow::Result<String> {
     let mut file_hash = Sha256::new();
     let fname = file_path.file_name()
         .ok_or(anyhow!("Bad filename: {:?}", file_path))?.to_str()
@@ -88,21 +88,21 @@ fn calc_video_id(file_path: &PathBuf, user_id: &str, upload_cookies: HashMap<Str
     Ok(hash[0..8].to_string())
 }
 
-/// Process new video after metadata reader has finished.
+/// Process new file after metadata reader has finished.
 /// Move the file to the appropriate directory, and update the database.
-/// See if the video is a duplicate, and submit it for transcoding if necessary.
-fn ingest_video(
+/// See if the file is a duplicate, and submit it for transcoding if necessary.
+fn ingest_media_file(
         vid: &str,
         md: &metadata_reader::Metadata,
         data_dir: &Path,
-        videos_dir: &Path,
+        media_files_dir: &Path,
         target_bitrate: u32,
         db: &DB,
         user_msg_tx: &crossbeam_channel::Sender<UserMessage>,
         cmpr_tx: &crossbeam_channel::Sender<video_compressor::CmprInput>)
             -> anyhow::Result<bool>
 {
-    let _span = tracing::info_span!("INGEST_VIDEO",
+    let _span = tracing::info_span!("INGEST_MEDIA",
         vid = %vid,
         user=md.user_id,
         filename=%md.src_file.file_name().unwrap_or_default().to_string_lossy()).entered();
@@ -112,23 +112,23 @@ fn ingest_video(
     let src = PathBuf::from(&md.src_file);
     if !src.is_file() { bail!("Source file not found: {:?}", src) }
 
-    let dir_for_video = videos_dir.join(&vid);
-    tracing::debug!("Video dir = {:?}", dir_for_video);
+    let dir_for_media_file = media_files_dir.join(&vid);
+    tracing::debug!("Media dir = {:?}", dir_for_media_file);
 
-    // Video already exists on disk?
-    if dir_for_video.exists() {
-        tracing::debug!("Video dir already exists.");
-        match models::Video::get(&mut db.conn()?, &vid.into()) {
+    // File already exists on disk?
+    if dir_for_media_file.exists() {
+        tracing::debug!("Media dir already exists.");
+        match models::MediaFile::get(&mut db.conn()?, &vid.into()) {
             Ok(v) => {
                 let new_owner = &md.user_id;
                 if &v.user_id == new_owner {
-                    tracing::info!("User already has this video.");
+                    tracing::info!("User already has this media file.");
                     user_msg_tx.send(UserMessage {
                         topic: UserMessageTopic::Ok,
-                        msg: "File already exists".to_string(),
+                        msg: "Media file already exists".to_string(),
                         details: None,
                         user_id: Some(new_owner.clone()),
-                        video_id: None  // Don't pass video id here, otherwise the pre-existing video would be deleted!
+                        media_file_id: None  // Don't pass media file id here, otherwise the pre-existing media would be deleted!
                     }).ok();
 
                     clean_up_rejected_file(&data_dir, &src, Some(vid.into())).unwrap_or_else(|e| {
@@ -137,26 +137,26 @@ fn ingest_video(
 
                     return Ok(false);
                 } else {
-                    bail!("Hash collision?!? Video '{vid}' already owned by another user '{new_owner}'.")
+                    bail!("Hash collision?!? Media '{vid}' already owned by another user '{new_owner}'.")
                 }
             },
             Err(DBError::NotFound()) => {
                 // File exists, but not in DB. Remove files and reprocess.
                 tracing::info!("Dir for '{vid}' exists, but not in DB. Deleting old dir and reprocessing.");
-                std::fs::remove_dir_all(&dir_for_video)?;
+                std::fs::remove_dir_all(&dir_for_media_file)?;
             }
             Err(e) => {
-                bail!("Error checking DB for video '{}': {}", vid, e);
+                bail!("Error checking DB for media file '{}': {}", vid, e);
             }
         }
     }
-    assert!(!dir_for_video.exists()); // Should have been deleted above
+    assert!(!dir_for_media_file.exists()); // Should have been deleted above
 
     // Move src file to orig/
-    tracing::debug!(dir=%dir_for_video.display(), "Creating video dir.");
-    std::fs::create_dir(&dir_for_video)?;
+    tracing::debug!(dir=%dir_for_media_file.display(), "Creating media file dir.");
+    std::fs::create_dir(&dir_for_media_file)?;
 
-    let dir_for_orig = dir_for_video.join("orig");
+    let dir_for_orig = dir_for_media_file.join("orig");
     std::fs::create_dir(&dir_for_orig)?;
     let src_moved = dir_for_orig.join(src.file_name().ok_or(anyhow!("Bad filename: {:?}", src))?);
 
@@ -167,10 +167,11 @@ fn ingest_video(
     let orig_filename = src.file_name().ok_or(anyhow!("Bad filename: {:?}", src))?.to_string_lossy().into_owned();
 
     // Add to DB
-    tracing::info!("Adding video to DB.");
-    models::Video::insert(&mut db.conn()?, &models::VideoInsert {
+    tracing::info!("Adding media file to DB.");
+    models::MediaFile::insert(&mut db.conn()?, &models::MediaFileInsert {
         id: vid.to_string(),
         user_id: md.user_id.clone(),
+        media_type: Some("video".to_string()),
         recompression_done: None,
         thumb_sheet_cols: None,
         thumb_sheet_rows: None,
@@ -200,31 +201,31 @@ fn ingest_video(
 
     let transcode_req = match needs_transcoding(md, target_bitrate) {
         Some((reason, new_bitrate)) => {
-            let video_dst = dir_for_video.join(format!("transcoded_br{}_{}.mp4", new_bitrate, uuid::Uuid::new_v4()));
+            let video_dst = dir_for_media_file.join(format!("transcoded_br{}_{}.mp4", new_bitrate, uuid::Uuid::new_v4()));
             cmpr_tx.send(video_compressor::CmprInput {
                 src: src_moved.clone(),
                 video_dst: Some(video_dst),
                 thumb_dir: None,
                 video_bitrate: new_bitrate,
-                video_id: vid.to_string(),
+                media_file_id: vid.to_string(),
                 user_id: md.user_id.clone(),
             }).map(|_| (true, reason)).context("Error sending file to transcoding")
         },
         None => {
-            tracing::info!("Video ok already, not transcoding.");
+            tracing::info!("Media OK already, not transcoding.");
             Ok((false, "".to_string()))
         }
     };
 
     // Also create thumbnails unless there was a problem with the file
     if let Ok(_) = &transcode_req {
-        let thumbs_dir = dir_for_video.join("thumbs");
+        let thumbs_dir = dir_for_media_file.join("thumbs");
         if let Err(e) = cmpr_tx.send(video_compressor::CmprInput {
                 src: src_moved,
                 video_dst: None,
                 thumb_dir: Some(thumbs_dir),
                 video_bitrate: 0,
-                video_id: vid.to_string(),
+                media_file_id: vid.to_string(),
                 user_id: md.user_id.clone(),
             }) {
                 tracing::error!(details=?e, "Failed to send file to thumbnailing");
@@ -233,7 +234,7 @@ fn ingest_video(
                         msg: "Thumbnailing failed.".to_string(),
                         details: Some(format!("Error sending file to thumbnailing: {}", e)),
                         user_id: Some(md.user_id.clone()),
-                        video_id: Some(vid.to_string())
+                        media_file_id: Some(vid.to_string())
                     }) { tracing::error!(details=?e, "Failed to send user message") };
         };
     };
@@ -241,33 +242,33 @@ fn ingest_video(
     // Format results to user readable message
     match transcode_req {
         Ok((do_transcode, reason)) => {
-            // Notify client about the new video
+            // Notify client about the new media file
             user_msg_tx.send(UserMessage {
-                topic: UserMessageTopic::VideoAdded,
+                topic: UserMessageTopic::MediaFileAdded,
                 msg: String::new(),
                 details: Some(serde_json::to_string(&md.upload_cookies).map_err(|e| anyhow!("Error serializing cookies: {}", e))?),
                 user_id: Some(md.user_id.clone()),
-                video_id: Some(vid.to_string())
+                media_file_id: Some(vid.to_string())
             })?;
             // Tell user in text also
-            tracing::info!(transcode=do_transcode, reason=reason, "Video added to DB. Transcode");
+            tracing::info!(transcode=do_transcode, reason=reason, "Media added to DB. Transcode");
             user_msg_tx.send(UserMessage {
                 topic: UserMessageTopic::Ok,
-                msg: "Video added.".to_string() + if do_transcode {" Transcoding..."} else {""},
+                msg: "Media added.".to_string() + if do_transcode {" Transcoding..."} else {""},
                 details: if do_transcode { Some(format!("Transcoding because {reason}")) } else { None },
                 user_id: Some(md.user_id.clone()),
-                video_id: Some(vid.to_string())
+                media_file_id: Some(vid.to_string())
             })?;
             Ok(do_transcode)
         },
         Err(e) => {
-            tracing::error!(details=?e, "Video added to DB, but failed to send to transcoding.");
+            tracing::error!(details=?e, "Media added to DB, but failed to send to transcoding.");
             user_msg_tx.send(UserMessage {
                 topic: UserMessageTopic::Error,
-                msg: "Video added but not transcoded. Video may not play.".to_string(),
-                details: Some(format!("Error sending video to transcoder: {}", e)),
+                msg: "Media added but not transcoded. It may not play.".to_string(),
+                details: Some(format!("Error sending file to transcoder: {}", e)),
                 user_id: Some(md.user_id.clone()),
-                video_id: Some(vid.to_string())
+                media_file_id: Some(vid.to_string())
             })?;
             Err(e)
         }
@@ -288,12 +289,12 @@ pub fn run_forever(
     upload_rx: Receiver<IncomingFile>,
     n_workers: usize)
 {
-    tracing::info!("Starting video processing pipeline.");
+    tracing::info!("Starting media file processing pipeline.");
 
-    // Create folder for processed videos
-    let videos_dir = data_dir.join("videos");
-    if let Err(e) = std::fs::create_dir_all(&videos_dir) {
-        tracing::error!(details=%e, "Error creating videos dir '{}'.", videos_dir.display());
+    // Create folder for processed media files
+    let media_files_dir = data_dir.join("videos");
+    if let Err(e) = std::fs::create_dir_all(&media_files_dir) {
+        tracing::error!(details=%e, "Error creating media files dir '{}'.", media_files_dir.display());
         return;
     }
 
@@ -326,7 +327,7 @@ pub fn run_forever(
         (th, incoming_recvr, exit_sender)
     };
 
-    // Thread for video compressor
+    // Thread for the compressor
     let (cmpr_in_tx, cmpr_in_rx) = unbounded::<video_compressor::CmprInput>();
     let (cmpr_out_tx, cmpr_out_rx) = unbounded::<video_compressor::CmprOutput>();
     let (cmpr_prog_tx, cmpr_prog_rx) = unbounded::<(String, String, String)>();
@@ -334,38 +335,38 @@ pub fn run_forever(
         video_compressor::run_forever(cmpr_in_rx, cmpr_out_tx, cmpr_prog_tx, n_workers);
     });
 
-    // Migration from older version: find a video that is missing thumbnail sheet
-    fn legacy_thumbnail_next_video(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<video_compressor::CmprInput>) -> Option<String> {
+    // Migration from older version: find a media file that is missing thumbnail sheet
+    fn legacy_thumbnail_next_media_file(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<video_compressor::CmprInput>) -> Option<String> {
 
         let next = db.conn()
-            .and_then(|mut conn| models::Video::get_all_with_missing_thumbnails(&mut conn))
-            .map(|videos| videos.first().cloned())
+            .and_then(|mut conn| models::MediaFile::get_all_with_missing_thumbnails(&mut conn))
+            .map(|media_files| media_files.first().cloned())
             .map_err(|e| {
-                tracing::error!(details=?e, "DB: Failed to get videos without thumbnails or connection.");
+                tracing::error!(details=?e, "DB: Failed to get media files without thumbnails or connection.");
             }).ok()?;
 
         if let Some(v) = next {
-            tracing::info!(video_id=%v.id, "Found legacy video that needs thumbnailing.");
+            tracing::info!(media_file_id=%v.id, "Found legacy media file that needs thumbnailing.");
 
-            let video_file = if v.recompression_done.is_some() {
+            let media_file_path = if v.recompression_done.is_some() {
                     Some(videos_dir.join(&v.id).join("video.mp4"))
                 } else {
                     match v.orig_filename {
                         Some(ref orig_filename) => Some(videos_dir.join(&v.id).join("orig").join(orig_filename)),
                         None => {
-                            tracing::error!(video_id=%v.id, "Legacy thumbnailing failed. Original filename missing and not recompressed.");
+                            tracing::error!(media_file_id=%v.id, "Legacy thumbnailing failed. Original filename missing and not recompressed.");
                             None
                         }}
                 };
 
-            match video_file {
-                Some(video_file) => {
+            match media_file_path {
+                Some(file_path) => {
                     let req = video_compressor::CmprInput {
-                        src: video_file,
+                        src: file_path,
                         video_dst: None,
                         thumb_dir: Some(videos_dir.join(&v.id).join("thumbs")),
                         video_bitrate: 0,
-                        video_id: v.id.clone(),
+                        media_file_id: v.id.clone(),
                         user_id: v.user_id.clone(),
                     };
                     cmpr_in.send(req).unwrap_or_else(|e| {
@@ -374,13 +375,13 @@ pub fn run_forever(
                     return Some(v.id.clone());
                 },
                 _ => {
-                    tracing::error!(video_id=%v.id, "Legacy thumbnailing failed. User ID or orig filename missing.");
+                    tracing::error!(media_file_id=%v.id, "Legacy thumbnailing failed. User ID or orig filename missing.");
                 },
             }
         }
         None
     }
-    let mut legacy_video_now_thumnailing = legacy_thumbnail_next_video(&db, &videos_dir, &mut cmpr_in_tx.clone());
+    let mut legacy_media_file_now_thumnailing = legacy_thumbnail_next_media_file(&db, &media_files_dir, &mut cmpr_in_tx.clone());
 
 
     let _span = tracing::info_span!("PIPELINE").entered();
@@ -409,19 +410,19 @@ pub fn run_forever(
                         let (vid, ing_res) = match md_res {
                             MetadataResult::Ok(md) => {
                                 tracing::debug!("Got metadata for {:?}", md.src_file);
-                                match calc_video_id(&md.src_file, &md.user_id, md.upload_cookies.clone()) {
+                                match calc_media_file_id(&md.src_file, &md.user_id, md.upload_cookies.clone()) {
                                     Err(e) => {
                                         (None, Err(DetailedMsg {
-                                            msg: "Video hashing error".into(),
+                                            msg: "Media file hashing error".into(),
                                             details: e.to_string(),
                                             src_file: md.src_file.clone(),
                                             user_id: md.user_id.clone(),
                                         }))
                                     },
                                     Ok(vid) => {
-                                        let ing_res = ingest_video(&vid, &md, &data_dir, &videos_dir, target_bitrate, &db, &user_msg_tx, &cmpr_in_tx).map_err(|e| {
+                                        let ing_res = ingest_media_file(&vid, &md, &data_dir, &media_files_dir, target_bitrate, &db, &user_msg_tx, &cmpr_in_tx).map_err(|e| {
                                             DetailedMsg {
-                                                msg: "Video ingestion failed".into(),
+                                                msg: "Media ingestion failed".into(),
                                                 details: e.to_string(),
                                                 src_file: md.src_file.clone(),
                                                 user_id: md.user_id.clone(),
@@ -433,7 +434,7 @@ pub fn run_forever(
                             MetadataResult::Err(e) => (None, Err(e))
                         };
                         // Relay errors, if any.
-                        // No need to send ok message here, variations of it are sent from ingest_video().
+                        // No need to send ok message here, variations of it are sent from ingest_media_file().
                         if let Err(e) = ing_res {
                             tracing::error!("Error ingesting file '{:?}' (owner '{:?}', id '{:?}'): {:?}", e.src_file, e.user_id, vid, e.msg);
                             let cleanup_err = match clean_up_rejected_file(&data_dir, &e.src_file, None) {
@@ -441,10 +442,10 @@ pub fn run_forever(
                                     Ok(()) => { "".into() } };
                             user_msg_tx.send(UserMessage {
                                     topic: UserMessageTopic::Error,
-                                    msg: "Error reading video metadata.".into(),
+                                    msg: "Error reading media file metadata.".into(),
                                     details: Some(format!("'{}': ", e.src_file.file_name().unwrap_or_default().to_string_lossy()) + &e.details + &cleanup_err),
                                     user_id: Some(e.user_id),
-                                    video_id: vid
+                                    media_file_id: vid
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                         }
                     },
@@ -465,7 +466,7 @@ pub fn run_forever(
                         tracing::info!("Metadata reader disconnected ('{:?}'). Exit.", e); break; },
                 }
             },
-            // Video compressor progress
+            // Transcoder progress
             recv(cmpr_prog_rx) -> msg => {
                 match msg {
                     Ok((vid, user_id, msg)) => {
@@ -474,58 +475,58 @@ pub fn run_forever(
                                 msg: msg,
                                 details: None,
                                 user_id: Some(user_id),
-                                video_id: Some(vid)
+                                media_file_id: Some(vid)
                             }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                     },
-                    Err(e) => { tracing::warn!("Video compressor is dead ('{:?}'). Exit.", e); break; },
+                    Err(e) => { tracing::warn!("Transcoder is dead ('{:?}'). Exit.", e); break; },
                 }
             },
-            // Video compressor output
+            // Transcoder output
             recv(cmpr_out_rx) -> msg => {
                 match msg {
-                    Err(e) => { tracing::warn!("Video compressor is dead ('{:?}'). Exit.", e); break; },
+                    Err(e) => { tracing::warn!("Transcoder is dead ('{:?}'). Exit.", e); break; },
                     Ok(res) => {
                         if res.success {
-                            let videos_dir = videos_dir.clone();
+                            let videos_dir = media_files_dir.clone();
                             let db = db.clone();
-                            let vid = res.video_id.clone();
+                            let vid = res.media_file_id.clone();
 
                             // Thumbnails done?
                             if let Some(thumb_dir) = res.thumb_dir {
-                                if let Err(e) = db.conn().and_then(|mut conn| models::Video::set_thumb_sheet_dimensions(&mut conn, &vid, THUMB_SHEET_COLS, THUMB_SHEET_ROWS)) {
+                                if let Err(e) = db.conn().and_then(|mut conn| models::MediaFile::set_thumb_sheet_dimensions(&mut conn, &vid, THUMB_SHEET_COLS, THUMB_SHEET_ROWS)) {
                                     tracing::error!(details=%e, "Error storing thumbnail sheet dims in DB");
                                 } else {
-                                    // Thumbnailer for old videos: find next video to thumbnail, if any
-                                    if Some(vid.clone()) == legacy_video_now_thumnailing {
-                                        legacy_video_now_thumnailing = legacy_thumbnail_next_video(&db, &videos_dir, &mut cmpr_in_tx.clone());
+                                    // Thumbnailer for old media files: find next file to thumbnail, if any
+                                    if Some(vid.clone()) == legacy_media_file_now_thumnailing {
+                                        legacy_media_file_now_thumnailing = legacy_thumbnail_next_media_file(&db, &videos_dir, &mut cmpr_in_tx.clone());
                                     }
                                 }
                                 // Write out stdout/stderr to separate files
                                 for (name, data) in [("stdout", &res.stdout), ("stderr", &res.stderr)].iter() {
                                     let path = thumb_dir.join(format!("{}.txt", name));
-                                    tracing::debug!(video=%vid, file=?path, "Writing {} from thumbnailer", name);
+                                    tracing::debug!(media_file=%vid, file=?path, "Writing {} from thumbnailer", name);
                                     match std::fs::write(&path, data) {
                                         Ok(_) => {},
                                         Err(e) => {
                                             tracing::error!(file=?path, details=%e, "Error writing {:?}", name);
                                 }}}
 
-                                // Send VideoUpdated message to user
+                                // Send MediaFileUpdated message to user
                                 user_msg_tx.send(UserMessage {
-                                        topic: UserMessageTopic::VideoUpdated,
-                                        msg: "Video thumbnail generated".into(),
+                                        topic: UserMessageTopic::MediaFileUpdated,
+                                        msg: "Media thumbnail generated".into(),
                                         details: None,
                                         user_id: Some(res.user_id),
-                                        video_id: Some(vid.clone())
+                                        media_file_id: Some(vid.clone())
                                     }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                             }
 
-                            // Video done?
+                            // File done?
                             if let Some(video_dst) = res.video_dst.clone() {
                                 // Write out stdout/stderr to separate files
                                 for (name, data) in [("stdout", &res.stdout), ("stderr", &res.stderr)].iter() {
                                     let path = videos_dir.join(&vid).join(format!("{}.txt", name));
-                                    tracing::debug!(video=%vid, file=?path, "Writing {} from ffmpeg", name);
+                                    tracing::debug!(media_file=%vid, file=?path, "Writing {} from ffmpeg", name);
                                     match std::fs::write(&path, data) {
                                         Ok(_) => {},
                                         Err(e) => {
@@ -544,7 +545,7 @@ pub fn run_forever(
                                     let vh_dir = videos_dir.join(&vid);
                                     if !vh_dir.exists() {
                                         if let Err(e) = std::fs::create_dir(&vh_dir) {
-                                            tracing::error!(details=%e, "Video dir {:?} was missing after transcoding, and creating it failed. Probably a bug.", vh_dir);
+                                            tracing::error!(details=%e, "Media dir {:?} was missing after transcoding, and creating it failed. Probably a bug.", vh_dir);
                                             return false;
                                         }}
                                     let dst_filename = match get_filename(&video_dst) {
@@ -557,16 +558,16 @@ pub fn run_forever(
                                         return false;
                                     }
 
-                                    if let Err(e) = db.conn().and_then(|mut conn| models::Video::set_recompressed(&mut conn, &vid)) {
-                                        tracing::error!(details=%e, "Error marking video as recompressed in DB");
+                                    if let Err(e) = db.conn().and_then(|mut conn| models::MediaFile::set_recompressed(&mut conn, &vid)) {
+                                        tracing::error!(details=%e, "Error marking media file as recompressed in DB");
                                         return false;
                                     } else {
                                         utx.send(UserMessage {
-                                            topic: UserMessageTopic::VideoUpdated,
+                                            topic: UserMessageTopic::MediaFileUpdated,
                                             msg: "Transcoding done".into(),
                                             details: None,
                                             user_id: Some(user_id),
-                                            video_id: Some(vid.clone())
+                                            media_file_id: Some(vid.clone())
                                         }).ok();
                                     }
 
@@ -576,22 +577,22 @@ pub fn run_forever(
                                 // Send success message
                                 user_msg_tx.send(UserMessage {
                                         topic: if linked_ok {UserMessageTopic::Ok} else {UserMessageTopic::Error},
-                                        msg: "Video transcoded.".to_string() + if linked_ok {""} else {" But linking or DB failed."},
+                                        msg: "Media transcoded.".to_string() + if linked_ok {""} else {" But linking or DB failed."},
                                         details: None,
                                         user_id: Some(res.dmsg.user_id),
-                                        video_id: Some(res.video_id.clone())
+                                        media_file_id: Some(res.media_file_id.clone())
                                     }).unwrap_or_else(|e| { tracing::error!(details=%e, "Error sending user message"); });
                             }
                         }
                         else {
-                            let msg = format!("Video {} failed", if res.video_dst.is_some() {"transcoding"} else {"thumbnailing"});
-                            tracing::error!(video=res.video_id, details=?res.dmsg, msg);
+                            let msg = format!("Media {} failed", if res.video_dst.is_some() {"transcoding"} else {"thumbnailing"});
+                            tracing::error!(video=res.media_file_id, details=?res.dmsg, msg);
                             user_msg_tx.send(UserMessage {
                                     topic: UserMessageTopic::Error,
                                     msg: msg,
                                     details: Some(res.dmsg.details),
                                     user_id: Some(res.dmsg.user_id),
-                                    video_id: Some(res.video_id)
+                                    media_file_id: Some(res.media_file_id)
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                         }
                     }

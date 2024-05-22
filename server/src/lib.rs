@@ -101,7 +101,7 @@ impl ClapshotInit {
             }
         };
 
-        // Run video processing pipeline
+        // Run media file processing pipeline
         let tf = Arc::clone(&terminate_flag);
         let dd = data_dir.clone();
         let vpp_thread = Some({

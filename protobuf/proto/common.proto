@@ -8,35 +8,36 @@ import "google/protobuf/struct.proto";
 message Empty {}
 
 // ---------------------------------------------------------
-// Video metadata
+// Media file metadata
 // ---------------------------------------------------------
 
-message Video {
+message MediaFile {
     string id = 1;
     optional string title = 2;
     string user_id = 3;
-    optional VideoDuration duration = 4;
-    optional google.protobuf.Timestamp added_time = 5;
-    optional VideoPreviewData preview_data = 6;
-    optional VideoProcessingMetadata processing_metadata = 7;
+    string media_type = 4;  // e.g. "video", "audio", "image" (internally refers to `media_types`database table)
+    optional MediaFileDuration duration = 5;
+    optional google.protobuf.Timestamp added_time = 6;
+    optional MediaFilePreviewData preview_data = 7;
+    optional MediaFileProcessingMetadata processing_metadata = 8;
 
     optional string playback_url = 100;         // e.g. "https://example.com/video.mp4"
-    optional string orig_url = 101;             // URL to download the original video
+    optional string orig_url = 101;             // URL to download the original file
 }
 
-message VideoDuration {
+message MediaFileDuration {
     double duration = 1;
     int64 total_frames = 2;
     string fps = 3; // e.g. "29.97"
 }
 
-message VideoProcessingMetadata {
+message MediaFileProcessingMetadata {
     optional google.protobuf.Timestamp recompression_done = 2;
     string orig_filename = 102;
     optional string ffprobe_metadata_all = 103;
 }
 
-message VideoPreviewData {
+message MediaFilePreviewData {
     message ThumbSheet {
         string url = 1;     // Sprite sheet of thumbnails
         uint32 rows = 2;
@@ -52,7 +53,7 @@ message VideoPreviewData {
 
 message Comment {
     string id = 1;
-    string video_id = 2;
+    string media_file_id = 2;
     optional string user_id = 3;
     string username_ifnull = 4;         // Denormalize display name, in case user_id is null
     string comment = 5;
@@ -72,11 +73,11 @@ message UserMessage {
         OK = 0;
         ERROR = 1;
         PROGRESS = 2;
-        VIDEO_UPDATED = 3;  // Video metadata changed
-        VIDEO_ADDED = 4;    // video_id set in refs, upload session cookies in details (if it was an HTTP upload)
+        MEDIA_FILE_UPDATED = 3;  // MediaFile metadata changed
+        MEDIA_FILE_ADDED = 4;    // media_file_id set in refs, upload session cookies in details (if it was an HTTP upload)
     }
     message Refs {
-        optional string video_id = 1;
+        optional string media_file_id = 1;
         optional string comment_id = 2;
     }
 
@@ -110,7 +111,7 @@ message PageItem {
             }
             oneof item {
                 Folder folder = 1;
-                Video video = 2;
+                MediaFile media_file = 2;
             }
             optional Visualization vis = 100;
 
@@ -123,9 +124,9 @@ message PageItem {
 
         bool allow_reordering = 10;                 // Allow (drag-and-drop & kbd) reordering of items
 
-        bool allow_upload = 11;                     // Allow uploading new items
-        optional string video_added_action = 12;    // Action name (ref. ClientDefineActionsRequest) to call after successful upload (e.g. move to folder, send notification somewhere, ...)
-                                                    //  JS parameters (_action_args): `video_id`, `listing_data` (map)
+        bool allow_upload = 11;                          // Allow uploading new items
+        optional string media_file_added_action = 12;    // Action name (ref. ClientDefineActionsRequest) to call after successful upload (e.g. move to folder, send notification somewhere, ...)
+                                                         //  JS parameters (_action_args): `media_file_id`, `listing_data` (map)
     }
 
     oneof item {
@@ -137,7 +138,7 @@ message PageItem {
 message FolderItemID {
     oneof item {
         string folder_id = 1;
-        string video_id = 2;
+        string media_file_id = 2;
     }
 }
 
@@ -200,25 +201,25 @@ message ScriptCall {
     Parameters:
         - _action_args: Object - Contains different parameters depending on the call context.
 
-            1. `PageItem.FolderListing.Item.popup_actions` - user right-clicks a video or folder:
+            1. `PageItem.FolderListing.Item.popup_actions` - user right-clicks a media file or folder:
                 - selected_items: Proto3.PageItem_FolderListing_Item[] - Selected items in the UI.
                 - listing_data: StringMap - Data from Organizer (to itself) about current folder listing.
 
-            2. `PageItem.FolderListing.Item.open_action` - user doubleclicks (to open) a video or folder:
+            2. `PageItem.FolderListing.Item.open_action` - user doubleclicks (to open) a media file or folder:
                 - item_to_open: Proto3.PageItem_FolderListing_Item - Item to open.
                 - listing_data: StringMap
 
             3. `PageItem.FolderListing.popup_actions` - user right-clicks on the folder listing background:
                 - listing_data: StringMap
 
-            4. `PageItem.FolderListing.video_added_action` - a new video was just uploaded to this folder:
-                - video_id: string - ID of the newly added video.
+            4. `PageItem.FolderListing.media_file_added_action` - a new media file was just uploaded to this folder:
+                - media_file_id: string - ID of the newly added media file.
                 - listing_data: StringMap
 
     Available functions:
-        - clapshot.openVideo(videoId: string): void - Open a video by its ID.
-        - clapshot.renameVideo(videoId: string, newName: string): void - Rename a video.
-        - clapshot.delVideo(videoId: string): void - Delete a video.
+        - clapshot.openMediaFile(MediaFileId: string): void - Open a media file by its ID.
+        - clapshot.renameMediaFile(MediaFileId: string, newName: string): void - Rename a media file.
+        - clapshot.delMediaFile(MediaFileId: string): void - Delete a media file.
         - clapshot.callOrganizer(cmd: string, args: Object): void - Call an Organizer API command.
         - clapshot.itemsToIDs(items: Proto3.PageItem_FolderListing_Item[]): Proto3.FolderItemID[] - Convert items to their IDs.
         - clapshot.moveToFolder(dstFolderId: string, ids: Proto3.FolderItemID[], listingData: StringMap): void - Move items to a folder.
@@ -231,13 +232,13 @@ message ScriptCall {
 
     Example scripts:
 
-    1. Rename an item (video or folder) when user right-clicks:
+    1. Rename an item (media file or folder) when user right-clicks:
         var it = _action_args.selected_items[0];
-        var old_name = it.video?.title || it.folder?.title;
+        var old_name = it.media_file?.title || it.folder?.title;
         var new_name = (prompt("Rename item", old_name))?.trim();
         if (new_name && new_name != old_name) {
-            if (it.video) {
-                clapshot.renameVideo(it.video.id, new_name);
+            if (it.media_file) {
+                clapshot.renameMediaFile(it.media_file.id, new_name);
             } else if (it.folder) {
                 clapshot.callOrganizer("rename_folder", {id: it.folder.id, new_name: new_name});
             } else {
@@ -245,15 +246,15 @@ message ScriptCall {
             }
         }
 
-    2. Move a newly added video to a folder:
-        var vid = _action_args.video_id;
+    2. Move a newly added media file to a folder:
+        var vid = _action_args.media_file_id;
         var listingData = _action_args.listing_data;
         var folderId = listingData?.folder_id;
         if (!folderId || !vid) {
-            var msg = "on_video_added error: video_id missing, or folder_id from listingData.";
+            var msg = "on_media_file_added error: media_file_id missing, or folder_id from listingData.";
             alert(msg); console.error(msg);
         } else {
-            clapshot.moveToFolder(folderId, [{videoId: vid}], listingData);
+            clapshot.moveToFolder(folderId, [{MediaFileId: vid}], listingData);
         }
     */
 }

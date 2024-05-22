@@ -1,9 +1,9 @@
-# Clapshot: Self-Hosted Video Review Tool
+# Clapshot: Self-Hosted Video/Media Review Tool
 [![Release](https://img.shields.io/github/v/release/elonen/clapshot?include_prereleases)]() [![Build and test](https://github.com/elonen/clapshot/actions/workflows/docker-test.yml/badge.svg)](https://github.com/elonen/clapshot/actions/workflows/docker-test.yml)
 
 ## Overview
 
-Clapshot is an open-source, self-hosted tool for collaborative video review and annotation. It features a Rust-based API server and a Svelte-based web UI. This tool is ideal for scenarios requiring local hosting of videos due to:
+Clapshot is an open-source, self-hosted tool for collaborative video/media review and annotation. It features a Rust-based API server and a Svelte-based web UI. This tool is ideal for scenarios requiring local hosting of videos due to:
 
 1. Policy constraints (*enterprise users*), or
 2. Cost-benefit concerns against paid cloud services (*very small businesses*)
@@ -12,11 +12,11 @@ Clapshot is an open-source, self-hosted tool for collaborative video review and 
 
 ### Key Features
 
-- Video ingestion via HTTP video uploads or shared folders
-- Video transcoding with FFmpeg
+- Media file ingestion via HTTP uploads or shared folders
+- Media transcoding with FFmpeg
 - Commenting, drawing annotations, and threaded replies
 - Real-time collaborative review sessions
-- Storage of videos as files and metadata in an SQLite (3.5+) database
+- Stores media files on disk and metadata in an SQLite (3.5+) database
 - Authentication agnostic, you can use *OAuth, JWS, Kerberos, Okta* etc., using Nginx username pass-through
 - **[NEW]** Extensible "Organizer" plugins for custom integrations, workflow, and access control
 
@@ -73,7 +73,7 @@ Main components:
 
 - **Clapshot Client** – Single Page Application (SPA) that runs in the browser. Connects to Clapshot Server via Websocket. Written in *Svelte*.
 - **Clapshot Server** – Linux daemon that handles most server-side logic. Binary written in *Rust*. Listens on `localhost` to the reverse proxy for plaintext HTTP and WSS.
-- **Clapshot Organizer(s)** – Plugin(s) that organize videos and UI into a custom folder hierarchy, etc. Written in Python (or any other language). See below for details.
+- **Clapshot Organizer(s)** – Plugin(s) that organize media files into a custom folder hierarchy, etc. Written in Python (or any other language). See below for details.
 
 Production deployments also depend on:
 
@@ -81,9 +81,9 @@ Production deployments also depend on:
 - **Nginx Web Server** – SSL reverse proxy between Client and Server + static asset delivery for browser. Also routes session auth to Authentication Proxy.
 - **Authentication Proxy** – Any auxilliary HTTP daemon that authenticates users and return a **user id** and **username** in HTTP headers. In the demo, this is `/var/www/.htpasswd` + [PHP htadmin](https://github.com/soster/htadmin), but you can also use combinations like [Okta](https://www.okta.com/) + [Vouch](https://github.com/vouch/vouch-proxy) + [LDAP Authz Proxy](https://github.com/elonen/ldap_authz_proxy) or something equally advanced.
 
-- **Sqlite DB** – Stores video metadata, comments, user messages etc. Both Clapshot Server and Organizer(s) access this. This is just a file, not a daemon.
-- **ffmpeg** and **mediainfo** – Clapshot Server processes video files with commands.
-- **File System** – Video files, HTML, JavaScript, CSS, thumbnail images etc, also `clapshot.sqlite`.
+- **Sqlite DB** – Stores metadata, comments, user messages etc. Both Clapshot Server and Organizer(s) access this. This is just a file, not a daemon.
+- **ffmpeg** and **mediainfo** – Clapshot Server processes media files with these commands.
+- **File System** – Media files, HTML, JavaScript, CSS, thumbnail images etc, also `clapshot.sqlite`.
 
 See [sequence diagram](doc/generated/open-frontpage-process.svg) for details on how these interact when a user opens the main page.
 

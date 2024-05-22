@@ -11,7 +11,7 @@ from organizer.database.operations import db_get_or_create_user_root_folder
 from organizer.utils import folder_path_to_uri_arg
 
 from .folders import FoldersHelper
-from organizer.database.models import DbUser, DbVideo, DbFolder
+from organizer.database.models import DbUser, DbMediaFile, DbFolder
 
 
 class PagesHelper:
@@ -55,7 +55,7 @@ class PagesHelper:
         Admin can also trash all user's content from here.
         """
         pg_items.append(clap.PageItem(html="<h3><strong>ADMIN</strong> – User Folders</h3>"))
-        pg_items.append(clap.PageItem(html="<p>The following users currently have a home folder and/or videos.<br/>Uploading videos or moving items to these folders will transfer ownership to that user.<br/>Trashing a user's home folder will delete everything they have.</p>"));
+        pg_items.append(clap.PageItem(html="<p>The following users currently have a home folder and/or media files.<br/>Uploading files or moving items to these folders will transfer ownership to that user.<br/>Trashing a user's home folder will delete everything they have.</p>"));
 
         with self.db_new_session() as dbs:
             all_users: list[DbUser] = dbs.query(DbUser).order_by(DbUser.id).distinct().all()
@@ -92,14 +92,14 @@ class PagesHelper:
                     listing_data={"folder_id": str(cur_folder.id)},
                     allow_reordering=False,
                     allow_upload=False,
-                    video_added_action=None)
+                    media_file_added_action=None)
 
             pg_items.append(clap.PageItem(folder_listing=user_folder_listing))
 
 
     async def _make_folder_listing(
             self,
-            folder_db_items: list[DbVideo | DbFolder],
+            folder_db_items: list[DbMediaFile | DbFolder],
             cur_folder: DbFolder,
             parent_folder: Optional[DbFolder],
             ses: org.UserSessionData) -> list[clap.PageItem]:
@@ -114,15 +114,15 @@ class PagesHelper:
             popup_actions.append("move_to_parent")
             listing_data["parent_folder_id"] = str(parent_folder.id)
 
-        # Fetch videos in this folder
-        video_ids = [v.id for v in folder_db_items if isinstance(v, DbVideo)]
-        video_list = await self.srv.db_get_videos(org.DbGetVideosRequest(ids=org.IdList(ids=video_ids)))
-        videos_by_id = {v.id: v for v in video_list.items}
+        # Fetch media files in this folder
+        media_ids = [v.id for v in folder_db_items if isinstance(v, DbMediaFile)]
+        media_list = await self.srv.db_get_media_files(org.DbGetMediaFilesRequest(ids=org.IdList(ids=media_ids)))
+        media_by_id = {v.id: v for v in media_list.items}
 
-        async def video_to_page_item(vid_id: str, popup_actions: list[str]) -> clap.PageItemFolderListingItem:
-            assert re.match(r"^[0-9a-fA-F]+$", vid_id), f"Unexpected video ID format: {vid_id}"
+        async def media_file_to_page_item(vid_id: str, popup_actions: list[str]) -> clap.PageItemFolderListingItem:
+            assert re.match(r"^[0-9a-fA-F]+$", vid_id), f"Unexpected media file ID format: {vid_id}"
             return clap.PageItemFolderListingItem(
-                video=videos_by_id[vid_id],
+                media_file=media_by_id[vid_id],
                 open_action=clap.ScriptCall(
                     lang=clap.ScriptCallLang.JAVASCRIPT,
                     code=f'clapshot.openVideo("{vid_id}");'),
@@ -133,8 +133,8 @@ class PagesHelper:
         for itm in folder_db_items:
             if isinstance(itm, DbFolder):
                 listing_items.append(await self.folders_helper.folder_to_page_item(itm, popup_actions, ses))
-            elif isinstance(itm, DbVideo):
-                listing_items.append(await video_to_page_item(itm.id, popup_actions))
+            elif isinstance(itm, DbMediaFile):
+                listing_items.append(await media_file_to_page_item(itm.id, popup_actions))
             else:
                 raise ValueError(f"Unknown item type: {itm}")
 
@@ -144,12 +144,12 @@ class PagesHelper:
             popup_actions=["new_folder"],
             listing_data=listing_data,
             allow_upload=True,
-            video_added_action="on_video_added")
+            media_file_added_action="on_media_file_added")
 
         pg_items = []
         pg_items.append(clap.PageItem(folder_listing=folder_listing))
         if len(folder_listing.items) == 0:
-            pg_items.append(clap.PageItem(html="<p style='margin-top: 1em;'><i class='far fa-circle-question text-blue-400'></i> Use the drop zone to <strong>upload videos</strong>, or right-click on the empty space above to <strong>create a folder</strong>.</p>"))
+            pg_items.append(clap.PageItem(html="<p style='margin-top: 1em;'><i class='far fa-circle-question text-blue-400'></i> Use the drop zone to <strong>upload media files</strong>, or right-click on the empty space above to <strong>create a folder</strong>.</p>"))
             pg_items.append(clap.PageItem(html="<p>After that, drag items to <strong>reorder</strong>, or drop them <strong>into folders</strong>. Hold shift to multi-select.</p>"))
 
         return pg_items

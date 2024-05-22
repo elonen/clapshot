@@ -15,7 +15,7 @@ import clapshot_grpc.proto.clapshot as clap
 
 from clapshot_grpc.utilities import try_send_user_message
 
-from .models import Base, DbFolder, DbFolderItems, DbSchemaMigrations, DbUser, DbVideo
+from .models import Base, DbFolder, DbFolderItems, DbSchemaMigrations, DbUser, DbMediaFile
 from .migrations import ALL_MIGRATIONS
 
 def db_check_pending_migrations(db: Engine) -> tuple[str, list[org.Migration]]:
@@ -53,11 +53,8 @@ def db_test_orm_mappings(dbs: Session, log: Logger):
         rnd = uuid.uuid4().hex  # random string to avoid collisions
         test_video, test_user = f"video_{rnd}", f"user_{rnd}"
 
-        # Create user
         dbs.execute(sqla_text("INSERT INTO users (id, name) VALUES (:id, :name)"), {"id": test_user, "name": f"Test user {rnd}"})
-
-        # Insert a video by SQL, since we don't have a Video ORM class
-        dbs.execute(sqla_text("INSERT INTO videos (id, user_id) VALUES (:id, :user_id)"), {"id": test_video, "user_id": test_user})
+        dbs.execute(sqla_text("INSERT INTO media_files (id, user_id) VALUES (:id, :user_id)"), {"id": test_video, "user_id": test_user})
         dbs.flush()
 
         # Insert a parent folder
@@ -73,7 +70,7 @@ def db_test_orm_mappings(dbs: Session, log: Logger):
         assert child_folder.id is not None, "Folder.id was not set after insert"
 
         # Insert folder contents
-        video_entry = DbFolderItems(video_id=test_video, folder_id=child_folder.id)
+        video_entry = DbFolderItems(media_file_id=test_video, folder_id=child_folder.id)
         dbs.add(video_entry)
         subfolder_entry = DbFolderItems(subfolder_id=child_folder.id, folder_id=parent_folder.id)
         dbs.add(subfolder_entry)
@@ -99,9 +96,9 @@ def db_check_and_fix_integrity(dbs: Session, log: Logger):
         if cnt := dbs.query(DbFolderItems).filter(DbFolderItems.id.in_(sqlalchemy.select(dangling_subfolders))).delete(synchronize_session=False):
             log.error(f"Deleted {cnt} DbFolderItem rows, referencing subfolders that didn't exist in DbFolder. THIS IS A FOREIGN KEY VIOLATION!")
 
-        dangling_videos = dbs.query(DbFolderItems.id).filter(DbFolderItems.video_id != None).outerjoin(DbVideo, DbFolderItems.video_id == DbVideo.id).filter(DbVideo.id == None).subquery()
-        if cnt := dbs.query(DbFolderItems).filter(DbFolderItems.id.in_(sqlalchemy.select(dangling_videos))).delete(synchronize_session=False):
-            log.error(f"Deleted {cnt} video item from DbFolderItems that didn't exist in DbVideo. THIS COULD BE A BUG.")
+        dangling_media_files = dbs.query(DbFolderItems.id).filter(DbFolderItems.media_file_id != None).outerjoin(DbMediaFile, DbFolderItems.media_file_id == DbMediaFile.id).filter(DbMediaFile.id == None).subquery()
+        if cnt := dbs.query(DbFolderItems).filter(DbFolderItems.id.in_(sqlalchemy.select(dangling_media_files))).delete(synchronize_session=False):
+            log.error(f"Deleted {cnt} media item from DbFolderItems that didn't exist in DbMediaFile. THIS COULD BE A BUG.")
 
 
 def db_check_for_folder_loops(dbs: Session, log: Logger) -> bool:
@@ -157,7 +154,7 @@ def db_check_for_folder_loops(dbs: Session, log: Logger) -> bool:
 async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, srv: Optional[org.OrganizerOutboundStub], log: Logger) -> DbFolder:
     """
     Find the folder with no parent for the user.
-    If none is found, create one and move all non-parent videos to it.
+    If none is found, create one and move all non-parent media files to it.
     """
     user_msg = None     # Queue any user message, as transaction will block it from being stored in the DB otherwise
 
@@ -187,7 +184,7 @@ async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, s
                 type=clap.UserMessageType.ERROR)
 
         elif cnt == 0:
-            # Create a root folder & move all orphan videos to it
+            # Create a root folder & move all orphan media files to it
             assert ret is None
             log.info(f"No root folder for user '{user.id}', creating one now.")
             ret = DbFolder(user_id=user.id, title=f"Home of '{user.name}'")
@@ -196,12 +193,12 @@ async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, s
 
         assert ret is not None, "Unexpected None result"
 
-        # Move all orphan videos to the root folder (whether or not we created it just now)
+        # Move all orphan media files to the root folder (whether or not we created it just now)
         dbs.execute(sqla_text(dedent('''
-            INSERT INTO bf_folder_items (folder_id, video_id)
-            SELECT :root_folder_id, v.id FROM videos v
-            LEFT JOIN bf_folder_items bfi ON v.id = bfi.video_id AND bfi.video_id IS NOT NULL
-            WHERE v.user_id = :user_id AND bfi.video_id IS NULL;
+            INSERT INTO bf_folder_items (folder_id, media_file_id)
+            SELECT :root_folder_id, v.id FROM media_files v
+            LEFT JOIN bf_folder_items bfi ON v.id = bfi.media_file_id AND bfi.media_file_id IS NOT NULL
+            WHERE v.user_id = :user_id AND bfi.media_file_id IS NULL;
         ''')), {"user_id": user.id, "root_folder_id": ret.id})
 
     if user_msg and srv:

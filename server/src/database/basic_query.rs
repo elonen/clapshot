@@ -90,16 +90,16 @@ macro_rules! implement_query_by_user_traits {
 }
 
 #[macro_export]
-macro_rules! implement_query_by_video_traits {
-    ($model:ty, $table:ident, $video_col:ident, $order_by:expr) => {
+macro_rules! implement_query_by_media_file_traits {
+    ($model:ty, $table:ident, $media_col:ident, $order_by:expr) => {
 
-        impl DbQueryByVideo for $model {
+        impl DbQueryByMediaFile for $model {
 
-            fn get_by_video(conn: &mut PooledConnection, vid: &str, pg: DBPaging) -> DBResult<Vec<Self>> {
+            fn get_by_media_file(conn: &mut PooledConnection, vid: &str, pg: DBPaging) -> DBResult<Vec<Self>> {
                 use schema::$table::dsl::*;
 
                 to_db_res($table
-                    .filter($video_col.eq(vid))
+                    .filter($media_col.eq(vid))
                     .order($order_by)
                     .then_order_by(id.asc())
                     .offset(pg.offset())

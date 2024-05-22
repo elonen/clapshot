@@ -46,7 +46,7 @@ use crate::database::models;
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::grpc::grpc_client::OrganizerConnection;
 use crate::grpc::grpc_client::OrganizerURI;
-use crate::grpc::{grpc_server, make_video_popup_actions};
+use crate::grpc::{grpc_server, make_media_file_popup_actions};
 use crate::api_server::ws_handers::SessionClose;
 use crate::video_pipeline::IncomingFile;
 use self::user_session::UserSession;
@@ -61,7 +61,7 @@ type SessionMap = Arc<RwLock<HashMap<String, UserSession>>>;
 pub enum SendTo<'a> {
     UserSession(&'a str),
     UserId(&'a str),
-    VideoId(&'a str),
+    MediaFileId(&'a str),
     MsgSender(&'a WsMsgSender),
     Collab(&'a str),
 }
@@ -75,7 +75,7 @@ pub struct UserMessage {
     pub user_id: Option<String>,
     pub msg: String,
     pub details: Option<String>,
-    pub video_id: Option<String>
+    pub media_file_id: Option<String>
 }
 
 fn abbrv(msg: &str) -> String {
@@ -112,9 +112,9 @@ async fn handle_ws_session(
         user_id: user.id.clone(),
         user_name: user.name.clone(),
         is_admin,
-        cur_video_id: None,
+        cur_media_file_id: None,
         cur_collab_id: None,
-        video_session_guard: None,
+        media_session_guard: None,
         collab_session_guard: None,
         organizer: None,
         org_session: proto::org::UserSessionData {
@@ -163,7 +163,7 @@ async fn handle_ws_session(
 
     // Define default actions. Organizer may call DefineActions later to override these.
     if let Err(e) = server.emit_cmd(
-            client_cmd!(DefineActions, {actions: make_video_popup_actions()}),
+            client_cmd!(DefineActions, {actions: make_media_file_popup_actions()}),
             SendTo::MsgSender(&ses.sender)) {
         tracing::error!(details=%e, "Error sending define_actions to client. Closing session.");
         return;
@@ -446,7 +446,7 @@ async fn run_api_server_async(
         .and_then(handle_multipart_upload);
 
     let rt_videos = warp::path("videos").and(
-        warp::fs::dir(server_state_cln1.videos_dir.clone())
+        warp::fs::dir(server_state_cln1.media_files_dir.clone())
             .with(warp::log("videos")));
 
     let rt_api_ws = warp::path("api").and(warp::path("ws"))
@@ -492,8 +492,8 @@ async fn run_api_server_async(
 
     let routes = if cors_origins.contains(&"*") {
         tracing::warn!(concat!(
-            "!! SECURITY RISK !! – Using CORS origin '*' allows any website to access your video annotation system. ",
-            "This exposes your users' videos to potential API attacks. ",
+            "!! SECURITY RISK !! – Using CORS origin '*' allows any website to access your system. ",
+            "This exposes your users' files to potential API attacks. ",
             "Do NOT use '*' in production! ",
             "Instead, specify the allowed origin, such as 'https://clapshot.example.com'."
         ));
@@ -531,16 +531,16 @@ async fn run_api_server_async(
                     message: m.msg.clone(),
                     details: m.details.clone().unwrap_or("".into()),
                     seen: false, comment_id: None,
-                    video_id: m.video_id.clone()
+                    media_file_id: m.media_file_id.clone()
                 };
 
-                // Message to all watchers of a video
-                if let Some(vid) = m.video_id {
+                // Message to all watchers of a media file
+                if let Some(vid) = m.media_file_id {
                     if let Err(_) = server_state.emit_cmd(
                         client_cmd!(ShowMessages, { msgs: vec![msg.to_proto3()] }),
-                        SendTo::VideoId(&vid)
+                        SendTo::MediaFileId(&vid)
                     ) {
-                        tracing::error!(video=vid, "Failed to send notification to video watchers.");
+                        tracing::error!(media_file=vid, "Failed to send notification to media file watchers.");
                     }
                 };
 
@@ -555,7 +555,7 @@ async fn run_api_server_async(
                         Ok(session_cnt) => { user_was_online = session_cnt>0 },
                         Err(e) => tracing::error!(user=user_id, details=%e, "Failed to send user notification."),
                     }
-                    if !(matches!(m.topic, UserMessageTopic::Progress | UserMessageTopic::VideoAdded | UserMessageTopic::VideoUpdated)) {
+                    if !(matches!(m.topic, UserMessageTopic::Progress | UserMessageTopic::MediaFileAdded | UserMessageTopic::MediaFileUpdated)) {
                         let msg = models::MessageInsert {
                             seen: msg.seen || user_was_online,
                             ..msg

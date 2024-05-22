@@ -11,7 +11,7 @@ let files = {
 export let postUrl: string;
 // Passed to HTTP POST request:
 export let listingData: Object;
-export let videoAddedAction: string|undefined;
+export let mediaFileAddedAction: string|undefined;
 
 
 let progressBar: HTMLProgressElement;
@@ -70,8 +70,8 @@ function upload() {
         ajax.setRequestHeader("X-FILE-NAME", file.name);
 
         let upload_cookies = { ...LocalStorageCookies.getAllNonExpired() };
-        if (videoAddedAction)
-            upload_cookies["video_added_action"] = videoAddedAction;
+        if (mediaFileAddedAction)
+            upload_cookies["video_added_action"] = mediaFileAddedAction;
         upload_cookies["listing_data_json"] = JSON.stringify(listingData);
         ajax.setRequestHeader("X-CLAPSHOT-COOKIES", JSON.stringify(upload_cookies));
 

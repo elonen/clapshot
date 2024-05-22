@@ -13,7 +13,7 @@ import clapshot_grpc.proto.clapshot.organizer as org
 from clapshot_grpc.utilities import try_send_user_message
 
 from organizer.config import PATH_COOKIE_NAME
-from organizer.database.models import DbFolder, DbFolderItems, DbVideo
+from organizer.database.models import DbFolder, DbFolderItems, DbMediaFile
 from organizer.database.operations import db_get_or_create_user_root_folder
 
 
@@ -71,7 +71,7 @@ class FoldersHelper:
         return res
 
 
-    async def fetch_folder_contents(self, folder: DbFolder, ses: org.UserSessionData) -> List[DbVideo | DbFolder]:
+    async def fetch_folder_contents(self, folder: DbFolder, ses: org.UserSessionData) -> List[DbMediaFile | DbFolder]:
         """
         Fetch the contents of a folder from the database, sorted by the specified criteria.
         """
@@ -81,30 +81,30 @@ class FoldersHelper:
         with self.db_new_session() as dbs:
             folder_items = dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder.id).all()
 
-            # Get DbFolder and DbVideo objects for all folder items
+            # Get DbFolder and DbMediaFile objects for all folder items
             subfolder_ids = [fi.subfolder_id for fi in folder_items if fi.subfolder_id]
             subfolder_items = dbs.query(DbFolder).filter(DbFolder.id.in_(subfolder_ids)).all()
             subfolders_by_id = {f.id: f for f in subfolder_items}
 
-            video_ids = [fi.video_id for fi in folder_items if fi.video_id]
-            video_items = dbs.query(DbVideo).filter(DbVideo.id.in_(video_ids)).all()
-            videos_by_id = {v.id: v for v in video_items}
+            media_ids = [fi.media_file_id for fi in folder_items if fi.media_file_id]
+            media_items = dbs.query(DbMediaFile).filter(DbMediaFile.id.in_(media_ids)).all()
+            media_by_id = {v.id: v for v in media_items}
 
             # Replace folder item IDs with actual objects and their sort_order
-            def _get_item(fi: DbFolderItems) -> Tuple[int, DbVideo | DbFolder]:
-                if fi.video_id:
-                    return (fi.sort_order, videos_by_id[fi.video_id])
+            def _get_item(fi: DbFolderItems) -> Tuple[int, DbMediaFile | DbFolder]:
+                if fi.media_file_id:
+                    return (fi.sort_order, media_by_id[fi.media_file_id])
                 elif fi.subfolder_id:
                     return (fi.sort_order, subfolders_by_id[fi.subfolder_id])
                 else:
-                    raise ValueError("Folder item has neither video nor subfolder ID")
+                    raise ValueError("Folder item has neither media file nor subfolder ID")
 
             items_with_sort_order = [_get_item(fi) for fi in folder_items]
 
             # Sort by sort_order first, then by type, and then by .created or .added_time (newest first)
             sorted_items = sorted(items_with_sort_order, key=lambda x: (
                 x[0],
-                isinstance(x[1], DbVideo),
+                isinstance(x[1], DbMediaFile),
                 -(getattr(x[1], 'added_time', getattr(x[1], 'created', datetime(1970, 1, 1))).timestamp())
             ))
 
@@ -117,7 +117,7 @@ class FoldersHelper:
     async def trash_folder_recursive(self, dbs: Session, folder_id: int, ses: org.UserSessionData) -> List[str]:
         """
         Trash a folder and unbind its contents recursively.
-        Returns a list of all video IDs that are to be deleted.
+        Returns a list of all media file IDs that are to be deleted.
         """
         fld = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
         if not fld:
@@ -126,20 +126,20 @@ class FoldersHelper:
             raise GRPCError(GrpcStatus.PERMISSION_DENIED, f"Cannot trash another user's folder")
 
         folder_items = dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder_id).all()
-        video_ids = [it.video_id for it in folder_items if it.video_id]
+        media_ids = [it.media_file_id for it in folder_items if it.media_file_id]
 
         self.log.debug(f"Deleting folder '{folder_id}' ('{fld.title}') and its contents")
 
         # Recurse to subfolders
         for fi in [it.subfolder_id for it in folder_items if it.subfolder_id]:
-            video_ids.extend(await self.trash_folder_recursive(dbs, fi, ses))
+            media_ids.extend(await self.trash_folder_recursive(dbs, fi, ses))
 
         # Remove content bindings
         dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder_id).delete()
 
         # Delete the folder itself
         dbs.query(DbFolder).filter(DbFolder.id == folder_id).delete()
-        return video_ids
+        return media_ids
 
 
     async def folder_to_page_item(self, fld: DbFolder, popup_actions: List[str], ses: org.UserSessionData) -> clap.PageItemFolderListingItem:
@@ -162,23 +162,23 @@ class FoldersHelper:
     async def preview_items_for_folder(self, fld: DbFolder, ses: org.UserSessionData) -> List[clap.PageItemFolderListingItem]:
         """
         Get preview items for a folder.
-        Used in folder listings to show a preview of the folder contents (contained videos and subfolders).
+        Used in folder listings to show a preview of the folder contents (contained media files and subfolders).
         """
         contained_items = await self.fetch_folder_contents(fld, ses)
 
-        videos = [item for item in contained_items if isinstance(item, DbVideo)][:4]
+        media_files = [item for item in contained_items if isinstance(item, DbMediaFile)][:4]
         folders = [item for item in contained_items if isinstance(item, DbFolder)][:4]
 
-        if videos:
-            video_details = await self.srv.db_get_videos(org.DbGetVideosRequest(ids=org.IdList(ids=[v.id for v in videos])))
-            videos_by_id = {v.id: v for v in video_details.items}
+        if media_files:
+            media_details = await self.srv.db_get_media_files(org.DbGetMediaFilesRequest(ids=org.IdList(ids=[v.id for v in media_files])))
+            media_by_id = {v.id: v for v in media_details.items}
 
-        # Prepare result list with up to 4 items, prioritizing videos
+        # Prepare result list with up to 4 items, prioritizing media files
         result = [
-            clap.PageItemFolderListingItem(video=videos_by_id[v.id]) for v in videos
+            clap.PageItemFolderListingItem(media_file=media_by_id[v.id]) for v in media_files
         ] + [
             clap.PageItemFolderListingItem(folder=clap.PageItemFolderListingFolder(id=str(f.id), title=f.title or "???"))
-            for f in folders[:4 - len(videos)]
+            for f in folders[:4 - len(media_files)]
         ]
 
         return result

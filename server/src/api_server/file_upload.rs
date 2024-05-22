@@ -54,8 +54,8 @@ pub async fn handle_multipart_upload(
                 cookies: cookies.clone()
             };
 
-            match org_authz_with_default(&org_session, "upload video", true, &server, &Some(organizer),
-                true, AuthzTopic::Other(None, authz_req::other_op::Op::UploadVideo)).await {
+            match org_authz_with_default(&org_session, "upload media file", true, &server, &Some(organizer),
+                true, AuthzTopic::Other(None, authz_req::other_op::Op::UploadMediaFile)).await {
                 Ok(_) => {},
                 Err(AuthzError::Denied) => {
                     return Ok(warp::reply::with_status("Permission denied".into(), warp::http::StatusCode::FORBIDDEN));

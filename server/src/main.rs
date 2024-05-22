@@ -14,14 +14,14 @@ mod log;
 #[command(
     name = PKG_NAME,
     version = PKG_VERSION,
-    about = "Clapshot Server - backend of a video annotation tool",
+    about = "Clapshot Server - backend of a media annotation tool",
     long_about = indoc! {"
-        Clapshot Server - backend of a video annotation tool
+        Clapshot Server - backend of a media annotation tool
 
         This is a small HTTP + WS server that listen to Client API requests,
-        delegates some of them to an Organizer plugins, and transcodes videos.
+        delegates some of them to an Organizer plugins, and transcodes media files.
 
-        It monitors `<data_dir>/incoming` for new videos, processes them, and stores them in `<data_dir>/videos`.
+        It monitors `<data_dir>/incoming` for new media files, processes them, and stores them in `<data_dir>/videos`.
         Use a proxy server to serve files from `videos` folder, and to secure the API with HTTPS/WSS.
         "},
 )]
@@ -54,7 +54,7 @@ struct Args {
     #[arg(short='P', long, default_value_t = 3.0, value_name="SECONDS")]
     poll: f32,
 
-    /// Max number of workers for video processing
+    /// Max number of workers for media file processing
     /// (0 = number of CPU cores)
     #[arg(short, long, default_value_t = 0, value_name="NUM")]
     workers: usize,
