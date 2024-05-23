@@ -15,10 +15,10 @@ impl OrganizerCaller {
         OrganizerCaller { uri }
     }
 
-    pub fn handshake_organizer(&self, data_dir: &Path, server_url: &str, db_file: &Path, backchannel: &GrpcBindAddr)
+    pub fn handshake_organizer(&self, data_dir: &Path, server_url: &str, db_file: &Path, backchannel: &GrpcBindAddr, cur_server_migration: Option<&str>)
         -> anyhow::Result<()>
     {
-        async fn call_it(conn: &mut OrganizerConnection, backchannel: &GrpcBindAddr, data_dir: &Path, server_url: &str, db_file: &Path)
+        async fn call_it(conn: &mut OrganizerConnection, backchannel: &GrpcBindAddr, data_dir: &Path, server_url: &str, db_file: &Path, cur_server_migration: Option<&str>)
          -> anyhow::Result<()>
         {
             let v = semver::Version::parse(crate::PKG_VERSION)?;
@@ -67,8 +67,19 @@ impl OrganizerCaller {
                     pending.sort_by(|a, b| a.version.cmp(&b.version));  // Oldest first
                     let mut cur_version = cm_res.get_ref().current_schema_ver.clone();
                     for m in pending {
-                        tracing::warn!("MIGRATION DEPENDENCY RESOLVER NOT YET PROPERLY IMPLEMENTED! Blindly applying organizer migration: {:?}", m);
+                        tracing::warn!("MIGRATION DEPENDENCY RESOLVER NOT YET PROPERLY IMPLEMENTED! Doing rudimentary checks and applying organizer migration: {:?}", m);
+
                         assert!(m.version > cur_version, "Migration version {} is not greater than current version {} -- this needs a better implementation to resolve", m.version, cur_version);
+                        for dep in &m.dependencies {
+                            if dep.name == "clapshot.server" {
+                                if let Some(min_ver) = &dep.min_ver {
+                                    assert!(cur_server_migration.unwrap_or_default() >= min_ver.as_str(), "Migration '{}' requires server DB version >= {} but server is at version {}", m.uuid, min_ver, cur_server_migration.unwrap_or_default());
+                                }
+                                if let Some(max_ver) = &dep.max_ver {
+                                    assert!(cur_server_migration.unwrap_or_default() <= max_ver.as_str(), "Migration '{}' requires server DB version <= {} but server is at version {}", m.uuid, max_ver, cur_server_migration.unwrap_or_default());
+                                }
+                            }
+                        }
                         conn.apply_migration(ApplyMigrationRequest { uuid: m.uuid.clone() }).await
                             .map_err(|e| anyhow::anyhow!("Error applying organizer migration '{}': {:?}", m.uuid, e))?;
                         cur_version = m.version;
@@ -99,7 +110,7 @@ impl OrganizerCaller {
             match self.tokio_connect() {
                 Ok((rt, mut conn)) => {
                     tracing::info!("Connected to organizer (on attempt {retry}). Doing handshake.");
-                    return rt.block_on(call_it(&mut conn, backchannel, data_dir, server_url, db_file));
+                    return rt.block_on(call_it(&mut conn, backchannel, data_dir, server_url, db_file, cur_server_migration));
                 },
                 Err(e) => {
                     tracing::warn!("Connecting organizer failed (attempt {retry}/{MAX_TRIES}: {}", e);

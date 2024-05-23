@@ -23,15 +23,12 @@ pub struct UserInsert {
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Insertable, Identifiable, QueryId, AsChangeset, Clone)]
+#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Insertable, Identifiable, QueryId, Clone)]
 #[diesel(treat_none_as_null = true)]
 #[diesel(table_name = media_types)]
 #[diesel(primary_key(id))]
 pub struct MediaType {
     pub id: String,
-    pub precedence: i32,
-    pub jq_script: String,
-    pub ffmpeg_options: String,
 }
 
 

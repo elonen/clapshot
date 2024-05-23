@@ -89,6 +89,15 @@ impl DB {
             .iter().map(|m| m.name().to_string()).collect())
     }
 
+    /// Return name of the latest applied migration
+    /// or None if no migrations have been applied
+    pub fn latest_migration_name(&self) -> DBResult<Option<String>> {
+        let applied = MigrationHarness::applied_migrations(&mut self.conn()?)
+            .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?;
+        let res = applied.iter().max().and_then(|m| Some(m.to_string()));
+        Ok(res)
+    }
+
     /// Run a named migration
     pub fn apply_migration(&self, conn: &mut SqliteConnection, migration_name: &str) -> EmptyDBResult {
         conn.transaction(|conn| {   // uses savepoints instead when needed
@@ -155,9 +164,6 @@ pub trait DbBasicQuery<P, I>: Sized
     /// Get all nodes of type Self, with no filtering, paginated.
     fn get_all(conn: &mut PooledConnection, pg: DBPaging) -> DBResult<Vec<Self>>;
 
-    /// Update objects, replaces the entire object except for the primary key.
-    fn update_many(conn: &mut PooledConnection, items: &[Self]) -> DBResult<Vec<Self>>;
-
     /// Delete a single object from the database.
     fn delete(conn: &mut PooledConnection, id: &P) -> DBResult<bool>;
 
@@ -165,12 +171,25 @@ pub trait DbBasicQuery<P, I>: Sized
     fn delete_many(conn: &mut PooledConnection, ids: &[P]) -> DBResult<usize>;
 }
 
+pub trait DbUpdate<P>: Sized
+    where P: std::str::FromStr + Send + Sync + Clone,
+{
+    /// Update objects, replaces the entire object except for the primary key.
+    fn update_many(conn: &mut PooledConnection, items: &[Self]) -> DBResult<Vec<Self>>;
+}
+
 mod basic_query;
 crate::implement_basic_query_traits!(models::User, models::UserInsert, users, String, created.desc());
-crate::implement_basic_query_traits!(models::MediaType, models::MediaType, media_types, String, precedence.desc());
+crate::implement_basic_query_traits!(models::MediaType, models::MediaType, media_types, String, id.desc());
 crate::implement_basic_query_traits!(models::MediaFile, models::MediaFileInsert, media_files, String, added_time.desc());
 crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32, created.desc());
 crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32, created.desc());
+
+crate::implement_update_traits!(models::User, users, String);
+crate::implement_update_traits!(models::MediaFile, media_files, String);
+crate::implement_update_traits!(models::Comment, comments, i32);
+crate::implement_update_traits!(models::Message, messages, i32);
+
 
 
 pub trait DbQueryByUser: Sized {

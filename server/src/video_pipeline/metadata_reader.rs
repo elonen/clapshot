@@ -10,6 +10,12 @@ use std::sync::atomic::AtomicBool;
 
 use super::{IncomingFile, DetailedMsg};
 
+#[derive(Debug, Clone)]
+pub enum MediaType {
+    Video,
+    Audio,
+    Image,
+}
 
 #[derive(Debug, Clone)]
 pub struct Metadata {
@@ -17,6 +23,7 @@ pub struct Metadata {
     pub user_id: String,
     pub total_frames: u32,
     pub duration: Decimal,
+    pub media_type: MediaType,
     pub orig_codec: String,
     pub fps: Decimal,
     pub bitrate: u32,
@@ -96,35 +103,68 @@ fn extract_variables<F>(json: serde_json::Value, args: &IncomingFile, get_file_s
 {
     let tracks = json["media"]["track"].as_array().ok_or("No media tracks found")?;
 
-    let video_track = tracks.iter().find(|t| t["@type"] == "Video").ok_or("No video track found")?;
-    let fps = video_track["FrameRate"].as_str().ok_or("FPS not found")?;
-    let frame_count = video_track["FrameCount"].as_str().ok_or("FrameCount not found")?;
+    // Video file
+    if let Some(video_track) = tracks.iter().find(|t| t["@type"] == "Video") {
 
-    let duration_str = video_track["Duration"].as_str().ok_or("Duration not found")?;
-    let duration = Decimal::from_str(duration_str).map_err(|_| format!("Invalid duration: {}", fps))?;
+        // Bitrate is tricky. It might be in "BitRate" or "BitRate_Nominal". If it's not in either, we'll estimate it.
+        let duration = Decimal::from_str(video_track["Duration"].as_str().ok_or("Duration not found")?).map_err(|_| "Invalid duration")?;
+        let bitrate = {
+            let bitrate_str = video_track["BitRate"].as_str()
+                .or(video_track["BitRate_Nominal"].as_str());
+            match bitrate_str {
+                Some(bit_rate_str) => bit_rate_str.parse().map_err(|_| format!("Invalid bitrate: {}", bit_rate_str))?,
+                None => {
+                    let duration = duration.to_f32().ok_or("Invalid duration")?;
+                    ((get_file_size()? as f32) * 8.0 / duration) as u32
+                }}};
 
-    // Bitrate is tricky. It might be in "BitRate" or "BitRate_Nominal". If it's not in either, we'll estimate it.
-    let bitrate = {
-        let bitrate_str = video_track["BitRate"].as_str()
-            .or(video_track["BitRate_Nominal"].as_str());
-        match bitrate_str {
-            Some(bit_rate_str) => bit_rate_str.parse().map_err(|_| format!("Invalid bitrate: {}", bit_rate_str))?,
-            None => {
-                let duration = duration.to_f32().ok_or("Invalid duration")?;
-                ((get_file_size()? as f32) * 8.0 / duration) as u32
-            }}};
+        Ok(Metadata {
+            src_file: args.file_path.clone(),
+            user_id: args.user_id.clone(),
+            total_frames: video_track["FrameCount"].as_str().ok_or("FrameCount not found")?.parse().map_err(|_| "Invalid frame count".to_string())?,
+            duration,
+            media_type: MediaType::Video,
+            orig_codec: video_track["Format"].as_str().ok_or("No codec found")?.to_string(),
+            fps: Decimal::from_str(video_track["FrameRate"].as_str().ok_or("FPS not found")?).map_err(|_| "Invalid FPS".to_string())?,
+            bitrate,
+            metadata_all: json.to_string(),
+            upload_cookies: args.cookies.clone()
+        })
+    }
 
-    Ok(Metadata {
-        src_file: args.file_path.clone(),
-        user_id: args.user_id.clone(),
-        total_frames: frame_count.parse().map_err(|e| format!("Error parsing frame count: {}", e))?,
-        duration: duration,
-        orig_codec: video_track["Format"].as_str().ok_or("No codec found")?.to_string(),
-        fps:  Decimal::from_str(fps).map_err(|_| format!("Invalid FPS: {}", fps))?,
-        bitrate: bitrate,
-        metadata_all: json.to_string(),
-        upload_cookies: args.cookies.clone()
-    })
+    // Audio file
+    else if let Some(audio_track) = tracks.iter().find(|t| t["@type"] == "Audio") {
+        Ok(Metadata {
+            src_file: args.file_path.clone(),
+            user_id: args.user_id.clone(),
+            total_frames: 0,
+            duration: Decimal::from_str(audio_track["Duration"].as_str().ok_or("Duration not found")?).map_err(|_| "Invalid duration".to_string())?,
+            media_type: MediaType::Audio,
+            orig_codec: audio_track["Format"].as_str().ok_or("No codec found")?.to_string(),
+            fps: Decimal::from_u8(0).unwrap(),
+            bitrate: audio_track["BitRate"].as_str().ok_or("Bitrate not found")?.parse().map_err(|_| "Invalid bitrate".to_string())?,
+            metadata_all: json.to_string(),
+            upload_cookies: args.cookies.clone()
+        })
+    }
+
+    // Image file
+    else if let Some(image_track) = tracks.iter().find(|t| t["@type"] == "Image") {
+        Ok(Metadata {
+            src_file: args.file_path.clone(),
+            user_id: args.user_id.clone(),
+            total_frames: 1,
+            duration: Decimal::from_u8(0).unwrap(),
+            media_type: MediaType::Image,
+            orig_codec: image_track["Format"].as_str().ok_or("No codec found")?.to_string(),
+            fps: Decimal::from_u8(0).unwrap(),
+            bitrate: 0,
+            metadata_all: json.to_string(),
+            upload_cookies: args.cookies.clone()
+        })
+    } else {
+        return Err("No video, audio or image track found".to_string());
+    }
 }
 
 /// Run mediainfo and extract the metadata

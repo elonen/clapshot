@@ -11,9 +11,6 @@ diesel::table! {
 diesel::table! {
     media_types (id) {
         id -> Text,
-        precedence -> Integer,
-        jq_script -> Text,
-        ffmpeg_options -> Text,
     }
 }
 

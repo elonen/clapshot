@@ -60,6 +60,7 @@ impl ClapshotInit {
         // Initialize database
         let db_file = data_dir.join("clapshot.sqlite");
         let db = connect_and_migrate_db(db_file.clone(), migrate)?;
+        let cur_server_migration = db.latest_migration_name()?;
 
         // Run API server
         let grpc_srv_listening_flag = Arc::new(AtomicBool::new(false));
@@ -93,7 +94,7 @@ impl ClapshotInit {
                 // Ok, organizer should be able to connect back to us now, so handshake
                 let org = OrganizerCaller::new(ouri);
                 tracing::info!("Connecting gRPC srv->org...");
-                org.handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind)?;
+                org.handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind, cur_server_migration.as_deref())?;
                 tracing::info!("srv->org handshake done (org->srv not connected yet).");
             }
             None => {

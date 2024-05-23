@@ -40,16 +40,6 @@ macro_rules! implement_basic_query_traits {
                     .load::<$model>(conn))
             }
 
-            /// Update objects, replaces the entire object except for the primary key.
-            fn update_many(conn: &mut PooledConnection, items: &[Self]) -> DBResult<Vec<Self>> {
-                use schema::$table::dsl::*;
-                let mut res: Vec<Self> = Vec::with_capacity(items.len());
-                for it in items {
-                    res.push(diesel::update($table.filter(id.eq(&it.id))).set(it).get_result(conn)?);
-                }
-                Ok(res)
-            }
-
             /// Delete a single object from the database.
             fn delete(conn: &mut PooledConnection, pk: &$pk_type) -> DBResult<bool>
             {
@@ -64,6 +54,24 @@ macro_rules! implement_basic_query_traits {
             {
                 use schema::$table::dsl::*;
                 Ok(diesel::delete($table.filter(id.eq_any(ids))).execute(conn)?)
+            }
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! implement_update_traits {
+    ($model:ty, $table:ident, $pk_type:ty) => {
+
+        impl DbUpdate<$pk_type> for $model {
+            /// Update objects, replaces the entire object except for the primary key.
+            fn update_many(conn: &mut PooledConnection, items: &[Self]) -> DBResult<Vec<Self>> {
+                use schema::$table::dsl::*;
+                let mut res: Vec<Self> = Vec::with_capacity(items.len());
+                for it in items {
+                    res.push(diesel::update($table.filter(id.eq(&it.id))).set(it).get_result(conn)?);
+                }
+                Ok(res)
             }
         }
     }

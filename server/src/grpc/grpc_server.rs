@@ -1,7 +1,7 @@
 use std::{path::Path, sync::atomic::Ordering::Relaxed};
 use anyhow::Context;
 use tonic::{Request, Response, Status};
-use crate::{api_server::{server_state::ServerState, ws_handers::del_media_file_and_cleanup, SendTo}, client_cmd, database::{DbBasicQuery, DbQueryByUser, DbQueryByMediaFile}, grpc::grpc_impl_helpers::{paged_vec, rpc_expect_field}};
+use crate::{api_server::{server_state::ServerState, ws_handers::del_media_file_and_cleanup, SendTo}, client_cmd, database::{DbBasicQuery, DbUpdate, DbQueryByUser, DbQueryByMediaFile}, grpc::grpc_impl_helpers::{paged_vec, rpc_expect_field}};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::database::models;
 
