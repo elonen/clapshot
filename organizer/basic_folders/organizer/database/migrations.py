@@ -29,8 +29,8 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
             dependencies=[
                 org.MigrationDependency(
                     name="clapshot.server",
-                    min_ver="2024-05-22-163000_add_media_type",
-                    max_ver="2024-05-22-163000_add_media_type"
+                    min_ver="20240522163000",
+                    max_ver="20240522163000"
                 ),
                 org.MigrationDependency(
                     name="clapshot.organizer.basic_folders",
@@ -79,8 +79,8 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
             dependencies=[
                 org.MigrationDependency(
                     name="clapshot.server",
-                    min_ver="2024-05-22-163000_add_media_type",
-                    max_ver="2024-05-22-163000_add_media_type"
+                    min_ver="20240522163000",
+                    max_ver="20240522163000"
                 ),
                 org.MigrationDependency(
                     name="clapshot.organizer.basic_folders",

@@ -1,4 +1,5 @@
 use std::path::Path;
+use diesel::migration::MigrationVersion;
 use lib_clapshot_grpc::proto::org::{ApplyMigrationRequest, CheckMigrationsRequest, AfterMigrationsRequest};
 use lib_clapshot_grpc::GrpcBindAddr;
 
@@ -59,6 +60,9 @@ impl OrganizerCaller {
             // This is a naive version that doesn't handle dependencies at all.
             tracing::info!("Calling check_migrations on organizer.");
 
+            let cur_server_migration = cur_server_migration.map(MigrationVersion::from)
+                .ok_or(anyhow::anyhow!("No server migration version found, cannot check against organizer migrations"))?;
+
             match conn.check_migrations(CheckMigrationsRequest {}).await {
                 Ok(cm_res) => {
                     let mut pending = cm_res.get_ref().pending_migrations.clone();
@@ -73,10 +77,12 @@ impl OrganizerCaller {
                         for dep in &m.dependencies {
                             if dep.name == "clapshot.server" {
                                 if let Some(min_ver) = &dep.min_ver {
-                                    assert!(cur_server_migration.unwrap_or_default() >= min_ver.as_str(), "Migration '{}' requires server DB version >= {} but server is at version {}", m.uuid, min_ver, cur_server_migration.unwrap_or_default());
+                                    let min_migration = MigrationVersion::from(min_ver.as_str());
+                                    assert!(cur_server_migration >= min_migration, "Migration '{}' requires server DB version >= {} but server is at version {}", m.uuid, min_ver, cur_server_migration);
                                 }
                                 if let Some(max_ver) = &dep.max_ver {
-                                    assert!(cur_server_migration.unwrap_or_default() <= max_ver.as_str(), "Migration '{}' requires server DB version <= {} but server is at version {}", m.uuid, max_ver, cur_server_migration.unwrap_or_default());
+                                    let max_migration = MigrationVersion::from(max_ver.as_str());
+                                    assert!(cur_server_migration <= max_migration, "Migration '{}' requires server DB version <= {} but server is at version {}", m.uuid, max_ver, cur_server_migration);
                                 }
                             }
                         }
