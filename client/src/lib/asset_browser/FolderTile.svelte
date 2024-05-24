@@ -5,6 +5,8 @@ import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
 import { dndzone, TRIGGERS, SOURCES } from 'svelte-dnd-action';
 import { selectedTiles } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
+import TileVisualizationOverride from './TileVisualizationOverride.svelte';
+import {rgbToCssColor, cssVariables} from './utils';
 
 export let id: any = {};
 export let name: string = "";
@@ -14,7 +16,6 @@ export let visualization: Proto3.PageItem_FolderListing_Item_Visualization|undef
 const dispatch = createEventDispatcher();
 
 function contentPreviewItems(data: Proto3.PageItem_FolderListing_Item[]): Proto3.PageItem_FolderListing_Item[] {
-    //let items = data.filter(it=>(it.mediaFile !== undefined)) as Proto3.PageItem_FolderListing_Item[];
     let items = data;
     if (items.length > 4) { items = items.slice(0,4); }
     return items;
@@ -59,26 +60,11 @@ function finalize(e: any) {
 		onSink(e);
 	}
 }
-// Helper function to convert RGB to CSS color
-function rgbToCssColor(r:number, g:number, b:number) {
-    return `rgb(${r}, ${g}, ${b})`;
-}
-
 
 // Convert `basecolor` (folder color override) to a CSS variable.
 let basecolor = visualization?.baseColor ?
     rgbToCssColor(visualization.baseColor.r, visualization.baseColor.g, visualization.baseColor.b) :
     '#3b73a5';
-
-function cssVariables(node: HTMLDivElement, variables: { basecolor: string; }) {
-    setCssVariables(node, variables);
-    return { update(variables: any) { setCssVariables(node, variables); } }
-}
-function setCssVariables(node: HTMLDivElement, variables: { [x: string]: any; basecolor?: string; }) {
-    for (const name in variables) {
-        node.style.setProperty(`--${name}`, variables[name]);
-    }
-}
 
 </script>
 
@@ -103,10 +89,10 @@ function setCssVariables(node: HTMLDivElement, variables: { [x: string]: any; ba
         </div>
         {#if preview_items.length > 0}
             <div class="flex-1 bg-[#0002] p-0.5 rounded-md shadow-inner overflow-clip leading-none text-[0px]">
-                <div class="grid grid-cols-2 gap-1">
+            <div class="grid grid-cols-2 gap-1 text-xs">
                 {#each contentPreviewItems(preview_items) as prev, _i}
                     {#if prev.mediaFile?.previewData?.thumbUrl }
-                        <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md">
+                        <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md" style="background: rgb(71, 85, 105)">
                             <ScrubbableVideoThumb
                                 extra_styles="border-radius: 0rem; height: 100%; width: auto; transform: translate(-50%, -50%); left: 50%; top: 50%; position: absolute; filter: opacity(66%);"
                                 thumbPosterUrl={prev.mediaFile.previewData?.thumbUrl}
@@ -121,23 +107,20 @@ function setCssVariables(node: HTMLDivElement, variables: { [x: string]: any; ba
                                 <span class="text-xs text-slate-500 text-center leading-none italic">{prev.folder?.title}</span>
                             </div>
                         </div>
+                    {:else if prev.vis }
+                        <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md" style="background: rgb(71, 85, 105)">
+                            <TileVisualizationOverride
+                                extra_styles="filter: opacity(66%);"
+                                vis={prev.vis}/>
+                        </div>
                     {/if}
                 {/each}
-                </div>
+            </div>
             </div>
         {:else}
-            {#if visualization?.icon}
+            {#if visualization}
                 <div class="w-full aspect-square overflow-clip inline-block relative rounded-md">
-                    <div class="w-full h-full flex items-center justify-center">
-                        {#if visualization.icon?.faClass}
-                            <i
-                                class="{visualization.icon.faClass.classes}"
-                                style="color: {visualization.icon.faClass.color ? rgbToCssColor(visualization.icon.faClass.color.r, visualization.icon.faClass.color.g, visualization.icon.faClass.color.b) : '#fff'}; font-size: {visualization.icon.size || 1.5}em;"
-                            ></i>
-                        {:else if visualization.icon.imgUrl}
-                            <img src={visualization.icon.imgUrl} class="w-1/2 h-1/2" alt="icon img"/>
-                        {/if}
-                    </div>
+                    <TileVisualizationOverride vis={visualization}/>
                 </div>
             {/if}
         {/if}

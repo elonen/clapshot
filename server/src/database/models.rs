@@ -45,6 +45,8 @@ pub struct MediaFile {
     #[serde(with = "ts_seconds")]
     pub added_time: chrono::NaiveDateTime,
     pub recompression_done: Option<chrono::NaiveDateTime>,
+    pub thumbs_done: Option<chrono::NaiveDateTime>,
+    pub has_thumbnail: Option<bool>,
     pub thumb_sheet_cols: Option<i32>,
     pub thumb_sheet_rows: Option<i32>,
     pub orig_filename: Option<String>,
@@ -63,6 +65,8 @@ pub struct MediaFileInsert {
     pub user_id: String,
     pub media_type: Option<String>,
     pub recompression_done: Option<chrono::NaiveDateTime>,
+    pub thumbs_done: Option<chrono::NaiveDateTime>,
+    pub has_thumbnail: Option<bool>,
     pub thumb_sheet_cols: Option<i32>,
     pub thumb_sheet_rows: Option<i32>,
     pub orig_filename: Option<String>,

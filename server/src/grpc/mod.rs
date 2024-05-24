@@ -56,11 +56,11 @@ fn make_builtin_rename_action() -> proto::ActionDef {
             lang: proto::script_call::Lang::Javascript.into(),
             code: r#"
 var it = _action_args.selected_items[0];
-var old_name = it.media_file?.title || it.folder?.title;
+var old_name = it.mediaFile?.title || it.folder?.title;
 var new_name = (prompt("Rename item", old_name))?.trim();
 if (new_name && new_name != old_name) {
-    if (it.media_file) {
-        clapshot.renameMediaFile(it.media_file.id, new_name);
+    if (it.mediaFile) {
+        clapshot.renameMediaFile(it.mediaFile.id, new_name);
     } else if (it.folder) {
         clapshot.callOrganizer("rename_folder", {id: it.folder.id, new_name: new_name});
     } else {
@@ -92,8 +92,8 @@ var items = _action_args.selected_items;
 
 var msg = "Are you sure you want to trash this item?";
 if (items.length == 1) {
-    if (items[0].media_file) {
-        msg = "Are you sure you want to trash '" + items[0].media_file?.title + "'?";
+    if (items[0].mediaFile) {
+        msg = "Are you sure you want to trash '" + items[0].mediaFile?.title + "'?";
     } else if (items[0].folder) {
         msg = "Are you sure you want to trash folder '" + items[0].folder?.title + "' and ALL CONTENTS?";
     }
@@ -103,8 +103,8 @@ if (items.length == 1) {
 if (confirm(msg)) {
     for (var i = 0; i < items.length; i++) {
         var it = items[i];
-        if (it.media_file) {
-            clapshot.delMediaFile(it.media_file.id);
+        if (it.mediaFile) {
+            clapshot.delMediaFile(it.mediaFile.id);
         } else if (it.folder) {
             clapshot.callOrganizer("trash_folder", {id: it.folder.id});
         } else {
@@ -129,7 +129,21 @@ pub (crate) fn folder_listing_for_media_files(media_files: &[crate::database::mo
                     code: format!("clapshot.openMediaFile(\"{}\")", v.id).into()
                 }),
                 popup_actions: vec!["popup_builtin_rename".into(), "popup_builtin_trash".into()],
-                vis: None,
+                vis: if v.has_thumbnail == Some(true) { None } else {
+                    Some(proto::page_item::folder_listing::item::Visualization {
+                        icon: Some(proto::Icon {
+                            src: Some(proto::icon::Src::FaClass(proto::icon::FaClass {
+                                classes: match v.media_type.as_deref() {
+                                    Some("audio") => "fas fa-volume-high",
+                                    Some("image") => "fas fa-image",
+                                    Some("video") => "fas fa-video",
+                                    _ => "fa fa-circle-question",
+                                }.into(), color: None, })),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })
+                },
             }
         }).collect();
 

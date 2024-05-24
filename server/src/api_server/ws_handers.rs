@@ -18,6 +18,7 @@ type SenderListMap = Arc<RwLock<HashMap<String, SenderList>>>;
 use serde_json::json;
 use anyhow::{anyhow, bail, Context};
 
+use inflector::Inflector;
 use data_url::{DataUrl, mime};
 use sha2::{Sha256, Digest};
 use hex;
@@ -201,8 +202,9 @@ pub async fn del_media_file_and_cleanup(media_file_id: &str, ses: Option<&mut Us
         }
 
         if let Some(ses) = ses {
+            let media_type_str = v.media_type.unwrap_or("file".to_string()).to_title_case();
             send_user_ok!(&ses.user_id, &server, Topic::MediaFile(&v.id),
-                if !cleanup_errors {"Media file deleted."} else {"Media file deleted, but cleanup had errors."},
+                if !cleanup_errors { format!("{} deleted.", media_type_str) } else { format!("{} deleted, but cleanup had errors.", media_type_str) },
                 details, true);
         }
     }
@@ -223,15 +225,16 @@ pub async fn msg_rename_media_file(data: &RenameMediaFile, ses: &mut UserSession
 
         let new_name = data.new_name.trim();
         if new_name.is_empty() || !new_name.chars().any(|c| c.is_alphanumeric()) {
-            send_user_error!(&ses.user_id, server, Topic::MediaFile(&v.id), "Invalid media file name (must have letters/numbers)");
+            send_user_error!(&ses.user_id, server, Topic::MediaFile(&v.id), "Invalid file name (must have letters/numbers)");
             return Ok(());
         }
         if new_name.len() > 160 {
-            send_user_error!(&ses.user_id, server, Topic::MediaFile(&v.id), "Media name too long (max 160)");
+            send_user_error!(&ses.user_id, server, Topic::MediaFile(&v.id), "Name too long (max 160)");
             return Ok(());
         }
         models::MediaFile::rename(&mut server.db.conn()?, &v.id, new_name)?;
-        send_user_ok!(&ses.user_id, server, Topic::MediaFile(&v.id), "Media file renamed.",
+        let media_type_str = v.media_type.unwrap_or("file".to_string()).to_title_case();
+        send_user_ok!(&ses.user_id, server, Topic::MediaFile(&v.id), format!("{} renamed.", media_type_str),
             format!("New name: '{}'", new_name), true);
     }
     Ok(())

@@ -77,6 +77,8 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<MediaFile>
             orig_filename: Some(format!("test{}.mp4", i)),
             title: Some(format!("test{}.mp4", i)),
             recompression_done: Some(chrono::NaiveDateTime::default()),
+            thumbs_done: Some(chrono::NaiveDateTime::default()),
+            has_thumbnail: Some(true),
             thumb_sheet_cols: Some(i as i32),
             thumb_sheet_rows: Some(i as i32),
             total_frames: Some((i * 1000) as i32),

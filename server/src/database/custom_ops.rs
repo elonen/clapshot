@@ -79,6 +79,37 @@ impl models::MediaFile {
         Ok(())
     }
 
+    /// Set the thumbnail flag for a media file.
+    ///
+    /// # Arguments
+    /// * `db` - Database
+    /// * `vid` - Id of the media file
+    /// * `new_value` - New value of the flag
+    pub fn set_has_thumb(conn: &mut PooledConnection, vid: &str, new_value: bool) -> EmptyDBResult
+    {
+        use schema::media_files::dsl::*;
+        diesel::update(media_files.filter(id.eq(vid)))
+            .set(has_thumbnail.eq(new_value))
+            .execute(conn)?;
+        Ok(())
+    }
+
+    /// Set the thumbs_done timestamp for a media file.
+    /// This is used to indicate that the thumbnail generation is done (wether anything was generated or not).
+    ///
+    /// # Arguments
+    /// * `db` - Database
+    /// * `vid` - Id of the media file
+    pub fn set_thumbs_done(conn: &mut PooledConnection, vid: &str) -> EmptyDBResult
+    {
+        use schema::media_files::dsl::*;
+        diesel::update(media_files.filter(id.eq(vid)))
+            .set(thumbs_done.eq(Local::now().naive_local()))
+            .execute(conn)?;
+        Ok(())
+    }
+
+
     /// Rename a media file (title).
     ///
     /// # Arguments
@@ -99,7 +130,7 @@ impl models::MediaFile {
         Ok(())
     }
 
-    /// Get all media files that don't have thumbnails yet.
+    /// Get all media files that don't have their thumbnails generated.
     ///
     /// # Returns
     /// * `Vec<models::MediaFile>` - List of MediaFile objects
@@ -107,10 +138,7 @@ impl models::MediaFile {
     {
         use models::*;
         use schema::media_files::dsl::*;
-        to_db_res(media_files.filter(
-                thumb_sheet_cols.is_null().or(
-                thumb_sheet_rows.is_null()))
-            .order_by(added_time.desc()).load::<MediaFile>(conn))
+        to_db_res(media_files.filter(thumbs_done.is_null()).order_by(added_time.desc()).load::<MediaFile>(conn))
     }
 }
 

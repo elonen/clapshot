@@ -62,7 +62,7 @@ class ActiondefsHelper:
                     var folderId = listingData?.folder_id;
 
                     if (!folderId || !vid) {
-                        var msg = "on_video_added error: media_file_id missing, or folder_id from listingData.";
+                        var msg = "on_media_file_added error: media_file_id missing, or folder_id from listingData.";
                         alert(msg); console.error(msg);
                     } else {
                         clapshot.moveToFolder(folderId, [{mediaFileId: vid}], listingData);

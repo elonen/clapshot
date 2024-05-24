@@ -232,7 +232,7 @@ function isShadowItem(item: any) {
                     <div in:fade={{duration:200}} class='custom-dnd-shadow-item'></div>
                 {:else}
                     {#if item.obj.mediaFile }
-                        <VideoTile item={item.obj.mediaFile} />
+                        <VideoTile item={item.obj.mediaFile} visualization={item.obj.vis}/>
                     {:else if item.obj.folder }
                         <FolderTile
                             id={item.obj.folder.id}

@@ -38,6 +38,8 @@ impl crate::database::models::MediaFile
             media_type: Some(v.media_type.clone()),
             added_time: v.added_time.as_ref().map(|t| proto3_to_datetime(t)).flatten().ok_or(DBError::Other(anyhow::anyhow!("Bad added_time")))?,
             recompression_done: v.processing_metadata.as_ref().map(|m| m.recompression_done.as_ref().map(|x| proto3_to_datetime(x))).flatten().flatten(),
+            thumbs_done: v.processing_metadata.as_ref().map(|m| m.thumbs_done.as_ref().map(|x| proto3_to_datetime(x))).flatten().flatten(),
+            has_thumbnail: v.preview_data.as_ref().map(|d| d.thumb_url.is_some()),
             thumb_sheet_cols: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.cols as i32)).flatten(),
             thumb_sheet_rows: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.rows as i32)).flatten(),
             orig_filename: v.processing_metadata.as_ref().map(|m| m.orig_filename.clone()),
@@ -63,21 +65,29 @@ impl crate::database::models::MediaFile
             (Some(orig_filename), recompression_done, ffprobe_metadata_all) => Some(proto::MediaFileProcessingMetadata {
                 orig_filename: orig_filename.clone(),
                 recompression_done: recompression_done.map(|t| datetime_to_proto3(&t)),
+                thumbs_done: self.thumbs_done.map(|t| datetime_to_proto3(&t)),
                 ffprobe_metadata_all: ffprobe_metadata_all.clone(),
             }),
             _ => None,
         };
-        let preview_data = if let (Some(cols), Some(rows)) = (self.thumb_sheet_cols, self.thumb_sheet_rows) {
-            let thumb_sheet = Some(proto::media_file_preview_data::ThumbSheet {
-                url: format!("{}/videos/{}/thumbs/sheet-{}x{}.webp", url_base, &self.id, cols, rows),
+
+        // Make preview data (thumb sheet and/or thumb url)
+        let thumb_url = if matches!(self.has_thumbnail, Some(true)) {
+            Some(format!("{}/videos/{}/thumbs/thumb.webp", &url_base, &self.id))
+        } else { None };
+
+        let thumb_sheet = match (self.thumb_sheet_cols, self.thumb_sheet_rows) {
+            (Some(cols), Some(rows)) => Some(proto::media_file_preview_data::ThumbSheet {
+                url: format!("{}/videos/{}/thumbs/sheet-{}x{}.webp", &url_base, &self.id, cols, rows),
                 rows: rows as u32,
                 cols: cols as u32,
-            });
-            Some(proto::MediaFilePreviewData {
-                thumb_url: Some(format!("{}/videos/{}/thumbs/thumb.webp", url_base, &self.id)),
-                thumb_sheet,
-            }
-            ) } else { None };
+            }),
+            _ => None
+        };
+
+        let preview_data = if thumb_url.is_some() || thumb_sheet.is_some() {
+            Some(proto::MediaFilePreviewData { thumb_url, thumb_sheet })
+        } else { None };
 
         // Use transcoded or orig video?
         let orig_uri = match &self.orig_filename {
@@ -96,8 +106,8 @@ impl crate::database::models::MediaFile
             user_id: self.user_id.clone(),
             duration,
             added_time: Some(datetime_to_proto3(&self.added_time)),
-            preview_data: preview_data,
-            processing_metadata: processing_metadata,
+            preview_data,
+            processing_metadata,
             playback_url: playback_uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri)),
             orig_url: orig_uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri))
         }
@@ -113,6 +123,8 @@ impl crate::database::models::MediaFileInsert
             user_id: v.user_id.clone(),
             media_type: Some(v.media_type.clone()),
             recompression_done: v.processing_metadata.as_ref().map(|m| m.recompression_done.as_ref().map(|x| proto3_to_datetime(x))).flatten().flatten(),
+            thumbs_done: v.processing_metadata.as_ref().map(|m| m.thumbs_done.as_ref().map(|x| proto3_to_datetime(x))).flatten().flatten(),
+            has_thumbnail: v.preview_data.as_ref().map(|d| d.thumb_url.is_some()),
             thumb_sheet_cols: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.cols as i32)).flatten(),
             thumb_sheet_rows: v.preview_data.as_ref().map(|d| d.thumb_sheet.as_ref().map(|x| x.rows as i32)).flatten(),
             orig_filename: v.processing_metadata.as_ref().map(|m| m.orig_filename.clone()),

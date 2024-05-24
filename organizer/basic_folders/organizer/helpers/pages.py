@@ -8,6 +8,7 @@ import clapshot_grpc.proto.clapshot.organizer as org
 import sqlalchemy
 
 from organizer.database.operations import db_get_or_create_user_root_folder
+from organizer.helpers import media_type_to_vis_icon
 from organizer.utils import folder_path_to_uri_arg
 
 from .folders import FoldersHelper
@@ -70,29 +71,30 @@ class PagesHelper:
                 users_folder = await db_get_or_create_user_root_folder(dbs, clap.UserInfo(id=user.id, name=user.name), self.srv, self.log)
                 assert users_folder, f"User {user.id} has no root folder (should've been autocreated)"
 
-                folders.append(clap.PageItemFolderListingItem(
-                        folder=clap.PageItemFolderListingFolder(
-                            id=str(users_folder.id),
-                            title=user.id,
-                            preview_items=[]),
-                        vis=clap.PageItemFolderListingItemVisualization(
-                            icon=clap.Icon(
-                                fa_class=clap.IconFaClass(classes="fas fa-user", color=clap.Color(r=184, g=160, b=148)),
-                                size=3.0),
-                            base_color=clap.Color(r=160, g=100, b=50)),
-                        popup_actions=["popup_builtin_trash"],   # don't allow any actions on the virtal folders
-                        open_action=clap.ScriptCall(
-                            lang=clap.ScriptCallLang.JAVASCRIPT,
-                            code=f'clapshot.callOrganizer("open_folder", {{id: {users_folder.id}}});'),
+                folders.append(
+                    clap.PageItemFolderListingItem(
+                        folder = clap.PageItemFolderListingFolder(
+                            id = str(users_folder.id),
+                            title = user.id,
+                            preview_items = []),
+                        vis = clap.PageItemFolderListingItemVisualization(
+                            icon = clap.Icon(
+                                fa_class = clap.IconFaClass(classes="fas fa-user", color=clap.Color(r=184, g=160, b=148)),
+                                size = 3.0),
+                            base_color = clap.Color(r=160, g=100, b=50)),
+                        popup_actions = ["popup_builtin_trash"],   # don't allow any actions on the virtal folders
+                        open_action = clap.ScriptCall(
+                            lang = clap.ScriptCallLang.JAVASCRIPT,
+                            code = f'clapshot.callOrganizer("open_folder", {{id: {users_folder.id}}});'),
                         ))
 
             user_folder_listing = clap.PageItemFolderListing(
-                    items=folders,
-                    popup_actions=[],  # don't allow any actions on this virtual view
-                    listing_data={"folder_id": str(cur_folder.id)},
-                    allow_reordering=False,
-                    allow_upload=False,
-                    media_file_added_action=None)
+                items = folders,
+                popup_actions = [],  # don't allow any actions on this virtual view
+                listing_data = {"folder_id": str(cur_folder.id)},
+                allow_reordering = False,
+                allow_upload = False,
+                media_file_added_action = None)
 
             pg_items.append(clap.PageItem(folder_listing=user_folder_listing))
 
@@ -122,12 +124,12 @@ class PagesHelper:
         async def media_file_to_page_item(vid_id: str, popup_actions: list[str]) -> clap.PageItemFolderListingItem:
             assert re.match(r"^[0-9a-fA-F]+$", vid_id), f"Unexpected media file ID format: {vid_id}"
             return clap.PageItemFolderListingItem(
-                media_file=media_by_id[vid_id],
-                open_action=clap.ScriptCall(
-                    lang=clap.ScriptCallLang.JAVASCRIPT,
-                    code=f'clapshot.openVideo("{vid_id}");'),
-                popup_actions=popup_actions,
-                vis=None)
+                media_file = media_by_id[vid_id],
+                open_action = clap.ScriptCall(
+                    lang = clap.ScriptCallLang.JAVASCRIPT,
+                    code = f'clapshot.openMediaFile("{vid_id}");'),
+                popup_actions = popup_actions,
+                vis = media_type_to_vis_icon(media_by_id[vid_id].media_type))
 
         listing_items: list[clap.PageItemFolderListingItem] = []
         for itm in folder_db_items:
@@ -139,12 +141,12 @@ class PagesHelper:
                 raise ValueError(f"Unknown item type: {itm}")
 
         folder_listing = clap.PageItemFolderListing(
-            items=listing_items,
-            allow_reordering=True,
-            popup_actions=["new_folder"],
-            listing_data=listing_data,
-            allow_upload=True,
-            media_file_added_action="on_media_file_added")
+            items = listing_items,
+            allow_reordering = True,
+            popup_actions = ["new_folder"],
+            listing_data = listing_data,
+            allow_upload = True,
+            media_file_added_action = "on_media_file_added")
 
         pg_items = []
         pg_items.append(clap.PageItem(folder_listing=folder_listing))

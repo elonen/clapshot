@@ -15,6 +15,7 @@ from clapshot_grpc.utilities import try_send_user_message
 from organizer.config import PATH_COOKIE_NAME
 from organizer.database.models import DbFolder, DbFolderItems, DbMediaFile
 from organizer.database.operations import db_get_or_create_user_root_folder
+from organizer.helpers import media_type_to_vis_icon
 
 
 class FoldersHelper:
@@ -22,7 +23,6 @@ class FoldersHelper:
         self.db_new_session = db_new_session
         self.srv = srv
         self.log = log
-
 
     async def get_current_folder_path(self, ses: org.UserSessionData, cookie_override: Optional[str]=None) -> List[DbFolder]:
         """
@@ -70,7 +70,6 @@ class FoldersHelper:
 
         return res
 
-
     async def fetch_folder_contents(self, folder: DbFolder, ses: org.UserSessionData) -> List[DbMediaFile | DbFolder]:
         """
         Fetch the contents of a folder from the database, sorted by the specified criteria.
@@ -113,7 +112,6 @@ class FoldersHelper:
 
             return res
 
-
     async def trash_folder_recursive(self, dbs: Session, folder_id: int, ses: org.UserSessionData) -> List[str]:
         """
         Trash a folder and unbind its contents recursively.
@@ -141,7 +139,6 @@ class FoldersHelper:
         dbs.query(DbFolder).filter(DbFolder.id == folder_id).delete()
         return media_ids
 
-
     async def folder_to_page_item(self, fld: DbFolder, popup_actions: List[str], ses: org.UserSessionData) -> clap.PageItemFolderListingItem:
         """
         Convert a folder node to a page item.
@@ -149,15 +146,14 @@ class FoldersHelper:
         pv_items = await self.preview_items_for_folder(fld, ses)
 
         return clap.PageItemFolderListingItem(
-            folder=clap.PageItemFolderListingFolder(
-                id=str(fld.id),
-                title=fld.title or "<UNNAMED>",
-                preview_items=pv_items),
-            open_action=clap.ScriptCall(
-                lang=clap.ScriptCallLang.JAVASCRIPT,
-                code=f'clapshot.callOrganizer("open_folder", {{id: {fld.id}}});'),
-            popup_actions=popup_actions)
-
+            folder = clap.PageItemFolderListingFolder(
+                id = str(fld.id),
+                title = fld.title or "<UNNAMED>",
+                preview_items = pv_items),
+            open_action = clap.ScriptCall(
+                lang = clap.ScriptCallLang.JAVASCRIPT,
+                code = f'clapshot.callOrganizer("open_folder", {{id: {fld.id}}});'),
+            popup_actions = popup_actions)
 
     async def preview_items_for_folder(self, fld: DbFolder, ses: org.UserSessionData) -> List[clap.PageItemFolderListingItem]:
         """
@@ -175,14 +171,19 @@ class FoldersHelper:
 
         # Prepare result list with up to 4 items, prioritizing media files
         result = [
-            clap.PageItemFolderListingItem(media_file=media_by_id[v.id]) for v in media_files
+            clap.PageItemFolderListingItem(
+                media_file=media_by_id[v.id],
+                vis=media_type_to_vis_icon(media_by_id[v.id].media_type))
+            for v in media_files
         ] + [
-            clap.PageItemFolderListingItem(folder=clap.PageItemFolderListingFolder(id=str(f.id), title=f.title or "???"))
-            for f in folders[:4 - len(media_files)]
+            clap.PageItemFolderListingItem(
+                folder=clap.PageItemFolderListingFolder(
+                    id=str(f.id), title=f.title or "???")
+            )
+            for f in folders[: 4 - len(media_files)]
         ]
 
         return result
-
 
     async def create_folder(self, dbs: Session, ses: org.UserSessionData, parent_folder: DbFolder, new_folder_name: str) -> DbFolder:
         """

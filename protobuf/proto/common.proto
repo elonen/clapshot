@@ -33,6 +33,7 @@ message MediaFileDuration {
 
 message MediaFileProcessingMetadata {
     optional google.protobuf.Timestamp recompression_done = 2;
+    optional google.protobuf.Timestamp thumbs_done = 3;
     string orig_filename = 102;
     optional string ffprobe_metadata_all = 103;
 }

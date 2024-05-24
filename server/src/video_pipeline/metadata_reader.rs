@@ -7,7 +7,7 @@ use crossbeam_channel::{Sender, Receiver, RecvError};
 use tracing;
 use rust_decimal::prelude::*;
 use std::sync::atomic::AtomicBool;
-
+use std::str::FromStr;
 use super::{IncomingFile, DetailedMsg};
 
 #[derive(Debug, Clone)]
@@ -16,6 +16,27 @@ pub enum MediaType {
     Audio,
     Image,
 }
+impl AsRef<str> for MediaType {
+    fn as_ref(&self) -> &str {
+        match self {
+            MediaType::Video => "video",
+            MediaType::Audio => "audio",
+            MediaType::Image => "image",
+        }
+    }
+}
+impl FromStr for MediaType {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "video" => Ok(MediaType::Video),
+            "audio" => Ok(MediaType::Audio),
+            "image" => Ok(MediaType::Image),
+            _ => Err(()),
+        }
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub struct Metadata {

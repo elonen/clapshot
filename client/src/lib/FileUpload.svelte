@@ -96,7 +96,7 @@ function onDropFiles(e: any) {
 <div class="w-full h-full inline-block p-0 m-0">
     <div class="w-full h-full" class:display-none={uploadingNow} >
         <Dropzone
-            accept={['video/*']}
+            accept={['video/*', 'image/*', 'audio/*']}
             disableDefaultStyles={true}
             containerClasses="custom-dropzone {dragActive ? 'drag-active' : ''}"
             containerStyles = "borderColor: '#fff', color: '#90cdf4'"

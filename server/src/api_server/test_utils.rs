@@ -59,6 +59,7 @@ pub(crate) async fn read(ws: &mut WsClient) -> Option<String> {
     res
 }
 pub(crate) async fn expect_msg(ws: &mut WsClient) -> String {
+    tracing::info!("expect_msg...");
     read(ws).await.expect("Got no message from server")
 }
 

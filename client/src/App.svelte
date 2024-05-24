@@ -34,6 +34,7 @@ let sendQueue: any[] = [];
 
 
 function logAbbrev(...strs: any[]) {
+    /*
     const maxLen = 180;
     let abbreviated: string[] = [];
     for (let i = 0; i < strs.length; i++) {
@@ -43,7 +44,30 @@ function logAbbrev(...strs: any[]) {
         abbreviated[i] = (str.length > maxLen) ? (str.slice(0, maxLen) + " ……") : str;
     }
     console.log(...abbreviated);
+    */
+    console.log(...strs);
 }
+
+// Log JSON object with console.dir, optionally wrapped in a message (op_name)
+// If obj is a string, try to parse it as JSON first, then log it. If it fails, log the string as-is.
+function richLog(obj: any, op_name: string|undefined = undefined, proto3_cmd: any = undefined) {
+
+    let cmd_name = "";
+    if (proto3_cmd) {
+        const first_non_nullish_key = (obj: any) => Object.keys(obj).find(key => (obj[key] !== null && obj[key] !== undefined));
+        cmd_name = first_non_nullish_key(proto3_cmd) ?? "(unknown cmd)";
+    }
+
+    let parsed = null;
+    try { parsed = JSON.parse(obj); } catch (e) { parsed = obj; }
+
+    if (op_name || cmd_name) {
+        let prefix = (op_name ? ("["+op_name+"]") : "") + (cmd_name ? (" " + cmd_name) : "");
+        console.log(prefix, parsed);
+    }
+    else console.log(parsed);
+}
+
 
 // Show last 5 connection errors and log everything to console
 function show_connection_error(msg: string) {
@@ -307,12 +331,13 @@ function wsEmit(cmd: ClientToServerCmd)
 {
     let cookies = LocalStorageCookies.getAllNonExpired();
     let raw_msg = JSON.stringify({ ...cmd, cookies });
+
     if (isConnected()) {
-        logAbbrev("[SEND] " + raw_msg);
+        richLog(raw_msg, "SEND", cmd);
         wsSocket?.send(raw_msg);
     }
     else {
-        logAbbrev("[SEND] (Disconnected, so queuing:) " + raw_msg);
+        richLog(raw_msg, "SEND (disconnected, so queuing)", cmd);
         sendQueue.push(raw_msg);
     }
 }
@@ -438,16 +463,23 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
     // Incoming messages
     wsSocket.addEventListener("message", function (event)
     {
-        logAbbrev("[RECV] " + event.data);
-        const msgJson = JSON.parse(event.data);
-        handleWithErrors(() =>
-        {
-            const cmd = Proto3.client.ServerToClientCmd.fromJSON(msgJson);
+        let cmd = null;
+        try {
+            const msgJson = JSON.parse(event.data);
+            cmd = Proto3.client.ServerToClientCmd.fromJSON(JSON.parse(event.data));
             if (!cmd) {
                 console.error("Got INVALID message: ", msgJson);
                 return;
             }
+        } catch (e) {
+            console.error("Error parsing incoming message: ", e);
+            console.error("Message data: ", event.data);
+            return;
+        }
 
+        richLog(event.data, "RECV", cmd);
+        handleWithErrors(() =>
+        {
             if (Date.now() - lastMediaFileProgressMsgTime > 5000) {
                 $videoProgressMsg = null; // timeout progress message after a while
             }
@@ -643,7 +675,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             else if (cmd.setCookies) {
                 let cookie_dict = cmd.setCookies.cookies;
                 if (!cookie_dict) {
-                    console.error("[SERVER] setCookies command with no cookies. Raw JSON:", msgJson);
+                    console.error("[SERVER] setCookies command with no cookies. Cmd:", cmd);
                 } else {
                     let expireTimestamp = cmd.setCookies.expireTime?.getTime() ?? null;
                     for (const [key, value] of Object.entries(cookie_dict)) {
@@ -652,7 +684,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 }
             }
             else {
-                console.error("[SERVER] UNKNOWN command from server. Raw JSON:", msgJson);
+                console.error("[SERVER] UNKNOWN command from server:", cmd);
             }
         });
     });

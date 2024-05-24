@@ -151,7 +151,7 @@ mod integration_test
 
     #[test]
     #[traced_test]
-    fn test_media_ingest_no_transcode() -> anyhow::Result<()>
+    fn test_video_ingest_no_transcode() -> anyhow::Result<()>
     {
         cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None]
             // Copy test file to incoming dir
@@ -230,14 +230,205 @@ mod integration_test
         Ok(())
     }
 
+
+    // --- Transcoding tests ---
+
+    pub struct WaitForReportResults {
+        pub transcode_complete: bool,
+        pub thumbs_complete: bool,
+        pub got_progress_report: bool,
+        pub got_transcode_report: bool,
+        pub got_thumbnail_report: bool,
+        pub ts_cols: String,
+        pub ts_rows: String,
+    }
+
+    async fn wait_for_reports(
+        mut ws: crate::api_server::test_utils::WsClient,
+        expect_transcode: bool,
+        expect_thumbnail: bool,
+        expect_thumbsheet: bool,
+        vid: String,
+        check_file_outputs: Option<(PathBuf, String)>) -> WaitForReportResults
+    {
+        let mut res = WaitForReportResults {
+            transcode_complete: false, thumbs_complete: false,
+            got_progress_report: false, got_transcode_report: false, got_thumbnail_report: false,
+            ts_cols: String::new(), ts_rows: String::new(),
+        };
+
+        const WAIT_AFTER_REPORTS_TIMEOUT_SECS: u32 = 5;
+
+        for _ in 0..(120*5)
+        {
+            // Wait until server sends media updated messages about
+            // transcoding and thumbnail generation being done
+            // before we try to open and check metadata.
+            let mut still_waiting = true;
+            if still_waiting {
+                match crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(&mut ws).await.map(|c| c.cmd).flatten() {
+                    Some(s2c::Cmd::ShowMessages(m)) => {
+                        // Got progress report?
+                        res.got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
+
+                        if m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::MediaFileUpdated as i32) {
+                            // Got transcoding update message?
+                            if m.msgs.iter().any(|msg| msg.clone().message.to_ascii_lowercase().contains("transcod")) {
+                                res.got_transcode_report = true;
+                            }
+                            // Got thumbnail update message?
+                            else if m.msgs.iter().any(|msg| msg.clone().message.to_ascii_lowercase().contains("thumb")) {
+                                res.got_thumbnail_report = true;
+                            }
+                        }
+                    },
+                    _ => (),
+                };
+
+                still_waiting = false;
+                if (expect_thumbnail || expect_thumbsheet) && !res.got_thumbnail_report {
+                    println!("...still waiting for thumbnail...");
+                    still_waiting = true;
+                }
+                if expect_transcode && !res.got_transcode_report {
+                    println!("...still waiting for transcode...");
+                    still_waiting = true;
+                }
+
+                if still_waiting {
+                    thread::sleep(Duration::from_millis(100));
+                } else {
+                    println!("...waiting done, expected reports received. Doing OpenNavigationPage ...");
+                    send_server_cmd!(ws, OpenNavigationPage, OpenNavigationPage {..Default::default()});
+                    break;
+                }
+            }
+        }
+
+        let reports_received_at = std::time::Instant::now();
+
+        // Wait for page with media file to be shown
+        'waitloop: for _ in 0..(120*5)
+        {
+            if reports_received_at.elapsed().as_millis() > (WAIT_AFTER_REPORTS_TIMEOUT_SECS*1000).into() {
+                panic!("Timeout checking API messages after transcode/thumbnail completion");
+            }
+
+            match crate::api_server::test_utils::expect_parsed::<ServerToClientCmd>(&mut ws).await.cmd {
+                Some(s2c::Cmd::ShowMessages(m)) => {
+                    tracing::info!("Got ShowMessages (while waiting for ShowPage. Ignoring.");
+                    res.got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
+                },
+
+                Some(s2c::Cmd::ShowPage(p)) => {
+                    let pitems = p.page_items;
+                    assert!(pitems.len() == 1+1);
+
+                    match &pitems[0].item {
+                        Some(proto::page_item::Item::Html(_)) => {},
+                        _ => panic!("Expected HTML for page item 0"),
+                    };
+
+                    let fl = match &pitems[1].item {
+                        Some(proto::page_item::Item::FolderListing(fl)) => fl,
+                        _ => panic!("Expected folder listing for page item 1"),
+                    };
+                    let v = match fl.items[0].item.clone().unwrap() {
+                        proto::page_item::folder_listing::item::Item::MediaFile(v) => v,
+                        _ => panic!("Expected media file"),
+                    };
+                    assert_eq!(v.id, vid);
+
+                    let playback_url = v.playback_url.unwrap();
+                    let orig_url = v.orig_url.unwrap();
+                    assert!(orig_url != playback_url);
+                    assert!(orig_url.contains("orig"));
+                    if expect_transcode {
+                        assert!(playback_url.contains("video.mp4"));
+                        assert!(!playback_url.contains("orig"));
+                    } else {
+                        assert!(playback_url.contains("orig"));
+                        assert!(!playback_url.contains("video.mp4"));
+                    }
+
+                    if let Some(pm) = v.processing_metadata {
+                        if pm.recompression_done.is_some() {
+                            res.transcode_complete = true;
+                        }
+
+                        if let Some(pd) = v.preview_data {
+                            if let Some(thumb_url) = pd.thumb_url {
+                                assert!(pm.thumbs_done.is_some(), "thumbs_done not set in processing metadata but got thumb_url");
+                                res.thumbs_complete = true;
+                            }
+                            if let Some(thumb_sheet) = pd.thumb_sheet {
+                                res.ts_cols = thumb_sheet.cols.to_string();
+                                res.ts_rows = thumb_sheet.rows.to_string();
+                                res.thumbs_complete = true;
+                            }
+                        }
+                    }
+
+                    if (expect_thumbnail == res.thumbs_complete) && (expect_transcode == res.transcode_complete) {
+                        break 'waitloop;
+                    } else {
+                        tracing::info!("Not done yet: transcode_complete = {} (expected: {}), thumbs_complete = {} (expected: {})...",
+                            res.transcode_complete, expect_transcode,
+                            res.thumbs_complete, expect_thumbnail);
+
+                    }
+                },
+
+                something_else => {
+                    tracing::info!("Got UNEXPECTED (not necessarily a bug) message: {:?}", something_else);
+                },
+            }
+            thread::sleep(Duration::from_secs_f32(0.2));
+        }
+
+        tracing::info!("Transcode complete: {} (expeted: {}), thumbs complete: {} (expected: {})",
+            res.transcode_complete, expect_transcode,
+            res.thumbs_complete, expect_thumbnail);
+
+        if let Some((data_dir, input_filename)) = check_file_outputs {
+            let vid_dir = data_dir.join("videos").join(vid);
+            let thumb_dir = vid_dir.join("thumbs");
+
+            assert!(vid_dir.join("orig").join(input_filename).is_file());
+            if expect_transcode {
+                assert!(vid_dir.join("video.mp4").is_symlink());
+                assert!(vid_dir.join("stdout.txt").is_file());
+                assert!(vid_dir.join("stderr.txt").is_file());
+            }
+
+            if expect_thumbnail {
+                assert!(thumb_dir.join("thumb.webp").is_file());
+            }
+            if expect_thumbsheet {
+                assert!(u32::from_str(&res.ts_cols).ok().unwrap() > 0);
+                assert!(u32::from_str(&res.ts_rows).ok().unwrap() > 0);
+                assert!(thumb_dir.join(format!("sheet-{}x{}.webp", res.ts_cols, res.ts_rows)).is_file());
+            }
+            if expect_thumbnail || expect_thumbsheet {
+                assert!(thumb_dir.join("stdout.txt").is_file());
+                assert!(thumb_dir.join("stderr.txt").is_file());
+            }
+        }
+
+        res
+    }
+
+
+
     #[test]
     #[traced_test]
     #[cfg(feature = "include_slow_tests")]
-    fn test_video_ingest_and_transcode() -> anyhow::Result<()>
+    fn test_video_mov_ingest_and_transcode() -> anyhow::Result<()>
     {
         cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None]
             // Copy test file to incoming dir
             let mov_file = "NASA_Red_Lettuce_excerpt.mov";
+
             let dangerous_name = "  -fake-arg name; \"and some more'.txt 你 .mov";
             data_dir.copy_from("src/tests/assets/", &[mov_file]).unwrap();
             std::fs::rename(data_dir.join(mov_file), incoming_dir.join(dangerous_name)).unwrap();
@@ -256,118 +447,74 @@ mod integration_test
             assert!(msg.details.unwrap().to_ascii_lowercase().contains("ranscod"));
             assert!(vid.len() > 0);
 
-            // Wait until transcoding is done
-            let mut transcode_complete = false;
-            let mut got_progress_report = false;
-            let mut ts_cols = String::new();
-            let mut ts_rows = String::new();
+            let wait_res = wait_for_reports(ws, true, true, true, vid.clone(), Some((data_dir.path().into(), dangerous_name.into()))).await;
 
-            let mut got_thumbnail_report = false;
-            let mut got_transcode_report = false;
-
-            'waitloop: for _ in 0..(120*5)
-            {
-                // Wait until server sends media updated messages about
-                // transcoding and thumbnail generation being done
-                // before we try to open and check metadata.
-                if !(got_thumbnail_report && got_transcode_report) {
-                    match crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(&mut ws).await.map(|c| c.cmd).flatten() {
-                        Some(s2c::Cmd::ShowMessages(m)) => {
-                            // Got progress report?
-                            got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
-
-                            if m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::MediaFileUpdated as i32) {
-                                // Got transcoding update message?
-                                if m.msgs.iter().any(|msg| msg.clone().message.to_ascii_lowercase().contains("transcod")) {
-                                    got_transcode_report = true;
-                                }
-                                // Got thumbnail update message?
-                                else if m.msgs.iter().any(|msg| msg.clone().message.to_ascii_lowercase().contains("thumbnail")) {
-                                    got_thumbnail_report = true;
-                                }
-                            }
-                        },
-                        _ => (),
-                    };
-
-                    if !(got_thumbnail_report && got_transcode_report) {
-                        if !got_thumbnail_report { println!("...still waiting for thumbnail..."); }
-                        if !got_transcode_report { println!("...still waiting for transcode..."); }
-                        thread::sleep(Duration::from_millis(100));
-                        continue;
-                    }
-                }
-
-                println!("... doing OpenNavigationPage ...");
-                send_server_cmd!(ws, OpenNavigationPage, OpenNavigationPage {..Default::default()});
-
-                match crate::api_server::test_utils::expect_parsed::<ServerToClientCmd>(&mut ws).await.cmd {
-
-                    Some(s2c::Cmd::ShowMessages(m)) => {
-                        got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
-                    },
-
-                    Some(s2c::Cmd::ShowPage(p)) => {
-                        let pitems = p.page_items;
-                        assert!(pitems.len() == 1+1);
-
-                        match &pitems[0].item {
-                            Some(proto::page_item::Item::Html(_)) => {},
-                            _ => panic!("Expected HTML for page item 0"),
-                        };
-
-                        let fl = match &pitems[1].item {
-                            Some(proto::page_item::Item::FolderListing(fl)) => fl,
-                            _ => panic!("Expected folder listing for page item 1"),
-                        };
-                        let v = match fl.items[0].item.clone().unwrap() {
-                            proto::page_item::folder_listing::item::Item::MediaFile(v) => v,
-                            _ => panic!("Expected media file"),
-                        };
-                        assert_eq!(v.id, vid);
-
-                        let playback_url = v.playback_url.unwrap();
-                        let orig_url = v.orig_url.unwrap();
-                        assert!(orig_url != playback_url);
-                        assert!(playback_url.contains("video.mp4"));
-                        assert!(!playback_url.contains("orig"));
-                        assert!(orig_url.contains("orig"));
-
-                        if let Some(pd) = v.preview_data {
-                            if let Some(pm) = v.processing_metadata {
-                                if pm.recompression_done.is_some() {
-                                    transcode_complete = true;
-                                    let thumb_sheet = pd.thumb_sheet.unwrap();
-                                    ts_cols = thumb_sheet.cols.to_string();
-                                    ts_rows = thumb_sheet.rows.to_string();
-                                    break 'waitloop;
-                                }
-                            }
-                        }
-                    },
-                    _ => {},
-                }
-
-                thread::sleep(Duration::from_secs_f32(0.2));
-            }
-
-            assert!(transcode_complete, "Transcode did not complete / was not marked done");
-            assert!(got_progress_report);
-
-            let vid_dir = data_dir.path().join("videos").join(vid);
-            assert!(vid_dir.join("video.mp4").is_symlink());
-            assert!(vid_dir.join("stdout.txt").is_file());
-            assert!(vid_dir.join("stderr.txt").is_file());
-            assert!(vid_dir.join("orig").join(dangerous_name).is_file());
-
-            let thumb_dir = vid_dir.join("thumbs");
-            assert!(thumb_dir.join("thumb.webp").is_file());
-            assert!(thumb_dir.join(format!("sheet-{ts_cols}x{ts_rows}.webp")).is_file());
-            assert!(thumb_dir.join("stdout.txt").is_file());
-            assert!(thumb_dir.join("stderr.txt").is_file());
+            assert!(wait_res.transcode_complete, "Transcode did not complete / was not marked done");
+            assert!(wait_res.got_progress_report);
         }
         Ok(())
     }
+
+
+    #[test]
+    #[traced_test]
+    #[cfg(feature = "include_slow_tests")]
+    fn test_audio_ingest_and_transcode() -> anyhow::Result<()>
+    {
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None]
+            // Copy test file to incoming dir
+            let audio_file_name = "drunkards-special-short-mono.wav";
+            data_dir.copy_from("src/tests/assets/", &[audio_file_name]).unwrap();
+            std::fs::rename(data_dir.join(audio_file_name), incoming_dir.join(audio_file_name)).unwrap();
+
+            // Wait for file to be processed
+            thread::sleep(Duration::from_secs_f32(0.5));
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
+            let vid = msg.refs.unwrap().media_file_id.unwrap();
+
+            thread::sleep(Duration::from_secs_f32(0.5));
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
+            let vid2 = msg.refs.unwrap().media_file_id.unwrap();
+            assert_eq!(vid, vid2);
+
+            // Check that it's being transcoded
+            assert!(msg.details.unwrap().to_ascii_lowercase().contains("ranscod"));
+            assert!(vid.len() > 0);
+
+            let wait_res = wait_for_reports(ws, true, false, false, vid.clone(), Some((data_dir.path().into(), audio_file_name.into()))).await;    // No thumbnail for audio
+        }
+        Ok(())
+    }
+
+
+    #[test]
+    #[traced_test]
+    fn test_image_ingest_and_transcode() -> anyhow::Result<()>
+    {
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None]
+            let image_file_name = "NASA-48410_PIA25967_-_MAV_Test.jpeg";
+            data_dir.copy_from("src/tests/assets/", &[image_file_name]).unwrap();
+            std::fs::rename(data_dir.join(image_file_name), incoming_dir.join(image_file_name)).unwrap();
+
+            // Wait for file to be processed
+            thread::sleep(Duration::from_secs_f32(0.5));
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
+            let vid = msg.refs.unwrap().media_file_id.unwrap();
+
+            thread::sleep(Duration::from_secs_f32(0.5));
+            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
+            let vid2 = msg.refs.unwrap().media_file_id.unwrap();
+            assert_eq!(vid, vid2);
+
+            // Check that it's being transcoded
+            assert!(msg.details.unwrap().to_ascii_lowercase().contains("ranscod"));
+            assert!(vid.len() > 0);
+
+            let wait_res = wait_for_reports(ws, true, true, false, vid.clone(), Some((data_dir.path().into(), image_file_name.into()))).await;
+        }
+        Ok(())
+    }
+
 
     #[test]
     #[traced_test]

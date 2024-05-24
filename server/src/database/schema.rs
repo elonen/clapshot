@@ -21,6 +21,8 @@ diesel::table! {
         media_type -> Nullable<Text>,
         added_time -> Timestamp,
         recompression_done -> Nullable<Timestamp>,
+        thumbs_done -> Nullable<Timestamp>,
+        has_thumbnail -> Nullable<Bool>,
         thumb_sheet_cols -> Nullable<Integer>,
         thumb_sheet_rows -> Nullable<Integer>,
         orig_filename -> Nullable<Text>,
