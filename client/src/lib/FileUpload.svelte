@@ -71,7 +71,7 @@ function upload() {
 
         let upload_cookies = { ...LocalStorageCookies.getAllNonExpired() };
         if (mediaFileAddedAction)
-            upload_cookies["video_added_action"] = mediaFileAddedAction;
+            upload_cookies["media_file_added_action"] = mediaFileAddedAction;
         upload_cookies["listing_data_json"] = JSON.stringify(listingData);
         ajax.setRequestHeader("X-CLAPSHOT-COOKIES", JSON.stringify(upload_cookies));
 

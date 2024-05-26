@@ -215,7 +215,7 @@ pub fn run_forever(inq: Receiver<IncomingFile>, outq: Sender<MetadataResult>, n_
     while pool_is_healthy.load(Ordering::Relaxed) {
         match inq.recv() {
             Ok(args) => {
-                tracing::info!(file=%args.file_path.display(), user=args.user_id, "Scanning file.");
+                tracing::info!(file=%args.file_path.file_name().unwrap_or_default().to_string_lossy(), user=args.user_id, "Scanning file.");
                 let pool_is_healthy = pool_is_healthy.clone();
                 let outq = outq.clone();
                 let span = span.clone();

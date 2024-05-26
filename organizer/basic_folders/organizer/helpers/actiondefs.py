@@ -57,14 +57,14 @@ class ActiondefsHelper:
             action=clap.ScriptCall(
                 lang=clap.ScriptCallLang.JAVASCRIPT,
                 code=dedent("""
-                    var vid = _action_args.media_file_id;
+                    var mfid = _action_args.media_file_id;
                     var listingData = _action_args.listing_data;
                     var folderId = listingData?.folder_id;
 
-                    if (!folderId || !vid) {
+                    if (!folderId || !mfid) {
                         var msg = "on_media_file_added error: media_file_id missing, or folder_id from listingData.";
                         alert(msg); console.error(msg);
                     } else {
-                        clapshot.moveToFolder(folderId, [{mediaFileId: vid}], listingData);
+                        clapshot.moveToFolder(folderId, [{mediaFileId: mfid}], listingData);
                     }
                 """).strip()))

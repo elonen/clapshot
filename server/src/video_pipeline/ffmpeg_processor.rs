@@ -383,7 +383,7 @@ fn run_ffmpeg_thumbnailer( thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_shee
         MediaType::Audio => (false, false),
     };
 
-    tracing::info!(poster=needs_poster, sheet=needs_sheet, "Thumbnailer called.");
+    tracing::info!(needs_poster=needs_poster, needs_sheet=needs_sheet, "Thumbnailer called.");
 
     if !thumb_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&thumb_dir) {

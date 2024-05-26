@@ -143,7 +143,7 @@ pub async fn handle_multipart_upload(
                                     }
                                     return Ok(warp::reply::with_status(format!("Upload failed: {e}"), warp::http::StatusCode::BAD_REQUEST));
                                 }
-                                tracing::info!("File uploaded: '{:?}'", dst);
+                                tracing::info!(dst=dst.display().to_string(), "File uploaded.");
                                 uploaded_file = dst.into();
                             }
                         };

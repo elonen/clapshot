@@ -24,7 +24,7 @@ let commentInput: CommentInput;
 let debugLayout: boolean = false;
 let uiConnectedState: boolean = false; // true if UI should look like we're connected to the server
 
-let lastMediaFileProgressMsgTime = Date.now();  // used to hide video_progress_msg after a few seconds
+let lastMediaFileProgressMsgTime = Date.now();  // used to hide progress after a few seconds
 
 let collabDialogAck = false;  // true if user has clicked "OK" on the collab dialog
 let lastCollabControllingUser: string | null = null;    // last user to control the video in a collab session
@@ -540,24 +540,24 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                         refreshMyMediaFiles();
                     }
                     else if ( msg.type === Proto3.UserMessage_Type.MEDIA_FILE_ADDED ) {
-                        console.log("Handling VIDEO_ADDED: ", msg);
-                        if (!msg.refs?.mediaFileId) { console.error("VIDEO_ADDED message with no mediaFileId. This is a bug."); }
+                        console.log("Handling MEDIA_FILE_ADDED: ", msg);
+                        if (!msg.refs?.mediaFileId) { console.error("MEDIA_FILE_ADDED message with no mediaFileId. This is a bug."); }
 
                         // Parse details and extract JSON data (added by FileUpload) from msg
                         const uploadCookies = JSON.parse(msg.details ?? '{}');
                         const listingData = JSON.parse(uploadCookies.listing_data_json ?? '{}');
-                        const videoAddedAction = uploadCookies.media_file_added_action;
+                        const addedAction = uploadCookies.media_file_added_action;
 
                         // Call organizer script if defined, otherwise refresh video list
-                        if (videoAddedAction) {
-                            const action = $serverDefinedActions[videoAddedAction];
+                        if (addedAction) {
+                            const action = $serverDefinedActions[addedAction];
                             if (!action) {
-                                const errorMsg = `Undefined video_added_action: '${videoAddedAction}'`;
+                                const errorMsg = `Undefined media_file_added_action: '${addedAction}'`;
                                 acts.add({ mode: 'error', message: errorMsg, lifetime: 5 });
                                 console.error(errorMsg);
                             } else {
                                 callOrganizerScript(action.action, {
-                                    video_id: msg.refs?.mediaFileId,
+                                    media_file_id: msg.refs?.mediaFileId,
                                     listing_data: listingData,
                                 });
                             }

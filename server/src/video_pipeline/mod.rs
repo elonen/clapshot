@@ -110,7 +110,7 @@ fn ingest_media_file(
         user=md.user_id,
         filename=%md.src_file.file_name().unwrap_or_default().to_string_lossy()).entered();
 
-    tracing::info!(file=%md.src_file.display(), "Ingesting file.");
+    tracing::info!("Ingesting file.");
 
     let src = PathBuf::from(&md.src_file);
     if !src.is_file() { bail!("Source file not found: {:?}", src) }
@@ -416,7 +416,7 @@ pub fn run_forever(
             recv(upload_rx) -> msg => {
                 match msg {
                     Ok(msg) => {
-                        tracing::info!("Got upload result. Submitting it for processing. {:?}", msg);
+                        tracing::debug!("Got upload result. Submitting it for processing. {:?}", msg);
                         to_md.send(IncomingFile {file_path: msg.file_path.clone(),user_id: msg.user_id, cookies: msg.cookies }).unwrap_or_else(|e| {
                                 tracing::error!("Error sending file to metadata reader: {:?}", e);
                                 clean_up_rejected_file(&data_dir, &msg.file_path, None).unwrap_or_else(|e| {
