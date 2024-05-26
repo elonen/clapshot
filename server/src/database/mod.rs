@@ -26,6 +26,31 @@ pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
 
+#[macro_export]
+macro_rules! retry_if_db_locked {
+    ($op:expr) => {
+        (|| {
+            let mut attempt = 1;
+            loop {
+                let res = $op;
+                if res.is_ok() {
+                    return res;
+                } else {
+                    let err_msg = res.as_ref().err().unwrap().to_string();
+                    if (attempt <= 8) && err_msg.to_lowercase().contains("locked") {
+                        tracing::debug!("DB: '{}, retrying in 100ms (attempt {}/{})", err_msg, attempt, 8);
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        attempt += 1;
+                        continue;
+                    } else {
+                        return res;
+                    }
+                }
+            }
+        })()
+    }
+}
+
 /// Convert a diesel result to a DBResult, turning empty result
 /// into a DBError::NotFound
 fn to_db_res<U>(res: QueryResult<U>) -> DBResult<U> {

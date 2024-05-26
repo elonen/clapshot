@@ -13,7 +13,7 @@ Clapshot is an open-source, self-hosted tool for collaborative video/media revie
 ### Key Features
 
 - Media file ingestion via HTTP uploads or shared folders
-- Media transcoding with FFmpeg
+- Media (video, audio, image) file transcoding with FFmpeg
 - Commenting, drawing annotations, and threaded replies
 - Real-time collaborative review sessions
 - Stores media files on disk and metadata in an SQLite (3.5+) database

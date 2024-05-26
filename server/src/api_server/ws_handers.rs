@@ -574,7 +574,7 @@ pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server
             tracing::warn!("[{}] '{cmd_str}' failed: {}", ses.sid, e);
             // Assume name is regex '^[a-zA-Z0-9_]+' of cmd_str
             let cmd_name = regex::Regex::new(r"^[a-zA-Z0-9_]+").unwrap().find(&cmd_str).map(|m| m.as_str()).unwrap_or(cmd_str.as_str());
-            send_user_error!(&ses.user_id, server, Topic::None, format!("{cmd_name} failed: {e}"));
+            send_user_error!(&ses.user_id, server, Topic::None, format!("Cmd '{cmd_name}' failed: {e}"));
         }
     }
     Ok(true)
