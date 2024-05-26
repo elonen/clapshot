@@ -34,7 +34,7 @@ async def connect_back_to_server(
         else:
             backchannel = grpclib.client.Channel(path=server_info.backchannel.unix.path)
 
-        log.info("Connecting back to Clapshot server...")
+        log.debug("Connecting back to Clapshot server...")
         oos = org.OrganizerOutboundStub(backchannel)
         await oos.handshake(org.OrganizerInfo(
             version=org.SemanticVersionNumber(major=organizer_version[0], minor=organizer_version[1], patch=organizer_version[2]),
@@ -42,7 +42,7 @@ async def connect_back_to_server(
             description=organizer_description,
             hard_dependencies=hard_dependencies,
         ))
-        log.info("Clapshot server connected.")
+        log.debug("Clapshot server connected.")
         return oos
 
     except ConnectionRefusedError as e:
@@ -59,7 +59,7 @@ async def open_database(server_info: org.ServerInfo, debug_sql: bool, log: Logge
     """
     assert server_info.db.type == org.ServerInfoDatabaseDatabaseType.SQLITE, "Only SQLite is supported."
 
-    log.info(f"Opening SQLite database at '{server_info.db.endpoint}'")
+    log.debug(f"Opening SQLite database at '{server_info.db.endpoint}'")
     db = sqlalchemy.create_engine(f"sqlite:///{server_info.db.endpoint}", connect_args={'timeout': 15}, echo=debug_sql)
     db_new_session = sessionmaker(bind=db)
 

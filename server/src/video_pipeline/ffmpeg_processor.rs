@@ -163,7 +163,10 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
     }.iter().map(|s| s.to_string()).collect();
 
 
-    tracing::info!(src_path=%src.path.display(), dst=%video_dst.display(), bitrate=video_bitrate, "Transcoding media file");
+    tracing::info!(bitrate=video_bitrate, "Transcoder called.");
+    tracing::debug!(ffmpeg_options=?ffmpeg_options, "FFMPEG options");
+
+
 
     // Open a named pipe for ffmpeg to write progress reports to.
     // If this fails, ignore it and just don't show progress.
@@ -184,7 +187,7 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
         let ppipe_fname = ppipe_fname.clone();
 
         std::thread::spawn(move || {
-            let _span = tracing::info_span!("ffmpeg_transcode_thread",
+            let _span = tracing::info_span!("ffmpeg_transcode",
                 thread = ?std::thread::current().id()).entered();
 
             let mut cmd = &mut Command::new("nice");
@@ -196,8 +199,7 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
             // Add media type specific options
             cmd = cmd.args(&ffmpeg_options).arg(&dst);
 
-            tracing::info!("Calling ffmpeg");
-            tracing::debug!("EXEC: {:?}", cmd);
+            tracing::debug!(cmd=?cmd, "Invoking ffmpeg.");
             match cmd.output() {
                 Ok(res) => {
                     tracing::info!("ffmpeg finished");
@@ -225,7 +227,7 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
                 let vid = src.media_file_id.clone();
                 let src = src.path.clone();
                 std::thread::spawn(move || {
-                    let _span = tracing::info_span!("progress_thread",
+                    let _span = tracing::info_span!("ffmpeg_progress",
                         thread = ?std::thread::current().id()).entered();
 
                     let frame_count = count_video_frames(&src);
@@ -381,7 +383,7 @@ fn run_ffmpeg_thumbnailer( thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_shee
         MediaType::Audio => (false, false),
     };
 
-    tracing::info!(src=%src.path.display(), dst=%thumb_dir.display(), "Thumbnailing media file");
+    tracing::info!(poster=needs_poster, sheet=needs_sheet, "Thumbnailer called.");
 
     if !thumb_dir.exists() {
         if let Err(e) = std::fs::create_dir_all(&thumb_dir) {
@@ -396,7 +398,7 @@ fn run_ffmpeg_thumbnailer( thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_shee
         let src_path = src.path.clone();
         let thumb_dir = thumb_dir.clone();
         std::thread::spawn(move || {
-            let _span = tracing::info_span!("ffmpeg_thumb_poster_thread",
+            let _span = tracing::info_span!("ffmpeg_thumb_poster",
                 thread = ?std::thread::current().id()).entered();
 
             if !needs_poster {
@@ -416,8 +418,8 @@ fn run_ffmpeg_thumbnailer( thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_shee
                 "-strict", "experimental",
                 "-c:v", "libwebp",
             ]).arg(thumb_dir.join("thumb.webp"));
-            tracing::info!("Creating poster thumbnail");
-            tracing::debug!("Exec: {:?}", cmd);
+
+            tracing::debug!(cmd=?cmd, "Invoking ffmpeg.");
             match cmd.output() {
                 Ok(res) => {
                     tracing::info!("ffmpeg finished");
@@ -438,7 +440,7 @@ fn run_ffmpeg_thumbnailer( thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_shee
         let src_path = src.path.clone();
         let thumb_dir = thumb_dir.clone();
         std::thread::spawn(move || {
-            let _span = tracing::info_span!("ffmpeg_thumbsheet_thread",
+            let _span = tracing::info_span!("ffmpeg_thumbsheet",
                 thread = ?std::thread::current().id()).entered();
 
             if !needs_sheet {
@@ -473,8 +475,7 @@ fn run_ffmpeg_thumbnailer( thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_shee
                 "-start_number", "0",
             ]).arg(thumb_dir.join(format!("sheet-{thumb_sheet_cols}x{thumb_sheet_rows}.webp")));
 
-            tracing::info!("Creating thumbnail sheet");
-            tracing::debug!("Exec: {:?}", cmd);
+            tracing::debug!(cmd=?cmd, "Invoking ffmpeg.");
             match cmd.output() {
                 Ok(res) => {
                     tracing::info!("ffmpeg finished");
@@ -497,7 +498,7 @@ fn run_ffmpeg_thumbnailer( thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_shee
     for (name, thread) in vec![("poster", single_thumb_thread), ("sheet", sheet_thread)].into_iter() {
         let (err, stdout, stderr) = match thread.join() {
             Ok(res) => {
-                tracing::info!("Thread '{name}' finished");
+                tracing::debug!("Thread '{name}' finished");
                 res
             },
             Err(e) => {
@@ -552,13 +553,27 @@ pub fn run_forever(
     n_workers: usize)
 {
     let _span = tracing::info_span!("COMPR").entered();
-    tracing::info!(n_workers = n_workers, "Starting.");
+    tracing::debug!(n_workers = n_workers, "Starting.");
 
     let pool = ThreadPool::new(n_workers);
     loop {
         match inq.recv() {
             Ok(args) => {
-                tracing::info!("Got message: {:?}", args);
+                //tracing::info!("Got message: {:?}", args);
+                match &args {
+                    CmprInput::Transcode { src, .. } => {
+                        tracing::info!(id=%src.media_file_id, r#type=?src.media_type,
+                            user=%src.user_id, file=%(src.path.file_name().unwrap_or_default().to_string_lossy()),
+                            "Media file transcode request.");
+                    },
+                    CmprInput::Thumbs { src, .. } => {
+                        tracing::info!(id=%src.media_file_id, r#type=?src.media_type,
+                            user=%src.user_id, file=%(src.path.file_name().unwrap_or_default().to_string_lossy()),
+                            "Media file thumbnail request.");
+                    },
+                }
+                tracing::debug!(details=?args, "Spawning worker thread.");
+
                 let outq = outq.clone();
                 let prgr_sender = progress.clone();
                 pool.execute(move || {

@@ -78,7 +78,7 @@ where
         + 'static,
     S::Future: Send + 'static,
 {
-    span.in_scope(|| { tracing::info!("Binding to '{:?}'", bind) });
+    span.in_scope(|| { tracing::debug!("Binding to '{:?}'", bind) });
 
     let refl = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
@@ -111,7 +111,7 @@ where
             srv.serve_with_incoming_shutdown(server_stream, wait_for_shutdown).await?;
         }
     }
-    span.in_scope(|| { tracing::info!("Exiting gracefully.") });
+    span.in_scope(|| { tracing::debug!("Exiting gracefully.") });
     Ok(())
 }
 
@@ -170,7 +170,7 @@ pub async fn connect_back_and_finish_handshake(
                     .connect_with_connector(service_fn(move |_: Uri| {
                         UnixStream::connect(path.clone()) })).await {
                     Ok(c) => {
-                        tracing::info!("Connected back to server (on attempt {retry}/{MAX_RETRIES})");
+                        tracing::debug!("Connected back to server (on attempt {retry}/{MAX_RETRIES})");
                         Some(c) },
                     Err(e) => {
                         tracing::warn!("Failed to connect back to server (attempt {retry}/{MAX_RETRIES}): {:?}", e);

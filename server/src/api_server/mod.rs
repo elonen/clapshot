@@ -201,7 +201,7 @@ async fn handle_ws_session(
             // Termination flag set? Exit.
             _ = sleep(Duration::from_millis(100)) => {
                 if server.terminate_flag.load(Relaxed) {
-                    tracing::info!("Termination flag set. Closing session.");
+                    tracing::debug!("Termination flag set. Closing session.");
                     break;
              }},
 
@@ -274,7 +274,7 @@ async fn handle_ws_session(
                                         Ok(false) => { break; }     // Session closed
                                         Err(e) => {
                                             if let Some(e) = e.downcast_ref::<SessionClose>() {
-                                                if !matches!(e, SessionClose::Logout) { tracing::info!("[{}] Closing session: {:?}", sid, e); }
+                                                if !matches!(e, SessionClose::Logout) { tracing::debug!("[{}] Closing session: {:?}", sid, e); }
                                                 break;
                                             } else if let Some(e) = e.downcast_ref::<tokio::sync::mpsc::error::SendError<Message>>() {
                                                 tracing::error!("[{}] Error sending message. Closing session. -- {}", sid, e);
@@ -297,7 +297,7 @@ async fn handle_ws_session(
                                 }
                             };
                         } else if msg.is_close() {
-                            tracing::info!("Got websocket close message.");
+                            tracing::debug!("Got websocket close message.");
                             break
                         } else {
                             tracing::error!(msg=?msg, "Got unexpected message - closing session.");
@@ -411,7 +411,7 @@ async fn run_api_server_async(
             while !server.organizer_has_connected.load(Relaxed) {
                 sleep(wait_time).await;
                 if wait_time > Duration::from_secs(1) {
-                    tracing::info!("Waiting for org->srv connection...");
+                    tracing::debug!("Waiting for org->srv connection...");
                 }
                 wait_time = std::cmp::min(wait_time * 2, Duration::from_secs(4));
                 if server.terminate_flag.load(Relaxed) { return; }
@@ -430,7 +430,7 @@ async fn run_api_server_async(
         None => None,
     };
 
-    tracing::info!(port=port, "Starting frontend API server.");
+    tracing::info!(port=port, "Starting websocket API.");
 
     let rt_health = warp::path("api").and(warp::path("health")).map(|| "I'm alive!");
 

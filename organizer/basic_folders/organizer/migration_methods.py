@@ -18,7 +18,7 @@ async def check_migrations_impl(oi, req: org.CheckMigrationsRequest) -> org.Chec
     """
     cur_ver, pending = db_check_pending_migrations(oi.db)
     max_ver = sorted([m.version for m in pending], reverse=True)[0] if pending else cur_ver
-    oi.log.info(f"check_migrations(): current schema version = '{cur_ver}', max version = '{max_ver}', {len(pending)} pending migration alternatives")
+    oi.log.debug(f"check_migrations(): current schema version = '{cur_ver}', max version = '{max_ver}', {len(pending)} pending migration alternatives")
     return org.CheckMigrationsResponse(current_schema_ver=cur_ver,pending_migrations=pending)
 
 
@@ -43,7 +43,7 @@ async def after_migrations_impl(oi: organizer.OrganizerInbound, _: org.AfterMigr
       => Do some "fsck"-type operations on the database.
     """
     log = oi.log.getChild("after_migration")
-    log.info("Running post-migration checks...")
+    log.debug("Running post-migration checks...")
     with oi.db_new_session() as dbs:
         db_test_orm_mappings(dbs, log)
         db_check_for_folder_loops(dbs, log)

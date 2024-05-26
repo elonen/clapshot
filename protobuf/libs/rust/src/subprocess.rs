@@ -40,7 +40,7 @@ pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Re
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
-    info!("Spawning (shell cmd): {:?}", cmd);
+    debug!("Spawning (shell cmd): {:?}", cmd);
     let mut child = cmd.spawn()?;
 
     /// Streams logs from a file descriptor (stdout/stderr of childprocess) to the main log.
@@ -88,11 +88,12 @@ pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Re
                                                 _ => panic!("Unsupported log level"),
                                             },
                                         };
+                                        let stream_name = if name.is_empty() { std::string::String::new() } else { format!("[{}] ", name) };
                                         match level_override {
-                                            tracing::Level::DEBUG => debug!("[{}] {}{}", name, prepend, msg_str),
-                                            tracing::Level::INFO => info!("[{}] {}{}", name, prepend, msg_str),
-                                            tracing::Level::WARN => warn!("[{}] {}{}", name, prepend, msg_str),
-                                            tracing::Level::ERROR => error!("[{}] {}{}", name, prepend, msg_str),
+                                            tracing::Level::DEBUG => debug!("{stream_name}{}{}", prepend, msg_str),
+                                            tracing::Level::INFO => info!("{stream_name}{}{}", prepend, msg_str),
+                                            tracing::Level::WARN => warn!("{stream_name}{}{}", prepend, msg_str),
+                                            tracing::Level::ERROR => error!("{stream_name}{}{}", prepend, msg_str),
                                             _ => panic!("Unsupported log level"),
                                         }
                                     }
@@ -121,7 +122,7 @@ pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Re
         if let Some(stdout) = child.stdout.take() {
                 let span = span.clone();
                 let terminate_flag = terminate_flag.clone();
-                std::thread::spawn(move || log_stream(span, stdout.as_raw_fd(), tracing::Level::INFO, "stdout", terminate_flag))
+                std::thread::spawn(move || log_stream(span, stdout.as_raw_fd(), tracing::Level::INFO, "", terminate_flag))
             } else { bail!("Failed to capture stdout"); },
         if let Some(stderr) = child.stderr.take() {
                 let span = span.clone();
@@ -145,13 +146,13 @@ impl Drop for ProcHandle {
             match kill(pid, Signal::SIGTERM) {
                 Ok(_) => {
                     match self.child.wait_timeout(Duration::from_secs(5)) {
-                        Ok(Some(status)) => info!("Process '{}' terminated with status: {}", self.name, status),
+                        Ok(Some(status)) => debug!("Process '{}' terminated with status: {}", self.name, status),
                         Err(e) => warn!("Failed to wait for child process: {:?}", e),
                         Ok(None) => {
                             warn!("Child process did not exit in time. Sending SIGKILL to pid {}.", pid);
                             match kill(pid, Signal::SIGKILL) {
                                 Ok(_) => match self.child.wait() {
-                                    Ok(status) => info!("Process '{}' killed with status: {}", self.name, status),
+                                    Ok(status) => debug!("Process '{}' killed with status: {}", self.name, status),
                                     Err(e) => warn!("Failed to wait for shell after SIGKILL: {:?}", e),
                                 },
                                 Err(Error::Sys(errno)) => { warn!("Failed to send SIGKILL: {}", errno); },

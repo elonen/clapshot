@@ -58,7 +58,7 @@ impl OrganizerCaller {
 
             // TODO: Handle organizer migrations properly
             // This is a naive version that doesn't handle dependencies at all.
-            tracing::info!("Calling check_migrations on organizer.");
+            tracing::debug!("Calling check_migrations on organizer.");
 
             let cur_server_migration = cur_server_migration.map(MigrationVersion::from)
                 .ok_or(anyhow::anyhow!("No server migration version found, cannot check against organizer migrations"))?;
@@ -93,7 +93,7 @@ impl OrganizerCaller {
                 },
                 Err(e) => {
                     match e.code() {
-                        tonic::Code::NotFound => { tracing::info!("No migrations found on organizer."); },
+                        tonic::Code::NotFound => { tracing::info!("No pending migrations on organizer."); },
                         tonic::Code::Unimplemented => { tracing::info!("Organizer does not implement migrations. Ignoring."); },
                         _ => { anyhow::bail!("Error checking organizer migrations: {:?}", e); }
                     }
@@ -102,7 +102,7 @@ impl OrganizerCaller {
 
             if let Err(e) = conn.after_migrations(AfterMigrationsRequest {}).await {
                 if e.code() == tonic::Code::Unimplemented {
-                    tracing::info!("Organizer does not implement after_migrations. Ignoring.");
+                    tracing::debug!("Organizer does not implement after_migrations. Ignoring.");
                 } else {
                     anyhow::bail!("Error calling after_migrations on organizer: {:?}", e);
                 }

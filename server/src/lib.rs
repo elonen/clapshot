@@ -95,10 +95,10 @@ impl ClapshotInit {
                 let org = OrganizerCaller::new(ouri);
                 tracing::info!("Connecting gRPC srv->org...");
                 org.handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind, cur_server_migration.as_deref())?;
-                tracing::info!("srv->org handshake done (org->srv not connected yet).");
+                tracing::debug!("srv->org handshake done (org->srv not connected yet).");
             }
             None => {
-                tracing::info!("No Organizer URI provided, skipping gRPC.");
+                tracing::debug!("No Organizer URI provided, skipping gRPC.");
             }
         };
 
@@ -194,7 +194,7 @@ fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyho
             eprintln!("Database migrations needed. Run `clapshot-server --migrate`");
             std::process::exit(1);
         } else {
-            tracing::info!(file=%db_file.display(), "No database migrations needed.");
+            tracing::debug!(file=%db_file.display(), "No database migrations needed.");
         }
     }
     Ok(db)

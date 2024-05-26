@@ -53,8 +53,7 @@ class OrganizerInbound(org.OrganizerInboundBase):
         Receive handshake from Clapshot server.
         We must connect back to it and send handshake to establish a bidirectional connection.
         """
-        self.log.info(f"Got handshake from server.")
-        self.log.debug(f"Server info: {json.dumps(server_info.to_dict())}")
+        self.log.debug(f"Got handshake. Server info: {json.dumps(server_info.to_dict())}")
 
         srv_dep = org.OrganizerDependency(name="clapshot.server", min_ver=org.SemanticVersionNumber(major=0, minor=6, patch=0))
         self.srv = await connect_back_to_server(server_info, MODULE_NAME, VERSION.split("."), "Basic folders for the UI", [srv_dep], self.log)

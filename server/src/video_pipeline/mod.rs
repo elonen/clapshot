@@ -170,7 +170,7 @@ fn ingest_media_file(
     let orig_filename = src.file_name().ok_or(anyhow!("Bad filename: {:?}", src))?.to_string_lossy().into_owned();
 
     // Add to DB
-    tracing::info!("Adding media file to DB.");
+    tracing::debug!("Adding media file to DB.");
     models::MediaFile::insert(&mut db.conn()?, &models::MediaFileInsert {
         id: media_id.to_string(),
         user_id: md.user_id.clone(),
@@ -272,7 +272,7 @@ fn ingest_media_file(
                 media_file_id: Some(media_id.to_string())
             })?;
             // Tell user in text also
-            tracing::info!(transcode=do_transcode, reason=reason, "Media added to DB. Transcode");
+            tracing::debug!(transcode=do_transcode, reason=reason, "Media added to DB. Transcode");
             user_msg_tx.send(UserMessage {
                 topic: UserMessageTopic::Ok,
                 msg: "Media added.".to_string() + if do_transcode {" Transcoding..."} else {""},
@@ -310,7 +310,7 @@ pub fn run_forever(
     upload_rx: Receiver<IncomingFile>,
     n_workers: usize)
 {
-    tracing::info!("Starting media file processing pipeline.");
+    tracing::debug!("Starting media file processing pipeline.");
 
     // Create folder for processed media files
     let media_files_dir = data_dir.join("videos");
@@ -364,7 +364,7 @@ pub fn run_forever(
             .map_err(|e| { tracing::error!(details=?e, "DB: Failed to get media files without thumbnails."); }).ok()?;
 
         if let Some(v) = candidates.first() {
-            tracing::info!(media_file_id=%v.id, "Found legacy media file that needs thumbnailing.");
+            tracing::info!(id=%v.id, "Found legacy media file that needs thumbnailing.");
 
             let media_file_path = if v.recompression_done.is_some() {
                     Some(videos_dir.join(&v.id).join("video.mp4"))
@@ -474,7 +474,7 @@ pub fn run_forever(
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                         }
                     },
-                    Err(e) => { tracing::info!("Metadata reader disconnected ('{:?}'). Exit.", e); break; },
+                    Err(e) => { tracing::debug!("Metadata reader disconnected ('{:?}'). Exit.", e); break; },
                 }
             },
             // Incoming file from monitor
@@ -488,7 +488,7 @@ pub fn run_forever(
                         });
                     },
                     Err(e) => {
-                        tracing::info!("Metadata reader disconnected ('{:?}'). Exit.", e); break; },
+                        tracing::debug!("Metadata reader disconnected ('{:?}'). Exit.", e); break; },
                 }
             },
             // Transcoder progress
@@ -601,7 +601,7 @@ pub fn run_forever(
 
                                 // Set has thumbnail in DB
                                 if let Err(e) = db.conn().and_then(|mut conn| models::MediaFile::set_has_thumb(&mut conn, &vid, true)) {
-                                    tracing::error!(details=%e, "Error storing thumb URL in DB");
+                                    tracing::error!(details=%e, "Error in set_has_thumb to DB");
                                     db_errors = true;
                                 }
 
@@ -662,7 +662,7 @@ pub fn run_forever(
             break;
         }
         if terminate_flag.load(std::sync::atomic::Ordering::Relaxed) {
-            tracing::info!("Termination flag set. Exit.");
+            tracing::debug!("Termination flag set. Exit.");
             break;
         }
     }

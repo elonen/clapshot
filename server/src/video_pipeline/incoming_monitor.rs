@@ -28,7 +28,7 @@ pub fn run_forever(
     exit_evt: Receiver<Void>) -> anyhow::Result<()>
 {
     let _span = tracing::info_span!("INCOMING").entered();
-    tracing::info!(dir=data_dir.to_str(), poll_interval=poll_interval, resubmit_delay=resubmit_delay, "Starting.");
+    tracing::debug!(dir=data_dir.to_str(), poll_interval=poll_interval, resubmit_delay=resubmit_delay, "Starting.");
 
     let mut last_tested_size: std::collections::HashMap<PathBuf, u64> = std::collections::HashMap::new();
     let mut submission_time: std::collections::HashMap<PathBuf, std::time::Instant> = std::collections::HashMap::new();
@@ -82,7 +82,7 @@ pub fn run_forever(
                                     },
                                 };
                             } else {
-                                tracing::info!("File '{:?}' apparently still being written to. Skipping for now...", path);
+                                tracing::debug!("File '{:?}' apparently still being written to. Skipping for now...", path);
                                 last_tested_size.insert(path, sz);
                             }}}}
             },

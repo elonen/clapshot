@@ -152,6 +152,8 @@ pub async fn send_open_media_file_cmd(server: &ServerState, session_id: &str, me
 
 
 pub async fn del_media_file_and_cleanup(media_file_id: &str, ses: Option<&mut UserSession>, server: &ServerState) -> Res<()> {
+    tracing::info!(media_file_id=media_file_id, user_id=ses.as_ref().map(|u|u.user_id.clone()), "Trashing media file.");
+
     if let Some(v) = get_media_file_or_send_error(Some(media_file_id), &ses, server).await? {
 
         // Check authorization against user session, if provided

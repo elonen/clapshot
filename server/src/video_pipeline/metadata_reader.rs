@@ -206,8 +206,8 @@ fn read_metadata_from_file(args: &IncomingFile) -> Result<Metadata, String>
 /// * `n_workers` - number of threads to use for processing
 pub fn run_forever(inq: Receiver<IncomingFile>, outq: Sender<MetadataResult>, n_workers: usize)
 {
-    let _span = tracing::info_span!("MD").entered();
-    tracing::info!(n_workers = n_workers, "Starting.");
+    let span = tracing::info_span!("MD").entered();
+    tracing::debug!(n_workers = n_workers, "Starting.");
 
     let pool = ThreadPool::new(n_workers);
     let pool_is_healthy  = std::sync::Arc::new(AtomicBool::new(true));
@@ -218,18 +218,22 @@ pub fn run_forever(inq: Receiver<IncomingFile>, outq: Sender<MetadataResult>, n_
                 tracing::info!(file=%args.file_path.display(), user=args.user_id, "Scanning file.");
                 let pool_is_healthy = pool_is_healthy.clone();
                 let outq = outq.clone();
+                let span = span.clone();
                 pool.execute(move || {
-                    if let Err(e) = outq.send(
-                        read_metadata_from_file(&args).map_err(|e| {
-                                DetailedMsg {
-                                    msg: "Metadata read failed".to_string(),
-                                    details: e,
-                                    src_file: args.file_path.clone(),
-                                    user_id: args.user_id.clone() }}))
-                    {
-                        tracing::error!(details=%e, "Result send failed! Aborting.");
-                        pool_is_healthy.store(false, Ordering::Relaxed);
-                    }});
+                    span.in_scope(|| {
+                        if let Err(e) = outq.send(
+                            read_metadata_from_file(&args).map_err(|e| {
+                                    DetailedMsg {
+                                        msg: "Metadata read failed".to_string(),
+                                        details: e,
+                                        src_file: args.file_path.clone(),
+                                        user_id: args.user_id.clone() }}))
+                        {
+                            tracing::error!(details=%e, "Result send failed! Aborting.");
+                            pool_is_healthy.store(false, Ordering::Relaxed);
+                        }
+                    })
+                });
             },
             Err(RecvError) => {
                 tracing::info!("Incoming queue closed.");
