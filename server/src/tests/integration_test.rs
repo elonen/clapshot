@@ -35,10 +35,12 @@ mod integration_test
     use tracing;
     use tracing::{error, info, warn, instrument};
     use tracing_test::traced_test;
+    use serial_test::serial;
     use std::io::Write;
 
 
     #[test]
+    #[serial]
     #[traced_test]
     fn test_integ_metadata_reader_ok() -> anyhow::Result<()>
     {
@@ -150,6 +152,7 @@ mod integration_test
     }
 
     #[test]
+    #[serial]
     #[traced_test]
     fn test_video_ingest_no_transcode() -> anyhow::Result<()>
     {
@@ -206,8 +209,9 @@ mod integration_test
     }
 
     #[test]
+    #[serial]
     #[traced_test]
-    fn test_video_ingest_corrupted_video() -> anyhow::Result<()>
+    fn test_video_try_ingest_corrupted_video() -> anyhow::Result<()>
     {
         cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None]
             tracing::info!("WRITING CORRUPTED VIDEO");
@@ -244,11 +248,10 @@ mod integration_test
     }
 
     async fn wait_for_reports(
-        mut ws: crate::api_server::test_utils::WsClient,
+        mut ws: &mut crate::api_server::test_utils::WsClient,
         expect_transcode: bool,
         expect_thumbnail: bool,
         expect_thumbsheet: bool,
-        vid: String,
         check_file_outputs: Option<(PathBuf, String)>) -> WaitForReportResults
     {
         let mut res = WaitForReportResults {
@@ -259,7 +262,22 @@ mod integration_test
 
         const WAIT_AFTER_REPORTS_TIMEOUT_SECS: u32 = 5;
 
-        for _ in 0..(120*5)
+        // Wait for file to be processed
+        thread::sleep(Duration::from_secs_f32(0.5));
+        let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
+        let vid = msg.refs.unwrap().media_file_id.unwrap();
+
+        thread::sleep(Duration::from_secs_f32(0.5));
+        let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
+        let vid2 = msg.refs.unwrap().media_file_id.unwrap();
+        assert_eq!(vid, vid2);
+
+        assert!(vid.len() > 0);
+        if expect_transcode {
+            assert!(msg.details.unwrap().to_ascii_lowercase().contains("transcod"));
+        }
+
+        for _ in 0..(60*2*10)
         {
             // Wait until server sends media updated messages about
             // transcoding and thumbnail generation being done
@@ -270,6 +288,8 @@ mod integration_test
                     Some(s2c::Cmd::ShowMessages(m)) => {
                         // Got progress report?
                         res.got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
+
+                        assert!(!m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Error as i32), "Got ERROR type message while waiting for transcode/thumbnail completion");
 
                         if m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::MediaFileUpdated as i32) {
                             // Got transcoding update message?
@@ -308,16 +328,18 @@ mod integration_test
         let reports_received_at = std::time::Instant::now();
 
         // Wait for page with media file to be shown
-        'waitloop: for _ in 0..(120*5)
+        'waitloop: for _ in 0..80
         {
             if reports_received_at.elapsed().as_millis() > (WAIT_AFTER_REPORTS_TIMEOUT_SECS*1000).into() {
                 panic!("Timeout checking API messages after transcode/thumbnail completion");
             }
 
             match crate::api_server::test_utils::expect_parsed::<ServerToClientCmd>(&mut ws).await.cmd {
+
                 Some(s2c::Cmd::ShowMessages(m)) => {
                     tracing::info!("Got ShowMessages (while waiting for ShowPage. Ignoring.");
                     res.got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
+                    assert!(!m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Error as i32), "Got ERROR type message while waiting for ShowPage");
                 },
 
                 Some(s2c::Cmd::ShowPage(p)) => {
@@ -383,7 +405,7 @@ mod integration_test
                     tracing::info!("Got UNEXPECTED (not necessarily a bug) message: {:?}", something_else);
                 },
             }
-            thread::sleep(Duration::from_secs_f32(0.2));
+            thread::sleep(Duration::from_secs_f32(0.1));
         }
 
         tracing::info!("Transcode complete: {} (expeted: {}), thumbs complete: {} (expected: {})",
@@ -421,6 +443,7 @@ mod integration_test
 
 
     #[test]
+    #[serial]
     #[traced_test]
     #[cfg(feature = "include_slow_tests")]
     fn test_video_mov_ingest_and_transcode() -> anyhow::Result<()>
@@ -433,21 +456,7 @@ mod integration_test
             data_dir.copy_from("src/tests/assets/", &[mov_file]).unwrap();
             std::fs::rename(data_dir.join(mov_file), incoming_dir.join(dangerous_name)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
-            let vid = msg.refs.unwrap().media_file_id.unwrap();
-
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
-            let vid2 = msg.refs.unwrap().media_file_id.unwrap();
-            assert_eq!(vid, vid2);
-
-            // Check that it's being transcoded
-            assert!(msg.details.unwrap().to_ascii_lowercase().contains("ranscod"));
-            assert!(vid.len() > 0);
-
-            let wait_res = wait_for_reports(ws, true, true, true, vid.clone(), Some((data_dir.path().into(), dangerous_name.into()))).await;
+            let wait_res = wait_for_reports(&mut ws, true, true, true, Some((data_dir.path().into(), dangerous_name.into()))).await;
 
             assert!(wait_res.transcode_complete, "Transcode did not complete / was not marked done");
             assert!(wait_res.got_progress_report);
@@ -457,6 +466,29 @@ mod integration_test
 
 
     #[test]
+    #[serial]
+    #[traced_test]
+    #[cfg(feature = "include_slow_tests")]
+    fn test_video_12bit_dnxhr_alpha_ingest_and_transcode() -> anyhow::Result<()>
+    {
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None]
+            // Copy test file to incoming dir
+            let mov_file = "alpha-test_dnxhr-444-12bit-dnxhr.mov";
+
+            data_dir.copy_from("src/tests/assets/", &[mov_file]).unwrap();
+            std::fs::rename(data_dir.join(mov_file), incoming_dir.join(mov_file)).unwrap();
+
+            let wait_res = wait_for_reports(&mut ws, true, true, true, Some((data_dir.path().into(), mov_file.into()))).await;
+
+            assert!(wait_res.transcode_complete, "Transcode did not complete / was not marked done");
+            assert!(wait_res.got_progress_report);
+        }
+        Ok(())
+    }
+
+
+    #[test]
+    #[serial]
     #[traced_test]
     #[cfg(feature = "include_slow_tests")]
     fn test_audio_ingest_and_transcode() -> anyhow::Result<()>
@@ -467,27 +499,14 @@ mod integration_test
             data_dir.copy_from("src/tests/assets/", &[audio_file_name]).unwrap();
             std::fs::rename(data_dir.join(audio_file_name), incoming_dir.join(audio_file_name)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
-            let vid = msg.refs.unwrap().media_file_id.unwrap();
-
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
-            let vid2 = msg.refs.unwrap().media_file_id.unwrap();
-            assert_eq!(vid, vid2);
-
-            // Check that it's being transcoded
-            assert!(msg.details.unwrap().to_ascii_lowercase().contains("ranscod"));
-            assert!(vid.len() > 0);
-
-            let wait_res = wait_for_reports(ws, true, false, false, vid.clone(), Some((data_dir.path().into(), audio_file_name.into()))).await;    // No thumbnail for audio
+            let wait_res = wait_for_reports(&mut ws, true, false, false, Some((data_dir.path().into(), audio_file_name.into()))).await;    // No thumbnail for audio
         }
         Ok(())
     }
 
 
     #[test]
+    #[serial]
     #[traced_test]
     fn test_image_ingest_and_transcode() -> anyhow::Result<()>
     {
@@ -496,27 +515,14 @@ mod integration_test
             data_dir.copy_from("src/tests/assets/", &[image_file_name]).unwrap();
             std::fs::rename(data_dir.join(image_file_name), incoming_dir.join(image_file_name)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
-            let vid = msg.refs.unwrap().media_file_id.unwrap();
-
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
-            let vid2 = msg.refs.unwrap().media_file_id.unwrap();
-            assert_eq!(vid, vid2);
-
-            // Check that it's being transcoded
-            assert!(msg.details.unwrap().to_ascii_lowercase().contains("ranscod"));
-            assert!(vid.len() > 0);
-
-            let wait_res = wait_for_reports(ws, true, true, false, vid.clone(), Some((data_dir.path().into(), image_file_name.into()))).await;
+            let wait_res = wait_for_reports(&mut ws, true, true, false, Some((data_dir.path().into(), image_file_name.into()))).await;
         }
         Ok(())
     }
 
 
     #[test]
+    #[serial]
     #[traced_test]
     fn test_organizer() -> anyhow::Result<()>
     {
