@@ -11,4 +11,11 @@ export interface UserMenuItem {
     data: string;
 }
 
+export interface MediaProgressReport {
+    mediaFileId?: string;
+    msg?: string;
+    progress?: number;      // 0-1
+    received_ts: number;    // timestamp, for expiring old reports
+}
+
 export type StringMap = { [key: string]: string };

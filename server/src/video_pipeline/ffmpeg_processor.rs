@@ -7,8 +7,9 @@ use threadpool::ThreadPool;
 
 use super::metadata_reader::MediaType;
 use super::DetailedMsg;
+use rust_decimal::prelude::ToPrimitive;
 
-pub type ProgressSender = crossbeam_channel::Sender<(String, String, String)>;
+pub type ProgressSender = crossbeam_channel::Sender<(String, String, String, Option<f32>)>;
 
 
 // Input to the FFMPEG processor
@@ -106,9 +107,11 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
         user = %src.user_id,
         thread = ?std::thread::current().id()).entered();
 
+    let mut frame_count: Option<u32> = None;
+
     // Construct ffmpeg options based on media type
     let bitrate = video_bitrate.to_string();
-    let duration = src.duration.to_string();
+
     let audio_filter_complex = format!(
         "color=c=white:s=2x720 [cursor]; \
         [0:a] showwavespic=s=1920x720:split_channels=1:draw=full, fps=60 [stillwave];\
@@ -116,7 +119,8 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
         [0:a] showwaves=size=1920x180:mode=p2p:colors=white|green|red|magenta [livewave]; \
         [stillwave][cursor] overlay=(W*t)/({}):0:shortest=1 [progress]; \
         [livewave][progress] vstack[stacked]; \
-        [stacked][freqwave] vstack [out];", &duration);
+        [stacked][freqwave] vstack [out];", &src.duration);
+
 
     let ffmpeg_options: Vec<String> = match src.media_type {
         MediaType::Video => {
@@ -135,6 +139,10 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
             ]
         },
         MediaType::Audio => {
+            frame_count = (src.duration * Decimal::from(60)).floor().to_u32();
+            if frame_count.is_none() {
+                return err2cout("Failed to parse audio duration", src.duration, &CmprInput::Transcode { video_dst, video_bitrate, src: src.clone() });
+            }
             vec![
                 "-dn",
                 "-r", "60",
@@ -148,6 +156,7 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
             ]
         },
         MediaType::Image => {
+            frame_count = Some(1*24);
             vec![
                 "-map", "0",
                 "-dn",
@@ -177,11 +186,130 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
         }.map_or_else(|e| { tracing::warn!(details=e, "Won't track FFMPEG progress; failed to create pipe file."); None}, |f| Some(f))
     };
 
-    // Start encoder thread
+    let progress_terminate = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    // Thread to read FFMPEG progress report from named pipe and send updates to user(s)
+    let progress_thread =
+    {
+        let progress_terminate = progress_terminate.clone();
+        let user_id = src.user_id.clone();
+
+        match ppipe_fname.clone() {
+            None => std::thread::spawn(move || {}), // No named pipe, skip progress tracking
+            Some(pfn) => {
+                if frame_count.is_none() && !matches!(src.media_type, MediaType::Video) {
+                    tracing::error!("Frame count not set for non-video media type before counting it with ffpbobe. Proceeding, but this is bug.");
+                }
+                let vid = src.media_file_id.clone();
+                let src = src.path.clone();
+                std::thread::spawn(move || {
+                    let _span = tracing::info_span!("ffmpeg_progress",
+                    thread = ?std::thread::current().id()).entered();
+
+                    // Get frame count for video (if not already known
+                    if frame_count.is_none() { frame_count = count_video_frames(&src); }
+
+                    let f = match unix_named_pipe::open_read(&pfn) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            tracing::error!(details=%e, "Failed to open named pipe.");
+                            return;
+                        }
+                    };
+                    let reader = &mut std::io::BufReader::new(&f);
+
+                    let mut msg : Option<String> = None;
+                    let mut frame_i = Option::<i32>::None;
+                    let mut fps = -1f32;
+                    let mut speed = None;
+                    let mut done_ratio = None;
+
+                    while !progress_terminate.load(std::sync::atomic::Ordering::Relaxed)
+                    {
+                        // Read progress lines from pipe & parse
+                        tracing::trace!("Reading .lines().next() from pipe...");
+                        match reader.lines().next() {
+                            Some(Err(e)) => {
+                                // Pipe is non-blocking, so ignore EAGAIN, handle others
+                                if e.kind() != std::io::ErrorKind::WouldBlock {
+                                    tracing::error!(details=%e, "Failed to read from pipe.");
+                                    break;
+                                } else {
+                                    tracing::trace!("Pipe read WouldBlock, sleeping...");
+                                    std::thread::sleep(std::time::Duration::from_millis(250));
+                                }
+                            },
+                            None => {
+                                tracing::debug!("Progress pipe EOF. Sleeping...");
+                                std::thread::sleep(std::time::Duration::from_millis(250));
+                            }
+                            Some(Ok(l)) => {
+                                // FFMPEG Progress "chunk" looks like this:
+                                //    frame=584
+                                //    fps=52.40
+                                //       <...some other key-value pairs...>
+                                //    progress=continue
+                                tracing::trace!(chunk=%l, "Got FFMPEG progress chunk line.");
+                                match l.find("=") {
+                                    None => { tracing::debug!(input=l, "Skipping invalid FFMPEG progress chunk line."); }
+                                    Some(idx) => {
+                                        let (key, val) = l.split_at(idx);
+                                        let val = &val[1..];
+                                        match key {
+                                            "frame" => {
+                                                match val.parse::<i32>() {
+                                                    Ok(n) => { frame_i = Some(n); },
+                                                    Err(e) => { tracing::warn!(details=%e, "Invalid frame# in FFMPEG progress log."); }
+                                                }
+                                            },
+                                            "fps" => {
+                                                match val.parse::<f32>() {
+                                                    Ok(n) => { fps = n; },
+                                                    Err(e) => { tracing::warn!(details=%e, "Invalid fps in FFMPEG progress log."); }
+                                                }
+                                            },
+                                            "speed" => {
+                                                speed = Some(val.to_string());
+                                            },
+                                            "progress" => {
+                                                match val {
+                                                    "end" => {
+                                                        msg = Some("Transcoding done.".to_string());
+                                                        done_ratio = Some(1.0);
+                                                    },
+                                                    _ => {
+                                                        let speed_str = match &speed {
+                                                            Some(s) => format!(" (speed: {})", s),
+                                                            None => {
+                                                                 if fps > 0f32 { format!(" (speed: {:.1} fps)", fps) } else { "".to_string() }
+                                                            }
+                                                        };
+                                                        match (frame_i, frame_count) {
+                                                            (Some(frame), Some(n_frames)) => {
+                                                                let ratio = frame as f32 / n_frames as f32;
+                                                                msg = Some(format!("Transcoding... {:.1}% done{speed_str}", (ratio * 100f32) as i32));
+                                                                done_ratio = Some(ratio);
+                                                            },
+                                                            _ => { msg = Some(format!("Transcoding...{speed_str}")); }
+                                            }}}},
+                                            other => {
+                                                tracing::trace!(key=other, val=%val, "Ignoring unsupported key.");
+                                            }, // Ignore other keys
+                                }}}
+                                // Send progress message (if any)
+                                if let Some(msg) = msg.take() {
+                                    if let Err(e) = progress.send((vid.clone(), user_id.clone(), msg, done_ratio.clone())) {
+                                        tracing::debug!(details=%e, "Failed to send FFMPEG progress message. Ending progress tracking.");
+                                        return;
+                    }}}}}
+                    tracing::debug!("Progress thread terminating.");
+                })
+    }}};
+
+    // Start transcoder thread (writes to the progress pipe)
     let ffmpeg_thread = {
         let src = src.path.clone();
         let dst = video_dst.clone();
-        let ppipe_fname = ppipe_fname.clone();
 
         std::thread::spawn(move || {
             let _span = tracing::info_span!("ffmpeg_transcode",
@@ -211,106 +339,17 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
             }
         })};
 
-    let progress_terminate = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-
-    // Thread to read FFMPEG progress report from named pipe and send updates to user(s)
-    let progress_thread =
-    {
-        let progress_terminate = progress_terminate.clone();
-        let user_id = src.user_id.clone();
-        match ppipe_fname {
-            None => std::thread::spawn(move || {}), // No named pipe, skip progress tracking
-            Some(pfn) => {
-                let vid = src.media_file_id.clone();
-                let src = src.path.clone();
-                std::thread::spawn(move || {
-                    let _span = tracing::info_span!("ffmpeg_progress",
-                        thread = ?std::thread::current().id()).entered();
-
-                    let frame_count = count_video_frames(&src);
-
-                    let f = match unix_named_pipe::open_read(&pfn) {
-                        Ok(f) => f,
-                        Err(e) => {
-                            tracing::error!(details=%e, "Failed to open named pipe.");
-                            return;
-                        }
-                    };
-                    let reader = &mut std::io::BufReader::new(&f);
-
-                    let mut msg : Option<String> = None;
-                    let mut frame_i = Option::<i32>::None;
-                    let mut fps = -1f32;
-
-                    while !progress_terminate.load(std::sync::atomic::Ordering::Relaxed)
-                    {
-                        // Read progress lines from pipe & parse
-                        match reader.lines().next() {
-                            Some(Err(e)) => {
-                                // Pipe is non-blocking, so ignore EAGAIN, handle others
-                                if e.kind() != std::io::ErrorKind::WouldBlock {
-                                    tracing::error!(details=%e, "Failed to read from pipe.");
-                                    break;
-                                } else {
-                                    std::thread::sleep(std::time::Duration::from_millis(100));
-                                }
-                        },
-                            None => { tracing::debug!("Progress pipe EOF"); break; }
-                            Some(Ok(l)) => {
-                                // FFMPEG Progress "chunk" looks like this:
-                                //    frame=584
-                                //    fps=52.40
-                                //       <...some other key-value pairs...>
-                                //    progress=continue
-                                match l.find("=") {
-                                    None => { tracing::debug!(input=l, "Skipping invalid FFMPEG progress chunk line."); }
-                                    Some(idx) => {
-                                        let (key, val) = l.split_at(idx);
-                                        let val = &val[1..];
-                                        match key {
-                                            "frame" => {
-                                                match val.parse::<i32>() {
-                                                    Ok(n) => { frame_i = Some(n); },
-                                                    Err(e) => { tracing::warn!(details=%e, "Invalid frame# in FFMPEG progress log."); }
-                                                }},
-                                            "fps" => {
-                                                match val.parse::<f32>() {
-                                                    Ok(n) => { fps = n; },
-                                                    Err(e) => { tracing::warn!(details=%e, "Invalid fps in FFMPEG progress log."); }
-                                                }},
-                                            "progress" => {
-                                                match val {
-                                                    "end" => { msg = Some("Transcoding done.".to_string()); },
-                                                    _ => {
-                                                        let fps_str = if fps > 0f32 { format!(" (speed: {:.1} fps)", fps) } else { "".to_string() };
-                                                        match (frame_i, frame_count) {
-                                                            (Some(frame), Some(n_frames)) => {
-                                                                let ratio = frame as f32 / n_frames as f32;
-                                                                msg = Some(format!("Transcoding... {:.1}% done{fps_str}", (ratio * 100f32) as i32));
-                                                            },
-                                                            _ => { msg = Some(format!("Transcoding...{fps_str}")); }
-                                                        }}}},
-                                            _ => {}, // Ignore other keys
-                                        }}}
-                                // Send progress message (if any)
-                                if let Some(msg) = msg.take() {
-                                    if let Err(e) = progress.send((vid.clone(), user_id.clone(), msg)) {
-                                        tracing::debug!(details=%e, "Failed to send FFMPEG progress message. Ending progress tracking.");
-                                        return;
-                                    }}
-                            }}}})
-                        }
-                    }
-    };
-
     // Wait for FFMPEG to finish, then terminate progress thread
+    tracing::debug!("Waiting for FFMPEG transcoder thread to join...");
     let (err_msg, stdout, stderr) = ffmpeg_thread.join().unwrap_or_else(|e| {
         tracing::error!(details=?e, "FFMPEG thread panicked.");
         (Some("FFMPEG thread panicked".to_string()), "".into(), format!("{:?}", e))
     });
     tracing::debug!("FFMPEG encoder thread joined.");
 
+    tracing::debug!("Terminating FFMPEG progress thread.");
     progress_terminate.store(true, std::sync::atomic::Ordering::Relaxed);
+    tracing::trace!("Waiting for FFMPEG progress thread to join...");
     if let Err(e) = progress_thread.join() {
         tracing::warn!(details=?e, "FFMPEG progress reporter thread panicked (ignoring).");
     }
@@ -343,16 +382,27 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
 /// * Number of frames in the video
 fn count_video_frames( src: &PathBuf ) -> Option<u32>
 {
-    match Command::new("ffprobe").args(&["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0"]).arg(&src).output() {
+    let _span = tracing::info_span!("count_video_frames", file = ?src).entered();
+    let opts = ["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=nb_read_packets", "-of", "csv=p=0"];
+
+    let mut cmd = Command::new("ffprobe");
+    let cmd = cmd.args(&opts).arg(&src);
+    tracing::debug!(cmd=?cmd, "Invoking ffprobe.");
+
+    match cmd.output() {
         Ok(output) => {
+            tracing::debug!("ffprobe finished");
             if output.status.success() {
                 match String::from_utf8_lossy(&output.stdout).trim().parse::<usize>() {
-                    Ok(n) => { return Some(n as u32); },
+                    Ok(n) => {
+                        tracing::debug!(frames=n, file=?src, "Frame count.");
+                        return Some(n as u32);
+                    },
                     Err(e) => { tracing::error!(details=%e, file=?src, "Frame counting failed: invalid u32 parse"); }
                 }
             } else { tracing::error!(details=%String::from_utf8_lossy(&output.stderr), file=?src, "Frame counting failed; ffprobe exited with error."); }
         },
-        Err(e) => { tracing::error!(details=%e, file=?src, "Ffprobe exec failed."); }
+        Err(e) => { tracing::error!(details=%e, file=?src, "ffprobe exec failed."); }
     };
     None
 }

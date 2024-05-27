@@ -21,10 +21,10 @@ impl ClapshotLogger
 {
     /// Create a new Logger instance.
     /// - `time_offset`: Time offset for the log timestamps.
-    /// - `debug`: Enable or disable debug mode.
+    /// - `level`: Tracing level to log.
     /// - `log_file`: Path to the log file or "-" for stdout.
     /// - `json_log`: Enable or disable JSON formatted logging.
-    pub fn new(time_offset: time::UtcOffset, debug: bool, log_file: &str, json_log: bool) -> anyhow::Result<Self> {
+    pub fn new(time_offset: time::UtcOffset, level: tracing::Level, log_file: &str, json_log: bool) -> anyhow::Result<Self> {
         let log_writer = Arc::new(Mutex::new(None));
         let log_to_stdout = log_file.is_empty() || log_file == "-";
 
@@ -50,17 +50,18 @@ impl ClapshotLogger
 
         if std::env::var_os("RUST_LOG").is_none() {
             std::env::set_var(
-                "RUST_LOG",
-                if debug {
-                    "debug,clapshot_server=debug,h2=info,hyper::proto::h1=info"
-                } else {
-                    "info,clapshot_server=info"
+                "RUST_LOG", match level {
+                    tracing::Level::ERROR => "error",
+                    tracing::Level::WARN => "warn",
+                    tracing::Level::INFO => "info,clapshot_server=info",
+                    tracing::Level::DEBUG => "debug,clapshot_server=debug,h2=info,hyper::proto::h1=info",
+                    tracing::Level::TRACE => "trace,clapshot_server=trace,h2=debug,hyper::proto::h1=debug,async_io=debug",
                 },
             );
         }
 
         let minute_offset = time_offset.whole_minutes() % 60;
-        let iso_fmt = match (debug, minute_offset != 0) {
+        let iso_fmt = match (level>=tracing::Level::DEBUG, minute_offset != 0) {
             (false, false) => "[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour sign:mandatory]",
             (false, true) => "[year]-[month]-[day]T[hour]:[minute]:[second][offset_hour sign:mandatory]:[offset_minute]",
             (true, _) => "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:4][offset_hour sign:mandatory]:[offset_minute]",
@@ -161,7 +162,7 @@ fn test_log_rotation_on_sigusr1() {
     let log_file_backup = log_dir.path().join("test_log_backup.log");
 
     let time_offset = time::UtcOffset::from_whole_seconds(0).unwrap();
-    let logger = Arc::new(ClapshotLogger::new(time_offset, true, log_file.to_str().unwrap(), false).expect("Failed to setup logger"));
+    let logger = Arc::new(ClapshotLogger::new(time_offset, tracing::Level::DEBUG, log_file.to_str().unwrap(), false).expect("Failed to setup logger"));
 
     tracing::info!("Logging before rotation");
 

@@ -69,13 +69,14 @@ pub enum SendTo<'a> {
 pub type UserMessageTopic = proto::user_message::Type;
 
 /// Message from other server modules to user(s)
-#[derive (Clone, Debug)]
+#[derive (Clone, Debug, Default)]
 pub struct UserMessage {
     pub topic: UserMessageTopic,
     pub user_id: Option<String>,
     pub msg: String,
     pub details: Option<String>,
-    pub media_file_id: Option<String>
+    pub media_file_id: Option<String>,
+    pub progress: Option<f32>,
 }
 
 fn abbrv(msg: &str) -> String {
@@ -525,7 +526,7 @@ async fn run_api_server_async(
             while let Ok(m) = user_msg_rx.try_recv() {
                 let topic_str = proto_msg_type_to_event_name(m.topic);
 
-                let msg = models::MessageInsert  {
+                let msg_insert = models::MessageInsert  {
                     event_name: topic_str.into(),
                     user_id: m.user_id.clone().unwrap_or("".into()),
                     message: m.msg.clone(),
@@ -534,10 +535,13 @@ async fn run_api_server_async(
                     media_file_id: m.media_file_id.clone()
                 };
 
+                let mut proto_msg = msg_insert.to_proto3();
+                proto_msg.progress = m.progress;
+
                 // Message to all watchers of a media file
                 if let Some(vid) = m.media_file_id {
                     if let Err(_) = server_state.emit_cmd(
-                        client_cmd!(ShowMessages, { msgs: vec![msg.to_proto3()] }),
+                        client_cmd!(ShowMessages, { msgs: vec![proto_msg.clone()] }),
                         SendTo::MediaFileId(&vid)
                     ) {
                         tracing::error!(media_file=vid, "Failed to send notification to media file watchers.");
@@ -549,7 +553,7 @@ async fn run_api_server_async(
                 if let Some(user_id) = m.user_id {
                     let mut user_was_online = false;
                     match server_state.emit_cmd(
-                        client_cmd!(ShowMessages, { msgs: vec![msg.to_proto3()] }),
+                        client_cmd!(ShowMessages, { msgs: vec![proto_msg.clone()] }),
                         SendTo::UserId(&user_id))
                     {
                         Ok(session_cnt) => { user_was_online = session_cnt>0 },
@@ -557,8 +561,8 @@ async fn run_api_server_async(
                     }
                     if !(matches!(m.topic, UserMessageTopic::Progress | UserMessageTopic::MediaFileAdded | UserMessageTopic::MediaFileUpdated)) {
                         let msg = models::MessageInsert {
-                            seen: msg.seen || user_was_online,
-                            ..msg
+                            seen: msg_insert.seen || user_was_online,
+                            ..msg_insert
                         };
                         server_state.db.conn()
                             .and_then(|mut conn| models::Message::insert(&mut conn, &msg))

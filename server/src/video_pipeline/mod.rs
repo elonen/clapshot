@@ -129,9 +129,9 @@ fn ingest_media_file(
                     user_msg_tx.send(UserMessage {
                         topic: UserMessageTopic::Ok,
                         msg: "Media file already exists".to_string(),
-                        details: None,
                         user_id: Some(new_owner.clone()),
-                        media_file_id: None  // Don't pass media file id here, otherwise the pre-existing media would be deleted!
+                        media_file_id: None,  // Don't pass media file id here, otherwise the pre-existing media would be deleted!
+                        ..Default::default()
                     }).ok();
 
                     clean_up_rejected_file(&data_dir, &src, Some(media_id.into())).unwrap_or_else(|e| {
@@ -255,7 +255,8 @@ fn ingest_media_file(
                     msg: "Thumbnailing failed.".to_string(),
                     details: Some(format!("Error sending file to thumbnailing: {}", e)),
                     user_id: Some(md.user_id.clone()),
-                    media_file_id: Some(media_id.to_string())
+                    media_file_id: Some(media_id.to_string()),
+                    progress: None
                 }) { tracing::error!(details=?e, "Failed to send user message") };
         };
     };
@@ -269,7 +270,8 @@ fn ingest_media_file(
                 msg: String::new(),
                 details: Some(serde_json::to_string(&md.upload_cookies).map_err(|e| anyhow!("Error serializing cookies: {}", e))?),
                 user_id: Some(md.user_id.clone()),
-                media_file_id: Some(media_id.to_string())
+                media_file_id: Some(media_id.to_string()),
+                progress: None,
             })?;
             // Tell user in text also
             tracing::debug!(transcode=do_transcode, reason=reason, "Media added to DB. Transcode");
@@ -278,7 +280,8 @@ fn ingest_media_file(
                 msg: "Media added.".to_string() + if do_transcode {" Transcoding..."} else {""},
                 details: if do_transcode { Some(format!("Transcoding because {reason}")) } else { None },
                 user_id: Some(md.user_id.clone()),
-                media_file_id: Some(media_id.to_string())
+                media_file_id: Some(media_id.to_string()),
+                progress: Some(0.0),
             })?;
             Ok(do_transcode)
         },
@@ -289,7 +292,8 @@ fn ingest_media_file(
                 msg: "Media added but not transcoded. It may not play.".to_string(),
                 details: Some(format!("Error sending file to transcoder: {}", e)),
                 user_id: Some(md.user_id.clone()),
-                media_file_id: Some(media_id.to_string())
+                media_file_id: Some(media_id.to_string()),
+                progress: None,
             })?;
             Err(e)
         }
@@ -351,7 +355,7 @@ pub fn run_forever(
     // Thread for the compressor
     let (cmpr_in_tx, cmpr_in_rx) = unbounded::<ffmpeg_processor::CmprInput>();
     let (cmpr_out_tx, cmpr_out_rx) = unbounded::<ffmpeg_processor::CmprOutput>();
-    let (cmpr_prog_tx, cmpr_prog_rx) = unbounded::<(String, String, String)>();
+    let (cmpr_prog_tx, cmpr_prog_rx) = unbounded::<(String, String, String, Option<f32>)>();
     thread::spawn(move || {
         ffmpeg_processor::run_forever(cmpr_in_rx, cmpr_out_tx, cmpr_prog_tx, n_workers);
     });
@@ -470,7 +474,8 @@ pub fn run_forever(
                                     msg: "Error reading media file metadata.".into(),
                                     details: Some(format!("'{}': ", e.src_file.file_name().unwrap_or_default().to_string_lossy()) + &e.details + &cleanup_err),
                                     user_id: Some(e.user_id),
-                                    media_file_id: vid
+                                    media_file_id: vid,
+                                    progress: None
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                         }
                     },
@@ -494,13 +499,15 @@ pub fn run_forever(
             // Transcoder progress
             recv(cmpr_prog_rx) -> msg => {
                 match msg {
-                    Ok((vid, user_id, msg)) => {
+                    Ok((vid, user_id, msg, progress)) => {
+                        tracing::trace!("Posting transcoder progress: {:?} {:?} {:?} {:?}", vid, user_id, msg, progress);
                         user_msg_tx.send(UserMessage {
                                 topic: UserMessageTopic::Progress,
-                                msg: msg,
+                                msg,
                                 details: None,
                                 user_id: Some(user_id),
-                                media_file_id: Some(vid)
+                                media_file_id: Some(vid),
+                                progress
                             }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                     },
                     Err(e) => { tracing::warn!("Transcoder is dead ('{:?}'). Exit.", e); break; },
@@ -563,7 +570,8 @@ pub fn run_forever(
                                         msg: "Transcoding done".into(),
                                         details: None,
                                         user_id: Some(user_id),
-                                        media_file_id: Some(vid.clone())
+                                        media_file_id: Some(vid.clone()),
+                                        progress: None
                                     }).ok();
                                 }
 
@@ -576,7 +584,8 @@ pub fn run_forever(
                                     msg: "Media transcoded.".to_string() + if linked_ok {""} else {" But linking or DB failed."},
                                     details: None,
                                     user_id: Some(logs.dmsg.user_id.clone()),
-                                    media_file_id: Some(logs.media_file_id.clone())
+                                    media_file_id: Some(logs.media_file_id.clone()),
+                                    progress: Some(1.0)
                                 }).unwrap_or_else(|e| { tracing::error!(details=%e, "Error sending user message"); });
                         },
 
@@ -624,7 +633,8 @@ pub fn run_forever(
                                     msg: "Media thumbnail generated".into(),
                                     details: None,
                                     user_id: Some(logs.user_id.clone()),
-                                    media_file_id: Some(vid.clone())
+                                    media_file_id: Some(vid.clone()),
+                                    progress: None
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                             }
 
@@ -649,7 +659,8 @@ pub fn run_forever(
                                     msg: msg,
                                     details: Some(logs.dmsg.details),
                                     user_id: Some(logs.dmsg.user_id),
-                                    media_file_id: Some(logs.media_file_id)
+                                    media_file_id: Some(logs.media_file_id),
+                                    progress: None
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                         },
                     }

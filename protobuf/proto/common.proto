@@ -90,6 +90,7 @@ message UserMessage {
     Refs refs = 6;  // Objects referenced by this message
     string message = 7;
     optional string details = 8;
+    optional float progress = 9;  // 0-1, only for PROGRESS type
 }
 
 

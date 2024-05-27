@@ -4,8 +4,8 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, mediaFileId, videoFps, videoTitle, curPageId, curPageItems, userMessages, videoProgressMsg, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors} from '@/stores';
-import {IndentedComment, type UserMenuItem, type StringMap} from "@/types";
+import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, mediaFileId, videoFps, videoTitle, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors} from '@/stores';
+import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "@/types";
 
 import CommentCard from '@/lib/CommentCard.svelte'
 import NavBar from '@/lib/NavBar.svelte'
@@ -23,8 +23,6 @@ let videoPlayer: VideoPlayer;
 let commentInput: CommentInput;
 let debugLayout: boolean = false;
 let uiConnectedState: boolean = false; // true if UI should look like we're connected to the server
-
-let lastMediaFileProgressMsgTime = Date.now();  // used to hide progress after a few seconds
 
 let collabDialogAck = false;  // true if user has clicked "OK" on the collab dialog
 let lastCollabControllingUser: string | null = null;    // last user to control the video in a collab session
@@ -408,6 +406,26 @@ function connectWebsocket(wsUrl: string) {
 }
 
 
+// Sets a temporary progress bar / message for a media file.
+// This is used to show transcoding progress.
+function addMediaProgressReport(mediaFileId?: String, msg?: String, progress?: number)
+{
+    let report = { mediaFileId, msg, progress, received_ts: Date.now() } as MediaProgressReport
+
+    // Filter out any old reports for this media file
+    $latestProgressReports = $latestProgressReports.filter((r: MediaProgressReport) => r.mediaFileId != report.mediaFileId);
+    if (report.progress !== 1.0) {  // Hide progress bar immediately when done
+        $latestProgressReports = [...$latestProgressReports, report];
+    }
+
+    // Schedule a cleanup of expired reports
+    setTimeout(() => {
+        $latestProgressReports = $latestProgressReports.filter((r: MediaProgressReport) => r.received_ts > (Date.now() - 6000));
+        $latestProgressReports = [...$latestProgressReports];   // force svelte to re-render
+    }, 1000);
+}
+
+
 // Called after we get the API URL from the server.
 function connectWebsocketAfterAuthCheck(ws_url: string)
 {
@@ -480,10 +498,6 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
         richLog(event.data, "RECV", cmd);
         handleWithErrors(() =>
         {
-            if (Date.now() - lastMediaFileProgressMsgTime > 5000) {
-                $videoProgressMsg = null; // timeout progress message after a while
-            }
-
             // welcome
             if (cmd.welcome) {
                 if (!cmd.welcome.user) {
@@ -531,10 +545,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             else if (cmd.showMessages) {
                 for (const msg of cmd.showMessages.msgs) {
                     if ( msg.type === Proto3.UserMessage_Type.PROGRESS ) {
-                        if (msg.refs?.mediaFileId == $mediaFileId) {
-                            $videoProgressMsg = msg.message;
-                            lastMediaFileProgressMsgTime = Date.now();
-                        }
+                        addMediaProgressReport(msg.refs?.mediaFileId, msg.message, msg.progress);
                     }
                     else if ( msg.type === Proto3.UserMessage_Type.MEDIA_FILE_UPDATED ) {
                         refreshMyMediaFiles();
@@ -570,11 +581,18 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                         if (msg.created) { $userMessages.push(msg); }
                         if (!msg.seen) {
                             const severity = (msg.type == Proto3.UserMessage_Type.ERROR) ? 'danger' : 'info';
-                            acts.add({mode: severity, message: msg.message, lifetime: 5});
+                            let fileinfo = msg.refs?.mediaFileId ? (msg.refs.mediaFileId + " – ") : "";
+                            acts.add({mode: severity, message: fileinfo + msg.message, lifetime: 5});
                             if (severity == 'info') {
                                 refreshMyMediaFiles();    // hack, rename and other such actions send info notifications
                             }
                         };
+                        $userMessages = [...$userMessages];  // force svelte to re-render
+
+                        // Some "normal" messages can also set progress bars (e.g. "Transcoding done")
+                        if (msg.progress !== undefined && msg.refs?.mediaFileId) {
+                            addMediaProgressReport(msg.refs?.mediaFileId, msg.message, msg.progress);
+                        }
                     }
                 }
             }

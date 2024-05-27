@@ -1,11 +1,23 @@
 <script lang="ts">
 
-import { createEventDispatcher } from 'svelte';
-import { curUsername, curUserPic, videoTitle, mediaFileId, videoOrigUrl, videoProgressMsg, collabId, userMenuItems } from "@/stores";
+import { onMount, createEventDispatcher } from 'svelte';
+import { curUsername, curUserPic, videoTitle, mediaFileId, videoOrigUrl, collabId, userMenuItems } from "@/stores";
 import Avatar from '@/lib/Avatar.svelte';
 import logo from "@/assets/clapshot-logo.svg";
+import {latestProgressReports} from '@/stores';
+  import type { MediaProgressReport } from '@/types';
+
 
 const dispatch = createEventDispatcher();
+
+// Watch for (transcoding) progress reports from server, and update progress bar if one matches this item.
+let videoProgressMsg: string | undefined = undefined;
+
+onMount(async () => {
+	latestProgressReports.subscribe((reports: MediaProgressReport[]) => {
+		videoProgressMsg = reports.find((r: MediaProgressReport) => r.mediaFileId === $mediaFileId)?.msg;
+	});
+});
 
 function onClickUser(): void {
     if (!$userMenuItems) return;
@@ -72,8 +84,8 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 						{/if}
 					</h2>
 				<span class="mx-4 text-xs text-center">{$videoTitle}</span>
-				{#if $videoProgressMsg}
-					<span class="text-cyan-800 mx-4 text-xs text-center">{$videoProgressMsg}</span>
+				{#if videoProgressMsg}
+					<span class="text-cyan-800 mx-4 text-xs text-center">{videoProgressMsg}</span>
 				{/if}
 			</span>
 			{/if}

@@ -233,7 +233,8 @@ impl crate::database::models::Message
             message: self.message.clone(),
             details: if self.details.is_empty() { None } else { Some(self.details.clone()) },
             created: Some(datetime_to_proto3(&self.created)),
-            seen: self.seen
+            seen: self.seen,
+            progress: None,
         }
     }
 }
@@ -271,7 +272,8 @@ impl crate::database::models::MessageInsert
             message: self.message.clone(),
             details: if self.details.is_empty() { None } else { Some(self.details.clone()) },
             created: None,
-            seen: self.seen
+            seen: self.seen,
+            progress: None,
         }
     }
 }

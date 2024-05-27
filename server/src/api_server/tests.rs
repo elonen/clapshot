@@ -43,6 +43,7 @@ async fn test_api_push_msg()
             user_id: Some("user.num1".into()),
             details: Some("test_details".into()),
             media_file_id: None, topic: UserMessageTopic::Ok,
+            progress: None
         };
 
         ts.user_msg_tx.send(umsg.clone()).unwrap();

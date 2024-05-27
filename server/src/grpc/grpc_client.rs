@@ -46,11 +46,14 @@ pub async fn connect(uri: OrganizerURI) -> anyhow::Result<OrganizerConnection>
 pub fn prepare_organizer(
         org_uri: &Option<String>,
         cmd: &Option<String>,
-        debug: bool,
+        level: tracing::Level,
         json: bool,
         data_dir: &Path)
     -> anyhow::Result<(Option<OrganizerURI>, Option<ProcHandle>)>
 {
+    assert!(tracing::Level::TRACE > tracing::Level::DEBUG);
+    let debug = level >= tracing::Level::DEBUG;
+
     let mut org_uri = match org_uri {
         None => None,
         Some(s) => Some(match s.split_once("://") {

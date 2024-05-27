@@ -73,9 +73,11 @@ struct Args {
     #[arg(short, long, value_name="FILE")]
     log: Option<String>,
 
-    /// Enable debug logging
-    #[arg(short, long)]
-    debug: bool,
+    /// Set debug level by repeating (-d = debug, -dd = trace)
+    #[arg(short, long, action=clap::ArgAction::Count)]
+    debug: u8,
+
+    // Enable debug mode (same as -v)
 
     /// Log in JSON format
     #[arg(short, long)]
@@ -84,7 +86,7 @@ struct Args {
 
     /// Use this user id if auth headers are not found.
     /// Mainly useful for debugging.
-    #[arg(long, default_value = "anonymous", value_name="USER")]
+    #[arg(long, default_value="anonymous", value_name="USER")]
     default_user: String,
 
 
@@ -121,9 +123,15 @@ fn main() -> anyhow::Result<()> {
     let url_base = args.url_base.trim_end_matches('/').to_string();
     let time_offset = time::UtcOffset::current_local_offset().expect("should get local offset");
 
+    let log_level = match args.debug {
+        0 => tracing::Level::INFO,
+        1 => tracing::Level::DEBUG,
+        _ => tracing::Level::TRACE,
+    };
+
     let _logger = Arc::new(log::ClapshotLogger::new(
         time_offset,
-        args.debug,
+        log_level,
         &args.log.clone().unwrap_or_default(),
         args.json,
     )?);
@@ -133,7 +141,7 @@ fn main() -> anyhow::Result<()> {
     let (org_uri, _org_hdl) = prepare_organizer(
         &args.org_in_uri,
         &args.org_cmd,
-        args.debug,
+        log_level,
         args.json,
         &args.data_dir,
     )?;
