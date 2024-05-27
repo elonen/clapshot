@@ -113,14 +113,14 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
         "color=c=white:s=2x720 [cursor]; \
         [0:a] showwavespic=s=1920x720:split_channels=1:draw=full, fps=60 [stillwave];\
         [0:a] showfreqs=mode=line:ascale=log:s=1920x180 [freqwave]; \
-        [0:a] showwaves=size=1920x180:mode=p2p [livewave]; \
+        [0:a] showwaves=size=1920x180:mode=p2p:colors=white|green|red|magenta [livewave]; \
         [stillwave][cursor] overlay=(W*t)/({}):0:shortest=1 [progress]; \
         [livewave][progress] vstack[stacked]; \
         [stacked][freqwave] vstack [out];", &duration);
 
     let ffmpeg_options: Vec<String> = match src.media_type {
         MediaType::Video => {
-            // Max 1080p, stereo 128kbps audio AAC,
+            // Max 1080p, stereo 128kbps audio AAC
             vec![
                 "-map", "0",
                 "-dn",
@@ -152,21 +152,18 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
                 "-map", "0",
                 "-dn",
                 "-vcodec", "libx264",
-                "-vf", "scale=1920:-8",
-                "-framerate", "1",
-                "-r", "30",
-                "-pix_fmt", "yuv444p",
+                "-tune", "stillimage",
+                "-vf", "scale=1920:-8,loop=-1:1",
+                "-t", "1",
+                "-r", "24",
+                "-pix_fmt", "yuv422p",
                 "-b:v", &bitrate,
                 "-b:a", "128000"
             ]
         }
     }.iter().map(|s| s.to_string()).collect();
 
-
-    tracing::info!(bitrate=video_bitrate, "Transcoder called.");
-    tracing::debug!(ffmpeg_options=?ffmpeg_options, "FFMPEG options");
-
-
+    tracing::info!(bitrate=video_bitrate, media_type=?src.media_type, "Transcoder called.");
 
     // Open a named pipe for ffmpeg to write progress reports to.
     // If this fails, ignore it and just don't show progress.
