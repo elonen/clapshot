@@ -1,3 +1,9 @@
+clapshot-organizer-basic-folders (0.7.0) bookworm; urgency=high
+
+  * Support for audio and images in addition to videos
+
+ -- Jarno Elonen <elonen@iki.fi>  Mon, 27 May 2024 21:59:00 +0200
+
 clapshot-organizer-basic-folders (0.6.1) bookworm; urgency=high
 
   * Move some common organizer code to the gRPC support library

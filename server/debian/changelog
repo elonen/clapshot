@@ -1,3 +1,11 @@
+clapshot-server (0.7.0) bookworm; urgency=high
+
+  * Support for audio and images in addition to videos
+  * Small UI improvements
+  * Bug fixes
+
+ -- Jarno Elonen <elonen@iki.fi>  Mon, 27 May 2024 21:59:00 +0200
+
 clapshot-server (0.6.1) bookworm; urgency=high
 
   * Fix broken migration script that lost comments.

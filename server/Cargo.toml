@@ -1,9 +1,9 @@
 [package]
 name = "clapshot-server"
-version = "0.6.1"
+version = "0.7.0"
 edition = "2021"
 
-description = "Clapshot video review tool (backend)"
+description = "Clapshot video/media review tool (backend)"
 homepage = "https://github.com/elonen/clapshot"
 license = "GPL-2.0"
 readme = "README.md"
