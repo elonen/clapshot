@@ -112,14 +112,27 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
     // Construct ffmpeg options based on media type
     let bitrate = video_bitrate.to_string();
 
-    let audio_filter_complex = format!(
-        "color=c=white:s=2x720 [cursor]; \
-        [0:a] showwavespic=s=1920x720:split_channels=1:draw=full, fps=60 [stillwave];\
+    /*
+    // showfreqs and showwaves caused showwavespic to re-evaluate each frame, crashing on low resource machines:
+    let audio_filter_complex = format!("\
+        [0:a] showwavespic=s=1920x720:split_channels=1:draw=full, setpts=0 [stillwave];\
+        color=c=white:s=2x720 [cursor]; \
         [0:a] showfreqs=mode=line:ascale=log:s=1920x180 [freqwave]; \
-        [0:a] showwaves=size=1920x180:mode=p2p:colors=white|green|red|magenta [livewave]; \
-        [stillwave][cursor] overlay=(W*t)/({}):0:shortest=1 [progress]; \
-        [livewave][progress] vstack[stacked]; \
-        [stacked][freqwave] vstack [out];", &src.duration);
+        [0:a] showwaves=size=1920x180:mode=p2p, dilation [livewave]; \
+        [livewave][stillwave] vstack  [stacked]; \
+        [stacked][cursor] overlay=(W*t)/({}):180:shortest=1 [progress]; \
+        [progress][freqwave] vstack [out]", &src.duration);
+    */
+    let audio_filter_complex = format!("\
+        color=c=white:s=2x720 [cursor]; \
+        [0:a] showwavespic=s=1920x720:split_channels=1:draw=scale:filter=peak:colors=#181818 [stillwave_peak];\
+        [0:a] showwavespic=s=1920x720:split_channels=1:draw=scale:filter=average [stillwave_avg];\
+        [stillwave_peak][stillwave_avg] overlay [stillwave];\
+        \
+        [stillwave] loop=loop=-1:size=1:start=0, fps=30, trim=duration={DURATION} [stillwave_loop]; \
+        [stillwave_loop][cursor] overlay=(W*t)/({DURATION}):0:shortest=1 [progress]; \
+        \
+        [progress] format=yuv420p [out];", DURATION=&src.duration);
 
 
     let ffmpeg_options: Vec<String> = match src.media_type {
@@ -152,7 +165,8 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
                 "-strict", "experimental",
                 "-vcodec", "libx264",
                 "-b:v", &bitrate,
-                "-acodec", "flac"
+                "-acodec", "aac",
+                "-b:a", "384k"
             ]
         },
         MediaType::Image => {
@@ -167,7 +181,6 @@ fn run_ffmpeg_transcode(src: &CmprInputSource, video_dst: PathBuf, video_bitrate
                 "-r", "24",
                 "-pix_fmt", "yuv422p",
                 "-b:v", &bitrate,
-                "-b:a", "128000"
             ]
         }
     }.iter().map(|s| s.to_string()).collect();
