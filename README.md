@@ -36,7 +36,12 @@ If you don't require local hosting, or are not adept in networking and Linux, co
 docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/clapshot:latest-demo
 ```
 
-- **Multi-user demo** with HTTP basic auth, append `-htadmin`, i.e.: `... elonen/clapshot:latest-demo-htadmin`
+- **Multi-user demo** with HTTP basic auth:
+
+```bash
+docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo-htadmin:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htadmin
+```
+
 
 After the Docker image starts, access the web UI at `http://127.0.0.1:8080`.
 

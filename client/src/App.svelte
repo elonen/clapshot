@@ -894,7 +894,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                                                 <i class="fas fa-upload"></i>
                                             </div>
                                             <div class="text-xl text-gray-700">
-                                                Drop video files here to upload
+                                                Drop video, audio and image files here to upload
                                             </div>
                                         </div>
                                     </FileUpload>

@@ -281,7 +281,7 @@ fn ingest_media_file(
                 details: if do_transcode { Some(format!("Transcoding because {reason}")) } else { None },
                 user_id: Some(md.user_id.clone()),
                 media_file_id: Some(media_id.to_string()),
-                progress: Some(0.0),
+                progress: if do_transcode { Some(0.0) } else { None },
             })?;
             Ok(do_transcode)
         },
