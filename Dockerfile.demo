@@ -4,9 +4,16 @@ FROM debian:bookworm-slim AS base
 
 # Install system packages
 RUN apt-get -qy update
+RUN apt-get -qy install acl sudo logrotate python3 python3.11 >/dev/null
+RUN apt-get -qy install nginx >/dev/null
 
-RUN apt-get -qy install acl sudo logrotate python3.11 >/dev/null
-RUN apt-get -qy install sqlite3 ffmpeg mediainfo nginx >/dev/null
+# Add deb-multimedia repository (for a more recent ffmpeg)
+RUN apt-get -qy install gnupg2 wget
+RUN wget -q https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb
+RUN dpkg -i deb-multimedia-keyring_2016.8.1_all.deb
+RUN echo "deb https://www.deb-multimedia.org bookworm main non-free" > /etc/apt/sources.list.d/deb-multimedia.list
+RUN apt-get -qy update
+RUN apt-get -qy install sqlite3 ffmpeg mediainfo >/dev/null
 
 # Add regular user (to match local user ID)
 ARG UID=1000
