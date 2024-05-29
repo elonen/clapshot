@@ -12,8 +12,8 @@ Clapshot is an open-source, self-hosted tool for collaborative video/media revie
 
 ### Key Features
 
-- Media file ingestion via HTTP uploads or shared folders
-- Media (video, audio, image) file transcoding with FFmpeg
+- Media file (video, audio, image) ingestion via HTTP uploads or shared folders
+- Transcoding (if needed) with FFmpeg
 - Commenting, drawing annotations, and threaded replies
 - Real-time collaborative review sessions
 - Stores media files on disk and metadata in an SQLite (3.5+) database
@@ -30,13 +30,13 @@ If you don't require local hosting, or are not adept in networking and Linux, co
 
 **Quick Start with Docker:**
 
-- **Single-user demo:** No authentication
+- Local **single-user demo:** No authentication
 
 ```bash
 docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/clapshot:latest-demo
 ```
 
-- **Multi-user demo** with HTTP basic auth:
+- Local **multi-user demo** with HTTP basic auth:
 
 ```bash
 docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo-htadmin:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htadmin
@@ -47,18 +47,33 @@ After the Docker image starts, access the web UI at `http://127.0.0.1:8080`.
 
 The basic auth multi-user demo uses [PHP htadmin](https://github.com/soster/htadmin) for user management. Default credentials are shown in the terminal.
 
-These Docker images are demos only and *not meant for production*.
 
-Here’s a better way to deploy the system:
+## Simple Small-business Production Deployments
 
-## Simplified Small-Business Deployment
+Here are two alternative ways to deploy Clapshot + PHP Htadmin into a light production use:
 
-For a simple production setup with password authentication on a Debian 12 host:
+### 1. Local Linux VM
+
+If you have a virtualization platform (e.g. Proxmox) or a spare computer, here's
+how to install and configure a Debian 12 host for Clapshot:
 
 1. Prepare a Debian 12 with a mounted block device (or just directory) at `/mnt/clapshot-data`.
 2. Download [Clapshot Debian Bookworm Deployment Script](https://gist.github.com/elonen/80a721f13bb4ec1378765270094ed5d5)
 3. Run the script as root to install and auto-configure Clapshot.
 4. **!! Change the default `admin` and `htadmin` passwords, and delete example users in Htadmin !!**
+
+If you want to expose this to the Internet, you'll probably want to get HTTPS certificates with Let's Encrypt and use some reverse proxy to encrypt Clapshot traffic.
+
+### 2. Docker + Cloudflare (make public on the Web)
+
+In this option, you'll run Clapshot + Htadmin in a Docker container (binding a local directory for Clapshot data),
+and then start Cloudflared in another container to expose Clapshot to the Internet over an HTTPS tunnel.
+
+1. Download and read [test/run-cloudflare.sh](test/run-cloudflare.sh), then run it
+2. Once satisfied about operation, get a static domain on Cloudflare and modify the above script accordingly - or perhaps make a custom Docker Compose file
+3. **!! Change the default `admin` and `htadmin` passwords, and delete example users in Htadmin !!**
+
+The same process can be adapted to any other *HTTPS-Proxy-as-a-Service* besides Cloudflare. You'll probably need to pay them something.
 
 ## Configuration and Operation
 
