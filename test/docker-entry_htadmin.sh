@@ -4,14 +4,16 @@
 # in a single Docker container for demo and testing purposes.
 
 DIR="/mnt/clapshot-data/data"
-URL_BASE="${CLAPSHOT_URL_BASE:-127.0.0.1:8080/}"
+URL_BASE=$(echo "${CLAPSHOT_URL_BASE:-http://127.0.0.1:8080/}" | sed 's#/*$#/#')
+CORS="${CLAPSHOT_CORS:-$URL_BASE}"  # Default to URL_BASE
 
 # Use same URL base as index.html for API server (as Nginx proxies localhost:8095/api to /api)
 # - Also enable basic auth logout button
+WS_BASE=$(echo "$URL_BASE" | sed 's#^http#ws#')
 cat > /etc/clapshot_client.conf << EOF
 {
-  "ws_url": "ws://${URL_BASE}api/ws",
-  "upload_url": "http://${URL_BASE}api/upload",
+  "ws_url": "${URL_BASE}api/ws",
+  "upload_url": "${URL_BASE}api/upload",
     "user_menu_extra_items": [
         { "label": "My Videos", "type": "url", "data": "/" }
     ],
@@ -20,8 +22,14 @@ cat > /etc/clapshot_client.conf << EOF
 EOF
 
 # Assume user accesses this at $URL_BASE
-sed -i "s@^url-base.*@url-base = http://${URL_BASE}@g" /etc/clapshot-server.conf
-echo 'cors = *' >> /etc/clapshot-server.conf
+sed -i "s@^url-base.*@url-base = ${URL_BASE}@g" /etc/clapshot-server.conf
+
+if grep -q '^cors' /etc/clapshot-server.conf; then
+  sed -i "s/^cors.*/cors = '$CORS'/g" /etc/clapshot-server.conf
+else
+  echo "cors = '$CORS'" >> /etc/clapshot-server.conf
+fi
+
 
 # Make server data dir and log accessible to docker user
 chown -R docker "$DIR"
@@ -51,8 +59,8 @@ cat <<- "EOF"
 EOF
 
 cat <<-EOF
----  Browse http://${URL_BASE}         for Clapshot
----  or     http://${URL_BASE}htadmin/  for user management
+---  Browse ${URL_BASE}          for Clapshot
+---  or     ${URL_BASE}htadmin/  for user management
 ---
 ---  Default users:
 ---   - admin:admin     (can edit other people's videos)
@@ -61,6 +69,8 @@ cat <<-EOF
 ---
 ---  User management admin:
 ---   - htadmin:admin   (only for /htadmin)
+---
+---  ⚠️ !!!CHANGE PASSWORDS IF SHARING WITH ANYONE !!! ⚠️
 ==============================================================
 EOF
 
