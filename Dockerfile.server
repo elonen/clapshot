@@ -34,7 +34,7 @@ RUN apt-get -qy install acl sudo logrotate >/dev/null
 
 # Install system packages
 RUN apt-get -qy update >/dev/null
-RUN apt-get -qy install make >/dev/null
+RUN apt-get -qy install make git >/dev/null
 RUN apt-get -qy install ffmpeg >/dev/null
 RUN apt-get -qy install mediainfo >/dev/null
 RUN apt-get -qy install mscgen >/dev/null

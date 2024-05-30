@@ -1,4 +1,12 @@
-clapshot-server (0.7.0) bookworm; urgency=high
+clapshot-server (0.7.1) bookworm; urgency=high
+
+  * Implement a full migration dependency solver
+  * Fix logrotate (USR1 signal) killing Organizer subprocess
+  * Bug fixes and improved database migration checks
+
+ -- Jarno Elonen <elonen@iki.fi>  Sun, 2 Jun 2024 11:15:00 +0200
+
+clapshot-server (0.7.0) bookworm; urgency=low
 
   * Support for audio and images in addition to videos
   * Small UI improvements

@@ -5,7 +5,7 @@ RUN apt-get -qy update >/dev/null
 RUN apt-get -qy install make protobuf-compiler >/dev/null
 
 ARG TARGET=dev
-RUN if [ "$TARGET" = "deb" ]; then apt-get -qy install make debhelper devscripts; fi >/dev/null
+RUN if [ "$TARGET" = "deb" ]; then apt-get -qy install make git debhelper devscripts; fi >/dev/null
 
 # Create regular user
 

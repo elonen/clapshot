@@ -1,3 +1,9 @@
+clapshot-client (0.7.1) bookworm; urgency=low
+
+  * (Nothing, just following server's version numbering.)
+
+ -- Jarno Elonen <elonen@iki.fi>  Sun, 2 Jun 2024 11:15:00 +0200
+
 clapshot-client (0.7.0) bookworm; urgency=high
 
   * Support for audio and images in addition to videos
