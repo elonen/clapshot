@@ -31,7 +31,7 @@ async def apply_migration_impl(oi: organizer.OrganizerInbound, req: org.ApplyMig
     """
     oi.log.info(f"apply_migration('{req.uuid}')")
     with oi.db_new_session() as dbs:
-        db_apply_migration(dbs, req.uuid)
+        db_apply_migration(dbs, req.uuid, oi.log)
         return org.ApplyMigrationResponse()
 
 

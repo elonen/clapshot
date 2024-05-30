@@ -3,6 +3,7 @@ use diesel::migration::MigrationVersion;
 use lib_clapshot_grpc::proto::org::{ApplyMigrationRequest, CheckMigrationsRequest, AfterMigrationsRequest};
 use lib_clapshot_grpc::GrpcBindAddr;
 
+use crate::backup_sqlite_database;
 use crate::grpc::grpc_client::{connect, OrganizerConnection};
 use super::grpc_client::OrganizerURI;
 use super::proto;
@@ -70,19 +71,33 @@ impl OrganizerCaller {
                     // Apply migrations
                     pending.sort_by(|a, b| a.version.cmp(&b.version));  // Oldest first
                     let mut cur_version = cm_res.get_ref().current_schema_ver.clone();
+
+                    if !pending.is_empty() {
+                        tracing::info!("Backing up database before Organizer migrations.");
+                        backup_sqlite_database(db_file.into())?;
+                    }
+
+                    if !pending.is_empty() {
+                        tracing::warn!("MIGRATION DEPENDENCY RESOLVER NOT YET PROPERLY IMPLEMENTED! Doing only rudimentary checks on Organizer migrations.");
+                    }
+
                     for m in pending {
-                        tracing::warn!("MIGRATION DEPENDENCY RESOLVER NOT YET PROPERLY IMPLEMENTED! Doing rudimentary checks and applying organizer migration: {:?}", m);
+                        tracing::debug!(data=?m, "Considering migration.");
 
                         assert!(m.version > cur_version, "Migration version {} is not greater than current version {} -- this needs a better implementation to resolve", m.version, cur_version);
                         for dep in &m.dependencies {
                             if dep.name == "clapshot.server" {
                                 if let Some(min_ver) = &dep.min_ver {
                                     let min_migration = MigrationVersion::from(min_ver.as_str());
-                                    assert!(cur_server_migration >= min_migration, "Migration '{}' requires server DB version >= {} but server is at version {}", m.uuid, min_ver, cur_server_migration);
+                                    if cur_server_migration < min_migration {
+                                        anyhow::bail!("Migration '{}' requires server DB version >= {} but server is at version {}", m.uuid, min_ver, cur_server_migration);
+                                    }
                                 }
                                 if let Some(max_ver) = &dep.max_ver {
                                     let max_migration = MigrationVersion::from(max_ver.as_str());
-                                    assert!(cur_server_migration <= max_migration, "Migration '{}' requires server DB version <= {} but server is at version {}", m.uuid, max_ver, cur_server_migration);
+                                    if cur_server_migration > max_migration {
+                                        anyhow::bail!("Migration '{}' requires server DB version <= {} but server is at version {}", m.uuid, max_ver, cur_server_migration);
+                                    }
                                 }
                             }
                         }

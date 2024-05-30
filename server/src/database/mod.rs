@@ -125,17 +125,40 @@ impl DB {
 
     /// Run a named migration
     pub fn apply_migration(&self, conn: &mut SqliteConnection, migration_name: &str) -> EmptyDBResult {
-        conn.transaction(|conn| {   // uses savepoints instead when needed
-            let pending = MigrationHarness::pending_migrations(conn, MIGRATIONS)
-                .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?;
-            let migration = pending.iter().find(|m| m.name().to_string() == migration_name)
-                .ok_or_else(|| anyhow!("Migration not found: {}", migration_name))?;
 
-            tracing::info!("Applying (Clapshot server) DB migration: {}", migration.name());
-            diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(conn)?;
+        let pending = MigrationHarness::pending_migrations(conn, MIGRATIONS)
+            .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?;
+
+        let migration = pending.iter().find(|m| m.name().to_string() == migration_name)
+            .ok_or_else(|| anyhow!("Migration not found: {}", migration_name))?;
+
+        let _span = tracing::info_span!("DB migration", name = migration.name().to_string()).entered();
+
+        if let Err(_) = sqlite_foreign_key_check(conn, false) {
+            tracing::warn!("^^^ DB foreign key checks failed BEFORE migration! It's possible the migration corrects them, but if it fails, fix your DB and try again.");
+        }
+
+        tracing::debug!("PRAGMA foreign_keys = OFF;");
+        diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(conn)?;
+
+        tracing::debug!("PRAGMA legacy_alter_table=ON;");
+        diesel::sql_query("PRAGMA legacy_alter_table=ON;").execute(conn)?;
+
+        let res: EmptyDBResult = conn.transaction(|conn| {
+            sqlite_check_foreign_key_status(conn, false).context("Pragma failed to disable foreign keys")?;
+
+            tracing::info!("Applying migration...");
             MigrationHarness::run_migration(conn, &**migration)
-                .map_err(|e| anyhow!("Failed to apply migration: {:?}", e))?;
+                .map_err(|e| anyhow!("Failed to apply MIGRATION: {:?}", e))?;
+
+            sqlite_foreign_key_check(conn, true).context("Foreign key check failed after migration")?;
+            Ok(())
+        });
+
+        res.and_then(|_| {
+            tracing::debug!("PRAGMA foreign_keys = ON;");
             diesel::sql_query("PRAGMA foreign_keys = ON;").execute(conn)?;
+            sqlite_check_foreign_key_status(conn, true).context("Pragma failed to re-enable foreign keys")?;
             Ok(())
         })
     }
@@ -144,6 +167,68 @@ impl DB {
     pub fn break_db(&self) {
         self.broken_for_test.store(true, std::sync::atomic::Ordering::Relaxed);
     }
+}
+
+
+#[derive(QueryableByName, Debug)]
+struct ForeignKeyEnforcement {
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    #[diesel(column_name = "foreign_keys")]
+    value: i32,
+}
+
+pub fn sqlite_check_foreign_key_status(conn: &mut SqliteConnection, should_be_on: bool) -> EmptyDBResult {
+    let fk_status: Vec<ForeignKeyEnforcement> = diesel::sql_query("PRAGMA foreign_keys;")
+        .load(conn)
+        .map_err(|e| anyhow!("Failed to check foreign key setting: {:?}", e))?;
+
+    if fk_status.is_empty() { return Err(anyhow!("Failed to check foreign key setting"))?; }
+
+    if should_be_on && fk_status.iter().any(|fk| fk.value != 1) {
+        return Err(anyhow!("Assertion failed: SQLite foreign_keys != ON").into());
+    } else if !should_be_on && fk_status.iter().any(|fk| fk.value != 0) {
+        return Err(anyhow!("Assertion failed: SQLite foreign_keys != OFF").into());
+    }
+    Ok(())
+}
+
+
+
+/// Check for foreign key violations in the database
+pub fn sqlite_foreign_key_check(conn: &mut SqliteConnection, log_as_errors: bool) -> EmptyDBResult {
+
+    #[derive(QueryableByName, Debug)]
+    struct ForeignKeyCheck {
+        #[diesel(sql_type = diesel::sql_types::Text)]
+        #[diesel(column_name = "table")]
+        table: String,
+        #[diesel(sql_type = diesel::sql_types::Text)]
+        #[diesel(column_name = "rowid")]
+        rowid: String,
+        #[diesel(sql_type = diesel::sql_types::Text)]
+        #[diesel(column_name = "parent")]
+        parent: String,
+        #[diesel(sql_type = diesel::sql_types::Text)]
+        #[diesel(column_name = fkid)]
+        fkid: String,
+    }
+
+    let violations: Vec<ForeignKeyCheck> = diesel::sql_query("PRAGMA foreign_key_check;")
+        .load(conn).map_err(|e| anyhow!("Failed to check foreign key violations: {:?}", e))?;
+    if violations.is_empty() {
+        tracing::debug!("Foreign key check Ok.");
+        Ok(())
+    } else {
+        for v in violations {
+            if log_as_errors {
+                tracing::error!(table=%v.table, rowid=%v.rowid, refers_to=%v.parent, fkid=%v.fkid, "Foreign key violation.");
+            } else {
+                tracing::warn!(table=%v.table, rowid=%v.rowid, refers_to=%v.parent, fkid=%v.fkid, "Foreign key violation.");
+            }
+        }
+        Err(diesel::result::Error::RollbackTransaction)
+    }?;
+    Ok(())
 }
 
 // ---------------- Paging ----------------

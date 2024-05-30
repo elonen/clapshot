@@ -378,3 +378,42 @@ fn test_transaction_commit() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+
+#[test]
+#[traced_test]
+fn test_migrate_existing_v056_db() -> anyhow::Result<()> {
+    let data_dir = assert_fs::TempDir::new().unwrap();
+    let db_file = data_dir.path().join("clapshot.sqlite");
+    std::fs::copy("src/tests/assets/databases/clapshot-migration-test-1.sqlite", &db_file)
+        .expect("Failed to copy test DB for migration test");
+
+    let db = DB::open_db_file(&db_file).unwrap();
+    let conn = &mut db.conn()?;
+    for m in db.pending_migration_names()? {
+        db.apply_migration(conn, &m)?;
+    }
+
+    // Check that the database has (some of) the expected contents (still after migrations)
+    let media_files = MediaFile::get_all(conn, DBPaging::default())?;
+    assert_eq!(media_files.len(), 9);
+    assert_eq!(media_files.iter().filter(|v| v.user_id == "uid-4f9c36a6").count(), 2);
+    assert_eq!(media_files.iter().filter(|v| v.user_id == "uid-9e25df03").count(), 2);
+    assert_eq!(media_files.iter().filter(|v| v.user_id == "uid-d20ec3a4").count(), 5);
+
+    let comments = Comment::get_all(conn, DBPaging::default())?;
+    assert_eq!(comments.len(), 41);
+    assert_eq!(comments.iter().filter(|c| c.user_id == Some("uid-9e25df03".into())).count(), 7);
+    assert_eq!(comments.iter().filter(|c| c.user_id == Some("uid-4f9c36a6".into())).count(), 4);
+    assert_eq!(comments.iter().filter(|c| c.user_id == Some("uid-addcb300".into())).count(), 5);
+    assert_eq!(comments.iter().filter(|c| c.user_id == Some("uid-d20ec3a4".into())).count(), 25);
+    assert_eq!(comments.iter().filter(|c| c.media_file_id == "77d7fe01").count(), 14);
+    assert_eq!(comments.iter().filter(|c| c.media_file_id == "338fb82c").count(), 2);
+
+    let messages = Message::get_all(conn, DBPaging::default())?;
+    assert_eq!(messages.len(), 36);
+    assert_eq!(messages.iter().filter(|m| m.user_id == "uid-d20ec3a4").count(), 17);
+    assert_eq!(messages.iter().filter(|m| m.media_file_id == Some("338fb82c".into())).count(), 3);
+
+    Ok(())
+}

@@ -94,7 +94,7 @@ test:
 
 run-local: ${SERVER_CMD} ${DEV_DATADIR}
 	(cd ../organizer; make)
-	${SERVER_CMD} --url-base http://127.0.0.1:8095/ --port 8095 --data-dir ${DEV_DATADIR} --migrate --cors '*' --org-cmd "${PLUGIN_BIN}" -dd --default-user "admin"
+	${SERVER_CMD} --url-base http://127.0.0.1:8095/ --port 8095 --data-dir ${DEV_DATADIR} --migrate --cors '*' --org-cmd "${PLUGIN_BIN}" -d --default-user "admin"
 
 run-docker: docker
 	docker run --rm -it -p 127.0.0.1:8095:8095 --mount type=bind,source="$$(pwd)"/${DEV_DATADIR},target=/app/server/${DEV_DATADIR}  ${DOCKER_IMG_NAME}:latest

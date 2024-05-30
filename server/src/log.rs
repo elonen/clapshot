@@ -182,6 +182,8 @@ fn test_log_rotation_on_sigusr1() {
         .flush()
         .expect("Failed to flush log writer");
 
+    thread::sleep(Duration::from_secs(1));
+
     let mut old_log_content = String::new();
     let mut old_log_file = File::open(&log_file_backup).expect("Failed to open old log file");
     old_log_file.read_to_string(&mut old_log_content).expect("Failed to read old log file");

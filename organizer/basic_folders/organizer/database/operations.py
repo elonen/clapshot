@@ -26,22 +26,32 @@ def db_check_pending_migrations(db: Engine) -> tuple[str, list[org.Migration]]:
         # Create the schema migrations table if it doesn't exist
         Base.metadata.create_all(db, tables=[Base.metadata.tables[ DbSchemaMigrations.__tablename__]], checkfirst=True)
         # List migrations whose version string is higher than the current version
+        res = None
         with Session(conn) as session:
             cur_ver: str = session.query(DbSchemaMigrations.version).order_by(DbSchemaMigrations.version.desc()).limit(1).scalar() or ''
             pending = [m.metadata for m in ALL_MIGRATIONS if m.metadata.version > cur_ver]
-            return cur_ver, pending
+            return (cur_ver, pending)
 
 
-def db_apply_migration(dbs: Session, migr_uuid: str):
+def db_apply_migration(dbs: Session, migr_uuid: str, log: Logger):
     try:
         migration = next(m for m in ALL_MIGRATIONS if m.metadata.uuid == migr_uuid)
         assert migration.metadata.version, "Migration version must be set"
+        db_set_pragma_foreign_keys(dbs, False, log)
+        log.debug(f"Applying migration SQL...")
         with dbs.begin_nested():
             for sql in migration.up_sql.split(";"):
                 dbs.execute(sqla_text(sql))
             dbs.add(DbSchemaMigrations(version=migration.metadata.version, migration_uuid=migration.metadata.uuid))
+        db_set_pragma_foreign_keys(dbs, True, log)
     except StopIteration:
         raise ValueError(f"Migration with id '{migr_uuid}' not found")
+
+
+def db_set_pragma_foreign_keys(dbs: Session, enable: bool, log: Logger):
+    log.debug(f"Setting PRAGMA foreign_keys to {'ON' if enable else 'OFF'}")
+    dbs.execute(sqla_text(f"PRAGMA foreign_keys = {'ON' if enable else 'OFF'}"))
+    assert dbs.execute(sqla_text("PRAGMA foreign_keys")).scalar() == int(enable), "PRAGMA foreign_keys setting failed to change the FK state"
 
 
 def db_test_orm_mappings(dbs: Session, log: Logger):

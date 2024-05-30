@@ -30,7 +30,7 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
                 org.MigrationDependency(
                     name="clapshot.server",
                     min_ver="20240522163000",
-                    max_ver="20240522163000"
+                    max_ver="20240530202000"
                 ),
                 org.MigrationDependency(
                     name="clapshot.organizer.basic_folders",
@@ -80,7 +80,7 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
                 org.MigrationDependency(
                     name="clapshot.server",
                     min_ver="20240522163000",
-                    max_ver="20240522163000"
+                    max_ver="20240530202000"
                 ),
                 org.MigrationDependency(
                     name="clapshot.organizer.basic_folders",

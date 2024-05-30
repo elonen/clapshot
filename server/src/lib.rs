@@ -1,8 +1,7 @@
 use std::{fs::File, sync::{atomic::{AtomicBool, Ordering}, Arc}, thread::{self, JoinHandle}};
 
 use anyhow::Context;
-use database::DB;
-use diesel::Connection;
+use database::{sqlite_foreign_key_check, DB};
 use flate2::{write::GzEncoder, Compression};
 use lib_clapshot_grpc::GrpcBindAddr;
 use crate::{api_server::server_state::ServerState, grpc::{caller::OrganizerCaller, grpc_client::OrganizerURI}};
@@ -91,11 +90,20 @@ impl ClapshotInit {
                         anyhow::bail!("gRPC server failed to start within 3 seconds.");
                     }
                 }
+
+                db.conn().and_then(|mut conn| {
+                    sqlite_foreign_key_check(&mut conn, false)
+                }).context("Foreign key checks failed BEFORE connecting to organizer. If migrations fail, fix the DB an try again.")?;
+
                 // Ok, organizer should be able to connect back to us now, so handshake
                 let org = OrganizerCaller::new(ouri);
                 tracing::info!("Connecting gRPC srv->org...");
                 org.handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind, cur_server_migration.as_deref())?;
-                tracing::debug!("srv->org handshake done (org->srv not connected yet).");
+                tracing::debug!("srv->org handshake done.");
+
+                db.conn().and_then(|mut conn| {
+                    sqlite_foreign_key_check(&mut conn, true)
+                }).context("Foreign key checks failed before after organizer handshake. Bug in organizer migrations?")?;
             }
             None => {
                 tracing::debug!("No Organizer URI provided, skipping gRPC.");
@@ -150,42 +158,13 @@ fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyho
 
     // Check & apply database migrations
     if  (migrate || db_was_missing) && !pending_migrations.is_empty() {
-        if db_file.exists() {
-            // Make a tar.gz backup
-            let now = chrono::Local::now();
-            let backup_path = db_file.with_extension(format!("backup-{}.tar.gz", now.format("%Y-%m-%dT%H_%M_%S")));
-            tracing::info!(file=%db_file.display(), backup=%backup_path.display(), "Backing up database before migration.");
-
-            let backup_file = File::create(&backup_path).context("Error creating DB backup file")?;
-            let gzip_writer = GzEncoder::new(backup_file, Compression::fast());
-            let mut tar_builder = tar::Builder::new(gzip_writer);
-
-            // Add the main .sqlite file to the tar archive
-            tar_builder.append_path_with_name(&db_file, db_file.file_name().unwrap())
-                .context("Error adding main DB file to tar archive")?;
-
-            // Add .sqlite-* files to the tar archive
-            let db_file_prefix = db_file.to_string_lossy().into_owned();
-            for entry in std::fs::read_dir(db_file.parent().unwrap()).context("Error reading DB directory")? {
-                let entry = entry.context("Error reading DB directory entry")?;
-                let path = entry.path();
-                if path.to_string_lossy().starts_with(&db_file_prefix) && path != db_file {
-                    tar_builder.append_path_with_name(&path, path.file_name().unwrap())
-                        .context("Error adding WAL/SHM files to tar archive")?;
-                }
-            }
-
-            tar_builder.finish().context("Error finishing tar archive")?;
-        }
-
+        backup_sqlite_database(db_file.clone())?;
         for m in &pending_migrations {
-            db.conn()?.transaction::<(), _, _>(|conn| {
-                if let Err(e) = db.apply_migration(conn, m) {
-                    tracing::error!(file=%db_file.display(), "Error applying migration '{}'. Rolling back.", m);
-                    bail!("Error applying migration {}: {:?}", m, e);
-                };
-                Ok(())
-            })?;
+            let mut conn = db.conn()?;
+            if let Err(e) = db.apply_migration(&mut conn, m) {
+                tracing::error!(file=%db_file.display(), "Error applying migration '{}'. Rolling back.", m);
+                bail!("Error applying migration {}: {:?}", m, e);
+            };
         }
         tracing::info!(file=%db_file.display(), "All server migrations applied.");
 
@@ -198,6 +177,39 @@ fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyho
         }
     }
     Ok(db)
+}
+
+
+/// Backup the SQLite database to a tar.gz file.
+/// This is done before migrations.
+pub fn backup_sqlite_database( db_file: std::path::PathBuf ) -> anyhow::Result<()> {
+    if db_file.exists() {
+        // Make a tar.gz backup
+        let now = chrono::Local::now();
+        let backup_path = db_file.with_extension(format!("backup-{}.tar.gz", now.format("%Y-%m-%dT%H_%M_%S")));
+        tracing::info!(file=%db_file.display(), backup=%backup_path.display(), "Backing up database before migration.");
+
+        let backup_file = File::create(&backup_path).context("Error creating DB backup file")?;
+        let gzip_writer = GzEncoder::new(backup_file, Compression::fast());
+        let mut tar_builder = tar::Builder::new(gzip_writer);
+
+        // Add the main .sqlite file to the tar archive
+        tar_builder.append_path_with_name(&db_file, db_file.file_name().unwrap())
+            .context("Error adding main DB file to tar archive")?;
+
+        // Add .sqlite-* files to the tar archive
+        let db_file_prefix = db_file.to_string_lossy().into_owned();
+        for entry in std::fs::read_dir(db_file.parent().unwrap()).context("Error reading DB directory")? {
+            let entry = entry.context("Error reading DB directory entry")?;
+            let path = entry.path();
+            if path.to_string_lossy().starts_with(&db_file_prefix) && path != db_file {
+                tar_builder.append_path_with_name(&path, path.file_name().unwrap())
+                    .context("Error adding WAL/SHM files to tar archive")?;
+            }
+        }
+        tar_builder.finish().context("Error finishing tar archive")?;
+    }
+    Ok(())
 }
 
 

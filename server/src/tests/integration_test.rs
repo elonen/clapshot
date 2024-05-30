@@ -521,6 +521,29 @@ mod integration_test
     }
 
 
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    fn test_existing_database_migrate_and_image_ingest() -> anyhow::Result<()>
+    {
+        let (_db, temp_dir, _videos, _comments) = crate::database::tests::make_test_db();
+
+        // Overwrite the test DB with one from assets dir, for migration testing on existing DB
+        let db_file = temp_dir.path().join("clapshot.sqlite");
+        std::fs::copy("src/tests/assets/databases/clapshot-migration-test-1.sqlite", &db_file)
+            .expect("Failed to copy test DB for migration test");
+
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, Some(temp_dir)]
+            let image_file_name = "NASA-48410_PIA25967_-_MAV_Test.jpeg";
+            data_dir.copy_from("src/tests/assets/", &[image_file_name]).unwrap();
+            std::fs::rename(data_dir.join(image_file_name), incoming_dir.join(image_file_name)).unwrap();
+            let wait_res = wait_for_reports(&mut ws, true, true, false, Some((data_dir.path().into(), image_file_name.into()))).await;
+        }
+        Ok(())
+    }
+
+
     #[test]
     #[serial]
     #[traced_test]

@@ -1,5 +1,3 @@
-PRAGMA foreign_keys = OFF;
-
 -- Convert ref_video_hash and ref_comment_id to non-foreign keys.
 -- They are supposed to remain in messages even if the video or comment is deleted.
 
@@ -18,5 +16,3 @@ CREATE TABLE messages_new (
 INSERT INTO messages_new SELECT * FROM messages;
 DROP TABLE messages;
 ALTER TABLE messages_new RENAME TO messages;
-
-PRAGMA foreign_keys = ON;

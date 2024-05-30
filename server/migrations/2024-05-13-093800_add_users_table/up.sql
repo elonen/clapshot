@@ -17,6 +17,7 @@ CREATE TABLE users (
     created DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+
 -- Step 2: Populate the users table from existing data
 -- Insert distinct users from videos
 INSERT INTO users (id, name)
@@ -25,6 +26,10 @@ SELECT DISTINCT user_id, user_name FROM videos WHERE user_id IS NOT NULL AND use
 -- Insert distinct users from comments (where not already included)
 INSERT OR IGNORE INTO users (id, name)
 SELECT DISTINCT user_id, user_name FROM comments WHERE user_name IS NOT NULL;
+
+-- Insert distinct users from messages (where not already included)
+INSERT OR IGNORE INTO users (id, name)
+SELECT DISTINCT user_id, user_id FROM messages WHERE user_id IS NOT NULL;
 
 
 -- Step 3: Create new videos, comments and messages tables
@@ -54,8 +59,8 @@ CREATE TABLE videos_new (
 ALTER TABLE comments RENAME COLUMN user_name TO username_ifnull;
 CREATE TABLE comments_new (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    video_id VARCHAR NOT NULL REFERENCES videos_new(id) ON UPDATE CASCADE ON DELETE CASCADE,
-    parent_id INTEGER REFERENCES comments_new(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    video_id VARCHAR NOT NULL REFERENCES videos(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    parent_id INTEGER REFERENCES comments(id) ON UPDATE CASCADE ON DELETE CASCADE,
     created DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
     edited DATETIME,
     user_id user_id VARCHAR(255) NULL REFERENCES users (id) ON DELETE SET NULL ON UPDATE CASCADE,
@@ -72,7 +77,7 @@ CREATE TABLE messages_new (
     created DATETIME DEFAULT (CURRENT_TIMESTAMP) NOT NULL,
     seen BOOLEAN NOT NULL,
     video_id VARCHAR,  -- keep messages about videos even if it's deleted, so no foreign key
-    comment_id INTEGER REFERENCES comments_new (id) ON UPDATE CASCADE ON DELETE CASCADE,
+    comment_id INTEGER REFERENCES comments (id) ON UPDATE CASCADE ON DELETE CASCADE,
     event_name VARCHAR NOT NULL,
     message VARCHAR NOT NULL,
     details VARCHAR NOT NULL
