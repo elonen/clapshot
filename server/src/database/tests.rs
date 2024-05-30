@@ -385,7 +385,7 @@ fn test_transaction_commit() -> anyhow::Result<()> {
 fn test_migrate_existing_v056_db() -> anyhow::Result<()> {
     let data_dir = assert_fs::TempDir::new().unwrap();
     let db_file = data_dir.path().join("clapshot.sqlite");
-    std::fs::copy("src/tests/assets/databases/clapshot-migration-test-1.sqlite", &db_file)
+    std::fs::copy("src/tests/assets/databases/clapshot-migration-test-1_v056.sqlite", &db_file)
         .expect("Failed to copy test DB for migration test");
 
     let db = DB::open_db_file(&db_file).unwrap();
