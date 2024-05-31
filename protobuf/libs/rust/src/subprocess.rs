@@ -3,6 +3,7 @@ use tracing::{info, warn, error, info_span, debug};
 use strip_ansi_escapes;
 use wait_timeout::ChildExt;
 use std::os::fd::FromRawFd;
+use std::os::unix::prelude::CommandExt;
 use std::time::Duration;
 
 use nix::sys::signal::{kill, Signal};
@@ -39,6 +40,14 @@ pub fn spawn_shell(cmd_str: &str, name: &str, span: tracing::Span) -> anyhow::Re
     cmd.arg("-c").arg(cmd_str)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+
+    // Ignore SIGUSR1 in the subprocess by default, to avoid killing it by accident.
+    // USR1 is used to reopen log files, is sent by logrotate to the main process.
+    unsafe { cmd.pre_exec(|| {
+        use libc::{signal, SIG_IGN, SIGUSR1};
+        signal(SIGUSR1, SIG_IGN);
+        Ok(())
+    }) };
 
     debug!("Spawning (shell cmd): {:?}", cmd);
     let mut child = cmd.spawn()?;

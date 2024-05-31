@@ -119,6 +119,7 @@ impl ReopenableFileWriter {
 
     /// Sync the current log file to disk and reopen it under a new file descriptor.
     pub fn sync_and_reopen(&self) -> io::Result<()> {
+        tracing::info!("Reopening log file: {:?}", self.path);
         let new_file = Self::open_file(&self.path)?;
         let mut file_lock = self.file.lock().unwrap();
         file_lock.as_mut().unwrap().sync_all()?;
