@@ -441,6 +441,22 @@ mod integration_test
     }
 
 
+    async fn wait_for_any_client_msg(mut ws: &mut crate::api_server::test_utils::WsClient)
+    {
+        for _ in 0..(60*2*10)
+        {
+            match crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(&mut ws).await.map(|c| c.cmd).flatten() {
+                Some(x) => {
+                    tracing::info!("Got message: {:?}", x);
+                    return;
+                },
+                None => {
+                    thread::sleep(Duration::from_millis(50));
+                },
+            };
+        }
+    }
+
 
     #[test]
     #[serial]
@@ -525,13 +541,13 @@ mod integration_test
     #[test]
     #[serial]
     #[traced_test]
-    fn test_existing_database_migrate_and_image_ingest() -> anyhow::Result<()>
+    fn test_existing_v056_migrate_and_image_ingest() -> anyhow::Result<()>
     {
         let (_db, temp_dir, _videos, _comments) = crate::database::tests::make_test_db();
 
         // Overwrite the test DB with one from assets dir, for migration testing on existing DB
         let db_file = temp_dir.path().join("clapshot.sqlite");
-        std::fs::copy("src/tests/assets/databases/clapshot-migration-test-1.sqlite", &db_file)
+        std::fs::copy("src/tests/assets/databases/clapshot-migration-test-1_v056.sqlite", &db_file)
             .expect("Failed to copy test DB for migration test");
 
         cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, Some(temp_dir)]
@@ -543,11 +559,62 @@ mod integration_test
         Ok(())
     }
 
+    #[test]
+    #[serial]
+    #[traced_test]
+    fn test_organizer_existing_v056_migrate() -> anyhow::Result<()>
+    {
+        // This supplements the other v056_migrate test, by testing with Organizer too.
+        match std::env::var("TEST_ORG_CMD").ok()
+        {
+            Some(org_cmd) => {
+                let (_db, temp_dir, _videos, _comments) = crate::database::tests::make_test_db();
+                // Overwrite the test DB with one from assets dir, for migration testing on existing DB
+                let db_file = temp_dir.path().join("clapshot.sqlite");
+                std::fs::copy("src/tests/assets/databases/clapshot-migration-test-1_v056.sqlite", &db_file).expect("Failed to copy test DB for migration test");
+                cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, Some(org_cmd), Some(temp_dir)]
+                    // If we get any client messages, Organizer migration was successful and API server was started
+                    wait_for_any_client_msg(&mut ws).await;
+                }
+            },
+            None => {
+                tracing::info!("Organizer cmd not specified, skipping organizer test");
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     #[serial]
     #[traced_test]
-    fn test_organizer() -> anyhow::Result<()>
+    fn test_organizer_existing_v061_migrate() -> anyhow::Result<()>
+    {
+        match std::env::var("TEST_ORG_CMD").ok()
+        {
+            Some(org_cmd) => {
+                let (_db, temp_dir, _videos, _comments) = crate::database::tests::make_test_db();
+                // Overwrite the test DB with one from assets dir, for migration testing on existing DB
+                let db_file = temp_dir.path().join("clapshot.sqlite");
+                std::fs::copy("src/tests/assets/databases/clapshot-migration-test-2_v061.sqlite", &db_file).expect("Failed to copy test DB for migration test");
+                cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, Some(org_cmd), Some(temp_dir)]
+                    // If we get any client messages, Organizer migration was successful and API server was started
+                    wait_for_any_client_msg(&mut ws).await;
+                }
+            },
+            None => {
+                tracing::info!("Organizer cmd not specified, skipping organizer test");
+            }
+        }
+        Ok(())
+    }
+
+
+
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    fn test_organizer_run_organizer_tests() -> anyhow::Result<()>
     {
         // Environment variable TEST_ORG_CMD can be used to specify a command
         // to start organizer. If not specified, the test will be skipped.

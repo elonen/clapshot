@@ -1,14 +1,16 @@
 from __future__ import annotations
+from logging import Logger
 
 import clapshot_grpc.proto.clapshot as clap
 import clapshot_grpc.proto.clapshot.organizer as org
+from clapshot_grpc.connect import open_database
+from organizer.config import MODULE_NAME
 
 from .database.operations import db_check_and_fix_integrity, db_check_for_folder_loops, db_check_pending_migrations, db_apply_migration, db_test_orm_mappings
-
 import organizer
 
 
-async def check_migrations_impl(oi, req: org.CheckMigrationsRequest) -> org.CheckMigrationsResponse:
+async def check_migrations_impl(req: org.CheckMigrationsRequest, log: Logger) -> org.CheckMigrationsResponse:
     """
     Organizer method (gRPC/protobuf)
 
@@ -16,31 +18,31 @@ async def check_migrations_impl(oi, req: org.CheckMigrationsRequest) -> org.Chec
       => Checks the db for the current schema version and returns a list migrations that have a higher version string.
          Server will figure out which one(s) to apply based on dependencies, and then call apply_migration().
     """
-    cur_ver, pending = db_check_pending_migrations(oi.db)
+    db, _ = await open_database(req.db, False, log)
+    cur_ver, pending = db_check_pending_migrations(db)
     max_ver = sorted([m.version for m in pending], reverse=True)[0] if pending else cur_ver
-    oi.log.debug(f"check_migrations(): current schema version = '{cur_ver}', max version = '{max_ver}', {len(pending)} pending migration alternatives")
-    return org.CheckMigrationsResponse(current_schema_ver=cur_ver,pending_migrations=pending)
+    return org.CheckMigrationsResponse(
+        name=MODULE_NAME,
+        current_schema_ver=cur_ver,
+        pending_migrations=pending)
 
 
-async def apply_migration_impl(oi: organizer.OrganizerInbound, req: org.ApplyMigrationRequest) -> org.ApplyMigrationResponse:
+async def apply_migration_impl(req: org.ApplyMigrationRequest, log: Logger) -> org.ApplyMigrationResponse:
     """
     Organizer method (gRPC/protobuf)
 
     Called by the server to apply a single pending migration to the database. The migration is identified by its UUID,
     previously returned by check_migrations().
     """
-    oi.log.info(f"apply_migration('{req.uuid}')")
-    with oi.db_new_session() as dbs:
-        db_apply_migration(dbs, req.uuid, oi.log)
+    _db, session_maker = await open_database(req.db, False, log)
+    with session_maker() as dbs:
+        db_apply_migration(dbs, req.uuid, log)
         return org.ApplyMigrationResponse()
 
 
-async def after_migrations_impl(oi: organizer.OrganizerInbound, _: org.AfterMigrationsRequest) -> clap.Empty:
+async def db_integrity_tests(oi: organizer.OrganizerInbound):
     """
-    Organizer method (gRPC/protobuf)
-
-    Called by the server after all pending migrations have been applied, to perform any necessary startup initialization.
-      => Do some "fsck"-type operations on the database.
+    Do some "fsck"-type operations on the database.
     """
     log = oi.log.getChild("after_migration")
     log.debug("Running post-migration checks...")
@@ -48,4 +50,3 @@ async def after_migrations_impl(oi: organizer.OrganizerInbound, _: org.AfterMigr
         db_test_orm_mappings(dbs, log)
         db_check_for_folder_loops(dbs, log)
         db_check_and_fix_integrity(dbs, log)
-        return clap.Empty()

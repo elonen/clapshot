@@ -12,6 +12,8 @@ use std::sync::atomic::AtomicBool;
 pub mod schema;
 pub mod models;
 pub mod error;
+pub mod migration_solver;
+pub mod db_backup;
 
 #[cfg(test)]
 pub mod tests;
@@ -107,16 +109,17 @@ impl DB {
         Ok(conn)
     }
 
-    /// Return list of any pending migrations
-    pub fn pending_migration_names(&self) -> DBResult<Vec<String>> {
+    /// Return list of any pending (migration_name, version) tuples
+    pub fn pending_server_migrations(&self) -> DBResult<Vec<(String, String)>> {
         Ok(MigrationHarness::pending_migrations(&mut self.conn()?, MIGRATIONS)
             .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?
-            .iter().map(|m| m.name().to_string()).collect())
+            .iter().map(|m| (format!("{}", m.name()), format!("{}", m.name().version())))
+            .collect())
     }
 
     /// Return name of the latest applied migration
     /// or None if no migrations have been applied
-    pub fn latest_migration_name(&self) -> DBResult<Option<String>> {
+    pub fn latest_applied_server_migration_name(&self) -> DBResult<Option<String>> {
         let applied = MigrationHarness::applied_migrations(&mut self.conn()?)
             .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?;
         let res = applied.iter().max().and_then(|m| Some(m.to_string()));
@@ -124,7 +127,7 @@ impl DB {
     }
 
     /// Run a named migration
-    pub fn apply_migration(&self, conn: &mut SqliteConnection, migration_name: &str) -> EmptyDBResult {
+    pub fn apply_server_migration(&self, conn: &mut SqliteConnection, migration_name: &str) -> EmptyDBResult {
 
         let pending = MigrationHarness::pending_migrations(conn, MIGRATIONS)
             .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?;
@@ -132,11 +135,10 @@ impl DB {
         let migration = pending.iter().find(|m| m.name().to_string() == migration_name)
             .ok_or_else(|| anyhow!("Migration not found: {}", migration_name))?;
 
-        let _span = tracing::info_span!("DB migration", name = migration.name().to_string()).entered();
-
-        if let Err(_) = sqlite_foreign_key_check(conn, false) {
-            tracing::warn!("^^^ DB foreign key checks failed BEFORE migration! It's possible the migration corrects them, but if it fails, fix your DB and try again.");
-        }
+        let _span = tracing::info_span!("apply_server_migration",
+            name = migration.name().to_string(),
+            new_ver = migration.name().version().to_string(),
+        ).entered();
 
         tracing::debug!("PRAGMA foreign_keys = OFF;");
         diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(conn)?;
@@ -147,11 +149,10 @@ impl DB {
         let res: EmptyDBResult = conn.transaction(|conn| {
             sqlite_check_foreign_key_status(conn, false).context("Pragma failed to disable foreign keys")?;
 
-            tracing::info!("Applying migration...");
+            tracing::info!("Applying...");
             MigrationHarness::run_migration(conn, &**migration)
                 .map_err(|e| anyhow!("Failed to apply MIGRATION: {:?}", e))?;
 
-            sqlite_foreign_key_check(conn, true).context("Foreign key check failed after migration")?;
             Ok(())
         });
 
@@ -216,7 +217,6 @@ pub fn sqlite_foreign_key_check(conn: &mut SqliteConnection, log_as_errors: bool
     let violations: Vec<ForeignKeyCheck> = diesel::sql_query("PRAGMA foreign_key_check;")
         .load(conn).map_err(|e| anyhow!("Failed to check foreign key violations: {:?}", e))?;
     if violations.is_empty() {
-        tracing::debug!("Foreign key check Ok.");
         Ok(())
     } else {
         for v in violations {

@@ -56,8 +56,8 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<MediaFile>
     let db = std::sync::Arc::new(DB::open_db_file(data_dir.join("clapshot.sqlite").as_path()).unwrap());
     let conn = &mut db.conn().unwrap();
 
-    for m in db.pending_migration_names().unwrap() {
-        db.apply_migration(conn, &m).unwrap();
+    for (m, _ver) in db.pending_server_migrations().unwrap() {
+        db.apply_server_migration(conn, &m).unwrap();
     }
 
     _dump_db(conn);   // Uncomment to debug database contents
@@ -390,8 +390,8 @@ fn test_migrate_existing_v056_db() -> anyhow::Result<()> {
 
     let db = DB::open_db_file(&db_file).unwrap();
     let conn = &mut db.conn()?;
-    for m in db.pending_migration_names()? {
-        db.apply_migration(conn, &m)?;
+    for (m, _ver) in db.pending_server_migrations()? {
+        db.apply_server_migration(conn, &m)?;
     }
 
     // Check that the database has (some of) the expected contents (still after migrations)
@@ -416,4 +416,37 @@ fn test_migrate_existing_v056_db() -> anyhow::Result<()> {
     assert_eq!(messages.iter().filter(|m| m.media_file_id == Some("338fb82c".into())).count(), 3);
 
     Ok(())
+}
+
+
+#[test]
+#[traced_test]
+fn test_backup_restore() {
+    let (db, data_dir, _videos, comments) = make_test_db();
+
+    let db_file = data_dir.path().join("clapshot.sqlite");
+    let backup_file = db_backup::backup_sqlite_database(db_file.clone())
+        .expect("Failed to backup database")
+        .expect("Backup was None");
+
+    // Delete all comments
+    {
+        let conn = &mut db.conn().unwrap();
+        for c in comments.iter() {
+            models::Comment::delete(conn, &c.id).expect("Failed to delete comment");
+        }
+        assert_eq!(models::Comment::get_all(conn, DBPaging::default()).unwrap().len(), 0);  // Make sure they are gone
+    }
+
+    // Close DB and restore
+    drop(db);
+    db_backup::restore_sqlite_database(db_file.clone(), backup_file.clone()).expect("Failed to restore database");
+
+    // Check that comments are back
+    {
+        let db = DB::open_db_file(&db_file).expect("Failed to open restored database");
+        let conn = &mut db.conn().expect("Failed to get connection");
+        let restored_comments = models::Comment::get_all(conn, DBPaging::default()).unwrap();
+        assert_eq!(restored_comments.len(), comments.len());
+    }
 }

@@ -51,16 +51,16 @@ async def connect_back_to_server(
 
 
 
-async def open_database(server_info: org.ServerInfo, debug_sql: bool, log: Logger) -> tuple[sqlalchemy.Engine, sqlalchemy.orm.sessionmaker]:
+async def open_database(db_info: org.Database, debug_sql: bool, log: Logger) -> tuple[sqlalchemy.Engine, sqlalchemy.orm.sessionmaker]:
     """
     Open the SQLite database specified in the server info, make a new session factory and return both.
     If debug_sql is True, SQLalchemy will log queries.
     All connections will have necessary pragmas applied (foreign keys, WAL, etc.)
     """
-    assert server_info.db.type == org.ServerInfoDatabaseDatabaseType.SQLITE, "Only SQLite is supported."
+    assert db_info.type == org.DatabaseDatabaseType.SQLITE, "Only SQLite is supported."
 
-    log.debug(f"Opening SQLite database at '{server_info.db.endpoint}'")
-    db = sqlalchemy.create_engine(f"sqlite:///{server_info.db.endpoint}", connect_args={'timeout': 15}, echo=debug_sql)
+    log.debug(f"Opening SQLite database at '{db_info.endpoint}'")
+    db = sqlalchemy.create_engine(f"sqlite:///{db_info.endpoint}", connect_args={'timeout': 15}, echo=debug_sql)
     db_new_session = sessionmaker(bind=db)
 
     # For every connection, enable foreign keys. SQLite doesn't enforce them by default.

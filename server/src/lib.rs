@@ -1,10 +1,11 @@
-use std::{fs::File, sync::{atomic::{AtomicBool, Ordering}, Arc}, thread::{self, JoinHandle}};
+use std::{collections::HashMap, path::PathBuf, sync::{atomic::{AtomicBool, Ordering}, Arc}, thread::{self, JoinHandle}};
 
 use anyhow::Context;
-use database::{sqlite_foreign_key_check, DB};
-use flate2::{write::GzEncoder, Compression};
-use lib_clapshot_grpc::GrpcBindAddr;
+use database::{db_backup::{backup_sqlite_database, restore_sqlite_database}, migration_solver::MigrationGraphModule, sqlite_foreign_key_check, DB};
+use lib_clapshot_grpc::{proto::org::{self, Migration}, GrpcBindAddr};
 use crate::{api_server::server_state::ServerState, grpc::{caller::OrganizerCaller, grpc_client::OrganizerURI}};
+
+use anyhow::bail;
 
 pub mod video_pipeline;
 pub mod api_server;
@@ -14,6 +15,8 @@ pub mod grpc;
 
 pub const PKG_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const PKG_NAME: &'static str = env!("CARGO_PKG_NAME");
+
+const SERVER_MODULE_NAME: &str = "clapshot.server";     // Name for migrations solver
 
 
 pub struct ClapshotInit {
@@ -46,6 +49,8 @@ impl ClapshotInit {
         use signal_hook::flag;
         use crossbeam_channel::unbounded;   // Work queue
 
+        let _span = tracing::info_span!("INIT").entered();
+
         for sig in TERM_SIGNALS {
             flag::register_conditional_shutdown(*sig, 1, Arc::clone(&terminate_flag))?;
             flag::register(*sig, Arc::clone(&terminate_flag))?;
@@ -58,11 +63,16 @@ impl ClapshotInit {
 
         // Initialize database
         let db_file = data_dir.join("clapshot.sqlite");
-        let db = connect_and_migrate_db(db_file.clone(), migrate)?;
-        let cur_server_migration = db.latest_migration_name()?;
+        let db_was_missing = !db_file.exists();
+
+        if migrate || db_was_missing {
+            migrate_db(&db_file, &organizer_uri)?;
+        }
+
+        let grpc_srv_listening_flag = Arc::new(AtomicBool::new(false));
+        let db: Arc<DB> = Arc::new(database::DB::open_db_file(&db_file).unwrap());
 
         // Run API server
-        let grpc_srv_listening_flag = Arc::new(AtomicBool::new(false));
         let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
         let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
         let api_thread = Some({
@@ -79,8 +89,8 @@ impl ClapshotInit {
             thread::spawn(move || { api_server::run_forever(user_msg_rx, grpc_srv, upload_tx, bind_api.to_string(), ub, cors_origins, server, port) })
         });
 
-        // Connect to organizer if configured
-        match organizer_uri.clone() {
+        // Handshake Organizer if configured
+        match &organizer_uri {
             Some(ouri) => {
                 // Wait for our gRPC server thread to bind before handshaking with organizer
                 let start_time = std::time::Instant::now();
@@ -90,20 +100,11 @@ impl ClapshotInit {
                         anyhow::bail!("gRPC server failed to start within 3 seconds.");
                     }
                 }
-
-                db.conn().and_then(|mut conn| {
-                    sqlite_foreign_key_check(&mut conn, false)
-                }).context("Foreign key checks failed BEFORE connecting to organizer. If migrations fail, fix the DB an try again.")?;
-
                 // Ok, organizer should be able to connect back to us now, so handshake
-                let org = OrganizerCaller::new(ouri);
+                let org = OrganizerCaller::new(&ouri);
                 tracing::info!("Connecting gRPC srv->org...");
-                org.handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind, cur_server_migration.as_deref())?;
+                org.blocking_handshake_organizer(&data_dir, &url_base, &db_file, &grpc_server_bind)?;
                 tracing::debug!("srv->org handshake done.");
-
-                db.conn().and_then(|mut conn| {
-                    sqlite_foreign_key_check(&mut conn, true)
-                }).context("Foreign key checks failed before after organizer handshake. Bug in organizer migrations?")?;
             }
             None => {
                 tracing::debug!("No Organizer URI provided, skipping gRPC.");
@@ -143,71 +144,194 @@ impl ClapshotInit {
 }
 
 
-/// Connect to the database and run migrations if needed.
-///
-/// If `migrate` is true, run migrations automatically,
-/// otherwise bail with an error if migrations are needed.
-fn connect_and_migrate_db( db_file: std::path::PathBuf, migrate: bool ) -> anyhow::Result<Arc<DB>>
+
+/// Find migrations from server and organizer, solve their dependencies, and apply them.
+/// Backup before starting, and restore if foreign key checks fail after applying the migrations.
+fn migrate_db( db_file: &PathBuf, org_uri: &Option<OrganizerURI>) -> anyhow::Result<()>
 {
-    use anyhow::bail;
+    use lib_clapshot_grpc::proto::org::CheckMigrationsRequest;
+    let _span = tracing::info_span!("migrate_db").entered();
 
-    let db_was_missing = !db_file.exists();
-    let db = Arc::new(database::DB::open_db_file(&db_file).unwrap());
+    let db: Arc<DB> = Arc::new(database::DB::open_db_file(&db_file).context("Error opening DB file")?);
+    let cur_server_migration = db.latest_applied_server_migration_name()?;
+    let pending_server_migrations = db.pending_server_migrations()?;
 
-    let pending_migrations = db.pending_migration_names()?;
-
-    // Check & apply database migrations
-    if  (migrate || db_was_missing) && !pending_migrations.is_empty() {
-        backup_sqlite_database(db_file.clone())?;
-        for m in &pending_migrations {
-            let mut conn = db.conn()?;
-            if let Err(e) = db.apply_migration(&mut conn, m) {
-                tracing::error!(file=%db_file.display(), "Error applying migration '{}'. Rolling back.", m);
-                bail!("Error applying migration {}: {:?}", m, e);
-            };
-        }
-        tracing::info!(file=%db_file.display(), "All server migrations applied.");
-
-    } else {
-        if !pending_migrations.is_empty() {
-            eprintln!("Database migrations needed. Run `clapshot-server --migrate`");
-            std::process::exit(1);
-        } else {
-            tracing::debug!(file=%db_file.display(), "No database migrations needed.");
-        }
+    match db.conn().and_then(|mut conn| { sqlite_foreign_key_check(&mut conn, false) }) {
+        Err(_) => tracing::warn!("^^^ Foreign key checks failed BEFORE migrations. Migrations might correct these, but if not, fix the DB and try again."),
+        Ok(())=> tracing::debug!("Foreign key checks Ok before migrations."),
     }
-    Ok(db)
+
+    // Represent server migrations for solver
+    let server_module = {
+        let mut prev_ver: Option<String> = cur_server_migration.clone();
+        let server_migs = pending_server_migrations.iter().map(|(m_name, m_version)| {
+            let mig = Migration {
+                uuid: m_name.clone(),
+                version: m_version.clone(),
+                dependencies: vec![lib_clapshot_grpc::proto::org::migration::Dependency {
+                    name: SERVER_MODULE_NAME.to_string(),
+                    min_ver: prev_ver.clone(),
+                    max_ver: prev_ver.clone(),
+                }],
+                description: "".to_string(),
+            };
+            prev_ver = Some(m_version.clone());
+            mig
+        }).collect::<Vec<_>>();
+
+        tracing::debug!("Clapshot server has {} pending migrations.", server_migs.len());
+        MigrationGraphModule {
+            name: SERVER_MODULE_NAME.to_string(),
+            cur_version: cur_server_migration.clone(),
+            migrations: server_migs
+        }
+    };
+
+    let mut migration_modules: Vec<MigrationGraphModule> = vec![ server_module ];
+
+    let org_db_info = Some(org::Database {
+        r#type: org::database::DatabaseType::Sqlite.into(),
+        endpoint: db_file.canonicalize()?.to_str().ok_or(
+            anyhow::anyhow!("Sqlite path is not valid UTF-8"))?.into()
+    });
+
+    // Add Organizer and its migrations, if available
+    if let Some(uri) = org_uri {
+        let caller = OrganizerCaller::new(uri);
+        let (rt, mut org_conn) = caller.tokio_connect().context("Error connecting to Organizer")?;
+        tracing::debug!("Calling check_migrations on Organizer.");
+
+        match rt.block_on(org_conn.check_migrations(CheckMigrationsRequest { db: org_db_info.clone() })) {
+            Ok(cm_res) => {
+                let migrations = cm_res.get_ref().pending_migrations.clone();
+                tracing::debug!("Organizer has {} pending migrations.", migrations.len());
+                migration_modules.push(MigrationGraphModule {
+                    name: cm_res.get_ref().name.clone(),
+                    cur_version: Some(cm_res.get_ref().current_schema_ver.clone()),
+                    migrations,
+                });
+            }
+            Err(e) => {
+                match e.code() {
+                    tonic::Code::NotFound => { tracing::info!("No pending migrations from Organizer."); },
+                    tonic::Code::Unimplemented => { tracing::info!("Organizer does not implement migrations. Ignoring."); },
+                    _ => { anyhow::bail!("Error checking Organizer migrations: {:?}", e); }
+                }
+            }
+        }
+    };
+
+    match migration_modules.iter().map(|m| m.migrations.len()).sum::<usize>() {
+        0 => {
+            tracing::info!("No pending migrations.");
+            return Ok(());
+        },
+        n => { tracing::debug!("Total {} migrations to consider. Solving dependencies.", n); }
+    }
+
+    // Solve migration order
+    let migration_order = database::migration_solver::solve_migration_graph(migration_modules.iter().collect())?;
+    match migration_order {
+        None => {
+            tracing::error!("Failed to solve migration dependencies. List of considered migrations:");
+            for m in migration_modules {
+                tracing::error!("Module: '{}': current version: '{:?}'", &m.name, &m.cur_version);
+                for mig in &m.migrations {
+                    tracing::error!("  - '{}', brings version to '{}'  depends on: '{:?}')", mig.uuid, mig.version, mig.dependencies);
+                }
+            }
+            bail!("Cannot proceed with migrations due to unsolvable dependencies.");
+        },
+        // Solver returned a list of migrations to apply
+        Some(order) => {
+            if order.is_empty() {
+                tracing::info!("Empty plan. No migrations to apply.");
+                return Ok(());
+            }
+
+            tracing::info!("Migration plan created.");
+            drop(db);   // Close before backup
+            let db_backup_file = backup_sqlite_database(db_file.into())?;
+
+            let db: Arc<DB> = Arc::new(database::DB::open_db_file(&db_file).context("Error opening DB file")?);
+            match apply_migrations(&migration_modules, &order, &db, db_file, org_uri,org_db_info.clone())
+                .and_then(|_| { db.conn().context("Error opening DB connection after migrations") })
+                .and_then(|mut conn| { sqlite_foreign_key_check(&mut conn, true).context("Foreign key checks failed after migrations") })
+            {
+                Ok(_) => {
+                    tracing::info!("Migrations applied successfully. Foreign keys checked Ok.");
+                    return Ok(());
+                },
+                Err(e) => {
+                    drop (db);  // Close before restore
+                    tracing::error!(error=%e, "Migration failure. Restoring DB from the backup.");
+                    match db_backup_file {
+                        None => {
+                            tracing::warn_span!("No backup file found. Skipping restore. This usually means DB was missing before migrations. If that's the case, delete the dangling DB before trying again.");
+                        },
+                        Some(db_backup_file) => {
+                            restore_sqlite_database(db_file.into(), db_backup_file)
+                                .context("Error restoring DB after failed migrations")?;
+
+                            tracing::info!("DB restored.");
+                            bail!("Migration(s) failed: {:?}", e);
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    Ok(())
 }
 
 
-/// Backup the SQLite database to a tar.gz file.
-/// This is done before migrations.
-pub fn backup_sqlite_database( db_file: std::path::PathBuf ) -> anyhow::Result<()> {
-    if db_file.exists() {
-        // Make a tar.gz backup
-        let now = chrono::Local::now();
-        let backup_path = db_file.with_extension(format!("backup-{}.tar.gz", now.format("%Y-%m-%dT%H_%M_%S")));
-        tracing::info!(file=%db_file.display(), backup=%backup_path.display(), "Backing up database before migration.");
+/// Execute given migration plan.
+fn apply_migrations(
+    migration_modules: &Vec<MigrationGraphModule>,
+    plan: &Vec<Migration>,
+    db: &Arc<DB>,
+    db_file: &PathBuf,
+    org_uri: &Option<OrganizerURI>,
+    org_db_info: Option<org::Database>
+) -> Result<(), anyhow::Error>
+{
+    use lib_clapshot_grpc::proto::org::ApplyMigrationRequest;
 
-        let backup_file = File::create(&backup_path).context("Error creating DB backup file")?;
-        let gzip_writer = GzEncoder::new(backup_file, Compression::fast());
-        let mut tar_builder = tar::Builder::new(gzip_writer);
+    let uuid_to_mod: HashMap<String, String> = migration_modules.iter().flat_map(|m| {
+        m.migrations.iter().map(|mig| (mig.uuid.clone(), m.name.clone()))
+    }).collect();
 
-        // Add the main .sqlite file to the tar archive
-        tar_builder.append_path_with_name(&db_file, db_file.file_name().unwrap())
-            .context("Error adding main DB file to tar archive")?;
+    for mig in plan {
+        match uuid_to_mod.get(mig.uuid.as_str()) {
+            // Server
+            Some(module_name) if module_name == SERVER_MODULE_NAME => {
+                let mut conn = db.conn()?;
+                if let Err(e) = db.apply_server_migration(&mut conn, &mig.uuid) {
+                    tracing::error!(file=%db_file.display(), err=?e, "Error applying migration '{}'. Rolling back.", &mig.uuid);
+                    bail!("Error applying migration '{}'", &mig.uuid);
+                }
+            }
+            // Organizer
+            Some(module_name) => {
+                let _span = tracing::info_span!("apply org migration", name=mig.uuid, new_ver=mig.version, org=module_name).entered();
+                tracing::info!("Applying on Organizer...");
 
-        // Add .sqlite-* files to the tar archive
-        let db_file_prefix = db_file.to_string_lossy().into_owned();
-        for entry in std::fs::read_dir(db_file.parent().unwrap()).context("Error reading DB directory")? {
-            let entry = entry.context("Error reading DB directory entry")?;
-            let path = entry.path();
-            if path.to_string_lossy().starts_with(&db_file_prefix) && path != db_file {
-                tar_builder.append_path_with_name(&path, path.file_name().unwrap())
-                    .context("Error adding WAL/SHM files to tar archive")?;
+                if let Some(uri) = org_uri {
+                    let (rt, mut org_conn) = OrganizerCaller::new(uri).tokio_connect()
+                        .context("Error connecting to organizer for migrations")?;
+                    rt.block_on(org_conn.apply_migration(ApplyMigrationRequest {
+                        db: org_db_info.clone(),
+                        uuid: mig.uuid.clone()
+                    })).map_err(|e| anyhow::anyhow!("Error applying organizer migration '{}': {:?}", &mig.uuid, e))?;
+                } else {
+                    bail!("Organizer migration '{}' found but no organizer URI to connect to.", &mig.uuid);
+                }
+            },
+            None => {
+                bail!("Migration '{}' not found in modules. This should not happen.", mig.uuid);
             }
         }
-        tar_builder.finish().context("Error finishing tar archive")?;
     }
     Ok(())
 }

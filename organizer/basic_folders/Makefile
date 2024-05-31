@@ -33,7 +33,7 @@ $(TARGET_BIN): $(VENV) $(PY_SRC) $(VENV)/bin/mypy
 	$(PIP) install .
 
 $(VENV)/bin/mypy: $(VENV)
-	@$(PIP) install mypy
+	@$(PIP) install mypy==1.9.0
 	@touch $@
 
 install: $(TARGET_BIN)

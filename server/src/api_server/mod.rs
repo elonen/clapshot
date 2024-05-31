@@ -575,6 +575,8 @@ async fn run_api_server_async(
         server_state.terminate_flag.store(true, Relaxed);
     };
 
+    tracing::info!("API server started Ok, waiting for clients.");
+
     // Start API server + message relay and wait for them to exit
     tokio::join!(server, msg_relay);
 

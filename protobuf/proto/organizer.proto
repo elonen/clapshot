@@ -51,12 +51,10 @@ service OrganizerOutbound {
 // Calls that Clapshot server makes to Organizer
 service OrganizerInbound {
 
-    // Initialization calls
+    // Initialization calls (in the order they are made)
+    rpc check_migrations(CheckMigrationsRequest) returns (CheckMigrationsResponse);
+    rpc apply_migration(ApplyMigrationRequest) returns (ApplyMigrationResponse);
     rpc handshake(ServerInfo) returns (Empty);
-
-    rpc check_migrations(CheckMigrationsRequest) returns (CheckMigrationsResponse); // This is called on startup, after handshake
-    rpc apply_migration(ApplyMigrationRequest) returns (ApplyMigrationResponse); // Called if check_migrations returns any pending migrations
-    rpc after_migrations(AfterMigrationsRequest) returns (Empty); // Called after all migrations to all modules have been applied
 
     // Organizer should respond to all calls as quickly as possible.
     // Two standard gRPC error returns status codes have special meaning:
@@ -82,15 +80,15 @@ service OrganizerInbound {
 
 // ---------------------------------------------------------
 
-message ServerInfo {
-
-    message Database {
-        enum DatabaseType {
-            SQLITE = 0;
-        }
-        DatabaseType type = 1;
-        string endpoint = 2;
+message Database {
+    enum DatabaseType {
+        SQLITE = 0;
     }
+    DatabaseType type = 1;
+    string endpoint = 2;
+}
+
+message ServerInfo {
 
     message Storage {
         message LocalFilesystem {
@@ -157,17 +155,20 @@ message Migration {
     }
 }
 
-message CheckMigrationsRequest {}
+message CheckMigrationsRequest {
+    Database db = 1;
+}
 message CheckMigrationsResponse {
-    string current_schema_ver = 1;               // Current (last applied) migration version
-    repeated Migration pending_migrations = 2;   // List of pending (alternative) migrations.
-    // Note that multiple migrations can advertise the same resulting version, but with different dependencies.
-    // The algorithm will try to find a "path" of migrations that satisfies all dependencies and achieves the highest version
-    // advertised by any of pending_migrations. If no such path exists, the server will refuse to start.
+    string name = 1;                            // Name of the organizer module (see OrganizerInfo)
+    string current_schema_ver = 2;              // Current (last applied) migration version
+    repeated Migration pending_migrations = 3;  // List of pending (alternative) migrations.
+    // Note that multiple migrations can result in the same resulting schema version, but via different dependencies.
+    // The algorithm will try to find smallest set of migrations that satisfies all dependencies and achieves the highest version.
 }
 
 message ApplyMigrationRequest {
-    string uuid = 1;    // UUID of the migration to apply (from CheckMigrationResponse)
+    Database db = 1;    // Database to apply the migration to. Organizer MUST NOT store the connection, but release it after the call.
+    string uuid = 2;    // UUID of the migration to apply (from CheckMigrationResponse)
 }
 message ApplyMigrationResponse {}
 message AfterMigrationsRequest {}

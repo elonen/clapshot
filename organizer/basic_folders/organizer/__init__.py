@@ -18,7 +18,7 @@ from functools import wraps
 
 from organizer.config import VERSION, MODULE_NAME
 
-from .migration_methods import check_migrations_impl, apply_migration_impl, after_migrations_impl
+from .migration_methods import check_migrations_impl, apply_migration_impl, db_integrity_tests
 from .user_session_methods import on_start_user_session_impl, navigate_page_impl, cmd_from_client_impl
 from .folder_op_methods import move_to_folder_impl, reorder_items_impl
 from .testing_methods import list_tests_impl, run_test_impl
@@ -43,9 +43,24 @@ class OrganizerInbound(org.OrganizerInboundBase):
     db_new_session: sqlalchemy.orm.sessionmaker     # callable session factory
 
     def __init__(self, logger, debug):
+        self.db = None
         self.log = logger
         self.debug = debug
 
+
+    # Migration methods
+
+    @override
+    @organizer_grpc_handler
+    async def check_migrations(self, request: org.CheckMigrationsRequest) -> org.CheckMigrationsResponse:
+        assert self.db is None, "Database already open. Called after handshake?"
+        return await check_migrations_impl(request, self.log)
+
+    @override
+    @organizer_grpc_handler
+    async def apply_migration(self, request: org.ApplyMigrationRequest) -> org.ApplyMigrationResponse:
+        assert self.db is None, "Database already open, cannot to apply migration. Called after handshake?"
+        return await apply_migration_impl(request, self.log)
 
     @override
     async def handshake(self, server_info: org.ServerInfo) -> clap.Empty:
@@ -59,31 +74,14 @@ class OrganizerInbound(org.OrganizerInboundBase):
         self.srv = await connect_back_to_server(server_info, MODULE_NAME, VERSION.split("."), "Basic folders for the UI", [srv_dep], self.log)
 
         debug_sql = False  # set to True to log all SQL queries
-        self.db, self.db_new_session = await open_database(server_info, debug_sql, self.log)
+        self.db, self.db_new_session = await open_database(server_info.db, debug_sql, self.log)
 
         self.folders_helper = FoldersHelper(self.db_new_session, self.srv, self.log)
         self.pages_helper = PagesHelper(self.folders_helper, self.srv, self.db_new_session, self.log)
         self.actions_helper = ActiondefsHelper()
 
+        await db_integrity_tests(self)
         return clap.Empty()
-
-
-    # Migration methods
-
-    @override
-    @organizer_grpc_handler
-    async def check_migrations(self, request: org.CheckMigrationsRequest) -> org.CheckMigrationsResponse:
-        return await check_migrations_impl(self, request)
-
-    @override
-    @organizer_grpc_handler
-    async def apply_migration(self, request: org.ApplyMigrationRequest) -> org.ApplyMigrationResponse:
-        return await apply_migration_impl(self, request)
-
-    @override
-    @organizer_grpc_handler
-    async def after_migrations(self, request: org.AfterMigrationsRequest) -> clap.Empty:
-        return await after_migrations_impl(self, request)
 
 
     # User session methods

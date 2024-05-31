@@ -1,9 +1,6 @@
 use std::path::Path;
-use diesel::migration::MigrationVersion;
-use lib_clapshot_grpc::proto::org::{ApplyMigrationRequest, CheckMigrationsRequest, AfterMigrationsRequest};
 use lib_clapshot_grpc::GrpcBindAddr;
 
-use crate::backup_sqlite_database;
 use crate::grpc::grpc_client::{connect, OrganizerConnection};
 use super::grpc_client::OrganizerURI;
 use super::proto;
@@ -13,116 +10,50 @@ pub struct OrganizerCaller {
 }
 
 impl OrganizerCaller {
-    pub fn new(uri: OrganizerURI ) -> Self {
-        OrganizerCaller { uri }
+    pub fn new(uri: &OrganizerURI ) -> Self {
+        OrganizerCaller { uri: uri.clone() }
     }
 
-    pub fn handshake_organizer(&self, data_dir: &Path, server_url: &str, db_file: &Path, backchannel: &GrpcBindAddr, cur_server_migration: Option<&str>)
+    pub fn blocking_handshake_organizer(&self, data_dir: &Path, server_url: &str, db_file: &Path, backchannel: &GrpcBindAddr)
         -> anyhow::Result<()>
     {
-        async fn call_it(conn: &mut OrganizerConnection, backchannel: &GrpcBindAddr, data_dir: &Path, server_url: &str, db_file: &Path, cur_server_migration: Option<&str>)
+        async fn async_call_handshake(conn: &mut OrganizerConnection, backchannel: &GrpcBindAddr, data_dir: &Path, server_url: &str, db_file: &Path)
          -> anyhow::Result<()>
         {
             let v = semver::Version::parse(crate::PKG_VERSION)?;
-            use lib_clapshot_grpc::proto::org::server_info;
+            use lib_clapshot_grpc::proto::org as org;
+
             let req = proto::org::ServerInfo {
-                storage: Some(server_info::Storage {
-                    storage: Some(server_info::storage::Storage::LocalFs(
-                        server_info::storage::LocalFilesystem {
+                storage: Some(org::server_info::Storage {
+                    storage: Some(org::server_info::storage::Storage::LocalFs(
+                        org::server_info::storage::LocalFilesystem {
                             base_dir: data_dir.to_string_lossy().into()
                     }))}),
-                backchannel: Some(server_info::GrpcEndpoint {
+                backchannel: Some(org::server_info::GrpcEndpoint {
                     endpoint: Some(
                         match backchannel {
                             GrpcBindAddr::Tcp(addr) =>
-                                server_info::grpc_endpoint::Endpoint::Tcp(
-                                    server_info::grpc_endpoint::Tcp {
+                            org::server_info::grpc_endpoint::Endpoint::Tcp(
+                                org::server_info::grpc_endpoint::Tcp {
                                         host: addr.ip().to_string(),
                                         port: addr.port() as u32,
                                     }),
                             GrpcBindAddr::Unix(path) =>
-                                server_info::grpc_endpoint::Endpoint::Unix(
-                                    server_info::grpc_endpoint::Unix {
+                            org::server_info::grpc_endpoint::Endpoint::Unix(
+                                org::server_info::grpc_endpoint::Unix {
                                         path: path.to_string_lossy().into(),
                                     }),
                         })
                     }),
                 url_base: server_url.into(),
-                db: Some(server_info::Database {
-                    r#type: server_info::database::DatabaseType::Sqlite.into(),
+                db: Some(org::Database {
+                    r#type: org::database::DatabaseType::Sqlite.into(),
                     endpoint: db_file.canonicalize()?.to_str().ok_or(
                         anyhow::anyhow!("Sqlite path is not valid UTF-8"))?.into()
                     }),
                 version: Some(proto::org::SemanticVersionNumber { major: v.major, minor: v.minor, patch: v.patch }),
             };
             conn.handshake(req).await?;
-
-            // TODO: Handle organizer migrations properly
-            // This is a naive version that doesn't handle dependencies at all.
-            tracing::debug!("Calling check_migrations on organizer.");
-
-            let cur_server_migration = cur_server_migration.map(MigrationVersion::from)
-                .ok_or(anyhow::anyhow!("No server migration version found, cannot check against organizer migrations"))?;
-
-            match conn.check_migrations(CheckMigrationsRequest {}).await {
-                Ok(cm_res) => {
-                    let mut pending = cm_res.get_ref().pending_migrations.clone();
-
-                    // Apply migrations
-                    pending.sort_by(|a, b| a.version.cmp(&b.version));  // Oldest first
-                    let mut cur_version = cm_res.get_ref().current_schema_ver.clone();
-
-                    if !pending.is_empty() {
-                        tracing::info!("Backing up database before Organizer migrations.");
-                        backup_sqlite_database(db_file.into())?;
-                    }
-
-                    if !pending.is_empty() {
-                        tracing::warn!("MIGRATION DEPENDENCY RESOLVER NOT YET PROPERLY IMPLEMENTED! Doing only rudimentary checks on Organizer migrations.");
-                    }
-
-                    for m in pending {
-                        tracing::debug!(data=?m, "Considering migration.");
-
-                        assert!(m.version > cur_version, "Migration version {} is not greater than current version {} -- this needs a better implementation to resolve", m.version, cur_version);
-                        for dep in &m.dependencies {
-                            if dep.name == "clapshot.server" {
-                                if let Some(min_ver) = &dep.min_ver {
-                                    let min_migration = MigrationVersion::from(min_ver.as_str());
-                                    if cur_server_migration < min_migration {
-                                        anyhow::bail!("Migration '{}' requires server DB version >= {} but server is at version {}", m.uuid, min_ver, cur_server_migration);
-                                    }
-                                }
-                                if let Some(max_ver) = &dep.max_ver {
-                                    let max_migration = MigrationVersion::from(max_ver.as_str());
-                                    if cur_server_migration > max_migration {
-                                        anyhow::bail!("Migration '{}' requires server DB version <= {} but server is at version {}", m.uuid, max_ver, cur_server_migration);
-                                    }
-                                }
-                            }
-                        }
-                        conn.apply_migration(ApplyMigrationRequest { uuid: m.uuid.clone() }).await
-                            .map_err(|e| anyhow::anyhow!("Error applying organizer migration '{}': {:?}", m.uuid, e))?;
-                        cur_version = m.version;
-                    }
-                },
-                Err(e) => {
-                    match e.code() {
-                        tonic::Code::NotFound => { tracing::info!("No pending migrations on organizer."); },
-                        tonic::Code::Unimplemented => { tracing::info!("Organizer does not implement migrations. Ignoring."); },
-                        _ => { anyhow::bail!("Error checking organizer migrations: {:?}", e); }
-                    }
-                }
-            };
-
-            if let Err(e) = conn.after_migrations(AfterMigrationsRequest {}).await {
-                if e.code() == tonic::Code::Unimplemented {
-                    tracing::debug!("Organizer does not implement after_migrations. Ignoring.");
-                } else {
-                    anyhow::bail!("Error calling after_migrations on organizer: {:?}", e);
-                }
-            }
-
             Ok(())
         }
 
@@ -131,7 +62,7 @@ impl OrganizerCaller {
             match self.tokio_connect() {
                 Ok((rt, mut conn)) => {
                     tracing::info!("Connected to organizer (on attempt {retry}). Doing handshake.");
-                    return rt.block_on(call_it(&mut conn, backchannel, data_dir, server_url, db_file, cur_server_migration));
+                    return rt.block_on(async_call_handshake(&mut conn, backchannel, data_dir, server_url, db_file));
                 },
                 Err(e) => {
                     tracing::warn!("Connecting organizer failed (attempt {retry}/{MAX_TRIES}: {}", e);
@@ -144,7 +75,7 @@ impl OrganizerCaller {
 
 
     /// Helper for code that's not already async
-    fn tokio_connect(&self) -> anyhow::Result<(tokio::runtime::Runtime, OrganizerConnection)> {
+    pub fn tokio_connect(&self) -> anyhow::Result<(tokio::runtime::Runtime, OrganizerConnection)> {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
         let client = rt.block_on(connect(self.uri.clone()))?;
         Ok((rt, client))
