@@ -91,9 +91,34 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
             description="Rename video_id to media_file_id in bf_folder_items"
         ),
         up_sql= dedent('''
-                ALTER TABLE bf_folder_items RENAME COLUMN video_id TO media_file_id;
+                -- Recreate table wih reference to 'media_files' instead of 'videos', as there was
+                -- apparently a short period where 'basic_folders_2024-05-01_1610' refered to 'videos'.
+                -- Recreating the table is the safest way to ensure the reference is correct.
+                CREATE TABLE bf_folder_items_new (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+
+                    folder_id INTEGER NOT NULL REFERENCES bf_folders(id) ON UPDATE CASCADE ON DELETE CASCADE,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+
+                    media_file_id VARCHAR(255) UNIQUE REFERENCES media_files(id) ON UPDATE CASCADE ON DELETE CASCADE,
+                    subfolder_id INTEGER UNIQUE REFERENCES bf_folders(id) ON UPDATE CASCADE ON DELETE CASCADE,
+
+                    CHECK (
+                        (media_file_id IS NOT NULL AND subfolder_id IS NULL) OR
+                        (media_file_id IS NULL AND subfolder_id IS NOT NULL)
+                    ),
+                    CHECK (folder_id != subfolder_id)
+                );
+
+                INSERT INTO bf_folder_items_new (id, folder_id, sort_order, media_file_id, subfolder_id)
+                                          SELECT id, folder_id, sort_order, video_id,      subfolder_id FROM bf_folder_items;
+                DROP TABLE bf_folder_items;
+                ALTER TABLE bf_folder_items_new RENAME TO bf_folder_items;
+
                 DROP INDEX IF EXISTS bf_folder_items_video_id;
+                CREATE INDEX bf_folder_items_folder_id ON bf_folder_items(folder_id);
                 CREATE INDEX bf_folder_items_media_file_id ON bf_folder_items(media_file_id);
+                CREATE INDEX bf_folder_items_subfolder_id ON bf_folder_items(subfolder_id);
                 '''),
     ),
 ]
