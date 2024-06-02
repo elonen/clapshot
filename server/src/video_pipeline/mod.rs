@@ -186,6 +186,7 @@ fn ingest_media_file(
         duration: md.duration.to_f32(),
         fps: Some(md.fps.to_string()),
         raw_metadata_all: Some(md.metadata_all.clone()),
+        default_subtitle_id: None,
     })?;
 
 
@@ -256,6 +257,7 @@ fn ingest_media_file(
                     details: Some(format!("Error sending file to thumbnailing: {}", e)),
                     user_id: Some(md.user_id.clone()),
                     media_file_id: Some(media_id.to_string()),
+                    subtitle_id: None,
                     progress: None
                 }) { tracing::error!(details=?e, "Failed to send user message") };
         };
@@ -271,6 +273,7 @@ fn ingest_media_file(
                 details: Some(serde_json::to_string(&md.upload_cookies).map_err(|e| anyhow!("Error serializing cookies: {}", e))?),
                 user_id: Some(md.user_id.clone()),
                 media_file_id: Some(media_id.to_string()),
+                subtitle_id: None,
                 progress: None,
             })?;
             // Tell user in text also
@@ -281,6 +284,7 @@ fn ingest_media_file(
                 details: if do_transcode { Some(format!("Transcoding because {reason}")) } else { None },
                 user_id: Some(md.user_id.clone()),
                 media_file_id: Some(media_id.to_string()),
+                subtitle_id: None,
                 progress: if do_transcode { Some(0.0) } else { None },
             })?;
             Ok(do_transcode)
@@ -293,6 +297,7 @@ fn ingest_media_file(
                 details: Some(format!("Error sending file to transcoder: {}", e)),
                 user_id: Some(md.user_id.clone()),
                 media_file_id: Some(media_id.to_string()),
+                subtitle_id: None,
                 progress: None,
             })?;
             Err(e)
@@ -475,6 +480,7 @@ pub fn run_forever(
                                     details: Some(format!("'{}': ", e.src_file.file_name().unwrap_or_default().to_string_lossy()) + &e.details + &cleanup_err),
                                     user_id: Some(e.user_id),
                                     media_file_id: vid,
+                                    subtitle_id: None,
                                     progress: None
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                         }
@@ -507,6 +513,7 @@ pub fn run_forever(
                                 details: None,
                                 user_id: Some(user_id),
                                 media_file_id: Some(vid),
+                                subtitle_id: None,
                                 progress
                             }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                     },
@@ -571,6 +578,7 @@ pub fn run_forever(
                                         details: None,
                                         user_id: Some(user_id),
                                         media_file_id: Some(vid.clone()),
+                                        subtitle_id: None,
                                         progress: None
                                     }).ok();
                                 }
@@ -585,6 +593,7 @@ pub fn run_forever(
                                     details: None,
                                     user_id: Some(logs.dmsg.user_id.clone()),
                                     media_file_id: Some(logs.media_file_id.clone()),
+                                    subtitle_id: None,
                                     progress: Some(1.0)
                                 }).unwrap_or_else(|e| { tracing::error!(details=%e, "Error sending user message"); });
                         },
@@ -634,6 +643,7 @@ pub fn run_forever(
                                     details: None,
                                     user_id: Some(logs.user_id.clone()),
                                     media_file_id: Some(vid.clone()),
+                                    subtitle_id: None,
                                     progress: None
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                             }
@@ -660,6 +670,7 @@ pub fn run_forever(
                                     details: Some(logs.dmsg.details),
                                     user_id: Some(logs.dmsg.user_id),
                                     media_file_id: Some(logs.media_file_id),
+                                    subtitle_id: None,
                                     progress: None
                                 }).unwrap_or_else(|e| { tracing::error!("Error sending user message: {:?}", e); });
                         },

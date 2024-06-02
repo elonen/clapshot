@@ -85,6 +85,7 @@ message ClientToServerCmd {
         optional string timecode = 3;
         optional string parent_id = 4;
         optional string drawing = 5;
+        optional string subtitle_id = 6;
     }
     message EditComment {
         string comment_id = 1;

@@ -76,6 +76,7 @@ pub struct UserMessage {
     pub msg: String,
     pub details: Option<String>,
     pub media_file_id: Option<String>,
+    pub subtitle_id: Option<i32>,
     pub progress: Option<f32>,
 }
 
@@ -532,7 +533,8 @@ async fn run_api_server_async(
                     message: m.msg.clone(),
                     details: m.details.clone().unwrap_or("".into()),
                     seen: false, comment_id: None,
-                    media_file_id: m.media_file_id.clone()
+                    media_file_id: m.media_file_id.clone(),
+                    subtitle_id: m.subtitle_id.clone(),
                 };
 
                 let mut proto_msg = msg_insert.to_proto3();

@@ -85,6 +85,7 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<MediaFile>
             duration: Some((i * 100) as f32),
             fps: Some(format!("{}", i * i)),
             raw_metadata_all: Some(format!("{{all: {{video: {}}}}}", i)),
+            default_subtitle_id: None,
         };
         MediaFile::insert(conn, &v).expect("Failed to insert video");
         MediaFile::get(conn, &v.id.into()).expect("Failed to get video")
@@ -101,6 +102,8 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<MediaFile>
             username_ifnull: format!("User Number{}", 1 + i % 2),
             comment: format!("Comment {}", i),
             drawing: Some(format!("drawing_{}.webp", i)),
+            subtitle_id: None,
+            subtitle_filename_ifnull: None,
         };
         let c = Comment::insert(conn, &c).expect("Failed to insert comment");
         let dp = data_dir.join("videos").join(vid).join("drawings");
@@ -125,6 +128,8 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<MediaFile>
         username_ifnull: "User Number1".to_string(),
         comment: "Comment_with_empty_drawing".to_string(),
         drawing: Some("".into()),
+        subtitle_id: None,
+        subtitle_filename_ifnull: None,
     };
     let cmt = models::Comment::insert(conn, &c).expect("Failed to insert comment");
     comments.push(cmt);
@@ -248,6 +253,8 @@ fn test_comment_delete() -> anyhow::Result<()> {
         comment: "re-add".to_string(),
         timecode: None,
         drawing: None,
+        subtitle_id: None,
+        subtitle_filename_ifnull: None,
     };
     let new_id = models::Comment::insert(conn, &c)?.id;
     assert_ne!(new_id, com[6].id, "Comment ID was re-used after deletion. This would mix up comment threads in the UI.");
@@ -290,6 +297,7 @@ fn test_user_messages() -> anyhow::Result<()> {
             event_name: "info".into(),
             media_file_id: Some("HASH0".into()),
             comment_id: None,
+            subtitle_id: None,
             details: "".into(),
             seen: false,
         },
@@ -299,6 +307,7 @@ fn test_user_messages() -> anyhow::Result<()> {
             event_name: "oops".into(),
             media_file_id: Some("HASH0".into()),
             comment_id: None,
+            subtitle_id: None,
             details: "STACKTRACE".into(),
             seen: false,
         },
@@ -308,6 +317,7 @@ fn test_user_messages() -> anyhow::Result<()> {
             event_name: "info".into(),
             media_file_id: None,
             comment_id: None,
+            subtitle_id: None,
             details: "".into(),
             seen: false,
         },

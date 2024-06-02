@@ -21,6 +21,9 @@ message MediaFile {
     optional MediaFilePreviewData preview_data = 7;
     optional MediaFileProcessingMetadata processing_metadata = 8;
 
+    repeated Subtitle subtitles = 20;          // Subtitles associated with the media file
+    optional string default_subtitle_id = 21;  // Default subtitle track ID
+
     optional string playback_url = 100;         // e.g. "https://example.com/video.mp4"
     optional string orig_url = 101;             // URL to download the original file
 }
@@ -49,6 +52,21 @@ message MediaFilePreviewData {
 }
 
 // ---------------------------------------------------------
+// Subtitles
+// ---------------------------------------------------------
+
+message Subtitle {
+    string id = 1;
+    string media_file_id = 2;
+    string title = 3;
+    string language_code = 4;
+    optional string playback_url = 5;
+    string orig_filename = 6;
+    optional google.protobuf.Timestamp added_time = 7;
+    float time_offset = 8;  // Can be negative
+}
+
+// ---------------------------------------------------------
 // Comments
 // ---------------------------------------------------------
 
@@ -61,6 +79,10 @@ message Comment {
     optional string timecode = 6;       // e.g. "00:00:00.000"
     optional string parent_id = 7;      // parent comment, null if top-level
     optional string drawing = 12;       // data-uri of an image
+
+    optional string subtitle_id = 20;
+    optional string subtitle_filename_ifnull = 21;  // Denormalize subtitle filename, in case subtitle_id is null
+
     optional google.protobuf.Timestamp created = 100;
     optional google.protobuf.Timestamp edited = 101;
 }
@@ -80,6 +102,7 @@ message UserMessage {
     message Refs {
         optional string media_file_id = 1;
         optional string comment_id = 2;
+        optional string subtitle_id = 3;
     }
 
     optional string id = 1;

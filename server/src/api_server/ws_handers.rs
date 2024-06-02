@@ -31,8 +31,7 @@ use crate::api_server::server_state::ServerState;
 use crate::api_server::user_session::Topic;
 use crate::database::error::DBError;
 use crate::database::{models, DB, DbBasicQuery, DbQueryByUser, DbQueryByMediaFile, DBPaging};
-use crate::database::schema::comments::drawing;
-use crate::{send_user_error, send_user_ok, client_cmd};
+use crate::{client_cmd, optional_str_to_i32_or_tonic_error, send_user_error, send_user_ok, str_to_i32_or_tonic_error};
 
 use lib_clapshot_grpc::proto;
 
@@ -97,18 +96,20 @@ pub async fn msg_open_navigation_page(data: &OpenNavigationPage , ses: &mut User
     }
 
     // Organizer didn't handle this, so return a default listing.
-    let media_files = models::MediaFile::get_by_user(&mut server.db.conn()?, &ses.user_id, DBPaging::default())?;
-    let h_txt = if media_files.is_empty() {
-        "<h2>You have no media yet.</h2>"
-    } else {
-        "<h2>All your media files</h2>"
-    };
+
+    let mut media_files: Vec<proto::MediaFile> = Vec::new();
+    for m in models::MediaFile::get_by_user(&mut server.db.conn()?, &ses.user_id, DBPaging::default())? {
+        let subs = models::Subtitle::get_by_media_file(&mut server.db.conn()?, &m.id, DBPaging::default())?;
+        media_files.push(m.to_proto3(&server.url_base, subs));
+    }
+
+    let h_txt = if media_files.is_empty() { "<h2>You have no media yet.</h2>" } else { "<h2>All your media files</h2>" };
     let heading = proto::PageItem{ item: Some(proto::page_item::Item::Html(h_txt.into()))};
-    let listing = crate::grpc::folder_listing_for_media_files(&media_files, &server.url_base);
+    let listing = crate::grpc::folder_listing_for_media_files(&media_files);
     let page = vec![heading, listing];
 
     server.emit_cmd(
-        client_cmd!(ShowPage, { page_items: page, page_id: data.page_id.clone(), page_title: Some("Your Files".to_string())}),
+        client_cmd!(ShowPage, { page_items: page, page_id: data.page_id.clone(), page_title: Some("Your Media".to_string())}),
         super::SendTo::UserSession(&ses.sid))?;
     Ok(())
 }
@@ -132,7 +133,9 @@ pub async fn msg_open_media_file(data: &OpenMediaFile, ses: &mut UserSession, se
 pub async fn send_open_media_file_cmd(server: &ServerState, session_id: &str, media_file_id: &str) -> Res<()> {
     server.link_session_to_media_file(session_id, media_file_id)?;
     let conn = &mut server.db.conn()?;
-    let v = models::MediaFile::get(conn, &media_file_id.into())?.to_proto3(&server.url_base);
+    let v_db = models::MediaFile::get(conn, &media_file_id.into())?;
+    let subs = models::Subtitle::get_by_media_file(conn, media_file_id, DBPaging::default())?;
+    let v = v_db.to_proto3(&server.url_base, subs);
     if v.playback_url.is_none() {
         return Err(anyhow!("No playback file"));
     }
@@ -290,20 +293,16 @@ pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComm
         }
     };
 
-    let parent_id = match data.parent_id.as_ref().map(|s| s.parse::<i32>()) {
-        Some(Ok(id)) => Some(id),
-        Some(Err(_)) => { bail!("Invalid parent_id for comment"); }
-        None => None,
-    };
-
     let c = models::CommentInsert {
         media_file_id: media_file_id.to_string(),
-        parent_id,
+        parent_id: optional_str_to_i32_or_tonic_error!(data.parent_id)?,
         user_id: Some(ses.user_id.clone()),
         username_ifnull: ses.user_name.clone(),
         comment: data.comment.clone(),
         timecode: data.timecode.clone(),
         drawing: drwn.clone(),
+        subtitle_id: optional_str_to_i32_or_tonic_error!(data.subtitle_id)?,
+        subtitle_filename_ifnull: None
     };
     let c = models::Comment::insert(&mut server.db.conn()?, &c)
         .map_err(|e| anyhow!("Failed to add comment: {:?}", e))?;

@@ -1,7 +1,7 @@
 use std::{path::Path, sync::atomic::Ordering::Relaxed};
 use anyhow::Context;
 use tonic::{Request, Response, Status};
-use crate::{api_server::{server_state::ServerState, ws_handers::del_media_file_and_cleanup, SendTo}, client_cmd, database::{DbBasicQuery, DbUpdate, DbQueryByUser, DbQueryByMediaFile}, grpc::grpc_impl_helpers::{paged_vec, rpc_expect_field}};
+use crate::{api_server::{server_state::ServerState, ws_handers::del_media_file_and_cleanup, SendTo}, client_cmd, database::{DbBasicQuery, DbQueryByMediaFile, DbQueryByUser, DbUpdate}, grpc::grpc_impl_helpers::{paged_vec, rpc_expect_field}, optional_str_to_i32_or_tonic_error, str_to_i32_or_tonic_error};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::database::models;
 
@@ -48,29 +48,26 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         use crate::api_server::SendTo;
 
         let req = req.into_inner();
-        let msg_in = match req.msg {
-            Some(m) => m,
-            None => return Err(Status::invalid_argument("No message specified")),
-        };
-        let recipient = match req.recipient {
-            Some(s) => s,
-            None => return Err(Status::invalid_argument("No recipient specified")),
-        };
 
-        let comment_id = match msg_in.refs.clone().and_then(|r| r.comment_id) {
-            Some(c) => match c.parse::<i32>() {
-                Ok(i) => Some(i),
-                Err(e) => return Err(Status::invalid_argument(format!("Invalid comment ID: {}", e))),
-            },
-            None => None,
+        let msg_in = req.msg.map_or_else(|| return Err(Status::invalid_argument("No message specified")), Ok)?;
+        let recipient = req.recipient.ok_or_else(|| Status::invalid_argument("No recipient specified"))?;
+
+        let (media_file_id, comment_id, subtitle_id) = match &msg_in.refs {
+            Some(refs) => (
+                refs.media_file_id.clone(),
+                optional_str_to_i32_or_tonic_error!(refs.comment_id)?,
+                optional_str_to_i32_or_tonic_error!(refs.subtitle_id)?
+            ),
+            None => (None, None, None),
         };
 
         let send_msg = |username: &str, to: SendTo, persist: bool| -> anyhow::Result<()> {
             let msg = models::MessageInsert {
                 user_id: username.to_string(),
                 seen: false,
-                media_file_id: msg_in.refs.clone().and_then(|r| r.media_file_id),
-                comment_id: comment_id,
+                media_file_id,
+                comment_id,
+                subtitle_id,
                 event_name: proto_msg_type_to_event_name((&msg_in).r#type()).to_string(),
                 message: msg_in.message.clone(),
                 details: msg_in.details.clone().unwrap_or_default(),
@@ -132,8 +129,12 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             Filter::Ids(ids) => { paged_vec(models::MediaFile::get_many(conn, &ids.ids)?, pg) },
             Filter::UserId(user_id) => { models::MediaFile::get_by_user(conn, &user_id, pg)? },
         };
+
+        let mut proto_items = Vec::with_capacity(items.len());
+        for mf in items { proto_items.push(mf.to_proto3(&self.server.url_base, mf.get_subtitles(conn)?)); }
+
         Ok(Response::new(org::DbMediaFileList {
-            items: items.into_iter().map(|v| v.to_proto3(&self.server.url_base)).collect(),
+            items: proto_items,
             paging: req.paging,
         }))
     }
@@ -146,11 +147,11 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         let db = self.server.db.clone();
         let pg = req.paging.as_ref().try_into()?;
         let conn = &mut db.conn()?;
+
         let items = match rpc_expect_field(&req.filter, "filter")? {
             Filter::All(_) => { models::Comment::get_all(conn, pg)? },
             Filter::Ids(ids) => {
-                let ids = ids.ids.iter().map(|s| s.parse::<i32>()).collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| Status::invalid_argument(format!("Invalid comment ID: {}", e)))?;
+                let ids = ids.ids.iter().map(|comment_id| str_to_i32_or_tonic_error!(comment_id)).collect::<Result<Vec<_>, _>>()?;
                 paged_vec(models::Comment::get_many(conn, &ids)?, pg)
             },
             Filter::UserId(user_id) => { models::Comment::get_by_user(conn, user_id, pg)? },
@@ -173,17 +174,12 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         let items = match rpc_expect_field(&req.filter, "filter")? {
             Filter::All(_) => { models::Message::get_all(conn, pg)? },
             Filter::Ids(ids) => {
-                let ids = ids.ids.iter().map(|s| s.parse::<i32>()).collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| Status::invalid_argument(format!("Invalid user message ID: {}", e)))?;
-                paged_vec(models::Message::get_many(conn, &ids)?, pg)
+                let ids = ids.ids.iter().map(|message_id| str_to_i32_or_tonic_error!(message_id)).collect::<Result<Vec<_>, _>>()?;
+                paged_vec(models::Message::get_many(conn, ids.as_slice())?, pg)
             },
             Filter::UserId(user_id) => { models::Message::get_by_user(conn, user_id, pg)? },
             Filter::MediaFileId(media_file_id) => { models::Message::get_by_media_file(conn, media_file_id, pg)? },
-            Filter::CommentId(comment_id) => {
-                let comment_id = comment_id.parse::<i32>()
-                    .map_err(|e| Status::invalid_argument(format!("Invalid comment ID: {}", e)))?;
-                models::Message::get_by_comment(conn, comment_id)?
-            },
+            Filter::CommentId(comment_id) => { models::Message::get_by_comment(conn, str_to_i32_or_tonic_error!(comment_id)?)? },
         };
         Ok(Response::new(org::DbUserMessageList {
             items: items.into_iter().map(|m| m.to_proto3()).collect(),
@@ -226,7 +222,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
                     }).collect::<Vec<_>>();
 
                     // Convert back to proto3
-                    res_comb_orig_order.iter().map(|it| $to_proto(it)).collect::<Vec<_>>()
+                    res_comb_orig_order.iter().map(|it| $to_proto(it)).collect::<Result<Vec<_>, tonic::Status>>()
                 }
             }
         }
@@ -235,15 +231,19 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             media_files: upsert_type!([
                 conn, req.media_files, models::MediaFile, models::MediaFileInsert,
                 |it: &proto::MediaFile| it.id.is_empty(),
-                |it: &models::MediaFile| it.to_proto3(self.server.url_base.as_str())]),
+                |it: &models::MediaFile| Ok(it.to_proto3(self.server.url_base.as_str(), it.get_subtitles(conn)?))])?,
             comments: upsert_type!([
                 conn, req.comments, models::Comment, models::CommentInsert,
                 |it: &proto::Comment| it.id.is_empty(),
-                |it: &models::Comment| it.to_proto3()]),
+                |it: &models::Comment| Ok(it.to_proto3())])?,
             user_messages: upsert_type!([
                 conn, req.user_messages, models::Message, models::MessageInsert,
                 |it: &proto::UserMessage| it.id.is_none(),
-                |it: &models::Message| it.to_proto3()]),
+                |it: &models::Message| Ok(it.to_proto3())])?,
+            subtitles: upsert_type!([
+                conn, req.subtitles, models::Subtitle, models::SubtitleInsert,
+                |it: &proto::Subtitle| it.id.is_empty(),
+                |it: &models::Subtitle| Ok(it.to_proto3(self.server.url_base.as_str()))])?,
         }))
     }
 
@@ -264,6 +264,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         let conn = &mut self.server.db.conn()?;
         Ok(Response::new(org::DbDeleteResponse {
             media_files_deleted: delete_type!([conn, req.media_file_ids, String, models::MediaFile]),
+            subtitles_deleted: delete_type!([conn, req.subtitle_ids, i32, models::Subtitle]),
             comments_deleted: delete_type!([conn, req.comment_ids, i32, models::Comment]),
             user_messages_deleted: delete_type!([conn, req.user_message_ids, i32, models::Message]),
         }))

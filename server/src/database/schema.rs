@@ -31,6 +31,7 @@ diesel::table! {
         duration -> Nullable<Float>,
         fps -> Nullable<Text>,
         raw_metadata_all -> Nullable<Text>,
+        default_subtitle_id -> Nullable<Integer>,
     }
 }
 
@@ -46,6 +47,8 @@ diesel::table! {
         comment -> Text,
         timecode -> Nullable<Text>,
         drawing -> Nullable<Text>,
+        subtitle_id -> Nullable<Integer>,
+        subtitle_filename_ifnull -> Nullable<Text>,
     }
 }
 
@@ -57,12 +60,29 @@ diesel::table! {
         seen -> Bool,
         media_file_id -> Nullable<Text>,
         comment_id -> Nullable<Integer>,
+        subtitle_id -> Nullable<Integer>,
         event_name -> Text,
         message -> Text,
         details -> Text,
     }
 }
 diesel::joinable!(messages -> comments (comment_id));
+diesel::joinable!(messages -> media_files (media_file_id));
+diesel::joinable!(messages -> subtitles (subtitle_id));
+
+diesel::table! {
+    subtitles (id) {
+        id -> Integer,
+        media_file_id -> Text,
+        title -> Text,
+        language_code -> Text,
+        filename -> Nullable<Text>,
+        orig_filename -> Text,
+        added_time -> Timestamp,
+        time_offset -> Float,
+    }
+}
+diesel::joinable!(comments -> subtitles (subtitle_id));
 
 
 diesel::allow_tables_to_appear_in_same_query!(
@@ -71,4 +91,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     messages,
     media_files,
     media_types,
+    subtitles,
 );

@@ -42,7 +42,9 @@ async fn test_api_push_msg()
             msg: "test_msg".into(),
             user_id: Some("user.num1".into()),
             details: Some("test_details".into()),
-            media_file_id: None, topic: UserMessageTopic::Ok,
+            media_file_id: None,
+            topic: UserMessageTopic::Ok,
+            subtitle_id: None,
             progress: None
         };
 

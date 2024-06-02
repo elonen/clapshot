@@ -40,27 +40,31 @@ message DbGetUserMessagesRequest {
 // otherwise the existing object will be replaced.
 message DbUpsertRequest {
     repeated MediaFile media_files = 1;
-    repeated Comment comments = 2;
-    repeated UserMessage user_messages = 3;
+    repeated Subtitle subtitles = 2;
+    repeated Comment comments = 3;
+    repeated UserMessage user_messages = 4;
 }
 
 message DbUpsertResponse {
     // These will have IDs, creation timestamps, etc. filled in.
     repeated MediaFile media_files = 1;
-    repeated Comment comments = 2;
-    repeated UserMessage user_messages = 3;
+    repeated Subtitle subtitles = 2;
+    repeated Comment comments = 3;
+    repeated UserMessage user_messages = 4;
 }
 
 message DbDeleteRequest {
     repeated string media_file_ids = 1;
-    repeated string comment_ids = 2;
-    repeated string user_message_ids = 3;
+    repeated string subtitle_ids = 2;
+    repeated string comment_ids = 3;
+    repeated string user_message_ids = 4;
 }
 
 message DbDeleteResponse {
     uint32 media_files_deleted = 1;
-    uint32 comments_deleted = 2;
-    uint32 user_messages_deleted = 3;
+    uint32 subtitles_deleted = 2;
+    uint32 comments_deleted = 3;
+    uint32 user_messages_deleted = 4;
 }
 
 // ----------------------------------------
@@ -79,6 +83,11 @@ message IdList {
 message DbMediaFileList {
     repeated MediaFile items = 1;
     optional DbPaging paging = 2;  // Paging info for the result. Some queries may not do paging even if requested, so check for presence.
+}
+
+message DbSubtitleList {
+    repeated Subtitle items = 1;
+    optional DbPaging paging = 2;
 }
 
 message DbCommentList {

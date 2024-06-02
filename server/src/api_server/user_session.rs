@@ -29,7 +29,8 @@ macro_rules! send_user_msg(
             seen: false,
             media_file_id,
             message: $msg.into(),
-            details: $details.into()
+            details: $details.into(),
+            subtitle_id: None,
         }, crate::api_server::SendTo::UserId(&$user_id), $persist)?;
     };
     ($event_name:expr, $user_id:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => {
@@ -150,7 +151,7 @@ pub async fn org_authz<'a>(
         AuthzTopic::MediaFile(v, op) => authz_op::Op::MediaFileOp(
             authz_op::MediaFileOp {
                 op: op.into(),
-                media_file: Some(v.to_proto3(&server.url_base)) }),
+                media_file: Some(v.to_proto3(&server.url_base, vec![])) }), // omit subtitles for authz check
         AuthzTopic::Comment(c, op) => authz_op::Op::CommentOp(
             authz_op::CommentOp {
                 op: op.into(),

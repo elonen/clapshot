@@ -20,6 +20,18 @@ macro_rules! client_cmd {
     };
 }
 
+// Proto3 objects use string for many IDs that are integers in DB. Helper to convert them.
+#[macro_export]
+macro_rules! str_to_i32_or_tonic_error {
+    ($r:expr) => { $r.parse::<i32>().map_err(|e| tonic::Status::invalid_argument(format!("Could not parse {} as int: {}", stringify!($r), e))) };
+}
+#[macro_export]
+macro_rules! optional_str_to_i32_or_tonic_error {
+    ($r:expr) => { $r.as_ref().map(|v| v.parse::<i32>().map_err(|e| tonic::Status::invalid_argument(format!("Could not parse {} as int: {}", stringify!($r), e)))).transpose() };
+}
+
+
+
 /// Convert database time to protobuf3
 pub fn datetime_to_proto3(dt: &chrono::NaiveDateTime) -> pbjson_types::Timestamp {
     pbjson_types::Timestamp {
@@ -120,23 +132,24 @@ if (confirm(msg)) {
 
 
 /// Convert a list of database MediaFiles to a protobuf3 PageItem (FolderListing)
-pub (crate) fn folder_listing_for_media_files(media_files: &[crate::database::models::MediaFile], url_base: &str) -> proto::PageItem {
+pub (crate) fn folder_listing_for_media_files(media_files: &[proto::MediaFile]) -> proto::PageItem {
     let media_files: Vec<proto::page_item::folder_listing::Item> = media_files.iter().map(|v| {
             proto::page_item::folder_listing::Item {
-                item: Some(proto::page_item::folder_listing::item::Item::MediaFile(v.to_proto3(url_base))),
+                item: Some(proto::page_item::folder_listing::item::Item::MediaFile(v.clone())),
                 open_action: Some(proto::ScriptCall {
                     lang: proto::script_call::Lang::Javascript.into(),
                     code: format!("clapshot.openMediaFile(\"{}\")", v.id).into()
                 }),
                 popup_actions: vec!["popup_builtin_rename".into(), "popup_builtin_trash".into()],
-                vis: if v.has_thumbnail == Some(true) { None } else {
+                vis: if v.preview_data.as_ref().and_then(|pv| pv.thumb_url.as_ref()).is_some() { None } else {
+                    // If no thumbnail, show an icon based on media type instead
                     Some(proto::page_item::folder_listing::item::Visualization {
                         icon: Some(proto::Icon {
                             src: Some(proto::icon::Src::FaClass(proto::icon::FaClass {
-                                classes: match v.media_type.as_deref() {
-                                    Some("audio") => "fas fa-volume-high",
-                                    Some("image") => "fas fa-image",
-                                    Some("video") => "fas fa-video",
+                                classes: match v.media_type.as_str() {
+                                    "audio" => "fas fa-volume-high",
+                                    "image" => "fas fa-image",
+                                    "video" => "fas fa-video",
                                     _ => "fa fa-circle-question",
                                 }.into(), color: None, })),
                             ..Default::default()

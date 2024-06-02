@@ -294,11 +294,13 @@ crate::implement_basic_query_traits!(models::MediaType, models::MediaType, media
 crate::implement_basic_query_traits!(models::MediaFile, models::MediaFileInsert, media_files, String, added_time.desc());
 crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32, created.desc());
 crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32, created.desc());
+crate::implement_basic_query_traits!(models::Subtitle, models::SubtitleInsert, subtitles, i32, added_time.desc());
 
 crate::implement_update_traits!(models::User, users, String);
 crate::implement_update_traits!(models::MediaFile, media_files, String);
 crate::implement_update_traits!(models::Comment, comments, i32);
 crate::implement_update_traits!(models::Message, messages, i32);
+crate::implement_update_traits!(models::Subtitle, subtitles, i32);
 
 
 
@@ -319,3 +321,4 @@ pub trait DbQueryByMediaFile: Sized {
 }
 crate::implement_query_by_media_file_traits!(models::Comment, comments, media_file_id, created.desc());
 crate::implement_query_by_media_file_traits!(models::Message, messages, media_file_id, created.desc());
+crate::implement_query_by_media_file_traits!(models::Subtitle, subtitles, media_file_id, added_time.desc());

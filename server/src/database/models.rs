@@ -55,6 +55,7 @@ pub struct MediaFile {
     pub duration: Option<f32>,
     pub fps: Option<String>,
     pub raw_metadata_all: Option<String>,
+    pub default_subtitle_id: Option<i32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Insertable)]
@@ -75,6 +76,38 @@ pub struct MediaFileInsert {
     pub duration: Option<f32>,
     pub fps: Option<String>,
     pub raw_metadata_all: Option<String>,
+    pub default_subtitle_id: Option<i32>,
+}
+
+// -------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, Associations, AsChangeset, Clone)]
+#[diesel(belongs_to(MediaFile, foreign_key = media_file_id))]
+#[diesel(treat_none_as_null = true)]
+pub struct Subtitle {
+    pub id: i32,
+    pub media_file_id: String,
+    pub title: String,
+    pub language_code: String,
+    pub filename: Option<String>,
+    pub orig_filename: String,
+
+    #[serde(with = "ts_seconds")]
+    pub added_time: chrono::NaiveDateTime,
+
+    pub time_offset: f32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Insertable)]
+#[diesel(table_name = subtitles)]
+#[diesel(belongs_to(MediaFile, foreign_key = media_file_id))]
+pub struct SubtitleInsert {
+    pub media_file_id: String,
+    pub title: String,
+    pub language_code: String,
+    pub filename: Option<String>,
+    pub orig_filename: String,
+    pub time_offset: f32,
 }
 
 // -------------------------------------------------------
@@ -100,6 +133,8 @@ pub struct Comment {
     pub comment: String,
     pub timecode: Option<String>,
     pub drawing: Option<String>,
+    pub subtitle_id: Option<i32>,
+    pub subtitle_filename_ifnull: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Insertable)]
@@ -114,6 +149,9 @@ pub struct CommentInsert {
     pub comment: String,
     pub timecode: Option<String>,
     pub drawing: Option<String>,
+    pub subtitle_id: Option<i32>,
+    pub subtitle_filename_ifnull: Option<String>,
+
 }
 
 // -------------------------------------------------------
@@ -133,6 +171,7 @@ pub struct Message {
     pub seen: bool,
     pub media_file_id: Option<String>,
     pub comment_id: Option<i32>,
+    pub subtitle_id: Option<i32>,
     pub event_name: String,
     pub message: String,
     pub details: String,
@@ -148,6 +187,7 @@ pub struct MessageInsert {
     pub seen: bool,
     pub media_file_id: Option<String>,
     pub comment_id: Option<i32>,
+    pub subtitle_id: Option<i32>,
     pub event_name: String,
     pub message: String,
     pub details: String,

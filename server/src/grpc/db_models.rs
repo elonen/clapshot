@@ -1,5 +1,6 @@
 use lib_clapshot_grpc::proto;
-use crate::database::error::{DBResult, DBError};
+use crate::database::{error::{DBError, DBResult}, DBPaging, DbQueryByMediaFile, PooledConnection};
+use crate::database::models;
 
 use super::{datetime_to_proto3, proto3_to_datetime};
 
@@ -28,7 +29,7 @@ pub fn msg_event_name_to_proto_msg_type(t: &str) -> proto::user_message::Type {
 
 // ============================ MediaFile ============================
 
-impl crate::database::models::MediaFile
+impl models::MediaFile
 {
     pub fn from_proto3(v: &proto::MediaFile) -> DBResult<Self>
     {
@@ -48,10 +49,11 @@ impl crate::database::models::MediaFile
             duration: v.duration.as_ref().map(|d| d.duration as f32),
             fps: v.duration.as_ref().map(|d| d.fps.clone()),
             raw_metadata_all: v.processing_metadata.as_ref().map(|m| m.ffprobe_metadata_all.clone()).flatten(),
+            default_subtitle_id: v.default_subtitle_id.as_ref().map(|id| id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid default_subtitle_id")))).transpose()?,
         })
     }
 
-    pub fn to_proto3(&self, url_base: &str) -> proto::MediaFile
+    pub fn to_proto3(&self, url_base: &str, subtitles: Vec<models::Subtitle>) -> proto::MediaFile
     {
         let duration = match (self.duration, self.total_frames, &self.fps) {
             (Some(dur), Some(total_frames), Some(fps)) => Some(proto::MediaFileDuration {
@@ -108,13 +110,19 @@ impl crate::database::models::MediaFile
             added_time: Some(datetime_to_proto3(&self.added_time)),
             preview_data,
             processing_metadata,
+            subtitles: subtitles.into_iter().map(|s| s.to_proto3(url_base)).collect(),
+            default_subtitle_id: self.default_subtitle_id.map(|id| id.to_string()),
             playback_url: playback_uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri)),
             orig_url: orig_uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri))
         }
     }
+
+    pub fn get_subtitles(&self, conn: &mut PooledConnection) -> DBResult<Vec<models::Subtitle>> {
+        models::Subtitle::get_by_media_file(conn, &self.id, DBPaging::default())
+    }
 }
 
-impl crate::database::models::MediaFileInsert
+impl models::MediaFileInsert
 {
     pub fn from_proto3(v: &proto::MediaFile) -> DBResult<Self>
     {
@@ -133,13 +141,68 @@ impl crate::database::models::MediaFileInsert
             duration: v.duration.as_ref().map(|d| d.duration as f32),
             fps: v.duration.as_ref().map(|d| d.fps.clone()),
             raw_metadata_all: v.processing_metadata.as_ref().map(|m| m.ffprobe_metadata_all.clone()).flatten(),
+            default_subtitle_id: v.default_subtitle_id.as_ref().map(|id| id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid default_subtitle_id")))).transpose()?,
         })
     }
 }
 
+// ============================ Subtitles ============================
+
+impl models::Subtitle
+{
+    pub fn from_proto3(v: &proto::Subtitle) -> DBResult<Self>
+    {
+        let added_time = v.added_time.as_ref().ok_or(anyhow::anyhow!("Missing added_time timestamp"))?;
+        Ok(Self {
+            id: v.id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid subtitle ID")))?,
+            media_file_id: v.media_file_id.clone(),
+            title: v.title.clone(),
+            language_code: v.language_code.clone(),
+            filename: v.playback_url.as_ref().map(|url| url.split('/').last().unwrap().to_string()),
+            orig_filename: v.orig_filename.clone(),
+            added_time: proto3_to_datetime(added_time).ok_or(anyhow::anyhow!("Invalid 'added_time' timestamp"))?,
+            time_offset: v.time_offset,
+        })
+    }
+
+    pub fn to_proto3(&self, url_base: &str) -> proto::Subtitle
+    {
+        proto::Subtitle {
+            id: self.id.to_string(),
+            media_file_id: self.media_file_id.clone(),
+            title: self.title.clone(),
+            language_code: self.language_code.clone(),
+            playback_url: Some(format!("{}/videos/{}/subtitles/{}", url_base, &self.media_file_id, &self.filename.as_ref().unwrap_or(&self.orig_filename))),
+            orig_filename: self.orig_filename.clone(),
+            added_time: Some(datetime_to_proto3(&self.added_time)),
+            time_offset: self.time_offset,
+        }
+    }
+}
+
+
+impl models::SubtitleInsert
+{
+    pub fn from_proto3(s: &proto::Subtitle) -> DBResult<Self>
+    {
+        if s.id != String::default() {
+            return Err(DBError::Other(anyhow::anyhow!("Subtitle ID must be empty for conversion to SubtitleInsert, which doesn't have 'id' field")));
+        }
+        Ok(Self {
+            media_file_id: s.media_file_id.clone(),
+            title: s.title.clone(),
+            language_code: s.language_code.clone(),
+            filename: s.playback_url.as_ref().map(|url| url.split('/').last().unwrap().to_string()),
+            orig_filename: s.orig_filename.clone(),
+            time_offset: s.time_offset,
+        })
+    }
+}
+
+
 // ============================ Comment ============================
 
-impl crate::database::models::Comment
+impl models::Comment
 {
     pub fn from_proto3(c: &proto::Comment) -> DBResult<Self>
     {
@@ -156,6 +219,8 @@ impl crate::database::models::Comment
             created: proto3_to_datetime(created).ok_or(anyhow::anyhow!("Invalid 'created' timestamp"))?,
             edited: c.edited.as_ref().map(|t| proto3_to_datetime(t)).flatten(),
             drawing: c.drawing.clone(),
+            subtitle_id: c.subtitle_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid subtitle ID")))?,
+            subtitle_filename_ifnull: c.subtitle_filename_ifnull.clone(),
         })
     }
 
@@ -175,11 +240,13 @@ impl crate::database::models::Comment
             created: created_timestamp,
             edited: edited_timestamp,
             drawing: self.drawing.clone(),
+            subtitle_id: self.subtitle_id.map(|id| id.to_string()),
+            subtitle_filename_ifnull: self.subtitle_filename_ifnull.clone(),
         }
     }
 }
 
-impl crate::database::models::CommentInsert
+impl models::CommentInsert
 {
     pub fn from_proto3(c: &proto::Comment) -> DBResult<Self>
     {
@@ -194,13 +261,15 @@ impl crate::database::models::CommentInsert
             timecode: c.timecode.clone(),
             parent_id: c.parent_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid parent ID")))?,
             drawing: c.drawing.clone(),
+            subtitle_id: c.subtitle_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid subtitle ID")))?,
+            subtitle_filename_ifnull: c.subtitle_filename_ifnull.clone(),
         })
     }
 }
 
 // ============================ Message ============================
 
-impl crate::database::models::Message
+impl models::Message
 {
     pub fn from_proto3(v: &proto::UserMessage) -> DBResult<Self>
     {
@@ -213,6 +282,7 @@ impl crate::database::models::Message
             user_id: user_id.clone(),
             media_file_id: v.refs.as_ref().map(|r| r.media_file_id.clone()).flatten(),
             comment_id: v.refs.as_ref().map(|r| r.comment_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid comment ID")))).transpose()?.flatten(),
+            subtitle_id: v.refs.as_ref().map(|r| r.comment_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid subtitle ID")))).transpose()?.flatten(),
             message: v.message.clone(),
             details: v.details.clone().unwrap_or_default(),
             created: proto3_to_datetime(created).ok_or(anyhow::anyhow!("Invalid 'created' timestamp"))?,
@@ -229,6 +299,7 @@ impl crate::database::models::Message
             refs:Some(proto::user_message::Refs {
                 media_file_id: self.media_file_id.clone(),
                 comment_id: self.comment_id.map(|id| id.to_string()),
+                subtitle_id: self.subtitle_id.map(|id| id.to_string()),
             }),
             message: self.message.clone(),
             details: if self.details.is_empty() { None } else { Some(self.details.clone()) },
@@ -239,7 +310,7 @@ impl crate::database::models::Message
     }
 }
 
-impl crate::database::models::MessageInsert
+impl models::MessageInsert
 {
     pub fn from_proto3(v: &proto::UserMessage) -> DBResult<Self>
     {
@@ -253,6 +324,7 @@ impl crate::database::models::MessageInsert
             user_id: user_id.clone(),
             media_file_id: v.refs.as_ref().map(|r| r.media_file_id.clone()).flatten(),
             comment_id: v.refs.as_ref().map(|r| r.comment_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid comment ID")))).transpose()?.flatten(),
+            subtitle_id: v.refs.as_ref().map(|r| r.comment_id.as_ref().map(|id| id.parse()).transpose().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid subtitle ID")))).transpose()?.flatten(),
             message: v.message.clone(),
             details: v.details.clone().unwrap_or_default(),
             seen: v.seen,
@@ -268,6 +340,7 @@ impl crate::database::models::MessageInsert
             refs:Some(proto::user_message::Refs {
                 media_file_id: self.media_file_id.clone(),
                 comment_id: self.comment_id.map(|id| id.to_string()),
+                subtitle_id: self.subtitle_id.map(|id| id.to_string()),
             }),
             message: self.message.clone(),
             details: if self.details.is_empty() { None } else { Some(self.details.clone()) },
