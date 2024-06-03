@@ -1,6 +1,7 @@
 <script lang="ts">
 import { slide } from "svelte/transition";
 import * as Proto3 from '@clapshot_protobuf/typescript';
+import '@fortawesome/fontawesome-free/css/all.min.css';
 
 export let msg: Proto3.UserMessage;
 let showDetails: boolean = false;
@@ -84,5 +85,4 @@ function dateObjToISO(d: Date|undefined): string {
 </div>
 
 <style>
-@import '@fortawesome/fontawesome-free/css/all.min.css';
 </style>

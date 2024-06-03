@@ -4,12 +4,12 @@ import {acts} from '@tadashi/svelte-notification'
 import {create as sdb_create} from "simple-drawing-board";
 import {onMount, createEventDispatcher} from 'svelte';
 import {scale} from "svelte/transition";
-
+import '@fortawesome/fontawesome-free/css/all.min.css';
 import * as Proto3 from '@clapshot_protobuf/typescript';
-import {VideoFrame} from '@/lib/VideoFrame';
+import {VideoFrame} from './VideoFrame';
 import {allComments, videoIsReady, videoFps, collabId} from '@/stores';
 
-import CommentTimelinePin from '@/lib/CommentTimelinePin.svelte';
+import CommentTimelinePin from './CommentTimelinePin.svelte';
 
 const dispatch = createEventDispatcher();
 
@@ -457,7 +457,6 @@ function onFrameEdited(e: Event) {
 <svelte:window on:keydown={onWindowKeyPress} />
 
 <style>
-@import '@fortawesome/fontawesome-free/css/all.min.css';
 
 button:disabled {
     opacity: 0.3;

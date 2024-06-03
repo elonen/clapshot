@@ -4,19 +4,19 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, mediaFileId, videoFps, videoTitle, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors} from '@/stores';
-import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "@/types";
+import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, mediaFileId, videoFps, videoTitle, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors} from './stores';
+import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "./types";
 
-import CommentCard from '@/lib/CommentCard.svelte'
-import NavBar from '@/lib/NavBar.svelte'
-import CommentInput from '@/lib/CommentInput.svelte';
-import UserMessage from '@/lib/UserMessage.svelte';
-import FileUpload from '@/lib/FileUpload.svelte';
-import VideoPlayer from '@/lib/VideoPlayer.svelte';
+import CommentCard from './lib/player_view/CommentCard.svelte'
+import NavBar from './lib/NavBar.svelte'
+import CommentInput from './lib/player_view/CommentInput.svelte';
+import UserMessage from './lib/UserMessage.svelte';
+import FileUpload from './lib/asset_browser/FileUpload.svelte';
+import VideoPlayer from './lib/player_view/VideoPlayer.svelte';
 import {folderItemsToIDs, type VideoListDefItem} from "@/lib/asset_browser/types";
 import FolderListing from './lib/asset_browser/FolderListing.svelte';
 import LocalStorageCookies from './cookies';
-import RawHtmlItem from './lib/RawHtmlItem.svelte';
+import RawHtmlItem from './lib/asset_browser/RawHtmlItem.svelte';
 import { ClientToServerCmd } from '@clapshot_protobuf/typescript/dist/src/client';
 
 let videoPlayer: VideoPlayer;
