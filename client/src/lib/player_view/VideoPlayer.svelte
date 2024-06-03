@@ -7,7 +7,7 @@ import {scale} from "svelte/transition";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import {VideoFrame} from './VideoFrame';
-import {allComments, videoIsReady, videoFps, collabId} from '@/stores';
+import {allComments, curSubtitle, videoIsReady, videoFps, collabId, allSubtitles} from '@/stores';
 
 import CommentTimelinePin from './CommentTimelinePin.svelte';
 
@@ -366,6 +366,20 @@ function onFrameEdited(e: Event) {
     send_collab_report();
 }
 
+let prev_subtitle: Proto3.Subtitle|null = null;
+function toggleSubtitle() {
+    if ($curSubtitle) {
+        prev_subtitle = $curSubtitle;
+        $curSubtitle = null;
+    } else {
+        if (prev_subtitle) {
+            $curSubtitle = prev_subtitle;
+        } else {
+            $curSubtitle = $allSubtitles[0];
+        }
+    }
+}
+
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -390,7 +404,10 @@ function onFrameEdited(e: Event) {
 				bind:currentTime={time}
 				bind:duration
 				bind:paused>
-				<track kind="captions">
+                <track kind="captions">
+                {#if $curSubtitle}
+                    <track kind="captions" src={$curSubtitle.playbackUrl} srclang={$curSubtitle.languageCode} label={$curSubtitle.title} default />
+                {/if}
 			</video>
 
 			<!--    TODO: maybe show actively controlling collaborator's avatar like this?
@@ -438,13 +455,24 @@ function onFrameEdited(e: Event) {
 				</span>
 			</span>
 
+            <!-- Closed captioning -->
+            {#if $allSubtitles.length > 0}
+                <span class="flex-0 text-center whitespace-nowrap">
+                    <button
+                        class={ $curSubtitle ? 'fa-solid fa-closed-captioning text-amber-600' : 'fa-solid fa-closed-captioning text-gray-400' }
+                        title="Toggle closed captioning"
+                        on:click={() => toggleSubtitle()}
+                    />
+                </span>
+            {/if}
+
 			<!-- Audio volume -->
 			<span class="flex-0 text-center whitespace-nowrap">
 				<button
 					class="fas {audio_volume>0 ? 'fa-volume-high' : 'fa-volume-mute'} mx-2"
 					on:click="{() => audio_volume = audio_volume>0 ? 0 : 50}"
 					/>
-					<input class="mx-2" id="vol-control" type="range" min="0" max="100" step="1" bind:value={audio_volume}/>
+                <input class="mx-2" id="vol-control" type="range" min="0" max="100" step="1" bind:value={audio_volume}/>
 			</span>
 
 			<!-- Video duration -->

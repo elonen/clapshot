@@ -4,7 +4,7 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, mediaFileId, videoFps, videoTitle, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors} from './stores';
+import {allComments, allSubtitles, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, mediaFileId, videoFps, videoTitle, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle} from './stores';
 import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "./types";
 
 import CommentCard from './lib/player_view/CommentCard.svelte'
@@ -172,6 +172,7 @@ function closePlayerIfOpen() {
     $videoFps = null;
     $videoTitle = null;
     $allComments = [];
+    $allSubtitles = [];
     $videoIsReady = false;
 }
 
@@ -200,6 +201,20 @@ function onCommentPinClicked(e: any) {
             card.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"});
             setTimeout(() => { card?.classList.add("highlighted_comment"); }, 500);
             setTimeout(() => { card?.classList.remove("highlighted_comment"); }, 3000);
+        }
+    }
+}
+
+// <button class="text-gray-300" on:click={onSubtitleChange} data-subtitle-id={sub.id}>
+function onSubtitleChange(sub_id: string) {
+    console.log("onSubtitleChange: ", sub_id);
+    if ($curSubtitle?.id == sub_id) {
+        $curSubtitle = null;
+    } else {
+        $curSubtitle = $allSubtitles.find((s) => s.id == sub_id) ?? null;
+        if ($curSubtitle == null) {
+            console.error("Subtitle not found: ", sub_id);
+            acts.add({mode: 'error', message: "Subtitle not found. See log.", lifetime: 5});
         }
     }
 }
@@ -618,7 +633,14 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     $videoFps = parseFloat(v.duration.fps);
                     if (isNaN($videoFps)) throw Error("Invalid FPS");
                     $videoTitle = v.title;
+                    $allSubtitles = v.subtitles ?? [];
                     $allComments = [];
+
+                    if (v.defaultSubtitleId) {
+                        $curSubtitle = $allSubtitles.find((s) => s.id == v.defaultSubtitleId) ?? null;
+                    } else {
+                        $curSubtitle = null;
+                    }
 
                     if ($collabId)
                         wsEmit({joinCollab: { collabId: $collabId, mediaFileId: $mediaFileId! }});
@@ -841,20 +863,37 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
             </div>
 
             {#if $allComments.length > 0}
-            <!-- ========== comment sidepanel ============= -->
-            <div id="comment_list" transition:fade class="flex-none w-72 basis-128 bg-gray-900 py-2 px-2 space-y-2 ml-2 overflow-y-auto">
-                {#each $allComments as it}
-                <CommentCard
-                    indent={it.indent}
-                    comment={it.comment}
-                    on:display-comment={onDisplayComment}
-                    on:delete-comment={onDeleteComment}
-                    on:reply-to-comment={onReplyComment}
-                    on:edit-comment={onEditComment}
-                />
-                {/each}
+            <div id="comment_list" transition:fade class="flex flex-col h-full w-72 bg-gray-900 py-2 px-2 ml-2">
+                <div class="flex-grow overflow-y-auto space-y-2">
+                    {#each $allComments as it}
+                        <CommentCard
+                            indent={it.indent}
+                            comment={it.comment}
+                            on:display-comment={onDisplayComment}
+                            on:delete-comment={onDeleteComment}
+                            on:reply-to-comment={onReplyComment}
+                            on:edit-comment={onEditComment}
+                        />
+                    {/each}
+                </div>
+                <div class="flex-none">
+                    <!-- Subtitles -->
+                    <h6 class="text-gray-500 py-2 border-t border-gray-500">Subtitles</h6>
+                    {#each $allSubtitles as sub}
+                        <!-- new version with toggle on/off + "radio"-style behavior but with buttons and fa eye / eye-slash -->
+                        <div class="flex justify-between items-center {sub.id == $curSubtitle?.id ? "text-amber-600" : "text-gray-300"}">
+                            <button on:click={() => onSubtitleChange(sub.id)} title={sub.origFilename}>
+                                <i class="fa {sub.id == $curSubtitle?.id ? "fa-eye" : "fa-eye-slash" }"></i>
+                                <span class="ml-2">
+                                ({sub.languageCode.toUpperCase()}) {sub.title}
+                                </span>
+                            </button>
+                        </div>
+                    {/each}
+                </div>
             </div>
             {/if}
+
         </div>
 
         {#if $collabId && !collabDialogAck}
@@ -949,6 +988,12 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
         } to {
             transform: rotate(360deg);
         }
+    }
+
+    /* Remove ugly <video><track> background from captions and make font slightly smaller than default */
+    :global(::cue) {
+        background: transparent;
+        font-size: 90%;
     }
 
     /* Make all headings in organizer page bigger */

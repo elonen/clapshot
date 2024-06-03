@@ -172,7 +172,7 @@ impl models::Subtitle
             media_file_id: self.media_file_id.clone(),
             title: self.title.clone(),
             language_code: self.language_code.clone(),
-            playback_url: Some(format!("{}/videos/{}/subtitles/{}", url_base, &self.media_file_id, &self.filename.as_ref().unwrap_or(&self.orig_filename))),
+            playback_url: Some(format!("{}/videos/{}/subs/{}", url_base, &self.media_file_id, &self.filename.as_ref().unwrap_or(&self.orig_filename))),
             orig_filename: self.orig_filename.clone(),
             added_time: Some(datetime_to_proto3(&self.added_time)),
             time_offset: self.time_offset,

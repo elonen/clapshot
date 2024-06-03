@@ -1,0 +1,29 @@
+1
+00:00:00,000 --> 00:00:02,522
+Ignition sequence start.
+
+2
+00:00:02,722 --> 00:00:06,452
+Six. Five. Four. Three.
+
+3
+00:00:06,652 --> 00:00:09,405
+Two. One. Zero.
+
+4
+00:00:09,406 --> 00:00:12,466
+All engines running. Lift off.
+
+5
+00:00:12,666 --> 00:00:15,883
+We have a lift off!
+32 minutes past the hour.
+
+6
+00:00:16,083 --> 00:00:21,317
+Lift off on Apollo 11.
+
+7
+00:00:21,517 --> 00:00:31,517
+Tower cleared.
+

@@ -23,6 +23,9 @@ export let videoIsReady: Writable<boolean> = writable(false);
 export let allComments: Writable<IndentedComment[]> = writable([]);
 export let userMessages: Writable<Proto3.UserMessage[]> = writable([]);
 
+export let allSubtitles: Writable<Proto3.Subtitle[]> = writable([]);
+export let curSubtitle: Writable<Proto3.Subtitle|null> = writable(null);
+
 export let connectionErrors: Writable<string[]> = writable([]);
 
 export let collabId: Writable<string|null> = writable(null);
