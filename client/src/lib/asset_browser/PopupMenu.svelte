@@ -1,6 +1,7 @@
 <script lang="ts">
 import { createEventDispatcher, onMount } from 'svelte';
 import * as Proto3 from '@clapshot_protobuf/typescript';
+import '@fortawesome/fontawesome-free/css/all.min.css';
 
 export let x = 0;
 export let y = 0;
@@ -67,7 +68,6 @@ function fmtColorToCSS(c: Proto3.Color | null | undefined) {
 
 
 <style>
-@import '@fortawesome/fontawesome-free/css/all.min.css';
 * {
     padding: 0;
     margin: 0;

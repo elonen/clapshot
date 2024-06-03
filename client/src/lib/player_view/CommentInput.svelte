@@ -1,7 +1,7 @@
 <script lang="ts">
 import { createPopup } from '@picmo/popup-picker';
 import { darkTheme } from 'picmo';
-
+import '@fortawesome/fontawesome-free/css/all.min.css';
 import { createEventDispatcher } from 'svelte';
 import { fade } from "svelte/transition";
 
@@ -129,7 +129,6 @@ function onEmojiPicker(e: any)
 
 
 <style>
-@import '@fortawesome/fontawesome-free/css/all.min.css';
 
 button {
     transition: 0.1s ease-in-out;

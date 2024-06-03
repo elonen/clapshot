@@ -2,7 +2,7 @@
 
 import { createEventDispatcher } from 'svelte';
 import { scale, slide } from "svelte/transition";
-import Avatar from '@/lib//Avatar.svelte';
+import Avatar from '@/lib/Avatar.svelte';
 import { curUserId, curUserIsAdmin, allComments } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
