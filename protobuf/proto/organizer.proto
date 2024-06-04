@@ -236,6 +236,7 @@ message AuthzUserActionRequest {
             RENAME = 1;
             DELETE = 2;
             COMMENT = 3;
+            EDIT = 4;
         }
         MediaFile media_file = 1;
         Op op = 2;

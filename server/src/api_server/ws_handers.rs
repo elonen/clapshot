@@ -3,10 +3,11 @@
 #![allow(unused_imports)]
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::str::FromStr;
 use lib_clapshot_grpc::proto::client::ClientToServerCmd;
-use lib_clapshot_grpc::proto::client::client_to_server_cmd::{OpenNavigationPage, OpenMediaFile, DelMediaFile, RenameMediaFile, EditComment, DelComment, JoinCollab, LeaveCollab, CollabReport, ReorderItems};
+use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddSubtitle, CollabReport, DelComment, DelMediaFile, DelSubtitle, EditComment, EditSubtitleInfo, JoinCollab, LeaveCollab, OpenMediaFile, OpenNavigationPage, RenameMediaFile, ReorderItems};
 use parking_lot::RwLock;
 type WsMsg = warp::ws::Message;
 
@@ -30,7 +31,7 @@ use super::UserSession;
 use crate::api_server::server_state::ServerState;
 use crate::api_server::user_session::Topic;
 use crate::database::error::DBError;
-use crate::database::{models, DB, DbBasicQuery, DbQueryByUser, DbQueryByMediaFile, DBPaging};
+use crate::database::{models, DBPaging, DbBasicQuery, DbQueryByMediaFile, DbQueryByUser, DbUpdate, DB};
 use crate::{client_cmd, optional_str_to_i32_or_tonic_error, send_user_error, send_user_ok, str_to_i32_or_tonic_error};
 
 use lib_clapshot_grpc::proto;
@@ -374,6 +375,133 @@ pub async fn msg_del_comment(data: &DelComment, ses: &mut UserSession, server: &
 }
 
 
+pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    let media_file_id = match get_media_file_or_send_error(Some(&data.media_file_id), &Some(ses), server).await? {
+        Some(v) => {
+            let default_perm = ses.user_id == (&v).user_id || ses.is_admin;
+            org_authz_with_default(&ses.org_session, "add subtitle", true, server, &ses.organizer,
+                default_perm, AuthzTopic::MediaFile(&v, authz_req::media_file_op::Op::Edit)).await?;
+            v.id
+        },
+        None => return Ok(()),
+    };
+
+    let language_code = {
+        // Guess language from filename (e.g. "en" from "video.en.srt")
+        let lang = data.file_name.split('.').rev().nth(1).unwrap_or_default();
+        if (lang.len()==2 || lang.len()==3) && lang.chars().all(|c| c.is_ascii_lowercase()) {
+            lang.to_string()
+        } else {
+            "en".to_string()
+        }
+    };
+
+    let media_dir = server.media_files_dir.join(&media_file_id);
+    if !media_dir.exists() { bail!("Media file dir not found: {:?}", media_dir); }
+
+    let subs_dir = media_dir.join("subs");
+    let orig_subs_dir = subs_dir.join("orig");
+    if let Err(e) = std::fs::create_dir_all(&orig_subs_dir) {
+        bail!("Failed to create orig subs dir");
+    }
+
+    let orig_fn_clean: PathBuf = Path::new(&data.file_name).file_name().context("Bad filename")?.into();
+    let orig_sub_file = orig_subs_dir.join(&orig_fn_clean);
+
+    tracing::debug!("Writing orig subtitle file to: {:?}", orig_sub_file);
+    if orig_sub_file.exists() {
+        send_user_error!(&ses.user_id, server, Topic::MediaFile(&media_file_id), "Failed to add subtitle.", format!("Subtitle file already exists: '{:?}'", &orig_fn_clean), true);
+        return Ok(());
+    }
+
+    let file_contents = {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        STANDARD.decode(&data.contents_base64).context("Failed to base64 decode subtitle file")?
+    };
+
+    tokio::fs::write(&orig_sub_file, file_contents).await.context("Failed to write orig subtitle file")?;
+
+    // Convert to WebVTT if needed
+    let playback_filename ={
+        use aspasia::{AssSubtitle, SubRipSubtitle, Subtitle, TimedSubtitleFile, WebVttSubtitle};
+
+        let vtt_path = subs_dir.join(&orig_fn_clean.with_extension("vtt").file_name().context("Bad filename")?);
+        if vtt_path.exists() {
+            send_user_error!(&ses.user_id, server, Topic::MediaFile(&media_file_id), "Failed to add subtitle.", format!("WebVTT file already exists: '{:?}'", &vtt_path.file_name().context("Bad filename")?), true);
+            return Ok(());
+        }
+
+        match TimedSubtitleFile::new(&orig_sub_file) {
+            Ok(TimedSubtitleFile::WebVtt(sub)) => {
+                tracing::debug!("Subtitle file is already WebVTT, not converting: {:?}", &orig_sub_file);
+                None
+            },
+            Ok(sub) => {
+                tracing::debug!("Converting subtitle file to WebVTT: {:?}", &orig_sub_file);
+                WebVttSubtitle::from(sub).export(&vtt_path).context("Failed to convert to WebVTT")?;
+                Some(vtt_path.file_name().context("Bad filename")?.to_str().context("Bad filename")?.to_string())
+            },
+            Err(e) => return Err(anyhow!("Failed to parse subtitle file: {:?}", e)),
+        }
+    };
+
+    let conn = &mut server.db.conn()?;
+    models::Subtitle::insert(conn, &models::SubtitleInsert {
+        media_file_id: media_file_id.to_string(),
+        orig_filename: orig_fn_clean.to_string_lossy().into(),
+        title: orig_fn_clean.to_string_lossy().into(),
+        language_code,
+        filename: playback_filename,
+        time_offset: 0.0,
+    }) .map_err(|e| anyhow!("Failed to add subtitle: {:?}", e))?;
+
+    send_open_media_file_cmd(server, &ses.sid, &media_file_id).await?;
+    Ok(())
+}
+
+
+pub async fn msg_edit_subtitle_info(data: &EditSubtitleInfo, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    let id = str_to_i32_or_tonic_error!(data.id)?;
+    let conn = &mut server.db.conn()?;
+
+    let mut sub = models::Subtitle::get(conn, &id).map_err(|e| anyhow!("Failed to get subtitle: {:?}", e))?;
+    let mf = models::MediaFile::get(conn, &sub.media_file_id).map_err(|e| anyhow!("Failed to get media file: {:?}", e))?;
+
+    let default_perm = ses.user_id == (&sub).media_file_id || ses.is_admin;
+    org_authz_with_default(&ses.org_session, "edit subtitle", true, server, &ses.organizer,
+        default_perm, AuthzTopic::MediaFile(&mf, authz_req::media_file_op::Op::Edit)).await?;
+
+    sub.title = data.title.clone().unwrap_or(sub.title.clone());
+    sub.language_code = data.language_code.clone().unwrap_or(sub.language_code.clone());
+    sub.time_offset = data.time_offset.clone().unwrap_or(sub.time_offset);
+
+    models::Subtitle::update_many(conn, &[sub]) .map_err(|e| anyhow!("Failed to update subtitle: {:?}", e))?;
+    send_open_media_file_cmd(server, &ses.sid, &mf.id).await?;
+    Ok(())
+}
+
+pub async fn msg_del_subtitle(data: &DelSubtitle, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    let id = str_to_i32_or_tonic_error!(data.id)?;
+    let conn = &mut server.db.conn()?;
+
+    let sub = models::Subtitle::get(conn, &id).map_err(|e| anyhow!("Failed to get subtitle: {:?}", e))?;
+    let mf = models::MediaFile::get(conn, &sub.media_file_id).map_err(|e| anyhow!("Failed to get media file: {:?}", e))?;
+
+    let default_perm = ses.user_id == (&sub).media_file_id || ses.is_admin;
+    org_authz_with_default(&ses.org_session, "delete subtitle", true, server, &ses.organizer,
+        default_perm, AuthzTopic::MediaFile(&mf, authz_req::media_file_op::Op::Edit)).await?;
+
+    let subs_dir = server.media_files_dir.join(&mf.id).join("subs");
+    let orig_file = subs_dir.join("orig").join(&sub.orig_filename);
+    let vtt_file = subs_dir.join(&sub.filename.unwrap_or("".to_string()));
+    if orig_file.exists() { std::fs::remove_file(&orig_file).map_err(|e| anyhow!("Failed to delete orig subtitle file: {:?}", e))?; }
+    if vtt_file.exists() { std::fs::remove_file(&vtt_file).map_err(|e| anyhow!("Failed to delete vtt subtitle file: {:?}", e))?; }
+
+    models::Subtitle::delete(conn, &id).map_err(|e| anyhow!("Failed to delete subtitle: {:?}", e))?;
+    send_open_media_file_cmd(server, &ses.sid, &mf.id).await?;
+    Ok(())
+}
+
 pub async fn msg_list_my_messages(data: &proto::client::client_to_server_cmd::ListMyMessages, ses: &mut UserSession, server: &ServerState) -> Res<()> {
     let conn = &mut server.db.conn()?;
     let msgs = models::Message::get_by_user(conn, &ses.user_id, DBPaging::default())?;
@@ -553,6 +681,9 @@ pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server
             Cmd::AddComment(data) => msg_add_comment(&data, ses, server).await,
             Cmd::EditComment(data) => msg_edit_comment(&data, ses, server).await,
             Cmd::DelComment(data) => msg_del_comment(&data, ses, server).await,
+            Cmd::AddSubtitle(data) => msg_add_subtitle(&data, ses, server).await,
+            Cmd::EditSubtitleInfo(data) => msg_edit_subtitle_info(&data, ses, server).await,
+            Cmd::DelSubtitle(data) => msg_del_subtitle(&data, ses, server).await,
             Cmd::ListMyMessages(data) => msg_list_my_messages(&data, ses, server).await,
             Cmd::JoinCollab(data) => msg_join_collab(&data, ses, server).await,
             Cmd::LeaveCollab(data) => msg_leave_collab(&data, ses, server).await,

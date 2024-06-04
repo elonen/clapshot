@@ -94,6 +94,22 @@ message ClientToServerCmd {
     message DelComment {
         string comment_id = 1;
     }
+
+    message AddSubtitle {
+        string media_file_id = 1;
+        string file_name = 2;
+        string contents_base64 = 3;
+    }
+    message EditSubtitleInfo {
+        string id = 1;
+        optional string title = 2;
+        optional string language_code = 3;
+        optional float time_offset = 4;
+    }
+    message DelSubtitle {
+        string id = 1;
+    }
+
     message ListMyMessages {
     }
     message JoinCollab {
@@ -107,6 +123,7 @@ message ClientToServerCmd {
         bool loop = 2;
         double seek_time_sec = 3;
         optional string drawing = 4;
+        optional string subtitle_id = 5;
     }
     message OrganizerCmd {
         string cmd = 1;
@@ -126,19 +143,30 @@ message ClientToServerCmd {
 
     oneof cmd {
         OpenNavigationPage open_navigation_page = 10;
+
         OpenMediaFile open_media_file = 20;
         DelMediaFile del_media_file = 30;
         RenameMediaFile rename_media_file = 40;
+
         AddComment add_comment = 50;
         EditComment edit_comment = 60;
         DelComment del_comment = 70;
+
+        AddSubtitle add_subtitle = 75;
+        EditSubtitleInfo edit_subtitle_info = 76;
+        DelSubtitle del_subtitle = 77;
+
         ListMyMessages list_my_messages = 80;
+
         JoinCollab join_collab = 90;
         LeaveCollab leave_collab = 100;
         CollabReport collab_report = 110;
+
         OrganizerCmd organizer_cmd = 120;
+
         MoveToFolder move_to_folder = 130;
         ReorderItems reorder_items = 140;
+
         Logout logout = 150;
     }
 }

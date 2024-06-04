@@ -60,10 +60,11 @@ message Subtitle {
     string media_file_id = 2;
     string title = 3;
     string language_code = 4;
-    optional string playback_url = 5;
-    string orig_filename = 6;
-    optional google.protobuf.Timestamp added_time = 7;
-    float time_offset = 8;  // Can be negative
+    string orig_filename = 5;
+    float time_offset = 6;  // Can be negative
+    string orig_url = 7;
+    string playback_url = 8;
+    optional google.protobuf.Timestamp added_time = 20;
 }
 
 // ---------------------------------------------------------

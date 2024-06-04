@@ -42,8 +42,15 @@ function refreshCommentPins(): void {
 
 function send_collab_report(): void {
     if ($collabId) {
-        let drawing = paused ? getScreenshot() : null;
-        dispatch('collabReport', {paused: videoElem.paused, loop: videoElem.loop, seek_time: videoElem.currentTime, drawing: drawing});
+        let drawing = paused ? getScreenshot() : undefined;
+        let report: Proto3.client.ClientToServerCmd_CollabReport = {
+            paused: videoElem.paused,
+            loop: videoElem.loop,
+            seekTimeSec: videoElem.currentTime,
+            drawing,
+            subtitleId: $curSubtitle?.id,
+        };
+        dispatch('collabReport', { report });
     }
 }
 
@@ -366,16 +373,29 @@ function onFrameEdited(e: Event) {
     send_collab_report();
 }
 
+
+let uploadSubtitlesButton: HTMLButtonElement;
+function changeSubtitleUploadIcon(upload_icon: boolean) {
+    if (upload_icon) {
+        uploadSubtitlesButton.classList.remove('fa-closed-captioning');
+        uploadSubtitlesButton.classList.add('fa-upload');
+    } else {
+        uploadSubtitlesButton.classList.remove('fa-upload');
+        uploadSubtitlesButton.classList.add('fa-closed-captioning');
+    }
+}
+
 let prev_subtitle: Proto3.Subtitle|null = null;
 function toggleSubtitle() {
+    // Dispatch to parent instead of setting directly, to allow collab sessions to sync
     if ($curSubtitle) {
         prev_subtitle = $curSubtitle;
-        $curSubtitle = null;
+        dispatch('onSubtitleChange', {id: null});
     } else {
         if (prev_subtitle) {
-            $curSubtitle = prev_subtitle;
+            dispatch('onSubtitleChange', {id: prev_subtitle.id});
         } else {
-            $curSubtitle = $allSubtitles[0];
+            dispatch('onSubtitleChange', {id: $allSubtitles[0]?.id});
         }
     }
 }
@@ -404,10 +424,12 @@ function toggleSubtitle() {
 				bind:currentTime={time}
 				bind:duration
 				bind:paused>
-                <track kind="captions">
-                {#if $curSubtitle}
-                    <track kind="captions" src={$curSubtitle.playbackUrl} srclang={$curSubtitle.languageCode} label={$curSubtitle.title} default />
-                {/if}
+                <track kind="captions"
+                    src="{$curSubtitle?.playbackUrl}"
+                    srclang="en"
+                    label="{$curSubtitle?.title}"
+                    default
+                />
 			</video>
 
 			<!--    TODO: maybe show actively controlling collaborator's avatar like this?
@@ -456,15 +478,24 @@ function toggleSubtitle() {
 			</span>
 
             <!-- Closed captioning -->
-            {#if $allSubtitles.length > 0}
-                <span class="flex-0 text-center whitespace-nowrap">
+            <span class="flex-0 text-center whitespace-nowrap">
+                {#if $allSubtitles.length > 0}
                     <button
                         class={ $curSubtitle ? 'fa-solid fa-closed-captioning text-amber-600' : 'fa-solid fa-closed-captioning text-gray-400' }
                         title="Toggle closed captioning"
                         on:click={() => toggleSubtitle()}
                     />
-                </span>
-            {/if}
+                {:else}
+                    <button bind:this={uploadSubtitlesButton}
+                        class="fa-solid fa-closed-captioning text-gray-400" title="Upload subtitles"
+                        on:mouseover={() => { changeSubtitleUploadIcon(true); }}
+                        on:focus={() => { changeSubtitleUploadIcon(true); }}
+                        on:mouseout={() => { changeSubtitleUploadIcon(false); }}
+                        on:blur={() => { changeSubtitleUploadIcon(false); }}
+                        on:click={() => { dispatch('uploadSubtitles', {}); }}
+                    />
+                {/if}
+            </span>
 
 			<!-- Audio volume -->
 			<span class="flex-0 text-center whitespace-nowrap">

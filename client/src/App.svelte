@@ -139,6 +139,7 @@ function onDisplayComment(e: any) {
             loop: videoPlayer.isLooping(),
             seekTimeSec: videoPlayer.getCurTime(),
             drawing: e.detail.drawing,
+            subtitleId: $curSubtitle?.id
         }});
     }
 }
@@ -182,12 +183,7 @@ function onPlayerSeeked(_e: any) {
 
 function onCollabReport(e: any) {
     if ($collabId)
-        wsEmit({collabReport: {
-            paused: e.detail.paused,
-            loop: e.detail.loop,
-            seekTimeSec: e.detail.seek_time,
-            drawing: e.detail.drawing,
-        }});
+        wsEmit({collabReport: e.report});
 }
 
 function onCommentPinClicked(e: any) {
@@ -205,19 +201,74 @@ function onCommentPinClicked(e: any) {
     }
 }
 
-// <button class="text-gray-300" on:click={onSubtitleChange} data-subtitle-id={sub.id}>
-function onSubtitleChange(sub_id: string) {
-    console.log("onSubtitleChange: ", sub_id);
+function onSubtitleChange(e: any) {
+    const sub_id = e.detail.id;
+    console.debug("onSubtitleChange, id:", sub_id);
     if ($curSubtitle?.id == sub_id) {
         $curSubtitle = null;
     } else {
         $curSubtitle = $allSubtitles.find((s) => s.id == sub_id) ?? null;
-        if ($curSubtitle == null) {
+        if ($curSubtitle == null && sub_id != null) {
             console.error("Subtitle not found: ", sub_id);
             acts.add({mode: 'error', message: "Subtitle not found. See log.", lifetime: 5});
         }
     }
+    if ($collabId) {
+        wsEmit({collabReport: {
+            paused: videoPlayer.isPaused(),
+            loop: videoPlayer.isLooping(),
+            seekTimeSec: videoPlayer.getCurTime(),
+            drawing: videoPlayer.getScreenshot(),
+            subtitleId: $curSubtitle?.id,
+        }});
+    }
+    console.log("Subtitle URL changed to: ", $curSubtitle?.playbackUrl);
 }
+
+// User clicked on subtitle upload icon
+async function onUploadSubtitles() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.srt, .vtt, .ssa, .ass';
+    input.click();
+
+    input.onchange = async () => {
+        if (!input.files?.length) {
+            console.log('No subtitle file selected. Skipping upload.');
+            return;
+        }
+        for (let file of input.files) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    if (!event.target?.result) { throw new Error('No file contents read'); }
+                    const dataUrl = event.target.result as string;
+                    const [_, contentsBase64] = dataUrl.split(',');
+                    wsEmit({ addSubtitle : {
+                        mediaFileId: $mediaFileId!,
+                        fileName: file.name,
+                        contentsBase64
+                    }});
+                } catch (e) {
+                    console.error('Error adding subtitle file:', e);
+                    acts.add({mode: 'error', message: 'Error adding subtitle file. See log.', lifetime: 5});
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+}
+
+async function deleteSubtitle(id: string) {
+    if (window.confirm("Are you sure you want to delete this subtitle?")) {
+        wsEmit({ delSubtitle: { id } });
+    }
+}
+
+async function editSubtitle(id: string) {
+    window.alert("Not implemented yet");
+}
+
 
 function popHistoryState(e: PopStateEvent) {
     console.debug("popHistoryState called. e.state=", e.state);
@@ -633,7 +684,8 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     $videoFps = parseFloat(v.duration.fps);
                     if (isNaN($videoFps)) throw Error("Invalid FPS");
                     $videoTitle = v.title;
-                    $allSubtitles = v.subtitles ?? [];
+                    $allSubtitles = [...v.subtitles];
+                    console.debug("new $allSubtitles: ", $allSubtitles);
                     $allComments = [];
 
                     if (v.defaultSubtitleId) {
@@ -855,6 +907,8 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                         on:seeked={onPlayerSeeked}
                         on:collabReport={onCollabReport}
                         on:commentPinClicked={onCommentPinClicked}
+                        on:uploadSubtitles={onUploadSubtitles}
+                        on:onSubtitleChange={onSubtitleChange}
                     />
                 </div>
                 <div class="flex-none w-full p-2 {debugLayout?'border-2 border-green-500':''}">
@@ -862,7 +916,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                 </div>
             </div>
 
-            {#if $allComments.length > 0}
+            {#if $allComments.length > 0 || $curSubtitle}
             <div id="comment_list" transition:fade class="flex flex-col h-full w-72 bg-gray-900 py-2 px-2 ml-2">
                 <div class="flex-grow overflow-y-auto space-y-2">
                     {#each $allComments as it}
@@ -878,16 +932,26 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                 </div>
                 <div class="flex-none">
                     <!-- Subtitles -->
-                    <h6 class="text-gray-500 py-2 border-t border-gray-500">Subtitles</h6>
+                    <div class="flex justify-between text-gray-500 items-center py-2 border-t border-gray-500">
+                        <h6>Subtitles</h6>
+                        <button class="fa fa-plus-circle" title="Upload subtitles" on:click={onUploadSubtitles}></button>
+                    </div>
                     {#each $allSubtitles as sub}
                         <!-- new version with toggle on/off + "radio"-style behavior but with buttons and fa eye / eye-slash -->
-                        <div class="flex justify-between items-center {sub.id == $curSubtitle?.id ? "text-amber-600" : "text-gray-300"}">
-                            <button on:click={() => onSubtitleChange(sub.id)} title={sub.origFilename}>
-                                <i class="fa {sub.id == $curSubtitle?.id ? "fa-eye" : "fa-eye-slash" }"></i>
-                                <span class="ml-2">
-                                ({sub.languageCode.toUpperCase()}) {sub.title}
-                                </span>
+                        <div class="flex flex-nowrap space-x-1 text-sm whitespace-nowrap justify-between items-center text-gray-400 w-full">
+                            <button
+                                class="flex-grow text-left hover:text-white {sub.id == $curSubtitle?.id ? 'text-amber-600' : 'text-gray-400'} overflow-hidden"
+                                on:click={() => onSubtitleChange({detail: {id: sub.id}})}
+                                title={sub.origFilename}
+                                style="text-overflow: ellipsis; white-space: nowrap;"
+                            >
+                                <i class="fa {sub.id == $curSubtitle?.id ? 'fa-eye' : 'fa-eye-slash' }"></i>
+                                <span class="text-ellipsis"><strong>{sub.languageCode.toUpperCase()}</strong> – {sub.title}</span>
                             </button>
+                            <span class="flex-shrink-0">
+                                <button class="fa fa-pencil-alt hover:text-white" title="Edit subtitle" on:click={() => editSubtitle(sub.id)}></button>
+                                <button class="fa fa-trash-alt hover:text-white" title="Delete subtitle" on:click={() => deleteSubtitle(sub.id)}></button>
+                            </span>
                         </div>
                     {/each}
                 </div>

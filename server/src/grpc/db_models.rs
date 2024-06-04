@@ -158,7 +158,7 @@ impl models::Subtitle
             media_file_id: v.media_file_id.clone(),
             title: v.title.clone(),
             language_code: v.language_code.clone(),
-            filename: v.playback_url.as_ref().map(|url| url.split('/').last().unwrap().to_string()),
+            filename: v.playback_url.split('/').last().map(|s| s.to_string()),
             orig_filename: v.orig_filename.clone(),
             added_time: proto3_to_datetime(added_time).ok_or(anyhow::anyhow!("Invalid 'added_time' timestamp"))?,
             time_offset: v.time_offset,
@@ -167,12 +167,18 @@ impl models::Subtitle
 
     pub fn to_proto3(&self, url_base: &str) -> proto::Subtitle
     {
+        let orig_url = format!("{}/videos/{}/subs/orig/{}", url_base, &self.media_file_id, &self.orig_filename);
+        let playback_url = match &self.filename {
+            Some(f) => format!("{}/videos/{}/subs/{}", url_base, &self.media_file_id, f),
+            None => orig_url.clone()
+        };
         proto::Subtitle {
             id: self.id.to_string(),
             media_file_id: self.media_file_id.clone(),
             title: self.title.clone(),
             language_code: self.language_code.clone(),
-            playback_url: Some(format!("{}/videos/{}/subs/{}", url_base, &self.media_file_id, &self.filename.as_ref().unwrap_or(&self.orig_filename))),
+            playback_url,
+            orig_url,
             orig_filename: self.orig_filename.clone(),
             added_time: Some(datetime_to_proto3(&self.added_time)),
             time_offset: self.time_offset,
@@ -192,7 +198,7 @@ impl models::SubtitleInsert
             media_file_id: s.media_file_id.clone(),
             title: s.title.clone(),
             language_code: s.language_code.clone(),
-            filename: s.playback_url.as_ref().map(|url| url.split('/').last().unwrap().to_string()),
+            filename: s.playback_url.split('/').last().map(|s| s.to_string()),
             orig_filename: s.orig_filename.clone(),
             time_offset: s.time_offset,
         })

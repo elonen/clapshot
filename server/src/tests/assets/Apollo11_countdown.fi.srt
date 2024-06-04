@@ -1,0 +1,28 @@
+1
+00:00:00,000 --> 00:00:02,522
+Sytytyssekvenssi alkaa.
+
+2
+00:00:02,722 --> 00:00:06,452
+Kuusi. Viisi. Neljä. Kolme.
+
+3
+00:00:06,652 --> 00:00:09,405
+Kaksi. Yksi. Nolla.
+
+4
+00:00:09,406 --> 00:00:12,466
+Kaikki moottorit käynnissä. Nosto.
+
+5
+00:00:12,666 --> 00:00:15,883
+Nosto onnistui!
+32 minuuttia yli tasatunnin.
+
+6
+00:00:16,083 --> 00:00:21,317
+Apollo 11 nousee.
+
+7
+00:00:21,517 --> 00:00:31,517
+Tornista irtaannuttu.

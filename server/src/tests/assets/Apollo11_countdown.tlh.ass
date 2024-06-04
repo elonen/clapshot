@@ -1,0 +1,20 @@
+[Script Info]
+; This is an Advanced Sub Station Alpha v4+ script.
+Title: subtitles
+ScriptType: v4.00+
+Collisions: Normal
+PlayDepth: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,20,&H00FFFFFF,&H0300FFFF,&H00000000,&H02000000,0,0,0,0,100,100,0,0,1,2,1,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.52,Default,,0,0,0,,bIQ bIHeghjaj.
+Dialogue: 0,0:00:02.72,0:00:06.45,Default,,0,0,0,,jav. vagh. loS. wej.
+Dialogue: 0,0:00:06.65,0:00:09.40,Default,,0,0,0,,cha'. wa'. pagh.
+Dialogue: 0,0:00:09.40,0:00:12.46,Default,,0,0,0,,Hoch quinpu'DU' yIjaH. yIghoS.
+Dialogue: 0,0:00:12.66,0:00:15.88,Default,,0,0,0,,wIghoS!\Ntup wejchugh cha' rep ret.
+Dialogue: 0,0:00:16.08,0:00:21.31,Default,,0,0,0,,Apollo wa'maH wa' yIghoS.
+Dialogue: 0,0:00:21.51,0:00:31.51,Default,,0,0,0,,Qap lupHa'.
