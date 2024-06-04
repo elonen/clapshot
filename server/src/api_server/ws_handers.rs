@@ -439,6 +439,23 @@ pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server:
             Ok(sub) => {
                 tracing::debug!("Converting subtitle file to WebVTT: {:?}", &orig_sub_file);
                 WebVttSubtitle::from(sub).export(&vtt_path).context("Failed to convert to WebVTT")?;
+
+                // Workaround for: https://github.com/ylysyym/aspasia/issues/1
+                fn temp_workaround_aspasia_webvtt_bug(vtt_file: &Path) -> std::io::Result<()> {
+                    use std::fs::{self, File};
+                    use std::io::{self, BufRead, BufReader, Write};
+                    let file = File::open(vtt_file)?;
+                    let reader = BufReader::new(file);
+                    let mut lines: Vec<String> = Vec::new();
+                    for line in reader.lines() {
+                        let mut line = line?;
+                        if line.contains("-->") { line = line.replace(",", "."); }
+                        lines.push(line);
+                    }
+                    fs::write(vtt_file, lines.join("\n"))
+                }
+                temp_workaround_aspasia_webvtt_bug(&vtt_path)?;
+
                 Some(vtt_path.file_name().context("Bad filename")?.to_str().context("Bad filename")?.to_string())
             },
             Err(e) => return Err(anyhow!("Failed to parse subtitle file: {:?}", e)),
@@ -492,10 +509,15 @@ pub async fn msg_del_subtitle(data: &DelSubtitle, ses: &mut UserSession, server:
         default_perm, AuthzTopic::MediaFile(&mf, authz_req::media_file_op::Op::Edit)).await?;
 
     let subs_dir = server.media_files_dir.join(&mf.id).join("subs");
-    let orig_file = subs_dir.join("orig").join(&sub.orig_filename);
-    let vtt_file = subs_dir.join(&sub.filename.unwrap_or("".to_string()));
-    if orig_file.exists() { std::fs::remove_file(&orig_file).map_err(|e| anyhow!("Failed to delete orig subtitle file: {:?}", e))?; }
-    if vtt_file.exists() { std::fs::remove_file(&vtt_file).map_err(|e| anyhow!("Failed to delete vtt subtitle file: {:?}", e))?; }
+    tracing::debug!(orig_file=?sub.orig_filename, vtt_file=?sub.filename, "Deleting subtitle files");
+
+    let orig_path = subs_dir.join("orig").join(&sub.orig_filename);
+    if orig_path.exists() { std::fs::remove_file(&orig_path).context("Failed to delete orig subtitle file")?; }
+
+    if let Some(vtt) = sub.filename {
+        let vtt_path = subs_dir.join(&vtt);
+        if vtt_path.exists() { std::fs::remove_file(&vtt_path).context("Failed to delete vtt subtitle file")?; }
+    }
 
     models::Subtitle::delete(conn, &id).map_err(|e| anyhow!("Failed to delete subtitle: {:?}", e))?;
     send_open_media_file_cmd(server, &ses.sid, &mf.id).await?;
