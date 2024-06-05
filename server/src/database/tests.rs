@@ -389,6 +389,58 @@ fn test_transaction_commit() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+#[traced_test]
+fn test_subtitle_add_update_delete() -> anyhow::Result<()> {
+    let (db, _data_dir, vid, _com) = make_test_db();
+    let conn = &mut db.conn()?;
+
+    // Add a subtitle
+    let s = models::SubtitleInsert {
+        media_file_id: vid[0].id.clone(),
+        title: "Subtitle 1".to_string(),
+        language_code: "en".to_string(),
+        filename: Some("sub1.srt".to_string()),
+        orig_filename: "sub1.srt".to_string(),
+        time_offset: 0.0,
+    };
+    let s = models::Subtitle::insert(conn, &s)?;
+    assert_eq!(models::Subtitle::get(conn, &s.id)?.id, s.id);
+
+    // Update subtitle
+    let mut s = models::Subtitle::get(conn, &s.id)?;
+    s.title = "New title".to_string();
+    models::Subtitle::update_many(conn, &[s.clone()])?;
+    assert_eq!(models::Subtitle::get(conn, &s.id)?.title, "New title");
+
+    // Add comment with subtitle
+    let c = models::CommentInsert {
+        media_file_id: vid[0].id.clone(),
+        parent_id: None,
+        user_id: Some("user.num1".to_string()),
+        username_ifnull: "User Number1".to_string(),
+        comment: "Comment with subtitle".to_string(),
+        timecode: None,
+        drawing: None,
+        subtitle_id: Some(s.id),
+        subtitle_filename_ifnull: None,
+    };
+    let c = models::Comment::insert(conn, &c)?;
+    assert_eq!(models::Comment::get(conn, &c.id)?.subtitle_id, Some(s.id));
+    assert_eq!(models::Comment::get(conn, &c.id)?.subtitle_filename_ifnull, None);
+
+    // Delete subtitle
+    models::Subtitle::delete(conn, &s.id)?;
+    assert!(matches!(models::Subtitle::get(conn, &s.id).unwrap_err(), DBError::NotFound()));
+
+    // Check that comment still exists, and that subtitle_filename_ifnull is set
+    let c = models::Comment::get(conn, &c.id)?;
+    assert_eq!(c.subtitle_id, None);
+    assert_eq!(c.subtitle_filename_ifnull, Some("sub1.srt".to_string()));
+
+    Ok(())
+}
+
 
 #[test]
 #[traced_test]
