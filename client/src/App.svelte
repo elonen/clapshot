@@ -224,7 +224,7 @@ function onSubtitleChange(e: any) {
             subtitleId: $curSubtitle?.id,
         }});
     }
-    console.log("Subtitle URL changed to: ", $curSubtitle?.playbackUrl);
+    console.debug("Subtitle URL changed to: ", $curSubtitle?.playbackUrl);
 }
 
 // User clicked on subtitle upload icon
@@ -714,7 +714,6 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     $videoTitle = v.title;
                     $videoOwnerId = v.userId;
                     $allSubtitles = [...v.subtitles];
-                    console.debug("new $allSubtitles: ", $allSubtitles);
                     $allComments = [];
                     $defaultSubtitleId = v.defaultSubtitleId ?? null;
 

@@ -105,7 +105,9 @@ onMount(async () => {
     // Force the video to load
     if (!videoElem.videoWidth) { videoElem.load(); }
     prepare_drawing();
+    offsetTextTracks();
     allComments.subscribe((_v) => { refreshCommentPins(); });
+    curSubtitle.subscribe(() => { offsetTextTracks(); });
 });
 
 // Monitor video elem "loop" property in a timer.
@@ -403,6 +405,44 @@ function toggleSubtitle() {
     }
 }
 
+
+// Offset the start/end times of all cues in all text tracks by $curSubtitle.timeOffset seconds.
+// Called when the video is loaded, and when the subtitle changes.
+function offsetTextTracks() {
+    interface ExtendedVTTCue extends VTTCue {
+        originalStartTime?: number;
+        originalEndTime?: number;
+    }
+
+    const adjustCues = (track: TextTrack) => {
+        const offset = $curSubtitle?.timeOffset || 0.0;
+        if (!track.cues) {
+            console.debug("adjustCues(): track has no cues");
+            return;
+        }
+        console.debug("Offsetting cues on text tracks by", offset, "sec");
+        Array.from(track.cues).forEach((c) => {
+            const cue = c as ExtendedVTTCue;
+            if (!cue.originalStartTime) {
+                cue.originalStartTime = cue.startTime;
+                cue.originalEndTime = cue.endTime;
+            }
+            cue.startTime = cue.originalStartTime + offset;
+            cue.endTime = (cue.originalEndTime ??  (cue.originalStartTime+1))  + offset;
+        });
+    }
+
+    Array.from(videoElem.textTracks).forEach((t) => {
+        const track = t as TextTrack;
+        if (!track.cues || track.cues.length == 0) {
+            // If the track has no cues, wait a bit and try again (load events don't seem to work as expected)
+            console.debug("offsetTextTracks(): Track has no cues, checking again in 500ms");
+            setTimeout(() => { offsetTextTracks(); }, 500);
+        } else {
+            adjustCues(track);
+        }
+    });
+}
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -431,6 +471,7 @@ function toggleSubtitle() {
                     src="{$curSubtitle?.playbackUrl}"
                     srclang="en"
                     label="{$curSubtitle?.title}"
+                    on:loadedmetadata={offsetTextTracks}
                     default
                 />
 			</video>
