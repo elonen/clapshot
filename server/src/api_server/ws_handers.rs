@@ -376,12 +376,12 @@ pub async fn msg_del_comment(data: &DelComment, ses: &mut UserSession, server: &
 
 
 pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server: &ServerState) -> Res<()> {
-    let media_file_id = match get_media_file_or_send_error(Some(&data.media_file_id), &Some(ses), server).await? {
+    let mf = match get_media_file_or_send_error(Some(&data.media_file_id), &Some(ses), server).await? {
         Some(v) => {
             let default_perm = ses.user_id == (&v).user_id || ses.is_admin;
             org_authz_with_default(&ses.org_session, "add subtitle", true, server, &ses.organizer,
                 default_perm, AuthzTopic::MediaFile(&v, authz_req::media_file_op::Op::Edit)).await?;
-            v.id
+            v
         },
         None => return Ok(()),
     };
@@ -396,7 +396,7 @@ pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server:
         }
     };
 
-    let media_dir = server.media_files_dir.join(&media_file_id);
+    let media_dir = server.media_files_dir.join(&mf.id);
     if !media_dir.exists() { bail!("Media file dir not found: {:?}", media_dir); }
 
     let subs_dir = media_dir.join("subs");
@@ -410,7 +410,7 @@ pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server:
 
     tracing::debug!("Writing orig subtitle file to: {:?}", orig_sub_file);
     if orig_sub_file.exists() {
-        send_user_error!(&ses.user_id, server, Topic::MediaFile(&media_file_id), "Failed to add subtitle.", format!("Subtitle file already exists: '{:?}'", &orig_fn_clean), true);
+        send_user_error!(&ses.user_id, server, Topic::MediaFile(&mf.id), "Failed to add subtitle.", format!("Subtitle file already exists: '{:?}'", &orig_fn_clean), true);
         return Ok(());
     }
 
@@ -427,7 +427,7 @@ pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server:
 
         let vtt_path = subs_dir.join(&orig_fn_clean.with_extension("vtt").file_name().context("Bad filename")?);
         if vtt_path.exists() {
-            send_user_error!(&ses.user_id, server, Topic::MediaFile(&media_file_id), "Failed to add subtitle.", format!("WebVTT file already exists: '{:?}'", &vtt_path.file_name().context("Bad filename")?), true);
+            send_user_error!(&ses.user_id, server, Topic::MediaFile(&mf.id), "Failed to add subtitle.", format!("WebVTT file already exists: '{:?}'", &vtt_path.file_name().context("Bad filename")?), true);
             return Ok(());
         }
 
@@ -463,8 +463,8 @@ pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server:
     };
 
     let conn = &mut server.db.conn()?;
-    models::Subtitle::insert(conn, &models::SubtitleInsert {
-        media_file_id: media_file_id.to_string(),
+    let new_sub = models::Subtitle::insert(conn, &models::SubtitleInsert {
+        media_file_id: mf.id.clone(),
         orig_filename: orig_fn_clean.to_string_lossy().into(),
         title: orig_fn_clean.to_string_lossy().into(),
         language_code,
@@ -472,7 +472,13 @@ pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server:
         time_offset: 0.0,
     }) .map_err(|e| anyhow!("Failed to add subtitle: {:?}", e))?;
 
-    send_open_media_file_cmd(server, &ses.sid, &media_file_id).await?;
+    let all_subs = models::Subtitle::get_by_media_file(conn, &mf.id, DBPaging::default())?;
+    if all_subs.len() == 1 {
+        models::MediaFile::set_default_subtitle(conn, &mf.id, Some(new_sub.id))
+            .map_err(|e| anyhow!("Failed to set default subtitle: {:?}", e))?;
+    }
+
+    send_open_media_file_cmd(server, &ses.sid, &mf.id).await?;
     Ok(())
 }
 
@@ -488,11 +494,21 @@ pub async fn msg_edit_subtitle_info(data: &EditSubtitleInfo, ses: &mut UserSessi
     org_authz_with_default(&ses.org_session, "edit subtitle", true, server, &ses.organizer,
         default_perm, AuthzTopic::MediaFile(&mf, authz_req::media_file_op::Op::Edit)).await?;
 
+    // Update subtitle in DB
     sub.title = data.title.clone().unwrap_or(sub.title.clone());
     sub.language_code = data.language_code.clone().unwrap_or(sub.language_code.clone());
     sub.time_offset = data.time_offset.clone().unwrap_or(sub.time_offset);
-
     models::Subtitle::update_many(conn, &[sub]) .map_err(|e| anyhow!("Failed to update subtitle: {:?}", e))?;
+
+    // Set/unset default subtitle for media file if requested
+    if let Some(is_default) = data.is_default {
+        let new_val = if is_default { Some(id) } else { None };
+        if is_default || mf.default_subtitle_id == Some(id) {  // only set null if this subtitle was previously the default
+            models::MediaFile::set_default_subtitle(conn, &mf.id, new_val)
+                .map_err(|e| anyhow!("Failed to set default subtitle: {:?}", e))?;
+        }
+    }
+
     send_open_media_file_cmd(server, &ses.sid, &mf.id).await?;
     Ok(())
 }

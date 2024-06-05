@@ -67,6 +67,23 @@ impl models::MediaFile {
         Ok(())
     }
 
+    /// Set default subtitle id for a media file.
+    ///
+    /// # Arguments
+    /// * `db` - Database
+    /// * `vid` - Id of the media file
+    /// * `sid` - Id of the subtitle
+    pub fn set_default_subtitle(conn: &mut PooledConnection, vid: &str, sid: Option<i32>) -> EmptyDBResult
+    {
+        use schema::media_files::dsl::*;
+        retry_if_db_locked!({
+            diesel::update(media_files.filter(id.eq(vid)))
+                .set(default_subtitle_id.eq(sid))
+                .execute(conn)
+        })?;
+        Ok(())
+    }
+
     /// Set thumbnail sheet dimensions for a media file.
     ///
     /// # Arguments

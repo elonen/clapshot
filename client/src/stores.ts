@@ -7,7 +7,9 @@ export let videoPlaybackUrl: Writable<string|null> = writable(null);
 export let videoOrigUrl: Writable<string|null> = writable(null);
 export let mediaFileId: Writable<string|null> = writable(null);
 export let videoFps: Writable<number|null> = writable(null);
-export let videoTitle: Writable<string|null> = writable("(no video loaded)");
+export let videoTitle: Writable<string|null> = writable("(no video loaded)")
+export let videoOwnerId: Writable<string|null> = writable(null);
+
 export let latestProgressReports: Writable<MediaProgressReport[]> = writable([]);
 
 export let curPageItems: Writable<Proto3.PageItem[]> = writable([]);
@@ -25,6 +27,7 @@ export let userMessages: Writable<Proto3.UserMessage[]> = writable([]);
 
 export let allSubtitles: Writable<Proto3.Subtitle[]> = writable([]);
 export let curSubtitle: Writable<Proto3.Subtitle|null> = writable(null);
+export let defaultSubtitleId: Writable<string|null> = writable(null);
 
 export let connectionErrors: Writable<string[]> = writable([]);
 

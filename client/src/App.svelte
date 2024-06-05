@@ -4,10 +4,11 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, allSubtitles, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, mediaFileId, videoFps, videoTitle, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle} from './stores';
+import {allComments, allSubtitles, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, mediaFileId, videoFps, videoTitle, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle, defaultSubtitleId, videoOwnerId} from './stores';
 import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "./types";
 
 import CommentCard from './lib/player_view/CommentCard.svelte'
+import SubtitleCard from './lib/player_view/SubtitleCard.svelte';
 import NavBar from './lib/NavBar.svelte'
 import CommentInput from './lib/player_view/CommentInput.svelte';
 import UserMessage from './lib/UserMessage.svelte';
@@ -172,6 +173,7 @@ function closePlayerIfOpen() {
     $videoPlaybackUrl = null;
     $videoFps = null;
     $videoTitle = null;
+    $videoOwnerId = null;
     $allComments = [];
     $allSubtitles = [];
     $videoIsReady = false;
@@ -203,7 +205,7 @@ function onCommentPinClicked(e: any) {
 
 function onSubtitleChange(e: any) {
     const sub_id = e.detail.id;
-    console.debug("onSubtitleChange, id:", sub_id);
+    console.debug("onSubtitleChange, id:", sub_id, "allSubtitles:", $allSubtitles);
     if ($curSubtitle?.id == sub_id) {
         $curSubtitle = null;
     } else {
@@ -259,16 +261,42 @@ async function onUploadSubtitles() {
     };
 }
 
-async function deleteSubtitle(id: string) {
+function onSubtitleDelete(e: any) {
+    const sub_id = e.detail.id;
     if (window.confirm("Are you sure you want to delete this subtitle?")) {
-        wsEmit({ delSubtitle: { id } });
+        if ($curSubtitle?.id == sub_id) { $curSubtitle = null; }
+        wsEmit({ delSubtitle: { id: sub_id } });
     }
 }
 
-async function editSubtitle(id: string) {
-    window.alert("Not implemented yet");
+/*
+export interface ClientToServerCmd_EditSubtitleInfo {
+    id: string;
+    title?: string | undefined;
+    languageCode?: string | undefined;
+    timeOffset?: number | undefined;
+    _unknownFields?: {
+        [key: number]: Uint8Array[];
+    } | undefined;
 }
+*/
 
+async function onSubtitleUpdate(e: any) {
+    const sub = e.detail.sub;
+    const isDefault = e.detail.isDefault;
+    if (isNaN(sub.timeOffset)) {
+        console.error("Invalid time offset: ", sub.timeOffset);
+        acts.add({mode: 'error', message: "Invalid time offset: " + sub.timeOffset, lifetime: 5});
+        return;
+    }
+    wsEmit({ editSubtitleInfo: {
+        id: sub.id,
+        title: sub.title,
+        languageCode: sub.languageCode,
+        timeOffset: sub.timeOffset,
+        isDefault,
+    }});
+}
 
 function popHistoryState(e: PopStateEvent) {
     console.debug("popHistoryState called. e.state=", e.state);
@@ -684,14 +712,17 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     $videoFps = parseFloat(v.duration.fps);
                     if (isNaN($videoFps)) throw Error("Invalid FPS");
                     $videoTitle = v.title;
+                    $videoOwnerId = v.userId;
                     $allSubtitles = [...v.subtitles];
                     console.debug("new $allSubtitles: ", $allSubtitles);
                     $allComments = [];
+                    $defaultSubtitleId = v.defaultSubtitleId ?? null;
 
-                    if (v.defaultSubtitleId) {
-                        $curSubtitle = $allSubtitles.find((s) => s.id == v.defaultSubtitleId) ?? null;
+                    if ($defaultSubtitleId) {
+                        $curSubtitle = $allSubtitles.find((s) => s.id == $defaultSubtitleId) ?? null;
                     } else {
-                        $curSubtitle = null;
+                        let old_id = $curSubtitle?.id;
+                        $curSubtitle = $allSubtitles.find((s) => s.id == old_id) ?? null;
                     }
 
                     if ($collabId)
@@ -937,22 +968,13 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                         <button class="fa fa-plus-circle" title="Upload subtitles" on:click={onUploadSubtitles}></button>
                     </div>
                     {#each $allSubtitles as sub}
-                        <!-- new version with toggle on/off + "radio"-style behavior but with buttons and fa eye / eye-slash -->
-                        <div class="flex flex-nowrap space-x-1 text-sm whitespace-nowrap justify-between items-center text-gray-400 w-full">
-                            <button
-                                class="flex-grow text-left hover:text-white {sub.id == $curSubtitle?.id ? 'text-amber-600' : 'text-gray-400'} overflow-hidden"
-                                on:click={() => onSubtitleChange({detail: {id: sub.id}})}
-                                title={sub.origFilename}
-                                style="text-overflow: ellipsis; white-space: nowrap;"
-                            >
-                                <i class="fa {sub.id == $curSubtitle?.id ? 'fa-eye' : 'fa-eye-slash' }"></i>
-                                <span class="text-ellipsis"><strong>{sub.languageCode.toUpperCase()}</strong> – {sub.title}</span>
-                            </button>
-                            <span class="flex-shrink-0">
-                                <button class="fa fa-pencil-alt hover:text-white" title="Edit subtitle" on:click={() => editSubtitle(sub.id)}></button>
-                                <button class="fa fa-trash-alt hover:text-white" title="Delete subtitle" on:click={() => deleteSubtitle(sub.id)}></button>
-                            </span>
-                        </div>
+                        <SubtitleCard
+                            sub={sub}
+                            isDefault={$defaultSubtitleId == sub.id}
+                            on:onSubtitleChange={onSubtitleChange}
+                            on:deleteSubtitle={onSubtitleDelete}
+                            on:updateSubtitle={onSubtitleUpdate}
+                        />
                     {/each}
                 </div>
             </div>

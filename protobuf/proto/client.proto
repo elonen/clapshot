@@ -105,6 +105,7 @@ message ClientToServerCmd {
         optional string title = 2;
         optional string language_code = 3;
         optional float time_offset = 4;
+        optional bool is_default = 5;
     }
     message DelSubtitle {
         string id = 1;

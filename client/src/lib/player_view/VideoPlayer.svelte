@@ -388,6 +388,9 @@ function changeSubtitleUploadIcon(upload_icon: boolean) {
 let prev_subtitle: Proto3.Subtitle|null = null;
 function toggleSubtitle() {
     // Dispatch to parent instead of setting directly, to allow collab sessions to sync
+    if ($allSubtitles.find(s => s.id == prev_subtitle?.id) == undefined) {
+        prev_subtitle = null;
+    }
     if ($curSubtitle) {
         prev_subtitle = $curSubtitle;
         dispatch('onSubtitleChange', {id: null});
