@@ -13,12 +13,12 @@ export let isDefault: boolean = false;
 let showEditor: boolean = false;
 
 function doSave() {
-    dispatch("updateSubtitle", {sub, isDefault});
+    dispatch("update-subtitle", {sub, isDefault});
     showEditor = false;
 }
 
 function doDelete() {
-    dispatch("deleteSubtitle", {id: sub.id});
+    dispatch("delete-subtitle", {id: sub.id});
     showEditor = false;
 }
 
@@ -28,7 +28,7 @@ function doDelete() {
 <div transition:scale class="flex flex-nowrap space-x-1 text-sm whitespace-nowrap justify-between items-center text-gray-400 w-full">
     <button
         class="flex-grow text-left hover:text-white {sub.id == $curSubtitle?.id ? 'text-amber-600' : 'text-gray-400'} overflow-hidden"
-        on:click={() => dispatch("onSubtitleChange", {id: sub.id})}
+        on:click={() => dispatch("change-subtitle", {id: sub.id})}
         title={sub.origFilename}
         style="text-overflow: ellipsis; white-space: nowrap;"
     >

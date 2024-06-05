@@ -16,10 +16,10 @@ CREATE INDEX ix_subtitles_media_file_id ON subtitles (media_file_id);
 
 -- Step 2: Integrate with 'comments'
 
-ALTER TABLE comments ADD COLUMN subtitle_id INTEGER REFERENCES subtitles(id) ON UPDATE CASCADE;
+ALTER TABLE comments ADD COLUMN subtitle_id INTEGER REFERENCES subtitles(id) ON UPDATE CASCADE ON DELETE SET NULL;
 ALTER TABLE comments ADD COLUMN subtitle_filename_ifnull VARCHAR; -- Placeholder to record the original subtitle filename if it is deleted
 
-CREATE TRIGGER tr_comments_set_filename_on_subtitle_delete AFTER DELETE ON subtitles
+CREATE TRIGGER tr_comments_set_filename_on_subtitle_delete BEFORE DELETE ON subtitles
 FOR EACH ROW BEGIN
     UPDATE comments SET subtitle_filename_ifnull = OLD.orig_filename WHERE subtitle_id = OLD.id;
 END;

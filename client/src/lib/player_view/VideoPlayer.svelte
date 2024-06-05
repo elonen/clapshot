@@ -395,12 +395,12 @@ function toggleSubtitle() {
     }
     if ($curSubtitle) {
         prev_subtitle = $curSubtitle;
-        dispatch('onSubtitleChange', {id: null});
+        dispatch('change-subtitle', {id: null});
     } else {
         if (prev_subtitle) {
-            dispatch('onSubtitleChange', {id: prev_subtitle.id});
+            dispatch('change-subtitle', {id: prev_subtitle.id});
         } else {
-            dispatch('onSubtitleChange', {id: $allSubtitles[0]?.id});
+            dispatch('change-subtitle', {id: $allSubtitles[0]?.id});
         }
     }
 }
@@ -432,7 +432,12 @@ function offsetTextTracks() {
         });
     }
 
-    Array.from(videoElem.textTracks).forEach((t) => {
+    if (!videoElem?.textTracks) {
+        console.debug("offsetTextTracks(): videoElem has no textTracks");
+        return;
+    }
+
+    Array.from(videoElem?.textTracks).forEach((t) => {
         const track = t as TextTrack;
         if (!track.cues || track.cues.length == 0) {
             // If the track has no cues, wait a bit and try again (load events don't seem to work as expected)

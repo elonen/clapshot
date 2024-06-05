@@ -3,7 +3,7 @@
 import { createEventDispatcher } from 'svelte';
 import { scale, slide } from "svelte/transition";
 import Avatar from '@/lib/Avatar.svelte';
-import { curUserId, curUserIsAdmin, allComments } from '@/stores';
+import { curUserId, curUserIsAdmin, allComments, curSubtitle, allSubtitles } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
 const dispatch = createEventDispatcher();
@@ -18,7 +18,11 @@ let showReply: boolean = false;
 let replyInput: HTMLInputElement;
 
 function onTimecodeClick(tc: string) {
-    dispatch("display-comment", {'timecode': tc, 'drawing': comment.drawing});
+    dispatch("display-comment", {
+        timecode: tc,
+        drawing: comment.drawing,
+        subtitleId: comment.subtitleId
+    });
 }
 
 function onClickDeleteComment() {
@@ -31,7 +35,11 @@ function onClickDeleteComment() {
 function onReplySubmit() {
     if (replyInput.value != "")
     {
-        dispatch("reply-to-comment", {'parent_id': comment.id, 'comment_text': replyInput.value});
+        dispatch("reply-to-comment", {
+            parentId: comment.id,
+            commentText: replyInput.value,
+            subtitleId: $curSubtitle?.id
+        });
         replyInput.value = "";
         showReply = false;
     }
@@ -55,11 +63,16 @@ function hasChildren(): boolean {
     return $allComments.filter(c => c.comment.parentId == comment.id).length > 0;
 }
 
+function getSubtitleLanguage(subtitleId: string): string {
+    let sub = $allSubtitles.find(s => s.id == subtitleId);
+    return sub ? sub.languageCode.toUpperCase() : "";
+}
+
 </script>
 
 <div transition:scale
     id="comment_card_{comment.id}"
-    class="block overflow-clip rounded-lg bg-gray-800 {!!comment.timecode ? 'hover:bg-gray-700' : ''} shadow-lg shadow-black"
+    class="block overflow-clip text-ellipsis rounded-lg bg-gray-800 {!!comment.timecode ? 'hover:bg-gray-700' : ''} shadow-lg shadow-black"
     style="margin-left: {indent*1.5}em"
     tabindex="0"
     role="link"
@@ -77,9 +90,15 @@ function hasChildren(): boolean {
         <div class="flex-none w-9 h-9 block"><Avatar username="{comment.userId || comment.usernameIfnull}"/></div>
         <h5 class="flex-1 ml-3 text-gray-500 self-end">{comment.usernameIfnull}</h5>
         <span class="flex-none hidden text-xs font-mono">[{comment.id}@{comment.parentId}]</span>
-        <span
-            class="pl-2 flex-0 text-xs italic whitespace-nowrap text-yellow-700 hover:text-yellow-500 hover:underline cursor-pointer self-end">
-                {comment.timecode ? comment.timecode : ""}
+        <span class="pl-2 flex-0 text-xs text-right overflow-clip text-ellipsis italic whitespace-nowrap  self-end">
+                <span class="text-yellow-700 hover:text-yellow-500 hover:underline cursor-pointer">
+                    {comment.timecode ? comment.timecode : ""}
+                </span>
+                {#if comment.subtitleId}
+                    <span class="text-xs text-gray-500 text-nowrap text-ellipsis">| <strong>{getSubtitleLanguage(comment.subtitleId)}</strong></span>
+                {:else if comment.subtitleFilenameIfnull}
+                    <br/><span class="text-xs text-gray-500 line-through" title={comment.subtitleFilenameIfnull}>{comment.subtitleFilenameIfnull}</span>
+                {/if}
         </span>
     </div>
 

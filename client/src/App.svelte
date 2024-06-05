@@ -69,7 +69,7 @@ function richLog(obj: any, op_name: string|undefined = undefined, proto3_cmd: an
 
 
 // Show last 5 connection errors and log everything to console
-function show_connection_error(msg: string) {
+function showConnectionError(msg: string) {
     connectionErrors.update((errs: string[]) => {
         let t = new Date().toLocaleTimeString();
         errs.push(`[${t}] ${msg}`);
@@ -101,6 +101,7 @@ function onCommentInputButton(e: any) {
                 comment: e.detail.comment_text,
                 drawing: videoPlayer.getScreenshot(),
                 timecode: e.detail.is_timed ? videoPlayer.getCurTimecode() : "",
+                subtitleId: $curSubtitle?.id
             }});
         }
         resumePlayer();
@@ -131,8 +132,8 @@ function onDisplayComment(e: any) {
     // Close draw mode while showing (drawing from a saved) comment
     videoPlayer.onToggleDraw(false);
     commentInput.forceDrawMode(false);
-    if (e.detail.drawing)
-    videoPlayer.setDrawing(e.detail.drawing);
+    if (e.detail.drawing) { videoPlayer.setDrawing(e.detail.drawing); }
+    if (e.detail.subtitleId) { $curSubtitle = $allSubtitles.find((s) => s.id == e.detail.subtitleId) ?? null; }
     if ($collabId) {
         logAbbrev("Collab: onDisplayComment. collab_id: '" + $collabId + "'");
         wsEmit({collabReport: {
@@ -149,12 +150,13 @@ function onDeleteComment(e: any) {
     wsEmit({delComment: { commentId: e.detail.id }});
 }
 
-function onReplyComment(e: { detail: { parent_id: string; comment_text: string; }}) {
+function onReplyComment(e: { detail: { parentId: string; commentText: string, subtitleId: string|undefined }}) {
     console.log("onReplyComment: ", e.detail);
     wsEmit({addComment: {
         mediaFileId: $mediaFileId!,
-        parentId: e.detail.parent_id,
-        comment: e.detail.comment_text,
+        parentId: e.detail.parentId,
+        comment: e.detail.commentText,
+        subtitleId: e.detail.subtitleId,
     }});
 }
 
@@ -382,7 +384,7 @@ fetch(CONF_FILE)
     }
 })
 .catch(error => {
-    show_connection_error(`Failed to read config file '${CONF_FILE}': ${error}`);
+    showConnectionError(`Failed to read config file '${CONF_FILE}': ${error}`);
 });
 
 
@@ -482,19 +484,19 @@ function connectWebsocket(wsUrl: string) {
                     else
                         scheduleReconnect();
                 }
-                show_connection_error(`Auth error at '${http_health_url}': ${response.status} - ${response.statusText}`);
+                showConnectionError(`Auth error at '${http_health_url}': ${response.status} - ${response.statusText}`);
             }
         })
         .catch(error => {
             if (error.name === 'TypeError' && error.message == 'Failed to fetch') {
-            show_connection_error(`Network error fetching '${http_health_url}'`);
+            showConnectionError(`Network error fetching '${http_health_url}'`);
             } else {
-                show_connection_error(`Failed to fetch '${http_health_url}': ${error}`);
+                showConnectionError(`Failed to fetch '${http_health_url}': ${error}`);
             }
             scheduleReconnect();
         });
     } catch (error) {
-        show_connection_error(`Connect to '${wsUrl}' failed: ${error}`);
+        showConnectionError(`Connect to '${wsUrl}' failed: ${error}`);
         scheduleReconnect();
     }
 }
@@ -938,7 +940,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                         on:collabReport={onCollabReport}
                         on:commentPinClicked={onCommentPinClicked}
                         on:uploadSubtitles={onUploadSubtitles}
-                        on:onSubtitleChange={onSubtitleChange}
+                        on:change-subtitle={onSubtitleChange}
                     />
                 </div>
                 <div class="flex-none w-full p-2 {debugLayout?'border-2 border-green-500':''}">
@@ -970,9 +972,9 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                         <SubtitleCard
                             sub={sub}
                             isDefault={$defaultSubtitleId == sub.id}
-                            on:onSubtitleChange={onSubtitleChange}
-                            on:deleteSubtitle={onSubtitleDelete}
-                            on:updateSubtitle={onSubtitleUpdate}
+                            on:change-subtitle={onSubtitleChange}
+                            on:delete-subtitle={onSubtitleDelete}
+                            on:update-subtitle={onSubtitleUpdate}
                         />
                     {/each}
                 </div>
