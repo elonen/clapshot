@@ -3,14 +3,10 @@ import type { IndentedComment, UserMenuItem, MediaProgressReport } from '@/types
 import type { VideoListDefItem } from '@/lib/asset_browser/types';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-export let videoPlaybackUrl: Writable<string|null> = writable(null);
-export let videoOrigUrl: Writable<string|null> = writable(null);
 export let mediaFileId: Writable<string|null> = writable(null);
-export let videoFps: Writable<number|null> = writable(null);
-export let videoTitle: Writable<string|null> = writable("(no video loaded)")
-export let videoOwnerId: Writable<string|null> = writable(null);
+export let curVideo: Writable<Proto3.MediaFile|null> = writable(null);
 
-export let latestProgressReports: Writable<MediaProgressReport[]> = writable([]);
+export let videoIsReady: Writable<boolean> = writable(false);
 
 export let curPageItems: Writable<Proto3.PageItem[]> = writable([]);
 export let curPageId: Writable<string|null> = writable(null);
@@ -20,14 +16,11 @@ export let curUserId: Writable<string|null> = writable(null);
 export let curUserIsAdmin: Writable<boolean> = writable(false);
 export let curUserPic: Writable<string|null> = writable(null);
 
-export let videoIsReady: Writable<boolean> = writable(false);
-
 export let allComments: Writable<IndentedComment[]> = writable([]);
-export let userMessages: Writable<Proto3.UserMessage[]> = writable([]);
-
-export let allSubtitles: Writable<Proto3.Subtitle[]> = writable([]);
 export let curSubtitle: Writable<Proto3.Subtitle|null> = writable(null);
-export let defaultSubtitleId: Writable<string|null> = writable(null);
+
+export let userMessages: Writable<Proto3.UserMessage[]> = writable([]);
+export let latestProgressReports: Writable<MediaProgressReport[]> = writable([]);
 
 export let connectionErrors: Writable<string[]> = writable([]);
 

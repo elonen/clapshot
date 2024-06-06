@@ -3,7 +3,7 @@
 import { createEventDispatcher } from 'svelte';
 import { scale, slide } from "svelte/transition";
 import Avatar from '@/lib/Avatar.svelte';
-import { curUserId, curUserIsAdmin, allComments, curSubtitle, allSubtitles } from '@/stores';
+import { curUserId, curUserIsAdmin, allComments, curSubtitle, curVideo } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
 const dispatch = createEventDispatcher();
@@ -64,7 +64,7 @@ function hasChildren(): boolean {
 }
 
 function getSubtitleLanguage(subtitleId: string): string {
-    let sub = $allSubtitles.find(s => s.id == subtitleId);
+    let sub = $curVideo?.subtitles.find(s => s.id == subtitleId);
     return sub ? sub.languageCode.toUpperCase() : "";
 }
 

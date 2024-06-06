@@ -7,7 +7,7 @@ import {scale} from "svelte/transition";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import {VideoFrame} from './VideoFrame';
-import {allComments, curSubtitle, videoIsReady, videoFps, collabId, allSubtitles} from '@/stores';
+import {allComments, curSubtitle, videoIsReady, collabId, curVideo} from '@/stores';
 
 import CommentTimelinePin from './CommentTimelinePin.svelte';
 
@@ -70,9 +70,12 @@ function prepare_drawing(): void
     {
         $videoIsReady = true;
 
+        let frameRate = parseFloat($curVideo?.duration?.fps ?? "");
+        if (isNaN(frameRate)) { throw new Error("VideoPlayer: Invalid frame rate"); }
+
         vframeCalc = new VideoFrame({
             video: videoElem,
-            frameRate: $videoFps,
+            frameRate,
             callback: function(response: any) { console.log(response); } });
 
         refreshCommentPins(); // Creates CommentTimelinePin components, now that we can calculate timecodes properly
@@ -390,7 +393,7 @@ function changeSubtitleUploadIcon(upload_icon: boolean) {
 let prev_subtitle: Proto3.Subtitle|null = null;
 function toggleSubtitle() {
     // Dispatch to parent instead of setting directly, to allow collab sessions to sync
-    if ($allSubtitles.find(s => s.id == prev_subtitle?.id) == undefined) {
+    if ($curVideo?.subtitles.find(s => s.id == prev_subtitle?.id) == undefined) {
         prev_subtitle = null;
     }
     if ($curSubtitle) {
@@ -400,7 +403,7 @@ function toggleSubtitle() {
         if (prev_subtitle) {
             dispatch('change-subtitle', {id: prev_subtitle.id});
         } else {
-            dispatch('change-subtitle', {id: $allSubtitles[0]?.id});
+            dispatch('change-subtitle', {id: $curVideo?.subtitles[0]?.id});
         }
     }
 }
@@ -528,7 +531,7 @@ function offsetTextTracks() {
 
             <!-- Closed captioning -->
             <span class="flex-0 text-center whitespace-nowrap">
-                {#if $allSubtitles.length > 0}
+                {#if ($curVideo?.subtitles?.length ?? 0) > 0}
                     <button
                         class={ $curSubtitle ? 'fa-solid fa-closed-captioning text-amber-600' : 'fa-solid fa-closed-captioning text-gray-400' }
                         title="Toggle closed captioning"

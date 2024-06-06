@@ -2,7 +2,7 @@
 
 import { createEventDispatcher } from 'svelte';
 import { scale, slide } from "svelte/transition";
-import { curSubtitle, curUserId, curUserIsAdmin, videoOwnerId } from '@/stores';
+import { curSubtitle, curUserId, curUserIsAdmin, curVideo } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
 const dispatch = createEventDispatcher();
@@ -35,7 +35,7 @@ function doDelete() {
         <i class="fa {sub.id == $curSubtitle?.id ? 'fa-eye' : 'fa-eye-slash' }"></i>
         <span class="text-ellipsis"><strong>{sub.languageCode.toUpperCase()}</strong> – {sub.title}</span>
     </button>
-    {#if $videoOwnerId == $curUserId || $curUserIsAdmin}
+    {#if $curVideo?.userId == $curUserId || $curUserIsAdmin}
     <span class="flex-shrink-0">
         <button class="fa fa-pencil hover:text-white" title="Edit subtitle" on:click={() => { showEditor = !showEditor; }}></button>
     </span>

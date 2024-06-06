@@ -4,7 +4,7 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, allSubtitles, curUsername, curUserId, videoIsReady, videoPlaybackUrl, videoOrigUrl, mediaFileId, videoFps, videoTitle, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle, defaultSubtitleId, videoOwnerId} from './stores';
+import {allComments, curUsername, curUserId, videoIsReady, mediaFileId, curVideo, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle} from './stores';
 import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "./types";
 
 import CommentCard from './lib/player_view/CommentCard.svelte'
@@ -128,12 +128,13 @@ function onCommentInputButton(e: any) {
 }
 
 function onDisplayComment(e: any) {
+    if (!$curVideo) { throw Error("No video loaded"); }
     videoPlayer.seekToSMPTE(e.detail.timecode);
     // Close draw mode while showing (drawing from a saved) comment
     videoPlayer.onToggleDraw(false);
     commentInput.forceDrawMode(false);
     if (e.detail.drawing) { videoPlayer.setDrawing(e.detail.drawing); }
-    if (e.detail.subtitleId) { $curSubtitle = $allSubtitles.find((s) => s.id == e.detail.subtitleId) ?? null; }
+    if (e.detail.subtitleId) { $curSubtitle = $curVideo.subtitles.find((s) => s.id == e.detail.subtitleId) ?? null; }
     if ($collabId) {
         logAbbrev("Collab: onDisplayComment. collab_id: '" + $collabId + "'");
         wsEmit({collabReport: {
@@ -172,12 +173,8 @@ function closePlayerIfOpen() {
     wsEmit({leaveCollab: {}});
     $collabId = null;
     $mediaFileId = null;
-    $videoPlaybackUrl = null;
-    $videoFps = null;
-    $videoTitle = null;
-    $videoOwnerId = null;
+    $curVideo = null;
     $allComments = [];
-    $allSubtitles = [];
     $videoIsReady = false;
 }
 
@@ -207,11 +204,12 @@ function onCommentPinClicked(e: any) {
 
 function onSubtitleChange(e: any) {
     const sub_id = e.detail.id;
-    console.debug("onSubtitleChange, id:", sub_id, "allSubtitles:", $allSubtitles);
+    if (!$curVideo) { throw Error("No video loaded"); }
+    console.debug("onSubtitleChange, id:", sub_id, "allSubtitles:", $curVideo.subtitles);
     if ($curSubtitle?.id == sub_id) {
         $curSubtitle = null;
     } else {
-        $curSubtitle = $allSubtitles.find((s) => s.id == sub_id) ?? null;
+        $curSubtitle = $curVideo.subtitles.find((s) => s.id == sub_id) ?? null;
         if ($curSubtitle == null && sub_id != null) {
             console.error("Subtitle not found: ", sub_id);
             acts.add({mode: 'error', message: "Subtitle not found. See log.", lifetime: 5});
@@ -708,22 +706,15 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                         document.title = "Clapshot - " + (v.title ?? v.id);
                     }
 
-                    $videoPlaybackUrl = v.playbackUrl;
-                    $videoOrigUrl = v.origUrl ?? null;
                     $mediaFileId = v.id;
-                    $videoFps = parseFloat(v.duration.fps);
-                    if (isNaN($videoFps)) throw Error("Invalid FPS");
-                    $videoTitle = v.title;
-                    $videoOwnerId = v.userId;
-                    $allSubtitles = [...v.subtitles];
+                    $curVideo = v;
                     $allComments = [];
-                    $defaultSubtitleId = v.defaultSubtitleId ?? null;
 
-                    if ($defaultSubtitleId) {
-                        $curSubtitle = $allSubtitles.find((s) => s.id == $defaultSubtitleId) ?? null;
+                    if (v.defaultSubtitleId) {
+                        $curSubtitle = $curVideo.subtitles.find((s) => s.id == v.defaultSubtitleId) ?? null;
                     } else {
                         let old_id = $curSubtitle?.id;
-                        $curSubtitle = $allSubtitles.find((s) => s.id == old_id) ?? null;
+                        $curSubtitle = $curVideo.subtitles.find((s) => s.id == old_id) ?? null;
                     }
 
                     if ($collabId)
@@ -927,7 +918,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
             </div>
         </div>
 
-        {:else if $mediaFileId}
+        {:else if $mediaFileId && $curVideo && $curVideo.playbackUrl}
 
         <!-- ========== video review widgets ============= -->
         <div transition:slide class="flex h-full w-full {debugLayout?'border-2 border-blue-700':''}">
@@ -935,7 +926,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
             <div transition:slide class="flex-1 flex flex-col {debugLayout?'border-2 border-purple-600':''}">
                 <div class="flex-1 bg-cyan-900">
                     <VideoPlayer
-                        bind:this={videoPlayer} src={$videoPlaybackUrl}
+                        bind:this={videoPlayer} src={$curVideo.playbackUrl}
                         on:seeked={onPlayerSeeked}
                         on:collabReport={onCollabReport}
                         on:commentPinClicked={onCommentPinClicked}
@@ -963,20 +954,22 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                     {/each}
                 </div>
                 <div class="flex-none">
-                    <!-- Subtitles -->
-                    <div class="flex justify-between text-gray-500 items-center py-2 border-t border-gray-500">
-                        <h6>Subtitles</h6>
-                        <button class="fa fa-plus-circle" title="Upload subtitles" on:click={onUploadSubtitles}></button>
-                    </div>
-                    {#each $allSubtitles as sub}
-                        <SubtitleCard
-                            sub={sub}
-                            isDefault={$defaultSubtitleId == sub.id}
-                            on:change-subtitle={onSubtitleChange}
-                            on:delete-subtitle={onSubtitleDelete}
-                            on:update-subtitle={onSubtitleUpdate}
-                        />
-                    {/each}
+                    {#if $curVideo.subtitles}
+                        <!-- Subtitles -->
+                        <div class="flex justify-between text-gray-500 items-center py-2 border-t border-gray-500">
+                            <h6>Subtitles</h6>
+                            <button class="fa fa-plus-circle" title="Upload subtitles" on:click={onUploadSubtitles}></button>
+                        </div>
+                        {#each $curVideo.subtitles as sub}
+                            <SubtitleCard
+                                sub={sub}
+                                isDefault={$curVideo.defaultSubtitleId == sub.id}
+                                on:change-subtitle={onSubtitleChange}
+                                on:delete-subtitle={onSubtitleDelete}
+                                on:update-subtitle={onSubtitleUpdate}
+                            />
+                        {/each}
+                    {/if}
                 </div>
             </div>
             {/if}

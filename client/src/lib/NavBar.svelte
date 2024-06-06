@@ -1,7 +1,7 @@
 <script lang="ts">
 
 import { onMount, createEventDispatcher } from 'svelte';
-import { curUsername, curUserPic, videoTitle, mediaFileId, videoOrigUrl, collabId, userMenuItems } from "@/stores";
+import { curUsername, curUserPic, curVideo, mediaFileId, collabId, userMenuItems } from "@/stores";
 import Avatar from '@/lib/Avatar.svelte';
 import logo from "@/assets/clapshot-logo.svg";
 import {latestProgressReports} from '@/stores';
@@ -74,8 +74,8 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 					<h2 class=" text-lg text-center">
 						{$mediaFileId}
 						<a href="?vid={$mediaFileId}" class="text-gray-700 hover:text-gray-500"><i class="fas fa-share-square text-sm"></i></a>
-						{#if $videoOrigUrl}
-							<a href="{$videoOrigUrl}" download title="Download original file" class="text-gray-700 hover:text-gray-500"><i class="fas fa-download text-sm"></i></a>
+						{#if $curVideo?.origUrl}
+							<a href="{$curVideo?.origUrl}" download title="Download original file" class="text-gray-700 hover:text-gray-500"><i class="fas fa-download text-sm"></i></a>
 						{/if}
 						{#if $collabId}
 							<a href="?vid={$mediaFileId}" class="text-green-500 hover:text-orange-600" title="Collaborative session active. Click to exit."><i class="fas fa-users text-sm"></i></a>
@@ -83,7 +83,7 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 							<a href="?vid={$mediaFileId}&collab={randomSessionId}" title="Start collaborative session" class="text-gray-700 hover:text-gray-500"><i class="fas fa-user-plus text-sm"></i></a>
 						{/if}
 					</h2>
-				<span class="mx-4 text-xs text-center">{$videoTitle}</span>
+				<span class="mx-4 text-xs text-center">{$curVideo?.title}</span>
 				{#if videoProgressMsg}
 					<span class="text-cyan-800 mx-4 text-xs text-center">{videoProgressMsg}</span>
 				{/if}
