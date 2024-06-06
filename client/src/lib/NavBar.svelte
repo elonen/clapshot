@@ -50,6 +50,13 @@ function logoutBasicAuth(urlFor401: RequestInfo, redirUrl: string) {
         })
 }
 
+function showAbout() {
+	alert("Clapshot Client version " + process.env.CLAPSHOT_CLIENT_VERSION + "\n" +
+		"\n" +
+		"Visit the project page at:\n" +
+		"https://github.com/elonen/clapshot\n");
+}
+
 const randomSessionId = Math.random().toString(36).substring(2, 15);
 
 </script>
@@ -110,6 +117,8 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 						{#each $userMenuItems as item}
 							{#if item.type === "logout-basic-auth" }
 								<button on:click|preventDefault={() => logoutBasicAuth('/logout', '/')} class="block text-left px-4 py-2 w-full text-sm text-gray-700 hover:bg-gray-100" role="menuitem">{item.label}</button>
+							{:else if item.type === "about"}
+								<button on:click|preventDefault={showAbout} class="block text-left px-4 py-2 w-full text-sm text-gray-700 hover:bg-gray-100" role="menuitem">{item.label}</button>
 							{:else if item.type === "divider"}
 								<div class="border-t border-gray-100 my-1"></div>
 							{:else if item.type === "url"}

@@ -49,6 +49,7 @@ use crate::grpc::grpc_client::OrganizerURI;
 use crate::grpc::{grpc_server, make_media_file_popup_actions};
 use crate::api_server::ws_handers::SessionClose;
 use crate::video_pipeline::IncomingFile;
+use crate::PKG_VERSION;
 use self::user_session::UserSession;
 
 type Res<T> = anyhow::Result<T>;
@@ -137,7 +138,8 @@ async fn handle_ws_session(
     if let Err(e) = server.emit_cmd(
         client_cmd!(Welcome, {
             user: Some(proto::UserInfo { id: user_id, name: username }),
-            is_admin: is_admin
+            is_admin: is_admin,
+            server_version: PKG_VERSION.to_string(),
         }),
         SendTo::MsgSender(&ses.sender)
     ) {

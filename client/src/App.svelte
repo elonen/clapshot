@@ -380,6 +380,7 @@ fetch(CONF_FILE)
     if (json.user_menu_show_basic_auth_logout) {
         $userMenuItems = [...$userMenuItems, {label: "Logout", type: "logout-basic-auth"} as UserMenuItem];
     }
+    $userMenuItems = [...$userMenuItems, {label: "About", type: "about"} as UserMenuItem];
 })
 .catch(error => {
     showConnectionError(`Failed to read config file '${CONF_FILE}': ${error}`);
@@ -594,6 +595,20 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
         {
             // welcome
             if (cmd.welcome) {
+                if (!cmd.welcome.hasOwnProperty("serverVersion") || (process.env.CLAPSHOT_MIN_SERVER_VERSION && cmd.welcome.serverVersion < process.env.CLAPSHOT_MIN_SERVER_VERSION)) {
+                    const msg = "Server version too old (v" + cmd.welcome.serverVersion + "). Please update server.";
+                    console.error(msg);
+                    window.alert(msg);
+                    return;
+                }
+                console.log("Connected to server v" + cmd.welcome.serverVersion);
+                if (process.env.CLAPSHOT_MAX_SERVER_VERSION && cmd.welcome.serverVersion > process.env.CLAPSHOT_MAX_SERVER_VERSION) {
+                    const msg = "Client version too old (client v" + process.env.CLAPSHOT_CLIENT_VERSION + " for server v" + cmd.welcome.serverVersion + "). Please update client.";
+                    console.error(msg);
+                    window.alert(msg);
+                    return;
+                }
+
                 if (!cmd.welcome.user) {
                     console.error("No user in welcome message");
                     acts.add({mode: 'danger', message: 'No user in welcome message', lifetime: 5});

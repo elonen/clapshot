@@ -15,6 +15,7 @@ message ServerToClientCmd {
     message Welcome {
         UserInfo user = 1;
         bool is_admin = 2;              // FYI for the client UI, server will enforce the actual permissions
+        string server_version = 3;
     }
     message Error {
         string msg = 1;
