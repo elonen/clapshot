@@ -17,7 +17,9 @@ export let curUserIsAdmin: Writable<boolean> = writable(false);
 export let curUserPic: Writable<string|null> = writable(null);
 
 export let allComments: Writable<IndentedComment[]> = writable([]);
+
 export let curSubtitle: Writable<Proto3.Subtitle|null> = writable(null);
+export let subtitleEditingId: Writable<string|null> = writable(null);
 
 export let userMessages: Writable<Proto3.UserMessage[]> = writable([]);
 export let latestProgressReports: Writable<MediaProgressReport[]> = writable([]);
