@@ -182,8 +182,20 @@ export function isLooping(): boolean {
 }
 
 function togglePlay() {
-    let should_play = paused;
+    const should_play = paused;
     setPlayback(should_play, "VideoPlayer");
+}
+
+function clickOnVideo(event: MouseEvent ) {
+    if ($curVideo?.mediaType.toLowerCase().startsWith("audio")) {
+        // Audio file videos show a waveform, so use clicks for seeking instead of play/pause
+        const videoElem = event.target as HTMLVideoElement;
+        let frac = (event.clientX - videoElem.getBoundingClientRect().left) / videoElem.offsetWidth;
+        time = duration * frac;
+    } else {
+        const should_play = paused;
+        setPlayback(should_play, "VideoPlayer");
+    }
 }
 
 function format_tc(seconds: number) : string {
@@ -251,6 +263,12 @@ const WINDOW_KEY_ACTIONS: {[key: string]: (e: KeyboardEvent)=>any} = {
         'ArrowDown': () => step_video(-1),
         'z': (e) => { if (e.ctrlKey) onDrawUndo(); },
         'y': (e) => { if (e.ctrlKey) onDrawRedo(); },
+        'i': () => setLoopPoint(true),
+        'o': () => setLoopPoint(false),
+        'l': () => {
+            if (videoElem) { videoElem.loop = !videoElem.loop; }
+            if (!videoElem.loop) { loopStartTime = -1; loopEndTime = -2; }
+        },
     };
 
 function onWindowKeyPress(e: KeyboardEvent): void {
@@ -529,7 +547,7 @@ function handleTimeUpdate() {
 				style="opacity: {$videoIsReady ? 1.0 : 0}; transition-opacity: 1.0s;"
 				bind:this={videoElem}
 				on:loadedmetadata={prepare_drawing}
-				on:click={togglePlay}
+				on:click={clickOnVideo}
 				bind:currentTime={time}
                 on:timeupdate={handleTimeUpdate}
 				bind:duration
