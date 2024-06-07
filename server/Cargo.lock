@@ -632,7 +632,7 @@ checksum = "98cc8fbded0c607b7ba9dd60cd98df59af97e84d24e49c8557331cfc26d301ce"
 
 [[package]]
 name = "clapshot-server"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "Inflector",
  "anyhow",

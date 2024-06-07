@@ -1,3 +1,9 @@
+clapshot-server (0.8.0) bookworm; urgency=low
+
+  * Support for subtitles
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 7 Jun 2024 11:49:00 +0200
+
 clapshot-server (0.7.1) bookworm; urgency=high
 
   * Implement a full migration dependency solver

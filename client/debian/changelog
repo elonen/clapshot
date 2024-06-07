@@ -1,3 +1,12 @@
+clapshot-client (0.8.0) bookworm; urgency=low
+
+  * Support for subtitles
+  * Support for custom loop ranges
+  * Seek audio files by clicking on waveform
+  * Show popup on server/client version mismatch
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 7 Jun 2024 11:49:00 +0200
+
 clapshot-client (0.7.1) bookworm; urgency=low
 
   * (Nothing, just following server's version numbering.)

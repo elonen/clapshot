@@ -1,3 +1,9 @@
+clapshot-organizer-basic-folders (0.8.0) bookworm; urgency=low
+
+  * (Nothing new, follow Server and Client versions)
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 7 Jun 2024 11:49:00 +0200
+
 clapshot-organizer-basic-folders (0.7.1) bookworm; urgency=high
 
   * Make migration script to DB version 002 more robust
