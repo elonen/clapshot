@@ -46,6 +46,7 @@ message ServerToClientCmd {
         bool loop = 3;
         double seek_time_sec = 4;       // From start of media file
         optional string drawing = 5;    // data-uri of an image
+        optional string subtitle_id = 6;
     }
     message SetCookies {
         map<string, string> cookies = 1;        // Cookies to set. Use empty string to delete a cookie.

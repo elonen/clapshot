@@ -147,6 +147,7 @@ function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) {
     seekSideEffects();
     paused = true;
     send_collab_report();
+    if (videoElem) { videoElem.focus(); }
 }
 
 let playback_request_source: string|undefined = undefined;
@@ -179,6 +180,10 @@ export function getPlaybackState(): {playing: boolean, request_source: string|un
 
 export function isLooping(): boolean {
     return loop;
+}
+
+export function isPaused(): boolean {
+    return paused;
 }
 
 function togglePlay() {
@@ -455,7 +460,7 @@ function offsetTextTracks() {
     const adjustCues = (track: TextTrack) => {
         const offset = $curSubtitle?.timeOffset || 0.0;
         if (!track.cues) {
-            console.debug("adjustCues(): track has no cues");
+            //console.debug("adjustCues(): track has no cues");
             return;
         }
         console.debug("Offsetting cues on text tracks by", offset, "sec");
@@ -489,6 +494,8 @@ function offsetTextTracks() {
 
 // Set loop in/out points
 function setLoopPoint(isInPoint: boolean) {
+    if ($collabId) { return; }  // Disable custom loops in collab mode, hard to sync
+
     const loop_was_valid = (loopEndTime > loopStartTime);
     function resetLoop() {
         [loopStartTime, loopEndTime] = [-1, -2];
@@ -511,8 +518,7 @@ function setLoopPoint(isInPoint: boolean) {
         } else if (loop_was_valid) {
             resetLoop();
         }
-        let playbutton = document.getElementById("playbutton");
-        if (playbutton) { playbutton.focus(); }
+        if (videoElem) { videoElem.focus(); }
     }
 }
 

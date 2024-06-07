@@ -182,9 +182,10 @@ function onPlayerSeeked(_e: any) {
     commentInput.forceDrawMode(false);  // Close draw mode when video frame is changed
 }
 
-function onCollabReport(e: any) {
-    if ($collabId)
-        wsEmit({collabReport: e.report});
+function onCollabReport(e: { detail: { report: Proto3.client.ClientToServerCmd_CollabReport; }; }) {
+    if ($collabId) {
+        wsEmit({collabReport: e.detail.report});
+    }
 }
 
 function onCommentPinClicked(e: any) {
@@ -791,6 +792,9 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             // collabEvent
             else if (cmd.collabEvent) {
                 const evt = cmd.collabEvent;
+                if (evt.subtitleId != $curSubtitle?.id) {
+                    $curSubtitle = $curVideo?.subtitles.find((s) => s.id == evt.subtitleId) ?? null;
+                }
                 if (!evt.paused) {
                     videoPlayer.collabPlay(evt.seekTimeSec, evt.loop);
                 } else {

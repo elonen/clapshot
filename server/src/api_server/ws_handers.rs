@@ -619,6 +619,7 @@ pub async fn msg_collab_report(data: &CollabReport, ses: &mut UserSession, serve
             seek_time_sec: data.seek_time_sec,
             from_user: ses.user_name.clone(),
             drawing: data.drawing.clone(),
+            subtitle_id: data.subtitle_id.clone(),
         });
         server.emit_cmd(ce, super::SendTo::Collab(collab_id)).map(|_| ())
     } else {
