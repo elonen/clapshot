@@ -2,7 +2,7 @@
 
 import {acts} from '@tadashi/svelte-notification'
 import {create as sdb_create} from "simple-drawing-board";
-import {onMount, createEventDispatcher} from 'svelte';
+import {onMount, onDestroy, createEventDispatcher} from 'svelte';
 import {scale} from "svelte/transition";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import * as Proto3 from '@clapshot_protobuf/typescript';
@@ -20,13 +20,18 @@ let videoElem: any;
 let time: number = 0;
 let duration: number;
 let paused: boolean = true;
+
 let loop: boolean = false;
+let loopStartTime: number = -1;
+let loopEndTime: number = -2;
+
 let videoCanvasContainer: any;
 let vframeCalc: VideoFrame;
 
 let debug_layout: boolean = false; // Set to true to show CSS layout boxes
 let commentsWithTc: Proto3.Comment[] = [];  // Will be populated by the store once video is ready (=frame rate is known)
 
+let animationFrameId: number = 0;
 
 function refreshCommentPins(): void {
     // Make pins for all comments with timecode
@@ -111,6 +116,18 @@ onMount(async () => {
     offsetTextTracks();
     allComments.subscribe((_v) => { refreshCommentPins(); });
     curSubtitle.subscribe(() => { offsetTextTracks(); });
+    animationFrameId = requestAnimationFrame(handleTimeUpdate);
+});
+
+onDestroy(async () => {
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId=0;
+    }
+    if (draw_board) {
+        draw_board.destroy();
+        draw_board = null;
+    }
 });
 
 // Monitor video elem "loop" property in a timer.
@@ -451,6 +468,47 @@ function offsetTextTracks() {
         }
     });
 }
+
+// Set loop in/out points
+function setLoopPoint(isInPoint: boolean) {
+    const loop_was_valid = (loopEndTime > loopStartTime);
+    function resetLoop() {
+        [loopStartTime, loopEndTime] = [-1, -2];
+        videoElem.loop = false;
+    }
+    if (videoElem) {
+        const curTime = getCurTime();
+        const resetShortcut = isInPoint ? (curTime == loopStartTime) : (curTime == loopEndTime);
+        if (resetShortcut) {
+            resetLoop();
+        } else {
+            if (isInPoint) { loopStartTime = curTime; }
+            else {
+                loopEndTime = curTime;
+                if (loopStartTime < 0) { loopStartTime = 0; }
+            }
+        }
+        if (loopEndTime > loopStartTime) {
+            videoElem.loop = true;
+        } else if (loop_was_valid) {
+            resetLoop();
+        }
+        let playbutton = document.getElementById("playbutton");
+        if (playbutton) { playbutton.focus(); }
+    }
+}
+
+function handleTimeUpdate() {
+    // Looping around the manual range
+    if (loopStartTime < loopEndTime && videoElem && !paused) {
+        if (time >= loopEndTime) {
+            time = loopStartTime;
+        }
+        // Request call on next frame
+        animationFrameId = requestAnimationFrame(handleTimeUpdate);
+    }
+}
+
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -473,6 +531,7 @@ function offsetTextTracks() {
 				on:loadedmetadata={prepare_drawing}
 				on:click={togglePlay}
 				bind:currentTime={time}
+                on:timeupdate={handleTimeUpdate}
 				bind:duration
 				bind:paused>
                 <track kind="captions"
@@ -493,15 +552,18 @@ function offsetTextTracks() {
 		</div>
 	</div>
 
-	<div class="flex-none {debug_layout?'border-2 border-red-600':''}">
+	<div class="flex-none relative {debug_layout?'border-2 border-red-600':''}">
 
-		<div class="flex-1 space-y-0 leading-none">
+		<div class="flex-1 space-y-0 leading-none relative">
 			<progress value="{(time / duration) || 0}"
 				class="w-full h-[2em] hover:cursor-pointer"
 				on:mousedown|preventDefault={(e)=>handleMove(e, e.target)}
 				on:mousemove={(e)=>handleMove(e, e.target)}
 				on:touchmove|preventDefault={(e)=>handleMove(e, e.target)}
 			/>
+            {#if loopStartTime>0 || loopEndTime>0}
+                <div class="absolute bottom-1 border-2 h-0 pointer-events-none border-amber-600" style="left: {loopStartTime/duration*100.0}%; width: {(loopEndTime-loopStartTime)/duration*100.0}%"></div>
+            {/if}
 			{#each commentsWithTc as item}
 				<CommentTimelinePin
 					id={item.id}
@@ -513,20 +575,31 @@ function offsetTextTracks() {
 			{/each}
 		</div>
 
+
 		<!-- playback controls -->
 		<div class="flex p-1">
 
 			<!-- Play/Pause -->
 			<span class="flex-1 text-left ml-8 space-x-3 text-l whitespace-nowrap">
-				<button class="fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
-				<button class="w-4 fa-solid {paused ? (loop ? 'fa-repeat' : 'fa-play') : 'fa-pause'}" on:click={togglePlay} title="Play/Pause" />
-				<button class="fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
+				<button class="hover:text-amber-600 fa-solid fa-chevron-left" on:click={() => step_video(-1)} disabled={time==0} title="Step backwards" />
+				<button class="hover:text-amber-600 w-4 fa-solid {paused ? (loop ? 'fa-repeat' : 'fa-play') : 'fa-pause'}" id="playbutton" on:click={togglePlay} title="Play/Pause" />
+				<button class="hover:text-amber-600 fa-solid fa-chevron-right" on:click={() => step_video(1)} title="Step forwards"/>
 
 				<!-- Timecode -->
 				<span class="flex-0 mx-4 text-sm font-mono">
 					<input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" on:change={(e) => onTimecodeEdited(e)}/>
 					FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" on:change={(e) => onFrameEdited(e)}/>
 				</span>
+
+               {#if !$collabId }
+                    <!-- Loop control (in, loop-toggle, out) -->
+                    <span class="flex-0 px-4 text-sm">
+                        <button class="fa-solid fa-square-caret-down hover:text-white {loopStartTime>=0 ? 'text-amber-600' : 'text-gray-400'}"
+                            on:click={() => setLoopPoint(true)} title="Set loop start to current frame"/>
+                        <button class="fa-solid fa-square-caret-up hover:text-white {loopEndTime>=0 ? 'text-amber-600' : 'text-gray-400'}"
+                            on:click={() => setLoopPoint(false)} title="Set loop end to current frame"/>
+                    </span>
+                {/if}
 			</span>
 
             <!-- Closed captioning -->
