@@ -94,7 +94,7 @@ function onCommentInputButton(e: any) {
 
     if (e.detail.action == "send")
     {
-        if (e.detail.comment_text != "")
+        if (e.detail.comment_text != "" || videoPlayer.hasDrawing())
         {
             wsEmit({addComment: {
                 mediaFileId: $mediaFileId!,

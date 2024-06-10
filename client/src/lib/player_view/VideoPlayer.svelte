@@ -354,6 +354,10 @@ export function onDrawRedo() {
     draw_board?.redo();
 }
 
+export function hasDrawing() {
+    return draw_canvas && draw_canvas.style.visibility == "visible";
+}
+
 // Capture current video frame + drawing as a data URL (base64 encoded image)
 export function getScreenshot() : string
 {

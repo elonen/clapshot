@@ -29,6 +29,7 @@ function onClickSend() {
 }
 function onClickDraw() {
     drawMode = !drawMode;
+    if (drawMode) { timedComment = true; }  // Drawings make no sense without a timecode.
     sendDrawModeToParent();
 }
 function onColorSelected(c: string) {
@@ -100,8 +101,10 @@ function onEmojiPicker(e: any)
 
         {#if $videoIsReady}
             <button type="button"
+                id="timedCommentButton"
                 title="Comment is time specific?"
                 class="scale-90 {timedComment ? 'text-amber-600' : 'text-gray-500'}"
+                disabled={drawMode}
                 on:click="{ () => timedComment = !timedComment }">
                 <span class="fa-stack">
                     <i class="fa-solid fa-stopwatch fa-stack-2x"></i>
@@ -119,7 +122,8 @@ function onEmojiPicker(e: any)
         {/if}
 
         <button type="submit"
-            disabled={!inputText}
+            id="sendButton"
+            disabled={!inputText && !drawMode}
             class="inline-block h-9 px-4 py-2 ml-2 text-sm bg-blue-700 text-white rounded-lg shadow-md hover:bg-blue-500 hover:shadow-lg focus:bg-blue-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-800 active:shadow-lg transition duration-150 ease-in-out">
             Send
         </button>
@@ -133,9 +137,13 @@ function onEmojiPicker(e: any)
 button {
     transition: 0.1s ease-in-out;
 }
-button:disabled {
+#sendButton:disabled {
     opacity: 0.5;
     background-color: gray;
+}
+#timedCommentButton:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 </style>
 
