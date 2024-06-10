@@ -3,6 +3,8 @@ import type { IndentedComment, UserMenuItem, MediaProgressReport } from '@/types
 import type { VideoListDefItem } from '@/lib/asset_browser/types';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
+export let clientConfig: Writable<any> = writable({});
+
 export let mediaFileId: Writable<string|null> = writable(null);
 export let curVideo: Writable<Proto3.MediaFile|null> = writable(null);
 

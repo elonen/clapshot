@@ -4,7 +4,7 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, mediaFileId, curVideo, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle} from './stores';
+import {allComments, curUsername, curUserId, videoIsReady, mediaFileId, curVideo, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle, clientConfig} from './stores';
 import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "./types";
 
 import CommentCard from './lib/player_view/CommentCard.svelte'
@@ -373,6 +373,8 @@ fetch(CONF_FILE)
     }
     console.log("Config file '" + CONF_FILE + "' parsed: ", json);
     uploadUrl = json.upload_url;
+
+    $clientConfig = json;
 
     console.log("Connecting to WS API at: " + json.ws_url);
     connectWebsocket(json.ws_url);

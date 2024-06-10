@@ -7,6 +7,9 @@ DIR="/mnt/clapshot-data/data"
 URL_BASE=$(echo "${CLAPSHOT_URL_BASE:-http://127.0.0.1:8080/}" | sed 's#/*$#/#')
 CORS="${CLAPSHOT_CORS:-$URL_BASE}"  # Default to URL_BASE
 
+APP_TITLE="${CLAPSHOT_APP_TITLE:-Clapshot}"
+LOGO_URL="${CLAPSHOT_LOGO_URL:-clapshot-logo.svg}"
+
 # Use same URL base as index.html for API server (as Nginx proxies localhost:8095/api to /api)
 # - Also enable basic auth logout button
 WS_BASE=$(echo "$URL_BASE" | sed 's#^http#ws#')
@@ -17,7 +20,9 @@ cat > /etc/clapshot_client.conf << EOF
     "user_menu_extra_items": [
         { "label": "My Videos", "type": "url", "data": "/" }
     ],
-  "user_menu_show_basic_auth_logout": true
+  "user_menu_show_basic_auth_logout": true,
+  "logo_url": "${LOGO_URL}",
+  "app_title": "${APP_TITLE}"
 }
 EOF
 

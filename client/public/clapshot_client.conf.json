@@ -4,5 +4,8 @@
     "user_menu_extra_items": [
         { "label": "My Videos", "type": "url", "data": "/"}
     ],
-    "user_menu_show_basic_auth_logout": false
+    "user_menu_show_basic_auth_logout": false,
+
+    "logo_url": "clapshot-logo.svg",
+    "app_title": "Clapshot"
 }
