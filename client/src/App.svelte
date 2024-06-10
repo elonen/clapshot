@@ -131,8 +131,6 @@ function onDisplayComment(e: any) {
     if (!$curVideo) { throw Error("No video loaded"); }
     videoPlayer.seekToSMPTE(e.detail.timecode);
     // Close draw mode while showing (drawing from a saved) comment
-    videoPlayer.onToggleDraw(false);
-    commentInput.forceDrawMode(false);
     if (e.detail.drawing) { videoPlayer.setDrawing(e.detail.drawing); }
     if (e.detail.subtitleId) { $curSubtitle = $curVideo.subtitles.find((s) => s.id == e.detail.subtitleId) ?? null; }
     if ($collabId) {
@@ -145,6 +143,8 @@ function onDisplayComment(e: any) {
             subtitleId: $curSubtitle?.id
         }});
     }
+    videoPlayer.onToggleDraw(false);
+    commentInput.forceDrawMode(false);
 }
 
 function onDeleteComment(e: any) {

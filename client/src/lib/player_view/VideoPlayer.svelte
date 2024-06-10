@@ -334,6 +334,7 @@ export function onToggleDraw(mode_on: boolean) {
             var ctx = draw_canvas.getContext('2d');
             ctx.drawImage(videoElem, 0, 0);
             draw_canvas.style.visibility = "visible";
+            draw_canvas.style.pointerEvents = "auto";
         } else {
             draw_canvas.style.visibility = "hidden";
         }
@@ -397,6 +398,8 @@ export async function setDrawing(drawing: string) {
         draw_canvas.style.visibility = "visible";
         draw_canvas.style.cursor = "";
         draw_canvas.style.outline = "none";
+        // Make it non-interactive (pass clicks through)
+        draw_canvas.style.pointerEvents = "none";
     }
     catch(err) {
         acts.add({mode: 'error', message: `Failed to show image.`, lifetime: 3});
@@ -537,6 +540,28 @@ function handleTimeUpdate() {
     }
 }
 
+function clickOnPin(id: string) {
+    console.debug("Comment pin clicked:", id);
+    dispatch('commentPinClicked', {id});
+
+    // Set loop region between this pin and the next one, if looping is enabled
+    let clicked_pin = null;
+    let next_pin = null;
+    for (let i = 0; i < commentsWithTc.length; i++) {
+        if (commentsWithTc[i].id == id) {
+            clicked_pin = commentsWithTc[i];
+            if (i < commentsWithTc.length - 1) {
+                next_pin = commentsWithTc[i + 1];
+            }
+            break;
+        }
+    }
+    if (videoElem.loop && clicked_pin) {
+        loopStartTime = clicked_pin.timecode ? vframeCalc.toMilliseconds(clicked_pin.timecode) / 1000 : 0;
+        loopEndTime = next_pin?.timecode ? vframeCalc.toMilliseconds(next_pin.timecode) / 1000 : duration;
+    }
+}
+
 </script>
 
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
@@ -598,7 +623,7 @@ function handleTimeUpdate() {
 					username={item.usernameIfnull || item.userId || '?'}
 					comment={item.comment}
 					x_loc={tcToDurationFract(item.timecode)}
-					on:click={(_e) => { dispatch('commentPinClicked', {id: item.id});}}
+					on:click={(_e) => clickOnPin(item.id)}
 					/>
 			{/each}
 		</div>
