@@ -1,6 +1,4 @@
 <script lang="ts">
-import { createPopup } from '@picmo/popup-picker';
-import { darkTheme } from 'picmo';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import { createEventDispatcher } from 'svelte';
 import { fade } from "svelte/transition";
@@ -51,31 +49,10 @@ function onTextChange(e: any) {
     return false;
 }
 
-// Picmo emoji picker
-let emojiPicker: any = null;
-function onEmojiPicker(e: any)
-{
-    if (!emojiPicker) {
-            emojiPicker = createPopup({
-                theme: darkTheme }, {
-            referenceElement: e.target,
-            triggerElement: e.target,
-            position: 'right-end',
-            className: 'my-picmo-popup',
-        });
-        emojiPicker.addEventListener('emoji:select', (selection: any) => {
-            inputText = (inputText ? inputText : '') + selection.emoji;
-        });
-    }
-    emojiPicker.toggle();
-}
-
 </script>
 
 
 <div class="relative">
-    <div id="pickerContainer"></div> <!-- Picmo emoji picker -->
-
     <!-- Color selector -->
     {#if drawMode}
         <div class="absolute w-full top-[-3em] bg-gray-900 h-10 rounded-md flex place-content-center" transition:fade="{{duration: 100}}">
@@ -94,10 +71,6 @@ function onEmojiPicker(e: any)
             bind:value={inputText}
             on:input={onTextChange}
             class="flex-1 p-2 bg-gray-700 rounded-lg" placeholder="Add a comment{timedComment ? ' - at current time' :''}..." />
-
-        <button type="button"
-            class="far fa-smile text-gray-400 hover:text-yellow-500 w-8 h-8 text-[1.2em]"
-            on:click={onEmojiPicker} />
 
         {#if $videoIsReady}
             <button type="button"
