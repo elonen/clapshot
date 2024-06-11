@@ -168,6 +168,19 @@ function onEditComment(e: any) {
     }});
 }
 
+function onAddCommentsBulk(e: { detail: Proto3.Comment[]; }) {
+    const comments: Proto3.Comment[] = e.detail;
+    for (let c of comments) {
+        wsEmit({addComment: {
+            mediaFileId: $mediaFileId!,
+            comment: c.comment,
+            drawing: c.drawing,
+            timecode: c.timecode,
+            subtitleId: c.subtitleId,
+        }});
+    }
+}
+
 function closePlayerIfOpen() {
     console.debug("closePlayerIfOpen()");
     wsEmit({leaveCollab: {}});
@@ -910,7 +923,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
 <main>
     <span id="popup-container"></span>
     <div class="flex flex-col bg-[#101016] w-screen h-screen {debugLayout?'border-2 border-yellow-300':''}">
-        <div class="flex-none w-full"><NavBar on:basic-auth-logout={disconnect} /></div>
+        <div class="flex-none w-full"><NavBar on:basic-auth-logout={disconnect} on:add-comments={onAddCommentsBulk}/></div>
         <div class="flex-grow w-full overflow-auto {debugLayout?'border-2 border-cyan-300':''}">
             <Notifications />
 

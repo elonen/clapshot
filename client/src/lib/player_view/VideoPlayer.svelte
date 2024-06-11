@@ -35,14 +35,16 @@ let animationFrameId: number = 0;
 
 function refreshCommentPins(): void {
     // Make pins for all comments with timecode
-    commentsWithTc = [];
-    allComments.subscribe(comments => {
-        for (let c of comments) { if (c.comment.timecode) { commentsWithTc.push(c.comment); } }
+    function _update_comments_with_tc() {
+        commentsWithTc = [];
+        for (let c of $allComments) { if (c.comment.timecode) { commentsWithTc.push(c.comment); } }
         commentsWithTc = commentsWithTc.sort((a, b) => {
             if (!a.timecode || !b.timecode) { return 0; }
             return a.timecode.localeCompare(b.timecode);  // Sort by SMPTE timecode = sort by string
         });
-    });
+    }
+    allComments.subscribe(_ => { _update_comments_with_tc(); });
+    _update_comments_with_tc();
 }
 
 function send_collab_report(): void {
@@ -549,16 +551,21 @@ function clickOnPin(id: string) {
     let next_pin = null;
     for (let i = 0; i < commentsWithTc.length; i++) {
         if (commentsWithTc[i].id == id) {
-            clicked_pin = commentsWithTc[i];
+            if (!clicked_pin)
+                clicked_pin = commentsWithTc[i];
             if (i < commentsWithTc.length - 1) {
                 next_pin = commentsWithTc[i + 1];
             }
             break;
         }
     }
-    if (videoElem.loop && clicked_pin) {
+    if ((loop || videoElem.loop) && clicked_pin) {
         loopStartTime = clicked_pin.timecode ? vframeCalc.toMilliseconds(clicked_pin.timecode) / 1000 : 0;
         loopEndTime = next_pin?.timecode ? vframeCalc.toMilliseconds(next_pin.timecode) / 1000 : duration;
+        console.debug("Loop region set to", loopStartTime, loopEndTime);
+        videoElem.loop = true;
+    } else {
+        console.debug("Looping disabled or no next pin");
     }
 }
 

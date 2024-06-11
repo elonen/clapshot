@@ -6,7 +6,8 @@ import Avatar from '@/lib/Avatar.svelte';
 import {latestProgressReports, clientConfig} from '@/stores';
 import type { MediaProgressReport } from '@/types';
 import { Dropdown, DropdownItem, DropdownDivider, DropdownHeader } from 'flowbite-svelte';
-
+import EDLImport from './tools/EDLImport.svelte';
+  import { ChevronRightOutline } from 'flowbite-svelte-icons';
 
 const dispatch = createEventDispatcher();
 
@@ -63,8 +64,15 @@ async function copyToClipboard() {
 
 const randomSessionId = Math.random().toString(36).substring(2, 15);
 
-</script>
 
+let isEDLImportOpen = false;
+function addEDLComments(event: any) {
+	console.debug("addEDLComments", event.detail);
+	dispatch('add-comments', event.detail);
+}
+
+
+</script>
 
 <nav class="px-5 py-2.5 rounded dark:bg-gray-900">
 
@@ -103,6 +111,15 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 							{:else}
 								<DropdownItem href="?vid={$mediaFileId}&collab={randomSessionId}" title="Start collaborative session"><i class="fas fa-user-plus"></i> Start Collaborative Session</DropdownItem>
 							{/if}
+
+							<DropdownItem>
+								<i class="fas fa-cog"></i> Experimental tools
+								<ChevronRightOutline class="w-6 h-6 ms-2 float-right" />
+							</DropdownItem>
+							<Dropdown placement="right-start" class="w-64 text-sm">
+								<DropdownItem on:click={() => isEDLImportOpen = true}><i class="fas fa-file-import"></i> Import EDL as Comments</DropdownItem>
+								<EDLImport bind:isOpen={isEDLImportOpen} on:add-comments={addEDLComments}/>
+							</Dropdown>
 						</Dropdown>
 
 					</h2>
@@ -113,7 +130,6 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 			</span>
 			{/if}
 		</div>
-
 
 		<!-- Username & avatar-->
 		<div class="flex-0" style="visibility: {$curUsername ? 'visible': 'hidden'}">

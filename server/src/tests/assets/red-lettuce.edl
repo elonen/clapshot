@@ -1,0 +1,18 @@
+TITLE: NASA RED LETTUCE EXCERPT
+FCM: NON-DROP FRAME
+
+001  Card01Ky AA/V  C        00:01:40:00 01:40:02:17 00:00:00:00 00:00:02:17
+* FROM CLIP NAME:  red-lettuce-preparing.mov
+* COMMENT: Preparing lettuce with scissors
+FINAL CUT PRO REEL: Clapshot_Red_Lettuce_Test REPLACED BY: Card01Ky
+
+002  Card01Ky AA/V  C        00:01:42:17 00:01:45:03 00:00:02:17 00:00:05:03
+* FROM CLIP NAME:  group-shot.mov
+* COMMENT: All three people
+FINAL CUT PRO REEL: Clapshot_Red_Lettuce_Test REPLACED BY: Card01Ky
+
+003  Card01Ky AA/V  C        00:01:43:17 00:01:43:03 00:00:03:17 00:00:03:03
+* FROM CLIP NAME:  none.mov
+* COMMENT: False cut
+FINAL CUT PRO REEL: Clapshot_Red_Lettuce_Test REPLACED BY: Card01Ky
+
