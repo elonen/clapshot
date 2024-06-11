@@ -68,8 +68,8 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 		<!-- logo with "home" link -->
 		<span class="flex-0">
 			<a href="/" class="flex items-baseline cursor-pointer">
-				<img src="{$clientConfig?.logo_url || "clapshot-logo.svg"}" class="mr-3 h-6 sm:h-9 filter brightness-75" alt="{$clientConfig?.app_title || "Clapshot"}" />
-				<span class="self-center mt-1 text-4xl whitespace-nowrap text-gray-400" style="font-family: 'Yanone Kaffeesatz', sans-serif;">{($clientConfig?.app_title || "Clapshot").toUpperCase()}</span>
+				<img src="{$clientConfig ? ($clientConfig?.logo_url || "clapshot-logo.svg") : ""}" class="mr-3 h-6 sm:h-9 filter brightness-75" alt="{$clientConfig ? ($clientConfig.app_title || "Clapshot") : ""}" />
+				<span class="self-center mt-1 text-4xl whitespace-nowrap text-gray-400" style="font-family: 'Yanone Kaffeesatz', sans-serif;">{($clientConfig ? ($clientConfig.app_title || "Clapshot") : "").toUpperCase()}</span>
 			</a>
 		</span>
 
