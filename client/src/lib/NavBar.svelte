@@ -5,6 +5,7 @@ import { curUsername, curUserPic, curVideo, mediaFileId, collabId, userMenuItems
 import Avatar from '@/lib/Avatar.svelte';
 import {latestProgressReports, clientConfig} from '@/stores';
 import type { MediaProgressReport } from '@/types';
+import { Dropdown, DropdownItem, DropdownDivider, DropdownHeader } from 'flowbite-svelte';
 
 
 const dispatch = createEventDispatcher();
@@ -18,15 +19,7 @@ onMount(async () => {
 	});
 });
 
-function onClickUser(): void {
-    if (!$userMenuItems) return;
-    let user_menu = document.getElementById("user-menu");
-    if (user_menu?.classList.contains("hidden")) {
-        user_menu.classList.remove("hidden");
-    } else {
-        user_menu?.classList.add("hidden");
-    }
-}
+
 
 function logoutBasicAuth(urlFor401: RequestInfo, redirUrl: string) {
     // Try to log out of basic auth by making a request to /logout and expect 401.
@@ -56,6 +49,18 @@ function showAbout() {
 		"https://github.com/elonen/clapshot\n");
 }
 
+async function copyToClipboard() {
+	const urlParams = `?vid=${$mediaFileId}`;
+	const currentUrl = window.location.href.split('?')[0]; // remove existing query parameters
+	const fullUrl = currentUrl + urlParams;
+	try {
+		await navigator.clipboard.writeText(fullUrl);
+		alert('Link copied to clipboard.\nSend it to reviewers who have user accounts here.');
+	} catch (err) {
+		console.error('Failed to copy link: ', err);
+	}
+}
+
 const randomSessionId = Math.random().toString(36).substring(2, 15);
 
 </script>
@@ -76,18 +81,30 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 		<!-- video info -->
 		<div class="flex-1 justify-between">
 			{#if $mediaFileId}
-			<span class="grid grid-flow-row auto-rows-max items-center font-mono text-gray-600 mx-4">
+			<span class="grid grid-flow-row auto-rows-max items-center text-gray-600 mx-4">
 					<h2 class=" text-lg text-center">
-						{$mediaFileId}
-						<a href="?vid={$mediaFileId}" class="text-gray-700 hover:text-gray-500"><i class="fas fa-share-square text-sm"></i></a>
-						{#if $curVideo?.origUrl}
-							<a href="{$curVideo?.origUrl}" download title="Download original file" class="text-gray-700 hover:text-gray-500"><i class="fas fa-download text-sm"></i></a>
-						{/if}
-						{#if $collabId}
-							<a href="?vid={$mediaFileId}" class="text-green-500 hover:text-orange-600" title="Collaborative session active. Click to exit."><i class="fas fa-users text-sm"></i></a>
-						{:else}
-							<a href="?vid={$mediaFileId}&collab={randomSessionId}" title="Start collaborative session" class="text-gray-700 hover:text-gray-500"><i class="fas fa-user-plus text-sm"></i></a>
-						{/if}
+						<span class="font-mono">{$mediaFileId}</span>
+
+						<div class="relative inline-block text-left">
+							<button type="button"
+							  	class="inline-flex justify-center w-full rounded-md shadow-sm px-2 py-0.5 {$collabId ? 'bg-green-500' : 'bg-gray-800'} text-sm font-medium text-gray-500 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+								aria-haspopup="true" aria-expanded="true"
+							>
+								<i class="fas fa-bars"></i>
+							</button>
+
+						<Dropdown class="w-64 text-sm">
+							<DropdownItem on:click={copyToClipboard}><i class="fas fa-share-square"></i> Share to logged in users</DropdownItem>
+							{#if $curVideo?.origUrl}
+								<DropdownItem href="{$curVideo?.origUrl}" download title="Download original file"><i class="fas fa-download"></i> Download original</DropdownItem>
+							{/if}
+							{#if $collabId}
+								<DropdownItem href="?vid={$mediaFileId}" class="text-green-400"><i class="fas fa-users"></i> Leave collaborative Session</DropdownItem>
+							{:else}
+								<DropdownItem href="?vid={$mediaFileId}&collab={randomSessionId}" title="Start collaborative session"><i class="fas fa-user-plus"></i> Start Collaborative Session</DropdownItem>
+							{/if}
+						</Dropdown>
+
 					</h2>
 				<span class="mx-4 text-xs text-center">{$curVideo?.title}</span>
 				{#if videoProgressMsg}
@@ -102,32 +119,31 @@ const randomSessionId = Math.random().toString(36).substring(2, 15);
 		<div class="flex-0" style="visibility: {$curUsername ? 'visible': 'hidden'}">
 			<span class="flex w-auto items-center">
 				<h6 class="flex-1 mx-4 text-gray-500 font-semibold">{$curUsername}</h6>
-				<button id="user-button" class="flex-0 ring-4 ring-slate-800 text-sm rounded-full" on:click|preventDefault={onClickUser}>
+				<button id="user-button" class="flex-0 ring-4 ring-slate-800 text-sm rounded-full" aria-haspopup="true" aria-expanded="true">
 					{#if $curUserPic || $curUsername}
 					<div class="w-10 block"><Avatar username={$curUsername} /></div>
 					{/if}
 				</button>
 			</span>
 
-			<!-- floating user menu, hidden by default -->
 			{#if $userMenuItems != undefined && $userMenuItems.length > 0 }
-				<div id="user-menu" class="absolute right-0 w-48 mt-2 origin-top-right z-[200] bg-white border border-gray-200 divide-y divide-gray-100 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none hidden">
-					<div class="py-1">
-						{#each $userMenuItems as item}
-							{#if item.type === "logout-basic-auth" }
-								<button on:click|preventDefault={() => logoutBasicAuth('/logout', '/')} class="block text-left px-4 py-2 w-full text-sm text-gray-700 hover:bg-gray-100" role="menuitem">{item.label}</button>
-							{:else if item.type === "about"}
-								<button on:click|preventDefault={showAbout} class="block text-left px-4 py-2 w-full text-sm text-gray-700 hover:bg-gray-100" role="menuitem">{item.label}</button>
-							{:else if item.type === "divider"}
-								<div class="border-t border-gray-100 my-1"></div>
-							{:else if item.type === "url"}
-								<a href="{item.data}" class="block text-left px-4 py-2 w-full text-sm text-gray-700 hover:bg-gray-100" role="menuitem">{item.label}</a>
-							{:else}
-								<em>UNKNOWN item.type '{item.type}'</em>
-							{/if}
-						{/each}
-					</div>
-				</div>
+				<Dropdown class="w-44 text-sm">
+					{#each $userMenuItems as item}
+						<DropdownItem>
+						{#if item.type === "logout-basic-auth" }
+							<DropdownItem on:click={() => logoutBasicAuth('/logout', '/')}>{item.label}</DropdownItem>
+						{:else if item.type === "about"}
+							<DropdownItem on:click={showAbout}>{item.label}</DropdownItem>
+						{:else if item.type === "divider"}
+							<DropdownDivider />
+						{:else if item.type === "url"}
+							<DropdownItem href={item.data}>{item.label}</DropdownItem>
+						{:else}
+							<DropdownItem>UNKNOWN item.type '{item.type}'</DropdownItem>
+						{/if}
+						</DropdownItem>
+					{/each}
+				</Dropdown>
 			{/if}
 		</div>
 	</div>

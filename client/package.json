@@ -32,5 +32,10 @@
     "typescript": "^5.4.5",
     "vite": "^5.2.13",
     "vite-plugin-checker": "^0.6.4"
+  },
+  "dependencies": {
+    "flowbite": "^2.3.0",
+    "flowbite-svelte": "^0.46.1",
+    "flowbite-svelte-icons": "^1.6.1"
   }
 }
