@@ -28,6 +28,8 @@ let uiConnectedState: boolean = false; // true if UI should look like we're conn
 let collabDialogAck = false;  // true if user has clicked "OK" on the collab dialog
 let lastCollabControllingUser: string | null = null;    // last user to control the video in a collab session
 
+let forceBadBasicAuth = false;
+
 let wsSocket: WebSocket | undefined;
 let sendQueue: any[] = [];
 
@@ -434,6 +436,11 @@ function disconnect() {
     uiConnectedState = false;
 }
 
+function basicAuthLogout() {
+    forceBadBasicAuth = true;
+    disconnect();
+}
+
 
 // Send message to server. If not connected, queue it.
 function wsEmit(cmd: ClientToServerCmd)
@@ -470,14 +477,20 @@ let reconnectDelay = 100;  // for exponential backoff
 
 function connectWebsocket(wsUrl: string) {
     const http_health_url = wsUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/api\/.*$/, "/api/health");
-    let req_init: RequestInit = {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-Clapshot-Cookies': JSON.stringify(LocalStorageCookies.getAllNonExpired()),
-        },
-    };
+
+    let headers = new Headers({
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Clapshot-Cookies': JSON.stringify(LocalStorageCookies.getAllNonExpired()),
+    });
+
+    if (forceBadBasicAuth) {
+        // Health should always return 200, which might trick some browsers to keep the bad basic auth credentials, effectively logging out the user.
+        const nonce = Math.random().toString(36).substring(2, 15);
+        headers.set('Authorization', 'Basic ' + btoa('logout_user__'+nonce+':bad_pass__'+nonce));
+    }
+
+    let req_init: RequestInit = { method: 'GET', headers };
 
     function scheduleReconnect() {
         reconnectDelay = Math.round(Math.min(reconnectDelay * 1.5, 5000));
@@ -923,7 +936,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
 <main>
     <span id="popup-container"></span>
     <div class="flex flex-col bg-[#101016] w-screen h-screen {debugLayout?'border-2 border-yellow-300':''}">
-        <div class="flex-none w-full"><NavBar on:basic-auth-logout={disconnect} on:add-comments={onAddCommentsBulk}/></div>
+        <div class="flex-none w-full"><NavBar on:basic-auth-logout={basicAuthLogout} on:add-comments={onAddCommentsBulk}/></div>
         <div class="flex-grow w-full overflow-auto {debugLayout?'border-2 border-cyan-300':''}">
             <Notifications />
 

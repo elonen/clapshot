@@ -7,9 +7,11 @@ import {latestProgressReports, clientConfig} from '@/stores';
 import type { MediaProgressReport } from '@/types';
 import { Dropdown, DropdownItem, DropdownDivider, DropdownHeader } from 'flowbite-svelte';
 import EDLImport from './tools/EDLImport.svelte';
-  import { ChevronRightOutline } from 'flowbite-svelte-icons';
+import { ChevronRightOutline } from 'flowbite-svelte-icons';
+import { Modal } from 'flowbite-svelte';
 
 const dispatch = createEventDispatcher();
+let loggedOut = false;
 
 // Watch for (transcoding) progress reports from server, and update progress bar if one matches this item.
 let videoProgressMsg: string | undefined = undefined;
@@ -22,20 +24,25 @@ onMount(async () => {
 
 
 
-function logoutBasicAuth(urlFor401: RequestInfo, redirUrl: string) {
-    // Try to log out of basic auth by making a request to /logout and expect 401.
+function logoutBasicAuth() {
     // This is a bit tricky, as HTTP basic auth wasn't really designed for logout.
-    console.log("Making logout request to " + urlFor401 + " and redirecting to " + redirUrl + "...");
-    dispatch('basic-auth-logout', {});
-    fetch(urlFor401)
+    // Logout URL is expected to return 401 status code and return a Clear-Site-Data header.
+    // Additionally, send bad credentials in case 401 and Clear-Site-Data wasn't enough to forget the credentials.
+    // After that, disconnect websocket and show a modal to prompt user to reload the page.
+
+    const logoutUrl = $clientConfig?.logout_url || "/logout";
+	const nonce = Math.random().toString(36).substring(2, 15);
+
+    console.log("Making request to " + logoutUrl + " with bad creds...");
+    fetch(logoutUrl, {method:'GET', headers: {'Authorization': 'Basic ' + btoa('logout_user__'+nonce+':bad_pass__'+nonce)}})
         .then(res => {
             console.log("Logout response: " + res.status + " - " + res.statusText);
             if (res.status === 401) {
                 console.log("Logout successful.");
-                dispatch('basic-auth-logout', {});
-                setTimeout(function () { window.location.href = redirUrl; }, 1000);
+				dispatch('basic-auth-logout', {});
+				loggedOut = true;	// Show modal
             } else {
-                alert("Basic auth logout failed.\nStatus code from " + urlFor401 + ": " + res.status + " (not 401)");
+                alert("Basic auth logout failed.\nStatus code from " + logoutUrl + ": " + res.status + " (not 401)");
             }
         })
         .catch(error => {
@@ -147,7 +154,7 @@ function addEDLComments(event: any) {
 					{#each $userMenuItems as item}
 						<DropdownItem>
 						{#if item.type === "logout-basic-auth" }
-							<DropdownItem on:click={() => logoutBasicAuth('/logout', '/')}>{item.label}</DropdownItem>
+							<DropdownItem on:click={() => logoutBasicAuth()}>{item.label}</DropdownItem>
 						{:else if item.type === "about"}
 							<DropdownItem on:click={showAbout}>{item.label}</DropdownItem>
 						{:else if item.type === "divider"}
@@ -164,6 +171,11 @@ function addEDLComments(event: any) {
 		</div>
 	</div>
 </nav>
+
+<Modal title="Logged out" dismissable={false} bind:open={loggedOut} class="w-96">
+	<p><i class="fas fa fa-sign-in"></i> Reload page to log in again.</p>
+</Modal>
+
 
 <style>
 @import url("https://fonts.googleapis.com/css2?family=Roboto+Condensed&family=Yanone+Kaffeesatz&display=swap");
