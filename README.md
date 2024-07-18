@@ -17,6 +17,7 @@ Clapshot is an open-source, self-hosted tool for collaborative video/media revie
 - Transcoding (if needed) with FFmpeg
 - Commenting, drawing annotations, and threaded replies
 - Real-time collaborative review sessions
+- Support EDL import as comments, loop between them
 - Stores media files on disk and metadata in an SQLite (3.5+) database
 - Authentication agnostic, you can use *OAuth, JWS, Kerberos, Okta* etc., using Nginx username pass-through
 - **[NEW]** Extensible "Organizer" plugins for custom integrations, workflow, and access control

@@ -1,3 +1,15 @@
+clapshot-client (0.8.1) bookworm; urgency=low
+
+  * New feature: configurable branding (logo and name)
+  * New feature: import EDLs as comments
+  * Fix: Folder was not visible containing >= 3 items
+  * Fix/feature: Allow comments with just a drawing, no text
+  * Demonstrate how to have multiple admin users in htadmin demo (see nginx conf example)
+  * UI: move video player actions to a burger menu
+  * Remove emoji picker (slow, and OSs support it now)
+
+ -- Jarno Elonen <elonen@iki.fi>  Thu, 18 Jul 2024 21:20:00 +0200
+
 clapshot-client (0.8.0) bookworm; urgency=low
 
   * Support for subtitles
