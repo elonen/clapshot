@@ -84,12 +84,12 @@ let basecolor = visualization?.baseColor ?
     </div>
 
     <div class="w-[85%] h-[85%] flex flex-col folder-deco" title="{name}">
-        <div class="w-full flex-shrink whitespace-nowrap overflow-hidden text-s mt-2 mb-1.5">
-            <span class="text-slate-400 font-semibold my-1">{name}</span>
+        <div class="w-full flex-shrink-0 min-h-[1em] whitespace-nowrap overflow-hidden text-s mt-1 mb-0.5">
+            <div class="text-slate-400 w-full video-title-line py-0 my-0"><span title="{name}">{name}</span></div>
         </div>
         {#if preview_items.length > 0}
-            <div class="flex-1 bg-[#0002] p-0.5 rounded-md shadow-inner overflow-clip leading-none text-[0px]">
-            <div class="grid grid-cols-2 gap-1 text-xs">
+        <div class="flex-1 bg-[#0002] p-0.5 rounded-md shadow-inner overflow-clip leading-none text-[0px]">
+            <div class="grid grid-cols-2 gap-1 text-xs max-h-4">
                 {#each contentPreviewItems(preview_items) as prev, _i}
                     {#if prev.mediaFile?.previewData?.thumbUrl }
                         <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md" style="background: rgb(71, 85, 105)">
@@ -116,7 +116,7 @@ let basecolor = visualization?.baseColor ?
                     {/if}
                 {/each}
             </div>
-            </div>
+        </div>
         {:else}
             {#if visualization}
                 <div class="w-full aspect-square overflow-clip inline-block relative rounded-md">
