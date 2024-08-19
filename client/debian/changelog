@@ -1,3 +1,9 @@
+clapshot-client (0.8.2) bookworm; urgency=low
+
+  * (No changes, follow server versioning)
+
+ -- Jarno Elonen <elonen@iki.fi>  Mon, 19 Aug 2024 22:30:00 +0200
+
 clapshot-client (0.8.1) bookworm; urgency=low
 
   * New feature: configurable branding (logo and name)

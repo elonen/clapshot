@@ -1,4 +1,4 @@
-FROM rust:1.78-slim-bookworm AS rust-bookworm-slim
+FROM rust:1.80-slim-bookworm AS rust-bookworm-slim
 
 # ----------------------------------
 

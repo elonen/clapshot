@@ -1,3 +1,9 @@
+clapshot-server (0.8.2) bookworm; urgency=low
+
+  * Fix regression: commenting on other users' videos failed
+
+ -- Jarno Elonen <elonen@iki.fi>  Mon, 19 Aug 2024 22:30:00 +0200
+
 clapshot-server (0.8.1) bookworm; urgency=low
 
   * (Not many changes in server. Keep version in sync with client.)

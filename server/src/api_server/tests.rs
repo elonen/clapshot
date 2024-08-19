@@ -212,7 +212,6 @@ async fn test_api_add_plain_comment()
         let drw_data = "data:image/webp;charset=utf-8;base64,SU1BR0VfREFUQQ==";  // "IMAGE_DATA"
 
         send_server_cmd!(ws, AddComment, AddComment{media_file_id: media.id.clone(), comment: "Test comment 2".into(), drawing: Some(drw_data.into()), ..Default::default()});
-
         let c = expect_client_cmd!(&mut ws, AddComments);
         assert_eq!(c.comments.len(), 1);
         assert_eq!(c.comments[0].comment, "Test comment 2");
@@ -228,11 +227,29 @@ async fn test_api_add_plain_comment()
 
         // Break the database
         ts.db.break_db();
-        send_server_cmd!(ws, AddComment, AddComment{media_file_id: media.id.clone(), comment: "Test comment 4".into(), ..Default::default()});
+        send_server_cmd!(ws, AddComment, AddComment{media_file_id: media.id.clone(), comment: "Test comment 5".into(), ..Default::default()});
         expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
     }
 }
 
+
+#[tokio::test]
+#[traced_test]
+async fn test_api_comment_other_users_video()
+{
+    api_test! {[ws, ts]
+        let other_users_vid = &ts.media_files[1];
+        assert_ne!(other_users_vid.user_id, ts.media_files[0].user_id);
+
+        open_media_file(&mut ws, &other_users_vid.id).await;
+
+        // Add comment to someone else's media file
+        send_server_cmd!(ws, AddComment, AddComment{media_file_id: other_users_vid.id.clone(), comment: "Comment to other user's video".into(), ..Default::default()});
+        let c = expect_client_cmd!(&mut ws, AddComments);
+        assert_eq!(c.comments.len(), 1);
+        assert_eq!(c.comments[0].comment, "Comment to other user's video");
+    }
+}
 
 #[tokio::test]
 #[traced_test]

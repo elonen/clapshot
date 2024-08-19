@@ -13,8 +13,8 @@ use tracing_subscriber::{fmt, EnvFilter, fmt::time::OffsetTime};
 /// It supports transparent file reopen on SIGUSR1 (for `logrotate`),
 /// and can be configured for JSON or plain text logging.
 pub struct ClapshotLogger {
-    pub log_writer: Arc<Mutex<Option<ReopenableFileWriter>>>,
-    pub guard: tracing_appender::non_blocking::WorkerGuard,
+    pub _log_writer: Arc<Mutex<Option<ReopenableFileWriter>>>,
+    pub _guard: tracing_appender::non_blocking::WorkerGuard,
 }
 
 impl ClapshotLogger
@@ -95,7 +95,7 @@ impl ClapshotLogger
         }
         .expect("tracing::subscriber::set_global_default failed");
 
-        Ok(ClapshotLogger { log_writer, guard })
+        Ok(ClapshotLogger { _log_writer: log_writer, _guard: guard })
     }
 }
 
@@ -174,7 +174,7 @@ fn test_log_rotation_on_sigusr1() {
 
     tracing::info!("Logging after rotation");
     logger
-        .log_writer
+        ._log_writer
         .lock()
         .expect("Failed to lock log writer")
         .as_mut()

@@ -251,7 +251,7 @@ pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComm
 
     let media_file_id = match get_media_file_or_send_error(Some(&data.media_file_id), &Some(ses), server).await? {
         Some(v) => {
-            let default_perm = ses.user_id == (&v).user_id || ses.is_admin;
+            let default_perm = true;    // anyone can comment on any media file
             org_authz_with_default(&ses.org_session, "comment media file", true, server, &ses.organizer,
                 default_perm, AuthzTopic::MediaFile(&v, authz_req::media_file_op::Op::Comment)).await?;
             v.id
@@ -490,7 +490,7 @@ pub async fn msg_edit_subtitle_info(data: &EditSubtitleInfo, ses: &mut UserSessi
     let mut sub = models::Subtitle::get(conn, &id).map_err(|e| anyhow!("Failed to get subtitle: {:?}", e))?;
     let mf = models::MediaFile::get(conn, &sub.media_file_id).map_err(|e| anyhow!("Failed to get media file: {:?}", e))?;
 
-    let default_perm = ses.user_id == (&sub).media_file_id || ses.is_admin;
+    let default_perm = ses.user_id == mf.user_id || ses.is_admin;
     org_authz_with_default(&ses.org_session, "edit subtitle", true, server, &ses.organizer,
         default_perm, AuthzTopic::MediaFile(&mf, authz_req::media_file_op::Op::Edit)).await?;
 
@@ -520,7 +520,7 @@ pub async fn msg_del_subtitle(data: &DelSubtitle, ses: &mut UserSession, server:
     let sub = models::Subtitle::get(conn, &id).map_err(|e| anyhow!("Failed to get subtitle: {:?}", e))?;
     let mf = models::MediaFile::get(conn, &sub.media_file_id).map_err(|e| anyhow!("Failed to get media file: {:?}", e))?;
 
-    let default_perm = ses.user_id == (&sub).media_file_id || ses.is_admin;
+    let default_perm = ses.user_id == mf.user_id || ses.is_admin;
     org_authz_with_default(&ses.org_session, "delete subtitle", true, server, &ses.organizer,
         default_perm, AuthzTopic::MediaFile(&mf, authz_req::media_file_op::Op::Edit)).await?;
 

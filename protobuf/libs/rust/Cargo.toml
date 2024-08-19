@@ -1,6 +1,6 @@
 [package]
 name = "lib-clapshot-grpc"
-version = "0.8.1"
+version = "0.8.2"
 edition = "2021"
 
 description = "Clapshot gRPC prototypes in Rust"
