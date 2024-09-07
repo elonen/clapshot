@@ -8,7 +8,7 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import {VideoFrame} from './VideoFrame';
 import {allComments, curSubtitle, videoIsReady, collabId, curVideo} from '@/stores';
-
+import LocalStorageCookies from '@/cookies';
 import CommentTimelinePin from './CommentTimelinePin.svelte';
 
 const dispatch = createEventDispatcher();
@@ -32,6 +32,24 @@ let debug_layout: boolean = false; // Set to true to show CSS layout boxes
 let commentsWithTc: Proto3.Comment[] = [];  // Will be populated by the store once video is ready (=frame rate is known)
 
 let animationFrameId: number = 0;
+let audio_volume: number;
+
+
+function initializeVolume() {
+    const storedVolume = LocalStorageCookies.get('audio_volume');
+    audio_volume = storedVolume ? parseInt(storedVolume) : 100;
+    if (videoElem) {
+        videoElem.volume = audio_volume / 100;
+    }
+}
+$: {
+    if (videoElem) {
+        videoElem.volume = audio_volume / 100;
+        LocalStorageCookies.set('audio_volume', audio_volume.toString(), null);
+    }
+}
+
+
 
 function refreshCommentPins(): void {
     // Make pins for all comments with timecode
@@ -119,6 +137,7 @@ onMount(async () => {
     allComments.subscribe((_v) => { refreshCommentPins(); });
     curSubtitle.subscribe(() => { offsetTextTracks(); });
     animationFrameId = requestAnimationFrame(handleTimeUpdate);
+    initializeVolume();
 });
 
 onDestroy(async () => {
@@ -319,12 +338,6 @@ export function seekToFrame(frame: number) {
     }
 }
 
-// Audio control
-let audio_volume = 50;
-$:{
-    if (videoElem)
-        videoElem.volume = audio_volume/100; // Immediately changes video element volume
-}
 
 // These are called from PARENT component on user interaction
 export function onToggleDraw(mode_on: boolean) {
