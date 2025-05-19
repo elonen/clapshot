@@ -493,26 +493,33 @@ function connectWebsocket(wsUrl: string) {
     let req_init: RequestInit = { method: 'GET', headers };
 
     function scheduleReconnect() {
-        reconnectDelay = Math.round(Math.min(reconnectDelay * 1.5, 5000));
+        reconnectDelay = Math.round(Math.min(reconnectDelay * 1.5, 30_000)) + Math.random() * 1000;
         console.log("API reconnecting in " + reconnectDelay + " ms");
         setTimeout(() => { connectWebsocket(wsUrl); }, reconnectDelay);
         setTimeout(() => { if (!isConnected()) uiConnectedState = false; }, 3000);
     }
 
     try {
-        return fetch(http_health_url, req_init)
-        .then(response => {
+        return fetch(http_health_url, {
+            ...req_init,
+            redirect: 'manual', // don’t auto-follow 302→login so we detect “not authenticated”
+            credentials: 'same-origin'
+        }).then(response => {
             if (response.ok) {
                 console.log("Authentication check OK. Connecting to WS API");
                 return connectWebsocketAfterAuthCheck(wsUrl);
             } else {
-                if (response.status === 401 || response.status === 403) {
-                    if (reconnectDelay > 1500)    // don't reload too often, just retry the fetch
-                        window.location.reload();
-                    else
+                if (response.status === 401 || response.status === 403 ||
+                    response.status === 301 || response.status === 302)
+                {
+                    if (reconnectDelay > 1500) {   // don't reload too often
+                        console.warn("Got auth error or redirect from API endpoint. Reloading page to show login screen.");
+                        window.location.reload()
+                    } else {
                         scheduleReconnect();
+                    }
                 }
-                showConnectionError(`Auth error at '${http_health_url}': ${response.status} - ${response.statusText}`);
+                showConnectionError(`API connect returned '${http_health_url}': ${response.status} - ${response.statusText}`);
             }
         })
         .catch(error => {
