@@ -18,7 +18,7 @@ path = "src/lib.rs"
 tracing = "0.1.38"
 serde = "1.0.160"
 warp = "0.3.4"
-tokio = { version = "1.28.0", features = ["full"] }
+tokio = { version = "1.38.2", features = ["full"] }
 tokio-stream = "0.1.13"
 anyhow = "1.0.70"
 tonic = "0.13.1"
