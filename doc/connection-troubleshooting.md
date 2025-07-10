@@ -2,25 +2,9 @@
 
 > **Quick Start:** For common deployment scenarios without detailed explanation, see the [Quick Start Reference](quick-start-reference.md).
 
+> **Architecture:** For detailed understanding of how Clapshot components communicate, see the [Architecture Overview](architecture-overview.md).
+
 This guide addresses common connection issues between the Clapshot client (browser), server, and nginx components. These issues stem from the distributed architecture where the browser client needs to connect to both the nginx reverse proxy and the backend Clapshot server.
-
-## Understanding Clapshot's Architecture
-
-Before troubleshooting, it's important to understand how Clapshot components communicate:
-
-```
-Browser (Client) → Nginx → Clapshot Server + Organizer
-     ↓                ↓            ↓
-   SPA loads     Reverse proxy   API + WebSocket
- client config   Static files    (port 8095)
-```
-
-### Key Components:
-
-1. **Client (Browser)**: Svelte SPA that loads `clapshot_client.conf.json` for server connection info
-2. **Nginx**: Reverse proxy serving static files and proxying API calls to backend
-3. **Clapshot Server**: Rust binary listening on port 8095 (API + WebSocket)
-4. **Organizer**: Python process communicating with server via gRPC
 
 ## Common Connection Problems
 
@@ -35,13 +19,14 @@ Browser (Client) → Nginx → Clapshot Server + Organizer
 
 #### A. Client Configuration Issues
 
-The client needs to know where to connect. Check `clapshot_client.conf.json`:
+The client needs to know where to connect. This is controlled by the `clapshot_client.conf.json` configuration file.
 
 **For Docker deployments:**
 ```bash
-# Set the URL base environment variable
+# Set the URL base environment variable - this automatically configures the client
 docker run ... -e CLAPSHOT_URL_BASE="http://YOUR_HOST:YOUR_PORT/" ...
 ```
+*Note: The `CLAPSHOT_URL_BASE` environment variable is a Docker convenience feature. The Docker startup script uses this value to automatically generate the `clapshot_client.conf.json` file. This is not a separate configuration method - it's a shortcut that writes the same configuration file.*
 
 **For manual deployments:**
 ```json
@@ -54,7 +39,7 @@ docker run ... -e CLAPSHOT_URL_BASE="http://YOUR_HOST:YOUR_PORT/" ...
 
 **Location of config file:**
 - Docker: Automatically generated in `/etc/clapshot_client.conf`
-- Debian package: `/usr/share/clapshot-client/www/clapshot_client.conf.json`
+- Debian package: `/etc/clapshot_client.conf` (symlink to `/usr/share/clapshot-client/www/clapshot_client.conf.json`)
 - Must be accessible by the web browser alongside HTML/JS/CSS files
 
 #### B. Port Mapping Issues
@@ -105,22 +90,20 @@ error: the following required arguments were not provided:
   --url-base 
 ```
 
-**Solution:** Ensure proper configuration in service file or use Docker environment variables.
+**Solution:** Ensure proper configuration in service file or use Docker environment variables. 
 
-#### C. Database Lock Issues
-```
-Failed to get migrations: DatabaseError(Unknown, "database is locked")
-```
-
-**Solution:** 
-- Stop all Clapshot processes
-- Check for stale lock files
-- Restart with clean database state
+**Examples and documentation:**
+- See [Quick Start Reference](quick-start-reference.md) for working Docker command examples
+- See [Sysadmin Guide](sysadmin-guide.md) for manual installation and configuration details
+- Check existing Docker commands in this guide for required argument patterns
 
 ### 3. CORS and Cross-Origin Issues
 
+**What is CORS?**
+Cross-Origin Resource Sharing (CORS) is a crucial web security mechanism that controls which websites can access resources from your Clapshot server. When the browser's client code runs on one domain (like `http://192.168.1.100:8080`) but tries to connect to API endpoints on another domain or port, the browser enforces CORS policies to prevent malicious websites from accessing your data. Proper CORS configuration is essential for security while allowing legitimate access to your Clapshot instance.
+
 **Symptoms:**
-- CORS errors in browser console
+- CORS errors in browser's developer console
 - API calls blocked
 
 **Solutions:**
@@ -158,7 +141,7 @@ docker logs container_name
 
 ```bash
 # Check client config
-cat /usr/share/clapshot-client/www/clapshot_client.conf.json
+cat /etc/clapshot_client.conf
 # or for Docker:
 docker exec container_name cat /etc/clapshot_client.conf
 ```
@@ -294,7 +277,7 @@ When asking for help, please provide:
 2. **Client configuration**: Contents of `clapshot_client.conf.json`
 3. **Server logs**: Last 50 lines of clapshot server logs
 4. **Network setup**: How are you accessing Clapshot (localhost, LAN, internet)
-5. **Error messages**: Complete error messages from browser console
+5. **Error messages**: Complete error messages from browser's developer console
 
 ## Related Documentation
 

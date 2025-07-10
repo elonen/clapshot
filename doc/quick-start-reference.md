@@ -2,6 +2,8 @@
 
 Quick reference for common Clapshot deployment scenarios. For detailed troubleshooting, see the [Connection Troubleshooting Guide](connection-troubleshooting.md).
 
+> **Architecture:** For detailed understanding of how Clapshot components communicate, see the [Architecture Overview](architecture-overview.md).
+
 ## Local Development/Testing
 
 ### Single Machine Demo (Localhost Only)
