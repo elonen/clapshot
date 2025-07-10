@@ -123,15 +123,20 @@ describe('PopupMenu.svelte', () => {
       });
 
       const hideSpy = vi.fn();
-      component.$on('hide', hideSpy);
+
+      // Re-render with hide callback
+      cleanup();
+      const { component: newComponent } = render(PopupMenu, {
+        props: { x: 0, y: 0, menuLines, onhide: hideSpy }
+      });
 
       // Initially visible
       expect(screen.getByText('Test Item')).toBeInTheDocument();
 
       // Hide the menu
-      component.hide();
+      newComponent.hide();
 
-      // Should dispatch hide event
+      // Should call hide callback
       expect(hideSpy).toHaveBeenCalledOnce();
     });
   });
@@ -267,30 +272,24 @@ describe('PopupMenu.svelte', () => {
   });
 
   describe('Event handling', () => {
-    it('should dispatch action event when menu item is clicked', async () => {
+    it('should call action callback when menu item is clicked', async () => {
       const menuLines: Proto3.ActionDef[] = [{
         uiProps: { label: 'Click Me' },
         action: { code: 'test-action', params: { key: 'value' } }
       }];
 
-      const { component } = render(PopupMenu, {
-        props: { x: 0, y: 0, menuLines }
-      });
-
       const actionSpy = vi.fn();
-      component.$on('action', actionSpy);
+      render(PopupMenu, {
+        props: { x: 0, y: 0, menuLines, onaction: actionSpy }
+      });
 
       const button = screen.getByText('Click Me');
       await mockUser.click(button);
 
       expect(actionSpy).toHaveBeenCalledOnce();
-      expect(actionSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            action: menuLines[0]
-          }
-        })
-      );
+      expect(actionSpy).toHaveBeenCalledWith({
+        action: menuLines[0]
+      });
     });
 
     it('should hide menu after clicking item', async () => {
@@ -299,12 +298,10 @@ describe('PopupMenu.svelte', () => {
         action: { code: 'hide-action' }
       }];
 
-      const { component } = render(PopupMenu, {
-        props: { x: 0, y: 0, menuLines }
-      });
-
       const hideSpy = vi.fn();
-      component.$on('hide', hideSpy);
+      render(PopupMenu, {
+        props: { x: 0, y: 0, menuLines, onhide: hideSpy }
+      });
 
       const button = screen.getByText('Hide Test');
       await mockUser.click(button);
@@ -319,12 +316,10 @@ describe('PopupMenu.svelte', () => {
         action: { code: 'window-click-action' }
       }];
 
-      const { component } = render(PopupMenu, {
-        props: { x: 0, y: 0, menuLines }
-      });
-
       const hideSpy = vi.fn();
-      component.$on('hide', hideSpy);
+      render(PopupMenu, {
+        props: { x: 0, y: 0, menuLines, onhide: hideSpy }
+      });
 
       // Initially visible
       expect(screen.getByText('Window Click Test')).toBeInTheDocument();
@@ -389,18 +384,16 @@ describe('PopupMenu.svelte', () => {
       expect(typeof component.hide).toBe('function');
     });
 
-    it('should dispatch hide event when hide method is called', () => {
+    it('should call hide callback when hide method is called', () => {
       const menuLines: Proto3.ActionDef[] = [{
         uiProps: { label: 'Hide Test' },
         action: { code: 'hide-action' }
       }];
 
-      const { component } = render(PopupMenu, {
-        props: { x: 0, y: 0, menuLines }
-      });
-
       const hideSpy = vi.fn();
-      component.$on('hide', hideSpy);
+      const { component } = render(PopupMenu, {
+        props: { x: 0, y: 0, menuLines, onhide: hideSpy }
+      });
 
       component.hide();
 

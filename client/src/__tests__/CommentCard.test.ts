@@ -261,12 +261,10 @@ describe('CommentCard.svelte', () => {
     });
 
     it('should save comment on Enter key', async () => {
-      const { component, container } = render(CommentCard, {
-        props: { comment: mockComment, indent: 0 }
-      });
-
       const editSpy = vi.fn();
-      component.$on('edit-comment', editSpy);
+      const { container } = render(CommentCard, {
+        props: { comment: mockComment, indent: 0, oneditcomment: editSpy }
+      });
 
       // Trigger actions visibility first
       const commentElement = container.querySelector('#comment_card_comment-123') as HTMLElement;
@@ -286,23 +284,17 @@ describe('CommentCard.svelte', () => {
       await mockUser.type(textarea, 'Updated comment text');
       await mockUser.keyboard('{Enter}');
 
-      expect(editSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            id: 'comment-123',
-            comment_text: 'Updated comment text'
-          }
-        })
-      );
+      expect(editSpy).toHaveBeenCalledWith({
+        id: 'comment-123',
+        comment_text: 'Updated comment text'
+      });
     });
 
     it('should save changes on Escape key if text is not empty', async () => {
-      const { component, container } = render(CommentCard, {
-        props: { comment: mockComment, indent: 0 }
-      });
-
       const editSpy = vi.fn();
-      component.$on('edit-comment', editSpy);
+      const { container } = render(CommentCard, {
+        props: { comment: mockComment, indent: 0, oneditcomment: editSpy }
+      });
 
       // Trigger actions visibility first
       const commentElement = container.querySelector('#comment_card_comment-123') as HTMLElement;
@@ -320,10 +312,7 @@ describe('CommentCard.svelte', () => {
       
       await mockUser.clear(textarea);
       await mockUser.type(textarea, 'Some changes');
-      
-      // Fire keyup event with Escape key directly
-      const escapeEvent = new KeyboardEvent('keyup', { key: 'Escape' });
-      textarea.dispatchEvent(escapeEvent);
+      await mockUser.keyboard('{Escape}');
 
       // Wait for DOM updates
       await waitFor(() => {
@@ -332,23 +321,17 @@ describe('CommentCard.svelte', () => {
 
       // Should exit edit mode and dispatch edit event with changes
       expect(screen.getByText('Some changes')).toBeInTheDocument();
-      expect(editSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            id: 'comment-123',
-            comment_text: 'Some changes'
-          }
-        })
-      );
+      expect(editSpy).toHaveBeenCalledWith({
+        id: 'comment-123',
+        comment_text: 'Some changes'
+      });
     });
 
     it('should exit edit mode on blur and trim text', async () => {
-      const { component, container } = render(CommentCard, {
-        props: { comment: mockComment, indent: 0 }
-      });
-
       const editSpy = vi.fn();
-      component.$on('edit-comment', editSpy);
+      const { container } = render(CommentCard, {
+        props: { comment: mockComment, indent: 0, oneditcomment: editSpy }
+      });
 
       // Trigger actions visibility first
       const commentElement = container.querySelector('#comment_card_comment-123') as HTMLElement;
@@ -398,12 +381,10 @@ describe('CommentCard.svelte', () => {
     });
 
     it('should submit reply with valid text', async () => {
-      const { component, container } = render(CommentCard, {
-        props: { comment: mockComment, indent: 0 }
-      });
-
       const replySpy = vi.fn();
-      component.$on('reply-to-comment', replySpy);
+      const { container } = render(CommentCard, {
+        props: { comment: mockComment, indent: 0, onreplytocomment: replySpy }
+      });
 
       // Trigger actions visibility first
       const commentElement = container.querySelector('#comment_card_comment-123') as HTMLElement;
@@ -420,15 +401,11 @@ describe('CommentCard.svelte', () => {
       await mockUser.type(replyInput, 'This is a reply');
       await mockUser.keyboard('{Enter}');
 
-      expect(replySpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            parentId: 'comment-123',
-            commentText: 'This is a reply',
-            subtitleId: undefined
-          }
-        })
-      );
+      expect(replySpy).toHaveBeenCalledWith({
+        parentId: 'comment-123',
+        commentText: 'This is a reply',
+        subtitleId: undefined
+      });
     });
 
     it('should hide reply input on blur', async () => {
@@ -461,49 +438,37 @@ describe('CommentCard.svelte', () => {
 
   describe('Timecode and navigation', () => {
     it('should click timecode to navigate', async () => {
-      const { component } = render(CommentCard, {
-        props: { comment: mockComment, indent: 0 }
-      });
-
       const displaySpy = vi.fn();
-      component.$on('display-comment', displaySpy);
+      render(CommentCard, {
+        props: { comment: mockComment, indent: 0, ondisplaycomment: displaySpy }
+      });
 
       const timecode = screen.getByText('30.5s');
       await mockUser.click(timecode);
 
-      expect(displaySpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            timecode: '30.5s',
-            drawing: undefined,
-            subtitleId: 'subtitle-456'
-          }
-        })
-      );
+      expect(displaySpy).toHaveBeenCalledWith({
+        timecode: '30.5s',
+        drawing: undefined,
+        subtitleId: 'subtitle-456'
+      });
     });
 
     it('should handle keyboard Enter to navigate', async () => {
-      const { component } = render(CommentCard, {
-        props: { comment: mockComment, indent: 0 }
-      });
-
       const displaySpy = vi.fn();
-      component.$on('display-comment', displaySpy);
+      render(CommentCard, {
+        props: { comment: mockComment, indent: 0, ondisplaycomment: displaySpy }
+      });
 
       // Click on the comment card to focus it, then press Enter
       const commentCard = screen.getByRole('link');
       commentCard.focus();
       await mockUser.keyboard('{Enter}');
 
-      expect(displaySpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            timecode: '30.5s',
-            drawing: undefined,
-            subtitleId: 'subtitle-456'
-          }
-        })
-      );
+      expect(displaySpy).toHaveBeenCalledWith({
+        timecode: '30.5s',
+        drawing: undefined,
+        subtitleId: 'subtitle-456'
+      });
     });
 
     it('should handle comments without timecode', () => {
@@ -520,12 +485,10 @@ describe('CommentCard.svelte', () => {
 
   describe('Delete functionality', () => {
     it('should confirm and delete comment', async () => {
-      const { component, container } = render(CommentCard, {
-        props: { comment: mockComment, indent: 0 }
-      });
-
       const deleteSpy = vi.fn();
-      component.$on('delete-comment', deleteSpy);
+      const { container } = render(CommentCard, {
+        props: { comment: mockComment, indent: 0, ondeletecomment: deleteSpy }
+      });
 
       // Trigger actions visibility first
       const commentElement = container.querySelector('#comment_card_comment-123') as HTMLElement;
@@ -539,11 +502,7 @@ describe('CommentCard.svelte', () => {
       await mockUser.click(deleteButton);
 
       expect(global.confirm).toHaveBeenCalledWith('Delete comment?');
-      expect(deleteSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: { id: 'comment-123' }
-        })
-      );
+      expect(deleteSpy).toHaveBeenCalledWith({ id: 'comment-123' });
     });
 
     it('should prevent delete with children', async () => {

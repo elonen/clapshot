@@ -1,7 +1,13 @@
 <script lang="ts">
+  import { run } from 'svelte/legacy';
 
-  export let html: string;
-  let container: HTMLDivElement;
+
+  interface Props {
+    html: string;
+  }
+
+  let { html }: Props = $props();
+  let container: HTMLDivElement | undefined = $state();
 
   const addScript = async (src: string): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -28,7 +34,7 @@
     }
   };
 
-  $: {  // Reactive block: runs whenever html changes
+  run(() => {  // Reactive block: runs whenever html changes
        if (container) {
            container.innerHTML = html;
 
@@ -44,7 +50,7 @@
            });
            externalStyles.forEach(style => addStyle(style.href));
        }
-    };
+    });;
 </script>
 
 <div bind:this={container}></div>

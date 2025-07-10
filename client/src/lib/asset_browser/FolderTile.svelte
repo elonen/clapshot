@@ -1,6 +1,5 @@
 <script lang="ts">
 
-import { createEventDispatcher } from 'svelte';
 import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
 import { dndzone, TRIGGERS, SOURCES } from 'svelte-dnd-action';
 import { selectedTiles } from '@/stores';
@@ -8,12 +7,22 @@ import * as Proto3 from '@clapshot_protobuf/typescript';
 import TileVisualizationOverride from './TileVisualizationOverride.svelte';
 import {rgbToCssColor, cssVariables} from './utils';
 
-export let id: any = {};
-export let name: string = "";
-export let preview_items: Proto3.PageItem_FolderListing_Item[] = [];
-export let visualization: Proto3.PageItem_FolderListing_Item_Visualization|undefined = undefined;
+    interface Props {
+        id?: any;
+        name?: string;
+        preview_items?: Proto3.PageItem_FolderListing_Item[];
+        visualization?: Proto3.PageItem_FolderListing_Item_Visualization|undefined;
+        ondropitemsinto?: (event: {folderId: any, items: any[]}) => void;
+    }
 
-const dispatch = createEventDispatcher();
+    let {
+        id = {},
+        name = "",
+        preview_items = [],
+        visualization = undefined,
+        ondropitemsinto
+    }: Props = $props();
+
 
 function contentPreviewItems(data: Proto3.PageItem_FolderListing_Item[]): Proto3.PageItem_FolderListing_Item[] {
     let items = data;
@@ -23,7 +32,7 @@ function contentPreviewItems(data: Proto3.PageItem_FolderListing_Item[]): Proto3
 
 // This only holds a DnD item temporarily during keyboard DnD, and shadow items
 // when reordering by pointer.
-let dndItems: any = [];
+let dndItems: any = $state([]);
 
 function onSink(e: any) {
 	console.log("Sunk #" + e.detail.items[0].id + " into #" + id)
@@ -35,7 +44,7 @@ function onSink(e: any) {
     newItems = newItems.filter((item, pos) =>
         newItems.map((mi) => mi['id']).indexOf(item['id']) === pos );
 
-    dispatch("drop-items-into", {'folderId': id, 'items': newItems});
+    if (ondropitemsinto) ondropitemsinto({'folderId': id, 'items': newItems});
 
     dndItems = [];
 }
@@ -77,8 +86,8 @@ let basecolor = visualization?.baseColor ?
 
     <div class="w-full h-full video-list-folder"
         use:dndzone="{{items: dndItems, morphDisabled: true, dragDisabled: true, zoneTabIndex: -1, centreDraggedOnCursor: true}}"
-        on:consider={consider}
-        on:finalize={finalize}
+        onconsider={consider}
+        onfinalize={finalize}
     >
     {#each dndItems as _item, _i}<span></span>{/each}
     </div>
@@ -91,7 +100,7 @@ let basecolor = visualization?.baseColor ?
         <div class="flex-1 bg-[#0002] p-0.5 rounded-md shadow-inner overflow-clip leading-none text-[0px]">
             <div class="grid grid-cols-2 gap-1 text-xs max-h-4">
                 {#each contentPreviewItems(preview_items) as prev, _i}
-                    {#if prev.mediaFile?.previewData?.thumbUrl }
+                    {#if prev.mediaFile?.previewData?.thumbUrl}
                         <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md" style="background: rgb(71, 85, 105)">
                             <ScrubbableVideoThumb
                                 extra_styles="border-radius: 0rem; height: 100%; width: auto; transform: translate(-50%, -50%); left: 50%; top: 50%; position: absolute; filter: opacity(66%);"
@@ -101,13 +110,13 @@ let basecolor = visualization?.baseColor ?
                                 thumbSheetCols={prev.mediaFile.previewData?.thumbSheet?.cols}
                             />
                         </div>
-                    {:else if prev.folder }
+                    {:else if prev.folder}
                         <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md">
                             <div class="w-full h-full video-list-folder flex items-center justify-center">
                                 <span class="text-xs text-slate-500 text-center leading-none italic">{prev.folder?.title}</span>
                             </div>
                         </div>
-                    {:else if prev.vis }
+                    {:else if prev.vis}
                         <div class="w-full aspect-square overflow-clip inline-block shadow-md relative rounded-md" style="background: rgb(71, 85, 105)">
                             <TileVisualizationOverride
                                 extra_styles="filter: opacity(66%);"

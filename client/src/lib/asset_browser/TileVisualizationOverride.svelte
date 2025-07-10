@@ -2,8 +2,12 @@
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import { rgbToCssColor } from './utils';
 
-export let vis: Proto3.PageItem_FolderListing_Item_Visualization;
-export let extra_styles: string = "";
+    interface Props {
+        vis: Proto3.PageItem_FolderListing_Item_Visualization;
+        extra_styles?: string;
+    }
+
+    let { vis, extra_styles = "" }: Props = $props();
 
 </script>
 

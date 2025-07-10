@@ -1,4 +1,7 @@
 <script lang="ts">
+    import { createBubbler, stopPropagation } from 'svelte/legacy';
+
+    const bubble = createBubbler();
 
 import {dndzone, TRIGGERS, SOURCES, SHADOW_ITEM_MARKER_PROPERTY_NAME, type DndEvent} from "svelte-dnd-action";
 import PopupMenu from './PopupMenu.svelte';
@@ -6,28 +9,125 @@ import VideoTile from "./VideoTile.svelte";
 import FolderTile from "./FolderTile.svelte";
 
 import { folderItemsToIDs, type VideoListDefItem } from "./types";
-import { createEventDispatcher, tick } from "svelte";
+import { createEventDispatcher, tick, mount, unmount } from "svelte";
 import { fade } from "svelte/transition";
 
 import { selectedTiles, serverDefinedActions } from "@/stores";
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
+  /*
+   * ⚠️  COMPLEXITY WARNING ⚠️
+   *
+   * This component integrates svelte-dnd-action library with complex selection, keyboard navigation,
+   * and drag-and-drop functionality. Multiple intricate interdependencies exist that are NOT obvious
+   * from reading the code. Proceed with caution when making changes.
+   *
+   * 1. **svelte-dnd-action Keyboard Event Interception**:
+   *    - The library intercepts Enter/Space keys at a very low level (capture phase or earlier)
+   *    - These keys are automatically converted to drag operations (dragStarted/dragStopped events)
+   *    - NO configuration exists to exclude specific keys from drag activation
+   *    - Solution: Custom `enterKeyInterceptor` action uses capture-phase listeners to intercept
+   *      Enter before the library gets it, while leaving Space for drag operations
+   *
+   * 2. **Event Handler Hierarchy Complexity**:
+   *    - handleMouseDown: Library intercepts these events, selection logic CANNOT go here
+   *    - handleMouseUp: Where selection logic actually works
+   *    - handleKeyDown: Enter events never reach here due to library interception
+   *    - The event flow is: capture phase → dnd library → bubble phase → our handlers
+   *
+   * 3. **isDragging State Management**:
+   *    - CRITICAL: Only set to true on TRIGGERS.DRAG_STARTED, not every handleConsider event
+   *    - An old version of this code set it true for all consider events, breaking keyboard navigation
+   *    - This state affects selection behavior, keyboard handling, and visual feedback
+   *
+   * 4. **Zone Type Interactions**:
+   *    - NEVER add custom `type` to dndzone configuration
+   *    - FolderTile components use default type ('Internal')
+   *    - Different types cannot interact, breaking drop-into-folder functionality
+   *    - This was a subtle breaking change that took significant debugging to identify
+   *
+   * 5. **Focus vs Selection State**:
+   *    - Visual selection ($selectedTiles) vs keyboard focus are separate concerns
+   *    - Enter key only works on keyboard-focused elements, not just visually selected ones
+   *    - Solution: Manually set focus() on mouse click for consistent behavior
+   *    - Custom focus styling prevents harsh white outlines while maintaining functionality
+   *
+   * 6. **Multi-Select Implementation**:
+   *    - Shift+click: Range selection using getItemsInRange() and lastSelectedItemId tracking
+   *    - Cmd/Ctrl+click: Individual item toggles
+   *    - Range selection works across flexbox layout by using item array indices
+   *    - MUST maintain lastSelectedItemId correctly to avoid broken range selections
+   *
+   * 7. **Nested DnD Zone Dependencies**:
+   *    - Main list: One dndzone for reordering
+   *    - Folder tiles: Individual dndzone for accepting drops
+   *    - Drop-into-folder requires BOTH zones to work together correctly
+   *    - Event flow between nested zones is fragile and easily broken
+   *
+   * 8. **Multi-Select Drag Emulation**:
+   *    - Library doesn't natively support multi-item drag
+   *    - Custom logic in handleConsider/handleFinalize emulates this behavior
+   *    - selectedTiles store tracks multiple items for drag operations
+   *    - Extremely complex interaction between selection state and drag events
+   *
+   * BEFORE MAKING CHANGES:
+   * - Test ALL interaction modes: mouse click, drag, keyboard nav, multi-select, range select
+   * - Test drop-into-folder functionality specifically
+   * - Test Enter key opening items vs Space key drag operations
+   * - Verify focus behavior matches visual selection
+   * - Check that nested folder tiles still receive drag events properly
+   *
+   * DANGEROUS CHANGES TO AVOID:
+   * - Adding/changing dndzone `type` configuration
+   * - Moving selection logic to different event handlers
+   * - Modifying isDragging state management
+   * - Changing how enterKeyInterceptor works
+   * - Altering the nested dndzone structure
+   *
+   * This complexity exists because we're forcing the library to support use cases it wasn't
+   * designed for (multi-select + drag, Enter key opening, nested drop zones). The current
+   * implementation works but is inherently fragile.
+   */
+
 const dispatch = createEventDispatcher();
 
-export let listingData: { [key: string]: string };
-export let items: VideoListDefItem[] = [];
-export let dragDisabled: boolean = true;
-export let listPopupActions: string[] = [];
+    interface Props {
+        listingData: { [key: string]: string };
+        items?: VideoListDefItem[];
+        dragDisabled?: boolean;
+        listPopupActions?: string[];
+    }
 
-let isDragging = false;
+    let {
+        listingData,
+        items = $bindable([]),
+        dragDisabled = true,
+        listPopupActions = []
+    }: Props = $props();
+
+let isDragging = $state(false);
+let lastSelectedItemId = $state<string | null>(null);
 
 function mapDefItems(items: VideoListDefItem[]) {
     return folderItemsToIDs(items.map((it)=>it.obj));
 }
 
+function getItemsInRange(startId: string, endId: string): VideoListDefItem[] {
+    const startIndex = items.findIndex(item => item.id === startId);
+    const endIndex = items.findIndex(item => item.id === endId);
+
+    if (startIndex === -1 || endIndex === -1) return [];
+
+    const minIndex = Math.min(startIndex, endIndex);
+    const maxIndex = Math.max(startIndex, endIndex);
+
+    return items.slice(minIndex, maxIndex + 1);
+}
+
 function handleConsider(e: CustomEvent<DndEvent>) {
     isDragging = true;
     const {items: newItems, info: {trigger, source, id}} = e.detail;
+
     if (source !== SOURCES.KEYBOARD) {
         if (Object.keys($selectedTiles).length && trigger === TRIGGERS.DRAG_STARTED) {
             if (Object.keys($selectedTiles).includes(id)) {
@@ -41,7 +141,11 @@ function handleConsider(e: CustomEvent<DndEvent>) {
             }
         }
     }
-    if (trigger === TRIGGERS.DRAG_STOPPED) $selectedTiles = {};
+
+    if (trigger === TRIGGERS.DRAG_STOPPED) {
+        isDragging = false;
+        $selectedTiles = {};
+    }
     items = newItems as VideoListDefItem[];
 }
 function handleFinalize(e: CustomEvent<DndEvent>) {
@@ -49,6 +153,7 @@ function handleFinalize(e: CustomEvent<DndEvent>) {
 
     // Handle multi-selected drop
     let {items: newItems, info: {trigger, source, id}} = e.detail;
+
     if (Object.keys($selectedTiles).length) {
         if (trigger === TRIGGERS.DROPPED_INTO_ANOTHER) {
             items = newItems.filter(item => !Object.keys($selectedTiles).includes(item.id)) as VideoListDefItem[];
@@ -83,34 +188,34 @@ function dispatchOpenItem(id: string) {
     }
 }
 
-function handleMouseOrKeyDown(id: string, e: any) {
+function handleMouseDown(id: string, e: MouseEvent) {
     if (isDragging) {
-        console.log("(dragging => videolist: ignore key/mouse down)");
+        console.log("(dragging => videolist: ignore mouse down)");
         return;
     }
     hidePopupMenus();
 
-    // Open item by keyboard
-    if (e.key) {
-        if (e.key == "Enter") {
-            dispatchOpenItem(id);
-            $selectedTiles = {};
-            return;
+    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+
+    // Handle Ctrl+click on macOS as context menu (equivalent to right-click)
+    if (isMac && e.ctrlKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        let item = items.find(item => item.id === id);
+        if (item) {
+            onContextMenu(e, item);
         }
+        return;
     }
-    // (Multi-)selecting items
-    if (!e.shiftKey ) return;
-    if (e.key && e.key !== "Shift") return;
-    if (Object.keys($selectedTiles).includes(id)) {
-        delete($selectedTiles[id]);
-    } else {
-        let it = items.find(item => item.id === id);
-        if (it)
-            $selectedTiles[id] = it;
-        else
-            console.error("UI BUG: videolist item not found");
+
+    // Note: Selection logic moved to handleMouseUp since mousedown events are intercepted by drag library
+}
+
+function handleKeyDown(id: string, e: KeyboardEvent) {
+    // Note: Enter key is handled by enterKeyInterceptor action
+    if (isDragging) {
+        return;
     }
-    $selectedTiles = {...$selectedTiles};
 }
 
 function transformDraggedElement(el: any) {
@@ -127,9 +232,40 @@ function transformDraggedElement(el: any) {
 
 function handleMouseUp(e: MouseEvent, item: VideoListDefItem) {
     if (e.button > 0) return; // ignore right click
-    if (!isDragging && !e.shiftKey) {
-        $selectedTiles = {};
-        $selectedTiles[item.id] = item;
+
+    if (!isDragging) {
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const isMultiSelectKey = isMac ? e.metaKey : e.ctrlKey;
+
+        if (e.shiftKey && lastSelectedItemId) {
+            // Range selection: select all items between lastSelectedItemId and current item
+            const rangeItems = getItemsInRange(lastSelectedItemId, item.id);
+            for (const rangeItem of rangeItems) {
+                $selectedTiles[rangeItem.id] = rangeItem;
+            }
+            $selectedTiles = {...$selectedTiles};
+            // Don't update lastSelectedItemId for range selection
+        } else if (isMultiSelectKey) {
+            // Toggle individual item
+            if (Object.keys($selectedTiles).includes(item.id)) {
+                delete($selectedTiles[item.id]);
+            } else {
+                $selectedTiles[item.id] = item;
+            }
+            $selectedTiles = {...$selectedTiles};
+            lastSelectedItemId = item.id;
+        } else {
+            // Single selection
+            $selectedTiles = {};
+            $selectedTiles[item.id] = item;
+            lastSelectedItemId = item.id;
+
+            // Set keyboard focus to match visual selection
+            const element = document.getElementById(`videolist_item__${item.id}`);
+            if (element) {
+                element.focus();
+            }
+        }
     }
 }
 
@@ -181,25 +317,52 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
     if (actions.length === 0)
         return;
 
-    let popup = new PopupMenu({
-        target: popupContainer ,
-        props: {
-            menuLines: actions,
-            x: e.clientX,
-            y: e.clientY - 16, // Offset a bit to make it look better
-        },
-    });
-    popup.$on('action', (e) => dispatch("popup-action", {action: e.detail.action, items: targetTiles, listingData}));
-    popup.$on('hide', () => popup.$destroy());
-    e.preventDefault(); // Prevent default browser context menu
+    let popup = mount(PopupMenu, {
+            target: popupContainer ,
+            props: {
+                menuLines: actions,
+                x: e.clientX,
+                y: e.clientY - 16, // Offset a bit to make it look better
+                onaction: (event: any) => dispatch("popup-action", {action: event.action, items: targetTiles, listingData}),
+                onhide: () => unmount(popup)
+            },
+        });
 }
 
 function isShadowItem(item: any) {
     return item[SHADOW_ITEM_MARKER_PROPERTY_NAME];
 }
+
+// Custom action to intercept Enter key before dnd library gets it
+function enterKeyInterceptor(node: HTMLElement) {
+    function handleKeydown(event: KeyboardEvent) {
+        if (event.key === 'Enter' && !event.repeat) {
+            const focusedElement = document.activeElement;
+            if (focusedElement && focusedElement.id.startsWith("videolist_item__")) {
+                console.log("### INTERCEPTED ENTER WITH CAPTURE PHASE");
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+
+                const itemId = focusedElement.id.replace("videolist_item__", "");
+                dispatchOpenItem(itemId);
+                $selectedTiles = {};
+            }
+        }
+    }
+
+    // Capture phase runs before svelte-dnd-action's handlers
+    node.addEventListener('keydown', handleKeydown, { capture: true });
+
+    return {
+        destroy() {
+            node.removeEventListener('keydown', handleKeydown, { capture: true });
+        }
+    };
+}
 </script>
 
-<div>
+<div use:enterKeyInterceptor>
     <section
         use:dndzone="{{
             items, dragDisabled,
@@ -208,9 +371,13 @@ function isShadowItem(item: any) {
             dropTargetClasses: ['activeDropTarget'],
             dropTargetStyle: {},
             }}"
-        on:consider={handleConsider}
-        on:finalize={handleFinalize}
-        on:contextmenu={(e) => onContextMenu(e, null)}
+        onconsider={handleConsider}
+        onfinalize={handleFinalize}
+        oncontextmenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onContextMenu(e, null);
+        }}
         class="flex flex-wrap gap-4 p-4 bg-slate-900"
         role="list"
     >
@@ -221,28 +388,32 @@ function isShadowItem(item: any) {
                 role="button"
                 tabindex="0"
                 class:selectedTile={Object.keys($selectedTiles).includes(item.id)}
-                on:click|stopPropagation
-                on:dblclick={(_e) => {$selectedTiles = {}; dispatchOpenItem(item.id)}}
-                on:mousedown={(e) => handleMouseOrKeyDown(item.id, e)}
-                on:mouseup={(e) => handleMouseUp(e, item)}
-                on:keydown={(e) => handleMouseOrKeyDown(item.id, e)}
-                on:contextmenu|stopPropagation={(e) => onContextMenu(e, item)}
+                onclick={stopPropagation(bubble('click'))}
+                ondblclick={(_e) => {$selectedTiles = {}; dispatchOpenItem(item.id)}}
+                onmousedown={(e) => handleMouseDown(item.id, e)}
+                onmouseup={(e) => handleMouseUp(e, item)}
+                onkeydown={(e) => handleKeyDown(item.id, e)}
+                oncontextmenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onContextMenu(e as MouseEvent, item);
+                }}
             >
                 {#if isShadowItem(item)}
                     <div in:fade={{duration:200}} class='custom-dnd-shadow-item'></div>
                 {:else}
-                    {#if item.obj.mediaFile }
+                    {#if item.obj.mediaFile}
                         <VideoTile item={item.obj.mediaFile} visualization={item.obj.vis}/>
-                    {:else if item.obj.folder }
+                    {:else if item.obj.folder}
                         <FolderTile
                             id={item.obj.folder.id}
                             name={item.obj.folder.title}
                             preview_items={item.obj.folder.previewItems }
                             visualization={item.obj.vis}
-                            on:drop-items-into={(e) => {
+                            ondropitemsinto={(event) => {
                                 dispatch("move-to-folder", {
-                                    dstFolderId: e.detail.folderId,
-                                    ids: mapDefItems(e.detail.items) });
+                                    dstFolderId: event.folderId,
+                                    ids: mapDefItems(event.items) });
                             }}
                         />
                     {:else}
@@ -254,7 +425,7 @@ function isShadowItem(item: any) {
     </section>
 </div>
 
-<svelte:window on:click={(_e) => {
+<svelte:window onclick={(_e) => {
     // Deselect all items if clicked outside of the list
     if (!isDragging) $selectedTiles = {};
 }} />
@@ -274,6 +445,15 @@ function isShadowItem(item: any) {
 
 :global(.video-list-tile-sqr:hover) {
         filter: brightness(1.2);
+}
+
+:global(.video-list-tile-sqr:focus .video-list-video),
+:global(.video-list-tile-sqr:focus .video-list-folder) {
+    background: rgba(251, 200, 60, 0.8) !important;
+}
+
+:global(.video-list-tile-sqr:focus) {
+    outline: none;
 }
 
 :global([data-selected-items-count]::after) {

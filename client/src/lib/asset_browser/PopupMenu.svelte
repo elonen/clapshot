@@ -1,15 +1,22 @@
 <script lang="ts">
-import { createEventDispatcher, onMount } from 'svelte';
+    import { run, stopPropagation } from 'svelte/legacy';
+
+import { onMount } from 'svelte';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
-export let x = 0;
-export let y = 0;
-export let menuLines: Proto3.ActionDef[] = [];
+    interface Props {
+        x?: number;
+        y?: number;
+        menuLines?: Proto3.ActionDef[];
+        onaction?: (event: {action: Proto3.ActionDef}) => void;
+        onhide?: () => void;
+    }
 
-let menu_el: HTMLElement | null = null;
-let removed = false;
-const dispatch = createEventDispatcher();
+    let { x = $bindable(0), y = $bindable(0), menuLines = [], onaction, onhide }: Props = $props();
+
+let menu_el: HTMLElement | null = $state(null);
+let removed = $state(false);
 
 function moveKeepMenuOnScreen() {
     if (!menu_el) return;
@@ -17,15 +24,17 @@ function moveKeepMenuOnScreen() {
         x = Math.min(window.innerWidth - rect.width, x);
         if (y > window.innerHeight - rect.height) y -= rect.height;
 }
-$: moveKeepMenuOnScreen();  // $: = called on any dependency change
+run(() => {
+        moveKeepMenuOnScreen();
+    });  // $: = called on any dependency change
 
 export function hide() {
     removed = true;
-    dispatch("hide");
+    if (onhide) onhide();
 }
 
 function onClickItem(item: Proto3.ActionDef) {
-    dispatch("action", {action: item });
+    if (onaction) onaction({action: item });
     hide();
 }
 
@@ -52,7 +61,7 @@ function fmtColorToCSS(c: Proto3.Color | null | undefined) {
                 {#if it.uiProps?.label?.toLowerCase() == "hr" && !it.action?.code}
                     <hr>
                 {:else if it.uiProps}
-                    <li><button on:click|stopPropagation={()=>{onClickItem(it)}}>
+                    <li><button onclick={stopPropagation(()=>{onClickItem(it)})}>
                         {#if it.uiProps.icon?.faClass}<i class={it.uiProps.icon?.faClass.classes} style="color: {fmtColorToCSS(it.uiProps.icon?.faClass.color)}"></i>{/if}
                         {#if it.uiProps.icon?.imgUrl}<img alt="" src={it.uiProps.icon?.imgUrl} style="max-width: 2em; max-height: 2em;"/>{/if}
                         {it.uiProps.label}
@@ -64,7 +73,7 @@ function fmtColorToCSS(c: Proto3.Color | null | undefined) {
 </nav>
 {/if}
 
-<svelte:window on:click={hide} />
+<svelte:window onclick={hide} />
 
 
 <style>

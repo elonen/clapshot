@@ -1,13 +1,22 @@
 <script lang="ts">
-import {createEventDispatcher} from 'svelte';
 import {hexColorForUsername} from '@/lib/Avatar.svelte';
 
-const dispatch = createEventDispatcher();
 
-export let id: string = ""; // The id of the comment
-export let username: string = "";
-export let comment: string = "";
-export let x_loc: number = 0; // The x location of the pin, as a fraction of the width of the timeline
+    interface Props {
+        id?: string; // The id of the comment
+        username?: string;
+        comment?: string;
+        x_loc?: number; // The x location of the pin, as a fraction of the width of the timeline
+        onclick?: (event: {id: string}) => void; // Callback for click events
+    }
+
+    let {
+        id = "",
+        username = "",
+        comment = "",
+        x_loc = 0,
+        onclick
+    }: Props = $props();
 </script>
 
 
@@ -17,8 +26,8 @@ export let x_loc: number = 0; // The x location of the pin, as a fraction of the
         title="{username}: {comment}"
         tabindex="0"
         role="link"
-        on:keyup={e=>{e.key==='Enter' && dispatch('click', {id})}}
-        on:click={() => dispatch('click', {id})}></div>
+        onkeyup={e=>{e.key==='Enter' && onclick?.({id})}}
+        onclick={() => onclick?.({id})}></div>
 </div>
 
 

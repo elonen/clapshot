@@ -1,24 +1,39 @@
 <script lang="ts">
+    import { preventDefault } from 'svelte/legacy';
+    import { flushSync } from 'svelte';
 
-import { createEventDispatcher } from 'svelte';
+
 import { scale, slide } from "svelte/transition";
 import Avatar from '@/lib/Avatar.svelte';
 import { curUserId, curUserIsAdmin, allComments, curSubtitle, curVideo } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-const dispatch = createEventDispatcher();
 
-export let indent: number = 0;
-export let comment: Proto3.Comment;
+    interface Props {
+        indent?: number;
+        comment: Proto3.Comment;
+        ondisplaycomment?: (event: {timecode: string, drawing?: string, subtitleId?: string}) => void;
+        ondeletecomment?: (event: {id: string}) => void;
+        onreplytocomment?: (event: {parentId: string, commentText: string, subtitleId?: string}) => void;
+        oneditcomment?: (event: {id: string, comment_text: string}) => void;
+    }
 
-let editing = false;
-let showActions: boolean = false;
+    let { indent = 0, comment, ondisplaycomment, ondeletecomment, onreplytocomment, oneditcomment }: Props = $props();
 
-let showReply: boolean = false;
-let replyInput: HTMLInputElement;
+let editing = $state(false);
+let showActions: boolean = $state(false);
+
+let showReply: boolean = $state(false);
+let replyInput: HTMLInputElement | undefined = $state();
+
+let commentText = $state(comment.comment);
+
+$effect(() => {
+    commentText = comment.comment;
+});
 
 function onTimecodeClick(tc: string) {
-    dispatch("display-comment", {
+    if (ondisplaycomment) ondisplaycomment({
         timecode: tc,
         drawing: comment.drawing,
         subtitleId: comment.subtitleId
@@ -27,15 +42,15 @@ function onTimecodeClick(tc: string) {
 
 function onClickDeleteComment() {
     var result = confirm("Delete comment?");
-    if (result) {
-        dispatch("delete-comment", {'id': comment.id});
+    if (result && ondeletecomment) {
+        ondeletecomment({'id': comment.id});
     }
 }
 
 function onReplySubmit() {
-    if (replyInput.value != "")
+    if (replyInput && replyInput.value != "" && onreplytocomment)
     {
-        dispatch("reply-to-comment", {
+        onreplytocomment({
             parentId: comment.id,
             commentText: replyInput.value,
             subtitleId: $curSubtitle?.id
@@ -49,13 +64,26 @@ function callFocus(elem: HTMLElement) {
     elem.focus();
 }
 
-function onEditFieldKeyUp(e: KeyboardEvent) {
+function onEditFieldKeyDown(e: KeyboardEvent) {
     if ((e.key == "Enter" && !e.shiftKey) || e.key == "Escape") {
-        console.log("Enter pressed");
+        e.preventDefault();
+        e.stopPropagation();
+        flushSync(() => {
+            editing = false;
+        });
+        commentText = commentText.trim();
+        if (commentText != "" && oneditcomment) {
+            comment.comment = commentText;
+            oneditcomment({'id': comment.id, 'comment_text': commentText});
+        }
+    }
+}
+
+function onEditFieldBlur() {
+    if (editing) {
         editing = false;
-        comment.comment = comment.comment.trim();
-        if (comment.comment != "")
-            dispatch("edit-comment", {'id': comment.id, 'comment_text': comment.comment});
+        commentText = commentText.trim();
+        comment.comment = commentText;
     }
 }
 
@@ -76,18 +104,18 @@ function getSubtitleLanguage(subtitleId: string): string {
     style="margin-left: {indent*1.5}em"
     tabindex="0"
     role="link"
-    on:focus="{() => showActions=true}"
-    on:mouseenter="{() => showActions=true}"
-    on:mouseleave="{() => showActions=false}"
-    on:click = "{() => {if (comment.timecode) onTimecodeClick(comment.timecode);}}"
-    on:keydown={(e) => {
+    onfocus={() => showActions=true}
+    onmouseenter={() => showActions=true}
+    onmouseleave={() => showActions=false}
+    onclick={() => {if (comment.timecode) onTimecodeClick(comment.timecode);}}
+    onkeydown={(e) => {
         if (e.key == "Escape") { editing = false; }
         else if (e.key == "Enter") { if (comment.timecode) onTimecodeClick(comment.timecode); }
     }}
 >
 
     <div class="flex mx-2 pt-3">
-        <div class="flex-none w-9 h-9 block"><Avatar username="{comment.userId || comment.usernameIfnull}"/></div>
+        <div class="flex-none w-9 h-9 block"><Avatar username={comment.userId || comment.usernameIfnull}/></div>
         <h5 class="flex-1 ml-3 text-gray-500 self-end">{comment.usernameIfnull}</h5>
         <span class="flex-none hidden text-xs font-mono">[{comment.id}@{comment.parentId}]</span>
         <span class="pl-2 flex-0 text-xs text-right overflow-clip text-ellipsis italic whitespace-nowrap  self-end">
@@ -104,7 +132,7 @@ function getSubtitleLanguage(subtitleId: string): string {
 
     <div class="p-2" lang="en">
         {#if editing}
-            <textarea class="w-full outline-dashed bg-slate-500" rows=3 use:callFocus bind:value={comment.comment} on:keyup={onEditFieldKeyUp} on:blur="{()=>{editing=false; comment.comment = comment.comment.trim()}}"></textarea>
+            <textarea class="w-full outline-dashed bg-slate-500" rows=3 use:callFocus bind:value={commentText} onkeydown={onEditFieldKeyDown} onblur={onEditFieldBlur}></textarea>
         {:else}
             <p class="text-gray-300 text-base hyphenate">
                 {comment.comment}
@@ -117,24 +145,24 @@ function getSubtitleLanguage(subtitleId: string): string {
 
     {#if showActions}
     <div class="p-2 flex place-content-end" transition:slide="{{ duration: 200 }}">
-        <button class="border rounded-lg px-1 placeholder: ml-2 text-sm border-cyan-500 text-cyan-500" on:click={()=>showReply=true}>Reply</button>
+        <button class="border rounded-lg px-1 placeholder: ml-2 text-sm border-cyan-500 text-cyan-500" onclick={()=>showReply=true}>Reply</button>
         {#if comment.userId == $curUserId || $curUserIsAdmin}
-            <button class="border rounded-lg px-1 ml-2 text-sm border-cyan-600 text-cyan-600" on:click="{()=>{editing=true;}}">Edit</button>
+            <button class="border rounded-lg px-1 ml-2 text-sm border-cyan-600 text-cyan-600" onclick={()=>{editing=true;}}>Edit</button>
             {#if !hasChildren()}
-            <button class="border rounded-lg px-1 ml-2 text-sm border-red-300 text-red-300" on:click={onClickDeleteComment}>Del</button>
+            <button class="border rounded-lg px-1 ml-2 text-sm border-red-300 text-red-300" onclick={onClickDeleteComment}>Del</button>
             {/if}
         {/if}
     </div>
     {/if}
 
     {#if showReply}
-        <form class="p-2" on:submit|preventDefault={onReplySubmit}>
+        <form class="p-2" onsubmit={preventDefault(onReplySubmit)}>
             <input
                 class="w-full border p-1 rounded bg-gray-900"
                 type="text" placeholder="Your reply..."
                 use:callFocus
                 bind:this={replyInput}
-                on:blur="{()=>showReply=false}" />
+                onblur={()=>showReply=false} />
         </form>
     {/if}
 </div>

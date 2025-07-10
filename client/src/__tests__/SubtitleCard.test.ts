@@ -362,12 +362,10 @@ describe('SubtitleCard.svelte', () => {
 
   describe('Event dispatching', () => {
     it('should dispatch change-subtitle event when subtitle button is clicked', async () => {
-      const { component } = render(SubtitleCard, {
-        props: { sub: mockSubtitle, isDefault: false }
-      });
-
       const changeSpy = vi.fn();
-      component.$on('change-subtitle', changeSpy);
+      render(SubtitleCard, {
+        props: { sub: mockSubtitle, isDefault: false, onchangesubtitle: changeSpy }
+      });
 
       // Get the main subtitle button by its title attribute
       const subtitleButton = screen.getByTitle('subtitles.srt');
@@ -375,19 +373,15 @@ describe('SubtitleCard.svelte', () => {
 
       expect(changeSpy).toHaveBeenCalledOnce();
       expect(changeSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: { id: 'sub-123' }
-        })
+        { id: 'sub-123' }
       );
     });
 
     it('should dispatch update-subtitle event when save button is clicked', async () => {
-      const { component } = render(SubtitleCard, {
-        props: { sub: mockSubtitle, isDefault: true }
-      });
-
       const updateSpy = vi.fn();
-      component.$on('update-subtitle', updateSpy);
+      render(SubtitleCard, {
+        props: { sub: mockSubtitle, isDefault: true, onupdatesubtitle: updateSpy }
+      });
 
       const editButton = screen.getByRole('button', { name: /edit subtitle/i });
       await mockUser.click(editButton);
@@ -397,19 +391,15 @@ describe('SubtitleCard.svelte', () => {
 
       expect(updateSpy).toHaveBeenCalledOnce();
       expect(updateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: { sub: mockSubtitle, isDefault: true }
-        })
+        { sub: mockSubtitle, isDefault: true }
       );
     });
 
     it('should dispatch delete-subtitle event when delete button is clicked', async () => {
-      const { component } = render(SubtitleCard, {
-        props: { sub: mockSubtitle, isDefault: false }
-      });
-
       const deleteSpy = vi.fn();
-      component.$on('delete-subtitle', deleteSpy);
+      render(SubtitleCard, {
+        props: { sub: mockSubtitle, isDefault: false, ondeletesubtitle: deleteSpy }
+      });
 
       const editButton = screen.getByRole('button', { name: /edit subtitle/i });
       await mockUser.click(editButton);
@@ -419,9 +409,7 @@ describe('SubtitleCard.svelte', () => {
 
       expect(deleteSpy).toHaveBeenCalledOnce();
       expect(deleteSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: { id: 'sub-123' }
-        })
+        { id: 'sub-123' }
       );
     });
   });

@@ -1,5 +1,8 @@
 <script lang="ts">
-/**
+
+
+  interface Props {
+    /**
  * Thumbnail that lets you scrub through the video
  * by hovering over it and moving the mouse.
  *
@@ -7,12 +10,20 @@
  * When the mouse is not over the thumbnail,
  * a single poster image is shown instead.
  */
-export let thumbPosterUrl: string;
-export let thumbSheetUrl: string | null = null;
-export let thumbSheetCols: number | null = null;
-export let thumbSheetRows: number | null = null;
+    thumbPosterUrl: string;
+    thumbSheetUrl?: string | null;
+    thumbSheetCols?: number | null;
+    thumbSheetRows?: number | null;
+    extra_styles?: string;
+  }
 
-export let extra_styles: string = "";
+  let {
+    thumbPosterUrl,
+    thumbSheetUrl = null,
+    thumbSheetCols = null,
+    thumbSheetRows = null,
+    extra_styles = ""
+  }: Props = $props();
 
 function installThumbScrubber(e: MouseEvent)
 {
@@ -82,8 +93,8 @@ function removeThumbScrubber(e: MouseEvent)
 <div class="w-full aspect-video mx-auto rounded-md overflow-hidden"
   style="background-image: url('{thumbPosterUrl}'); background-size: cover; background-position: 0 0; {extra_styles}"
   role="img"
-  on:blur={()=>{}}
-  on:focus={()=>{}}
-  on:mouseover={installThumbScrubber}
-  on:mouseout={removeThumbScrubber}
+  onblur={()=>{}}
+  onfocus={()=>{}}
+  onmouseover={installThumbScrubber}
+  onmouseout={removeThumbScrubber}
 ></div>

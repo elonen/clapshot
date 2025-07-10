@@ -1,6 +1,6 @@
 <script lang="ts">
 
-import { onMount, createEventDispatcher } from 'svelte';
+import { onMount } from 'svelte';
 import { curUsername, curUserPic, curVideo, mediaFileId, collabId, userMenuItems } from "@/stores";
 import Avatar from '@/lib/Avatar.svelte';
 import {latestProgressReports, clientConfig} from '@/stores';
@@ -9,12 +9,19 @@ import { Dropdown, DropdownItem, DropdownDivider, DropdownHeader } from 'flowbit
 import EDLImport from './tools/EDLImport.svelte';
 import { ChevronRightOutline } from 'flowbite-svelte-icons';
 import { Modal } from 'flowbite-svelte';
+import * as Proto3 from '@clapshot_protobuf/typescript';
 
-const dispatch = createEventDispatcher();
-let loggedOut = false;
+interface Props {
+    onbasicauthlogout?: () => void;
+    onaddcomments?: (comments: Proto3.Comment[]) => void;
+}
+
+let { onbasicauthlogout, onaddcomments }: Props = $props();
+
+let loggedOut = $state(false);
 
 // Watch for (transcoding) progress reports from server, and update progress bar if one matches this item.
-let videoProgressMsg: string | undefined = undefined;
+let videoProgressMsg: string | undefined = $state(undefined);
 
 onMount(async () => {
 	latestProgressReports.subscribe((reports: MediaProgressReport[]) => {
@@ -39,7 +46,7 @@ function logoutBasicAuth() {
             console.log("Logout response: " + res.status + " - " + res.statusText);
             if (res.status === 401) {
                 console.log("Logout successful.");
-				dispatch('basic-auth-logout', {});
+				if (onbasicauthlogout) onbasicauthlogout();
 				loggedOut = true;	// Show modal
             } else {
                 alert("Basic auth logout failed.\nStatus code from " + logoutUrl + ": " + res.status + " (not 401)");
@@ -72,10 +79,10 @@ async function copyToClipboard() {
 const randomSessionId = Math.random().toString(36).substring(2, 15);
 
 
-let isEDLImportOpen = false;
-function addEDLComments(event: any) {
-	console.debug("addEDLComments", event.detail);
-	dispatch('add-comments', event.detail);
+let isEDLImportOpen = $state(false);
+function addEDLComments(comments: Proto3.Comment[]) {
+	console.debug("addEDLComments", comments);
+	if (onaddcomments) onaddcomments(comments);
 }
 
 
@@ -109,9 +116,9 @@ function addEDLComments(event: any) {
 							</button>
 
 						<Dropdown class="w-64 text-sm">
-							<DropdownItem on:click={copyToClipboard}><i class="fas fa-share-square"></i> Share to logged in users</DropdownItem>
+							<DropdownItem onclick={copyToClipboard}><i class="fas fa-share-square"></i> Share to logged in users</DropdownItem>
 							{#if $curVideo?.origUrl}
-								<DropdownItem href="{$curVideo?.origUrl}" title="Download original file"><a href="{$curVideo?.origUrl}" download><i class="fas fa-download"></i> Download original</a></DropdownItem>
+								<DropdownItem href={$curVideo?.origUrl} title="Download original file"><a href={$curVideo?.origUrl} download><i class="fas fa-download"></i> Download original</a></DropdownItem>
 							{/if}
 							{#if $collabId}
 								<DropdownItem href="?vid={$mediaFileId}" class="text-green-400"><i class="fas fa-users"></i> Leave collaborative Session</DropdownItem>
@@ -124,8 +131,8 @@ function addEDLComments(event: any) {
 								<ChevronRightOutline class="w-6 h-6 ms-2 float-right" />
 							</DropdownItem>
 							<Dropdown placement="right-start" class="w-64 text-sm">
-								<DropdownItem on:click={() => isEDLImportOpen = true}><i class="fas fa-file-import"></i> Import EDL as Comments</DropdownItem>
-								<EDLImport bind:isOpen={isEDLImportOpen} on:add-comments={addEDLComments}/>
+								<DropdownItem onclick={() => isEDLImportOpen = true}><i class="fas fa-file-import"></i> Import EDL as Comments</DropdownItem>
+								<EDLImport bind:isOpen={isEDLImportOpen} onaddcomments={addEDLComments}/>
 							</Dropdown>
 						</Dropdown>
 						</div>
@@ -150,18 +157,18 @@ function addEDLComments(event: any) {
 				</button>
 			</span>
 
-			{#if $userMenuItems != undefined && $userMenuItems.length > 0 }
+			{#if $userMenuItems != undefined && $userMenuItems.length > 0}
 				<Dropdown class="w-44 text-sm">
 					{#each $userMenuItems as item}
 						<DropdownItem>
-						{#if item.type === "logout-basic-auth" }
-							<DropdownItem on:click={() => logoutBasicAuth()}>{item.label}</DropdownItem>
+						{#if item.type === "logout-basic-auth"}
+							<DropdownItem onclick={() => logoutBasicAuth()}>{item.label}</DropdownItem>
 						{:else if item.type === "about"}
-							<DropdownItem on:click={showAbout}>{item.label}</DropdownItem>
+							<DropdownItem onclick={showAbout}>{item.label}</DropdownItem>
 						{:else if item.type === "divider"}
 							<DropdownDivider />
 						{:else if item.type === "url"}
-							<DropdownItem href={item.data}>{item.label}</DropdownItem>
+							<DropdownItem href={item.data || "#"}>{item.label}</DropdownItem>
 						{:else}
 							<DropdownItem>UNKNOWN item.type '{item.type}'</DropdownItem>
 						{/if}

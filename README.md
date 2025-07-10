@@ -140,7 +140,7 @@ Contributions are welcome, especially for features and improvements that benefit
 
 ## Licensing
 
-Copyright 2022 – 2024 by Jarno Elonen
+Copyright 2022 – 2025 by Jarno Elonen
 
 - Clapshot Server and Client are licensed under the **GNU General Public License, GPLv2**.
 - gRPC/proto3 libraries and example organizer plugins are under the **MIT License**.

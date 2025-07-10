@@ -1,4 +1,4 @@
-FROM node:18.16.0-bullseye-slim
+FROM node:24.2-bookworm-slim
 
 # Install system packages
 RUN apt-get -qy update >/dev/null

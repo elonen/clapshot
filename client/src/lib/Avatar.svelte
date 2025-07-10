@@ -1,4 +1,4 @@
-<script context="module" lang="ts">
+<script module lang="ts">
 
 // Convert a username to a hex color
 export function hexColorForUsername(name: string): string {
@@ -31,10 +31,19 @@ export function hexColorForUsername(name: string): string {
 <script lang="ts">
 import { onMount } from "svelte";
 
-export let username: string | null = "";
-export let width = "32";
-export let round = true;
-export let src: string | null = null;
+    interface Props {
+        username?: string | null;
+        width?: string;
+        round?: boolean;
+        src?: string | null;
+    }
+
+    let {
+        username = "",
+        width = "32",
+        round = true,
+        src = null
+    }: Props = $props();
 
 /*
     * LetterAvatar. Based on https://codepen.io/arturheinze/pen/ZGvOMw, which is based on https://gist.github.com/leecrossley/6027780
@@ -70,9 +79,11 @@ function MakeLetterAvatar(name: string | null, size: number): string {
 }
 
 const letterAvatar = MakeLetterAvatar(username, parseFloat(width));
-let avatarImage: HTMLImageElement;
+let avatarImage: HTMLImageElement | undefined = $state();
 onMount(() => {
-    avatarImage.src = (src && (src!=="")) ? src : letterAvatar;
+    if (avatarImage) {
+        avatarImage.src = (src && (src!=="")) ? src : letterAvatar;
+    }
 });
 </script>
 

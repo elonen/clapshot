@@ -92,24 +92,24 @@ describe('CommentInput.svelte', () => {
     });
 
     it('should dispatch text_input event when typing', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       const textInput = screen.getByPlaceholderText('Add a comment - at current time...');
       await mockUser.type(textInput, 'Test comment');
       
       expect(eventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: { action: 'text_input' }
-        })
+        { action: 'text_input' }
       );
     });
 
     it('should not dispatch text_input event when input is empty', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       const textInput = screen.getByPlaceholderText('Add a comment - at current time...');
       await mockUser.type(textInput, 'a');
@@ -177,9 +177,10 @@ describe('CommentInput.svelte', () => {
 
   describe('Draw mode functionality', () => {
     it('should toggle draw mode', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       const drawButton = screen.getByTitle('Draw on video');
       
@@ -191,9 +192,7 @@ describe('CommentInput.svelte', () => {
       // Should toggle draw mode on (with border)
       expect(drawButton).toHaveClass('border-2');
       expect(eventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: { action: 'draw', is_draw_mode: true }
-        })
+        { action: 'draw', is_draw_mode: true }
       );
     });
 
@@ -277,9 +276,10 @@ describe('CommentInput.svelte', () => {
     });
 
     it('should dispatch color_select event when color is clicked', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       // Enter draw mode first
       const drawButton = screen.getByTitle('Draw on video');
@@ -291,9 +291,7 @@ describe('CommentInput.svelte', () => {
       await mockUser.click(blueButton!);
       
       expect(eventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: { action: 'color_select', color: 'blue' }
-        })
+        { action: 'color_select', color: 'blue' }
       );
     });
 
@@ -335,9 +333,10 @@ describe('CommentInput.svelte', () => {
     });
 
     it('should dispatch undo event when undo button clicked', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       // Enter draw mode first
       const drawButton = screen.getByTitle('Draw on video');
@@ -347,16 +346,15 @@ describe('CommentInput.svelte', () => {
       await mockUser.click(undoButton);
       
       expect(eventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: { action: 'undo' }
-        })
+        { action: 'undo' }
       );
     });
 
     it('should dispatch redo event when redo button clicked', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       // Enter draw mode first
       const drawButton = screen.getByTitle('Draw on video');
@@ -366,18 +364,17 @@ describe('CommentInput.svelte', () => {
       await mockUser.click(redoButton);
       
       expect(eventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: { action: 'redo' }
-        })
+        { action: 'redo' }
       );
     });
   });
 
   describe('Form submission', () => {
     it('should dispatch send event with text when send button clicked', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       const textInput = screen.getByPlaceholderText('Add a comment - at current time...');
       await mockUser.type(textInput, 'Test comment');
@@ -386,20 +383,19 @@ describe('CommentInput.svelte', () => {
       await mockUser.click(sendButton);
       
       expect(eventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            action: 'send',
-            comment_text: 'Test comment',
-            is_timed: true
-          }
-        })
+        {
+          action: 'send',
+          comment_text: 'Test comment',
+          is_timed: true
+        }
       );
     });
 
     it('should dispatch send event with correct timed state', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       // Disable timed mode
       const timedButton = screen.getByTitle('Comment is time specific?');
@@ -412,32 +408,29 @@ describe('CommentInput.svelte', () => {
       await mockUser.click(sendButton);
       
       expect(eventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            action: 'send',
-            comment_text: 'Global comment',
-            is_timed: false
-          }
-        })
+        {
+          action: 'send',
+          comment_text: 'Global comment',
+          is_timed: false
+        }
       );
     });
 
     it('should submit form on Enter key press', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       const textInput = screen.getByPlaceholderText('Add a comment - at current time...');
       await mockUser.type(textInput, 'Test comment{Enter}');
       
       expect(eventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            action: 'send',
-            comment_text: 'Test comment',
-            is_timed: true
-          }
-        })
+        {
+          action: 'send',
+          comment_text: 'Test comment',
+          is_timed: true
+        }
       );
     });
 
@@ -471,9 +464,10 @@ describe('CommentInput.svelte', () => {
     });
 
     it('should activate draw mode when forceDrawMode(true) is called', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      const { component } = render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       const drawButton = screen.getByTitle('Draw on video');
       expect(drawButton).not.toHaveClass('border-2');
@@ -510,9 +504,10 @@ describe('CommentInput.svelte', () => {
 
   describe('Edge cases and error handling', () => {
     it('should handle empty text submission gracefully', async () => {
-      const { component } = render(CommentInput);
       const eventSpy = vi.fn();
-      component.$on('button-clicked', eventSpy);
+      render(CommentInput, {
+        props: { onbuttonclicked: eventSpy }
+      });
       
       const sendButton = screen.getByRole('button', { name: /send/i });
       
@@ -526,13 +521,11 @@ describe('CommentInput.svelte', () => {
       await mockUser.click(sendButton);
       
       expect(eventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: {
-            action: 'send',
-            comment_text: undefined,
-            is_timed: true
-          }
-        })
+        {
+          action: 'send',
+          comment_text: undefined,
+          is_timed: true
+        }
       );
     });
 

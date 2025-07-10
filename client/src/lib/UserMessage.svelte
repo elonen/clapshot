@@ -3,8 +3,12 @@ import { slide } from "svelte/transition";
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
-export let msg: Proto3.UserMessage;
-let showDetails: boolean = false;
+    interface Props {
+        msg: Proto3.UserMessage;
+    }
+
+    let { msg }: Props = $props();
+let showDetails: boolean = $state(false);
 
 function isError(msg: Proto3.UserMessage): boolean {
     return msg.type == Proto3.UserMessage_Type.ERROR;
@@ -46,7 +50,7 @@ function dateObjToISO(d: Date|undefined): string {
     </span>
     <span class="text-xs text-gray-500 pl-2 border-l border-gray-400">{dateObjToISO(msg.created)}</span>
 
-    {#if msg.refs?.mediaFileId }
+    {#if msg.refs?.mediaFileId}
         {#if isError(msg)}
             <span class="font-mono text-xs pl-2 border-l border-gray-400 line-through text-gray-700">
                 {msg.refs.mediaFileId}
@@ -61,14 +65,14 @@ function dateObjToISO(d: Date|undefined): string {
 
     <span class="text-gray-400 text-sm pl-2 border-l border-gray-400 pr-2">{msg.message}</span>
 
-    {#if msg.details }
+    {#if msg.details}
         <span class="text-xs text-gray-500 pl-2 border-l border-gray-400"></span>
         {#if showDetails}
             <i class="fa fa-chevron-down text-[#cca] cursor-pointer"
                 tabindex="0"
                 role="link"
-                on:keyup={e=> {if (e.key==='Enter') showDetails=false; }}
-                on:click={()=>{showDetails=false}}></i>
+                onkeyup={e=> {if (e.key==='Enter') showDetails=false; }}
+                onclick={()=>{showDetails=false}}></i>
             <div
                 class="bg-[#cca] font-mono rounded-md mt-2 p-2 text-black text-xs block"
                 transition:slide="{{ duration: 200 }}">
@@ -78,8 +82,8 @@ function dateObjToISO(d: Date|undefined): string {
             <i class="fa fa-chevron-right text-[#cca] cursor-pointer"
                 tabindex="0"
                 role="link"
-                on:keyup={e=> {if (e.key==='Enter') showDetails=true; }}
-                on:click={()=>{showDetails=true}}></i>
+                onkeyup={e=> {if (e.key==='Enter') showDetails=true; }}
+                onclick={()=>{showDetails=true}}></i>
         {/if}
     {/if}
 </div>
