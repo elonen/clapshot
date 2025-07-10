@@ -49,6 +49,8 @@ After the Docker image starts, access the web UI at `http://127.0.0.1:8080`.
 
 The basic auth multi-user demo uses [PHP htadmin](https://github.com/soster/htadmin) for user management. Default credentials are shown in the terminal.
 
+> **Note:** If accessing from a different machine or using a different port, you'll need to configure the `CLAPSHOT_URL_BASE` environment variable. See the [Connection Troubleshooting Guide](doc/connection-troubleshooting.md) for details.
+
 
 ## Simple Small-business Production Deployments
 
@@ -88,6 +90,8 @@ See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on:
 - building manually and running unit tests
 
 See [Upgrading Guide](doc/upgrading.md) for instructions on installing a new release over an old one.
+
+**Having connection issues?** See the [Connection Troubleshooting Guide](doc/connection-troubleshooting.md) for help with common deployment and connectivity problems.
 
 ## Architecture Overview
 

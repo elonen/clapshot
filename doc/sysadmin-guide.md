@@ -1,5 +1,7 @@
 # Clapshot Sysadmin Guide
 
+> **Having connection issues?** See the [Connection Troubleshooting Guide](connection-troubleshooting.md) for help with common deployment and connectivity problems.
+
 ### Building
 
 I recommend building Clapshot using Docker for a clean environment:
