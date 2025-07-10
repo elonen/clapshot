@@ -1,5 +1,6 @@
 # Clapshot Sysadmin Guide
 
+> **New to Clapshot?** Start with the [Quick Start Reference](quick-start-reference.md) for common deployment scenarios.
 > **Having connection issues?** See the [Connection Troubleshooting Guide](connection-troubleshooting.md) for help with common deployment and connectivity problems.
 
 ### Building

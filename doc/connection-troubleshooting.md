@@ -1,5 +1,7 @@
 # Clapshot Connection Troubleshooting Guide
 
+> **Quick Start:** For common deployment scenarios without detailed explanation, see the [Quick Start Reference](quick-start-reference.md).
+
 This guide addresses common connection issues between the Clapshot client (browser), server, and nginx components. These issues stem from the distributed architecture where the browser client needs to connect to both the nginx reverse proxy and the backend Clapshot server.
 
 ## Understanding Clapshot's Architecture
@@ -296,6 +298,7 @@ When asking for help, please provide:
 
 ## Related Documentation
 
+- [Quick Start Reference](quick-start-reference.md) - Common deployment scenarios
 - [Sysadmin Guide](sysadmin-guide.md) - Advanced configuration
 - [README.md](../README.md) - Basic setup instructions
 - [Cloudflare example](../test/run-cloudflare.sh) - Production Docker deployment

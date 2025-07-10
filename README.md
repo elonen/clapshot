@@ -49,7 +49,7 @@ After the Docker image starts, access the web UI at `http://127.0.0.1:8080`.
 
 The basic auth multi-user demo uses [PHP htadmin](https://github.com/soster/htadmin) for user management. Default credentials are shown in the terminal.
 
-> **Note:** If accessing from a different machine or using a different port, you'll need to configure the `CLAPSHOT_URL_BASE` environment variable. See the [Connection Troubleshooting Guide](doc/connection-troubleshooting.md) for details.
+> **Note:** If accessing from a different machine or using a different port, you'll need to configure the `CLAPSHOT_URL_BASE` environment variable. See the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
 
 
 ## Simple Small-business Production Deployments
@@ -80,6 +80,8 @@ and then start Cloudflared in another container to expose Clapshot to the Intern
 The same process can be adapted to any other *HTTPS-Proxy-as-a-Service* besides Cloudflare. You'll probably need to pay them something.
 
 ## Configuration and Operation
+
+**New to Clapshot?** Start with the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
 
 See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on:
 
