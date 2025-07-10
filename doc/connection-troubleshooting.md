@@ -4,16 +4,19 @@
 
 > **Architecture:** For detailed understanding of how Clapshot components communicate, see the [Architecture Overview](architecture-overview.md).
 
-This guide addresses common connection issues between the Clapshot client (browser), server, and nginx components. These issues stem from the distributed architecture where the browser client needs to connect to both the nginx reverse proxy and the backend Clapshot server.
+This guide addresses common connection issues between the Clapshot Client (browser), Server, and Nginx components.
 
 ## Common Connection Problems
 
 ### 1. "Connecting server" - Stuck Loading
 
 **Symptoms:**
+
 - Browser shows "Connecting server" message indefinitely
 - Console shows `NetworkError: Failed to fetch` or `502 Bad Gateway`
 - Cannot access `/api/health` endpoint
+
+This typically indicates problems during [Phase 2: WebSocket Session Initialization](architecture-overview.md#phase-2-websocket-session-initialization) of the communication flow.
 
 **Causes & Solutions:**
 
@@ -21,14 +24,8 @@ This guide addresses common connection issues between the Clapshot client (brows
 
 The client needs to know where to connect. This is controlled by the `clapshot_client.conf.json` configuration file.
 
-**For Docker deployments:**
-```bash
-# Set the URL base environment variable - this automatically configures the client
-docker run ... -e CLAPSHOT_URL_BASE="http://YOUR_HOST:YOUR_PORT/" ...
-```
-*Note: The `CLAPSHOT_URL_BASE` environment variable is a Docker convenience feature. The Docker startup script uses this value to automatically generate the `clapshot_client.conf.json` file. This is not a separate configuration method - it's a shortcut that writes the same configuration file.*
-
 **For manual deployments:**
+
 ```json
 {
   "ws_url": "http://YOUR_HOST:YOUR_PORT/api/ws",
@@ -37,32 +34,54 @@ docker run ... -e CLAPSHOT_URL_BASE="http://YOUR_HOST:YOUR_PORT/" ...
 }
 ```
 
+**For Docker deployments:**
+
+```bash
+# Set the URL base environment variable - this automatically configures the client
+docker run ... -e CLAPSHOT_URL_BASE="http://YOUR_HOST:YOUR_PORT/" ...
+```
+
+*Note: `CLAPSHOT_URL_BASE` environment variable is just a Docker convenience feature. The Docker startup script uses it to automatically generate the proper `clapshot_client.conf.json` file.*
+
+
 **Location of config file:**
+
 - Docker: Automatically generated in `/etc/clapshot_client.conf`
 - Debian package: `/etc/clapshot_client.conf` (symlink to `/usr/share/clapshot-client/www/clapshot_client.conf.json`)
-- Must be accessible by the web browser alongside HTML/JS/CSS files
+- Must be accessible by the web browser alongside HTML/JS/CSS files.
 
 #### B. Port Mapping Issues
 
 **Problem:** Client tries to connect to hardcoded localhost:8080
+
 ```
 Failed to fetch 'http://127.0.0.1:8080/api/health'
 ```
 
 **Solution for Docker:**
+
+Let's say you have Nginx listening to port 80 inside Docker, and have mapped it to YOUR_ADDRESS:8025 on the outside:
+
 ```bash
 # Wrong - port mismatch
 docker run -p 8025:80 elonen/clapshot:latest-demo
 
 # Right - configure client to match
-docker run -p 8025:80 -e CLAPSHOT_URL_BASE="http://YOUR_IP:8025/" elonen/clapshot:latest-demo
+docker run -p 8025:80 -e CLAPSHOT_URL_BASE="http://YOUR_ADDRESS:8025/" elonen/clapshot:latest-demo
 ```
+
+This will cause Client to connect `http://YOUR_ADDRESS:8025/api/health` instead.
+
+**Solution for Debian deployment:**
+
+Edit `/etc/clapshot_client.conf` and set `CLAPSHOT_URL_BASE` accordingly.
 
 #### C. Network Access Issues
 
 **Problem:** Client configured for localhost but accessing from different machine
 
 **Solutions:**
+
 - For local network access: Use actual IP address in `CLAPSHOT_URL_BASE`
 - For internet access: Use proper domain name
 - For development: Use `0.0.0.0:8080` for binding
@@ -70,9 +89,12 @@ docker run -p 8025:80 -e CLAPSHOT_URL_BASE="http://YOUR_IP:8025/" elonen/clapsho
 ### 2. Server Startup Failures
 
 **Symptoms:**
+
 - Server logs show errors and exits
 - 502 Bad Gateway errors
 - Missing gRPC server section in logs
+
+These issues prevent [Phase 3: Interaction with Organizer and Database](architecture-overview.md#phase-3-interaction-with-organizer-and-database) from functioning properly.
 
 **Common Causes:**
 
@@ -81,7 +103,7 @@ docker run -p 8025:80 -e CLAPSHOT_URL_BASE="http://YOUR_IP:8025/" elonen/clapsho
 DuplicateOptionError: option 'cors' in section 'general' already exists
 ```
 
-**Solution:** Remove duplicate CORS entries from `/etc/clapshot-server.conf` or let Docker script handle it automatically.
+**Solution:** Remove duplicate CORS entries from `/etc/clapshot-server.conf`.
 
 #### B. Missing Required Arguments
 ```
@@ -93,30 +115,67 @@ error: the following required arguments were not provided:
 **Solution:** Ensure proper configuration in service file or use Docker environment variables. 
 
 **Examples and documentation:**
+
 - See [Quick Start Reference](quick-start-reference.md) for working Docker command examples
 - See [Sysadmin Guide](sysadmin-guide.md) for manual installation and configuration details
 - Check existing Docker commands in this guide for required argument patterns
 
-### 3. CORS and Cross-Origin Issues
+### 3. Cannot Access HTAdmin Interface (`/htadmin`)
+
+(This only applies if you are using the example authentication method, HTAdmin + Basic Auth)
+
+**Symptoms:**
+
+- Cannot access `http://YOUR_HOST:YOUR_PORT/htadmin`
+- 404 or connection refused errors on admin endpoints
+- Admin interface works locally but not remotely
+
+**Causes & Solutions:**
+
+#### A. Docker Image Variants
+
+Some Docker images include a simple HTTP basic auth admin interface at `/htadmin`:
+
+- `elonen/clapshot:latest-demo-htadmin` - includes basic auth admin
+- `elonen/clapshot:latest-demo` - no auth
+
+#### B. Network Access Issues
+
+The admin interface may be configured to only accept local connections:
+
+```bash
+# Test local access first
+curl http://localhost:8080/htadmin
+
+# If that works but remote doesn't, check network config
+curl http://YOUR_IP:8080/htadmin
+```
+
+### 4. CORS and Cross-Origin Issues
 
 **What is CORS?**
-Cross-Origin Resource Sharing (CORS) is a crucial web security mechanism that controls which websites can access resources from your Clapshot server. When the browser's client code runs on one domain (like `http://192.168.1.100:8080`) but tries to connect to API endpoints on another domain or port, the browser enforces CORS policies to prevent malicious websites from accessing your data. Proper CORS configuration is essential for security while allowing legitimate access to your Clapshot instance.
+
+Cross-Origin Resource Sharing (CORS) is a crucial web security mechanism that controls which websites can access API of your Clapshot server. When the browser's client code runs on one domain (like `http://192.168.1.100:8080`) but tries to connect to API endpoints on another domain or port, the browser enforces CORS policies to prevent malicious website's Javascript components from accessing APIs they have not business accessing. Proper CORS configuration is essential for security while allowing legitimate access to your Clapshot instance.
 
 **Symptoms:**
 - CORS errors in browser's developer console
 - API calls blocked
 
+CORS issues typically affect [Phase 4: Thumbnail Retrieval](architecture-overview.md#phase-4-thumbnail-retrieval) and [Phase 5: Video Playback](architecture-overview.md#phase-5-video-playback).
+
 **Solutions:**
 
-**For development:**
+- **For production:**
+```
+cors = 'https://yourdomain.com'
+```
+
+- **For development:**
 ```
 cors = '*'
 ```
 
-**For production:**
-```
-cors = 'https://yourdomain.com'
-```
+CAUTION: Using '*' in production could expose your users' data to malicious actors! Use it _only_ for local develpment.
 
 **For Docker:**
 ```bash
@@ -180,11 +239,40 @@ grep "org->srv connected" /var/log/clapshot.log
 ls -la /mnt/clapshot-data/data/grpc-*.sock
 ```
 
+For more details on how these components interact, see the [Detailed Communication Flow](architecture-overview.md#detailed-communication-flow).
+
+## Docker vs Debian Package Deployment
+
+### When to Use Docker
+
+- **Development/testing**: Quick setup with minimal configuration
+- **Self-hosted with reverse proxy**: Docker behind nginx-proxy-manager, Traefik, etc.
+- **Simple deployments**: Single-machine setup with all components in one container
+
+### When to Use Debian Packages
+
+- **Production deployments**: More control over individual components
+- **Custom authentication**: Integration with existing auth systems
+- **Performance optimization**: Fine-tuned nginx and server configurations
+- **System integration**: Proper systemd services and logging
+
+### Understanding the Architecture
+
+Both deployment methods include the same core components:
+
+- **Client**: Web interface (HTML/JS/CSS files)
+- **Server**: Rust backend API
+- **Database**: SQLite for metadata
+- **Organizer**: Python plugin for file management
+- **Nginx**: Web server and reverse proxy
+
+The main difference is how these components are packaged and configured. See [Architecture Overview](architecture-overview.md) for detailed component interactions.
+
 ## Docker-Specific Troubleshooting
 
 ### Working Docker Compose Example
 
-```yaml
+```yml
 version: '3.8'
 
 services:
@@ -222,6 +310,49 @@ docker inspect container_name | grep -A 10 NetworkSettings
 # Test internal connectivity
 docker exec -it container_name curl http://localhost:8095/api/health
 ```
+
+### Docker-to-Docker Communication (Reverse Proxy)
+
+When running Clapshot behind another Docker container (like nginx-proxy-manager):
+
+```yaml
+version: '3.8'
+
+services:
+  clapshot:
+    image: elonen/clapshot:latest-demo-htadmin
+    container_name: clapshot_demo
+    environment:
+      # Use the external domain users will access
+      - CLAPSHOT_URL_BASE=https://clapshot.yourdomain.com/
+      - CLAPSHOT_CORS=https://clapshot.yourdomain.com
+    # Don't expose ports directly - let reverse proxy handle it
+    # ports:
+    #   - "8080:80"
+    volumes:
+      - clapshot-data:/mnt/clapshot-data/data
+    networks:
+      - proxy-network
+    restart: unless-stopped
+
+  nginx-proxy:
+    # Your reverse proxy configuration
+    networks:
+      - proxy-network
+
+networks:
+  proxy-network:
+    external: true
+
+volumes:
+  clapshot-data:
+```
+
+**Key points:**
+
+- Set `CLAPSHOT_URL_BASE` to the external domain, not the container name
+- Use Docker networks to allow containers to communicate
+- Don't expose Clapshot ports directly if using a reverse proxy
 
 ## Production Deployment Considerations
 
@@ -264,7 +395,6 @@ Ensure authentication headers are properly forwarded:
 |---------------|--------------|----------|
 | `NetworkError: Failed to fetch` | Client can't reach server | Check URL configuration |
 | `502 Bad Gateway` | Server not running | Check server startup logs |
-| `DuplicateOptionError: cors` | Config file corruption | Remove duplicate CORS entries |
 | `database is locked` | Concurrent access | Stop all processes, restart cleanly |
 | `Connecting server...` | Client/server mismatch | Verify URL configuration |
 | CORS errors | Cross-origin policy | Configure CORS properly |
@@ -281,7 +411,8 @@ When asking for help, please provide:
 
 ## Related Documentation
 
+- [Architecture Overview](architecture-overview.md) - Understanding how components communicate
 - [Quick Start Reference](quick-start-reference.md) - Common deployment scenarios
 - [Sysadmin Guide](sysadmin-guide.md) - Advanced configuration
 - [README.md](../README.md) - Basic setup instructions
-- [Cloudflare example](../test/run-cloudflare.sh) - Production Docker deployment
+- [Cloudflare example](../test/run-cloudflare.sh) - Docker deployment using Cloudflare as proxy
