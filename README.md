@@ -95,6 +95,8 @@ See [Upgrading Guide](doc/upgrading.md) for instructions on installing a new rel
 
 **Having connection issues?** See the [Connection Troubleshooting Guide](doc/connection-troubleshooting.md) for help with common deployment and connectivity problems.
 
+For help, you can also interrogate [Clapshot Config Helper GPT](https://chatgpt.com/g/g-687debd7cfec8191ad14f604552f0121-clapshot-config-helper) that has technical knowledge of the project and custom instructions to assist.
+
 ## Architecture Overview
 
 Main components:

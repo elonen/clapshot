@@ -80,6 +80,14 @@ global.IntersectionObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }))
 
+// Mock animation frame functions
+global.requestAnimationFrame = vi.fn((cb) => {
+  return setTimeout(cb, 16) as any;
+});
+global.cancelAnimationFrame = vi.fn((id) => {
+  clearTimeout(id);
+});
+
 // Mock console methods to avoid noise in tests
 global.console = {
   ...console,
