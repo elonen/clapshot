@@ -2,6 +2,13 @@
 
 Quick reference for common Clapshot deployment scenarios. For detailed troubleshooting, see the [Connection Troubleshooting Guide](connection-troubleshooting.md).
 
+> **⚠️ Important: Set URL Base First!** 
+> 
+> Before you start, configure the base URL so Clapshot knows where clients will connect. Without this, browsers on other machines will keep retrying `127.0.0.1` and never reach your server!
+>
+> - **Docker:** Use `-e CLAPSHOT_URL_BASE="http://YOUR_IP:8080/"`
+> - **Native install:** Edit `/etc/clapshot-server.conf` and set `url-base` and `cors` under `[general]`
+
 > **Architecture:** For detailed understanding of how Clapshot components communicate, see the [Architecture Overview](architecture-overview.md).
 
 ## Local Development/Testing
@@ -19,10 +26,15 @@ docker run --rm -it -p 8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/c
 ### LAN Access (Multiple Machines)
 ```bash
 # Replace YOUR_IP with your machine's LAN IP (e.g., 192.168.1.100)
-docker run --rm -it -p 8080:80 \
+# Note: Also expose WebSocket port 8095 for live annotations
+docker run --rm -it -p 8080:80 -p 8095:8095 \
   -e CLAPSHOT_URL_BASE="http://YOUR_IP:8080/" \
   -v clapshot-demo:/mnt/clapshot-data/data \
   elonen/clapshot:latest-demo-htadmin
+
+# If behind a firewall, allow both ports:
+# ufw allow 8080/tcp
+# ufw allow 8095/tcp
 ```
 **Access:** `http://YOUR_IP:8080`
 
@@ -72,7 +84,7 @@ chmod +x run-cloudflare.sh
 docker run -d \
   -e CLAPSHOT_URL_BASE="https://clapshot.company.com/" \
   -e CLAPSHOT_CORS="https://clapshot.company.com" \
-  -p 127.0.0.1:8080:80 \
+  -p 127.0.0.1:8080:80 -p 127.0.0.1:8095:8095 \
   -v clapshot-data:/mnt/clapshot-data/data \
   elonen/clapshot:latest-demo-htadmin
 ```
@@ -81,9 +93,23 @@ docker run -d \
 
 ### Debian/Ubuntu Automated Setup
 ```bash
-# Download and run the installation script
-wget https://gist.githubusercontent.com/elonen/80a721f13bb4ec1378765270094ed5d5/raw/install-clapshot.sh
-sudo bash install-clapshot.sh
+# Download the installation script
+wget https://gist.githubusercontent.com/elonen/80a721f13bb4ec1378765270094ed5d5/raw/d333729c6a8df88edc3825b69bd571ba89879eee/install-clapshot-deb12.sh
+
+# Run with your public address (required)
+sudo bash install-clapshot-deb12.sh -a http://YOUR_IP:8080
+# Or for HTTPS: sudo bash install-clapshot-deb12.sh -a https://clapshot.yourdomain.com
+```
+
+**Manual configuration (if needed later):**
+```ini
+# Edit /etc/clapshot-server.conf
+[general]
+url-base = http://YOUR_IP:8080/
+cors     = http://YOUR_IP:8080
+
+# Then restart the service
+sudo systemctl restart clapshot-server
 ```
 
 ## Common Environment Variables
@@ -95,6 +121,8 @@ sudo bash install-clapshot.sh
 | `CLAPSHOT_APP_TITLE` | Custom application title | `"Video Review System"` |
 | `CLAPSHOT_LOGO_URL` | Custom logo URL | `"/custom-logo.svg"` |
 
+**Note:** For debug logging on Docker, add `-e debug=true` to enable verbose server logging.
+
 ## Quick Diagnostics
 
 ### Check if Server is Running
@@ -104,6 +132,9 @@ curl http://localhost:8080/api/health
 
 # Check Docker container logs
 docker logs container_name
+
+# Check native installation logs
+tail -f /var/log/clapshot.log
 ```
 
 ### Verify Client Configuration
@@ -126,6 +157,8 @@ curl http://YOUR_IP:8080/api/health
 | 502 Bad Gateway | Check server logs, likely server startup failure |
 | NetworkError: Failed to fetch | Check client config and network connectivity |
 | CORS errors | Set `CLAPSHOT_CORS` to match your domain |
+
+**Browser troubleshooting:** Open DevTools Console (F12) to check for CORS/WebSocket errors like `ERR_CONNECTION_REFUSED` or 403 responses. These usually indicate network or configuration issues. See [Connection Troubleshooting Guide](connection-troubleshooting.md) for detailed help.
 
 ## Default Credentials (Change These!)
 
