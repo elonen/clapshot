@@ -4,11 +4,14 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{bail, Context};
-use aws_sdk_s3::{config::Region, endpoint::Endpoint, primitives::ByteStream, Client};
-use aws_types::credentials::Credentials;
+use anyhow::{anyhow, bail, Context};
+use aws_sdk_s3::{config::Region, config::endpoint::Endpoint, primitives::ByteStream, Client, config::endpoint::ResolveEndpoint};
+use aws_sdk_s3::config::auth::{ParamsBuilder};
+use aws_sdk_s3::config::Credentials;
+use aws_sdk_s3::config::endpoint::{DefaultResolver, EndpointFuture, SharedEndpointResolver};
+use http::Uri;
+use mime::Params;
 use tokio::runtime::Runtime;
-
 /// Simple content type guessing for a handful of formats we serve.
 fn guess_content_type(path: &Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()) {
@@ -57,18 +60,22 @@ impl StorageBackend {
         let rt = Runtime::new().context("create tokio runtime for S3 client")?;
         let client = {
             let region = Region::new(region);
-            let credentials = Credentials::from_keys(access_key, secret_key, None);
-            let endpoint = Endpoint::immutable(
-                http::Uri::from_str(&endpoint).context("bad s3 endpoint uri")?
-            );
+            let credentials = Credentials::new(access_key, secret_key, None, None, "");
+            let url=match Uri::from_str(&endpoint){
+                Ok(u) => u,
+                Err(e) => return Err(anyhow!("failed to create uri: {}", e)),
+            };
+
+            let resolver=DefaultResolver::new();
             let cfg = rt.block_on(async {
                 let base = aws_config::defaults(aws_config::BehaviorVersion::latest())
                     .region(region)
+                    .endpoint_url(endpoint)
                     .credentials_provider(credentials)
                     .load()
                     .await;
                 aws_sdk_s3::config::Builder::from(&base)
-                    .endpoint_resolver(endpoint)
+                    .endpoint_resolver(resolver)
                     .force_path_style(true)
                     .build()
             });
