@@ -34,6 +34,7 @@ use crate::database::error::DBError;
 use crate::video_pipeline::metadata_reader::MediaType;
 use cleanup_rejected::clean_up_rejected_file;
 use crate::database::{DB, models, DbBasicQuery};
+use crate::storage::StorageBackend;
 
 #[derive(Debug, Clone)]
 pub enum IngestUsernameFrom {
@@ -58,12 +59,20 @@ pub const THUMB_SHEET_ROWS: u32 = 10;
 pub const THUMB_W: u32 = 160;
 pub const THUMB_H: u32 = 90;
 
+#[derive(Debug, Clone, Copy)]
+pub enum TranscodePreference {
+    Auto,
+    Force,
+    Skip,
+}
+
 
 #[derive (Clone, Debug)]
 pub struct IncomingFile {
     pub file_path: PathBuf,
     pub user_id: String,
-    pub cookies: HashMap<String, String>  // Cookies from client, if this was an HTTP upload
+    pub cookies: HashMap<String, String>,  // Cookies from client, if this was an HTTP upload
+    pub transcode_preference: TranscodePreference,
 }
 
 #[derive(Debug, Clone)]
@@ -117,6 +126,7 @@ fn ingest_media_file(
         md: &metadata_reader::Metadata,
         data_dir: &Path,
         media_files_dir: &Path,
+        storage: &StorageBackend,
         target_bitrate: u32,
         db: &DB,
         user_msg_tx: &crossbeam_channel::Sender<UserMessage>,
@@ -185,6 +195,8 @@ fn ingest_media_file(
     std::fs::rename(&src, &src_moved)?;
     if !src_moved.exists() { bail!("Failed to move {:?} file to orig/", src_moved) }
 
+    storage.upload_if_exists(&src_moved);
+
     let orig_filename = src.file_name().ok_or(anyhow!("Bad filename: {:?}", src))?.to_string_lossy().into_owned();
 
     // Add to DB
@@ -209,7 +221,7 @@ fn ingest_media_file(
 
 
     // Check if it needs recompressing
-    fn needs_transcoding(md: &metadata_reader::Metadata, target_max_bitrate: u32) -> Option<(String, u32)> {
+    fn auto_transcoding_need(md: &metadata_reader::Metadata, target_max_bitrate: u32) -> Option<(String, u32)> {
         match md.media_type {
             metadata_reader::MediaType::Audio => Some(("client cannot playback audio only".to_string(), target_max_bitrate)),
             metadata_reader::MediaType::Image => Some(("client cannot 'playback' still images".to_string(), target_max_bitrate)),
@@ -238,7 +250,13 @@ fn ingest_media_file(
         duration: md.duration,
     };
 
-    let transcode_req = match needs_transcoding(md, target_bitrate) {
+    let requested_transcode = match md.transcode_preference {
+        TranscodePreference::Force => Some(("user requested transcoding".to_string(), target_bitrate)),
+        TranscodePreference::Skip => None,
+        TranscodePreference::Auto => auto_transcoding_need(md, target_bitrate),
+    };
+
+    let transcode_req = match requested_transcode {
         Some((reason, new_bitrate)) => {
             let video_dst_prefix = format!("transcoded_br{}_{}", new_bitrate, uuid::Uuid::new_v4());
             cmpr_tx.send(script_processor::CmprInput::Transcode {
@@ -331,6 +349,7 @@ pub fn run_forever(
     db: Arc<DB>,
     terminate_flag: Arc<AtomicBool>,
     data_dir: PathBuf,
+    storage: StorageBackend,
     user_msg_tx: crossbeam_channel::Sender<UserMessage>,
     poll_interval: f32,
     resubmit_delay: f32,
@@ -451,7 +470,12 @@ pub fn run_forever(
                 match msg {
                     Ok(msg) => {
                         tracing::debug!("Got upload result. Submitting it for processing. {:?}", msg);
-                        to_md.send(IncomingFile {file_path: msg.file_path.clone(),user_id: msg.user_id, cookies: msg.cookies }).unwrap_or_else(|e| {
+                        to_md.send(IncomingFile {
+                            file_path: msg.file_path.clone(),
+                            user_id: msg.user_id,
+                            cookies: msg.cookies,
+                            transcode_preference: msg.transcode_preference,
+                        }).unwrap_or_else(|e| {
                                 tracing::error!("Error sending file to metadata reader: {:?}", e);
                                 clean_up_rejected_file(&data_dir, &msg.file_path, None).unwrap_or_else(|e| {
                                     tracing::error!("Cleanup of '{:?}' failed: {:?}", &msg.file_path, e);
@@ -479,7 +503,7 @@ pub fn run_forever(
                                         }))
                                     },
                                     Ok(vid) => {
-                                        let ing_res = ingest_media_file(&vid, &md, &data_dir, &media_files_dir, target_bitrate, &db, &user_msg_tx, &cmpr_in_tx).map_err(|e| {
+                                        let ing_res = ingest_media_file(&vid, &md, &data_dir, &media_files_dir, &storage, target_bitrate, &db, &user_msg_tx, &cmpr_in_tx).map_err(|e| {
                                             DetailedMsg {
                                                 msg: "Media ingestion failed".into(),
                                                 details: e.to_string(),
@@ -564,6 +588,7 @@ pub fn run_forever(
                         {
                             let videos_dir = media_files_dir.clone();
                             let vid = logs.media_file_id.clone();
+                            let storage = storage.clone();
 
                             tracing::info!(media_file=%vid, log_info=%logs.stdout, "Transcoding completed");
 
@@ -592,6 +617,7 @@ pub fn run_forever(
                                     tracing::error!(details=%e, "Failed to create symlink {:?} -> {:?}", symlink_path, video_dst);
                                     return false;
                                 }
+                                storage.upload_if_exists(&symlink_path);
 
                                 if let Err(e) = db.conn().and_then(|mut conn| models::MediaFile::set_recompressed(&mut conn, &vid)) {
                                     tracing::error!(details=%e, "Error marking media file as recompressed in DB");
@@ -627,6 +653,7 @@ pub fn run_forever(
                         {
                             let videos_dir = media_files_dir.clone();
                             let vid = logs.media_file_id.clone();
+                            let storage = storage.clone();
                             let mut db_errors = false;
 
                             // Thumbnails (and/or sheet) done?
@@ -650,6 +677,12 @@ pub fn run_forever(
                                         if Some(vid.clone()) == legacy_media_file_now_thumnailing {
                                             legacy_media_file_now_thumnailing = legacy_thumbnail_next_media_file(&db, &videos_dir, &mut cmpr_in_tx.clone());
                                         }
+                                    }
+                                }
+                                if let Some(dir) = thumb_dir {
+                                    storage.upload_if_exists(&dir.join("thumb.webp"));
+                                    if let Some((sheet_cols, sheet_rows)) = thumb_sheet_dims {
+                                        storage.upload_if_exists(&dir.join(format!("sheet-{}x{}.webp", sheet_cols, sheet_rows)));
                                     }
                                 }
 

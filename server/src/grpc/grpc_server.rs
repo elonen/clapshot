@@ -131,7 +131,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         };
 
         let mut proto_items = Vec::with_capacity(items.len());
-        for mf in items { proto_items.push(mf.to_proto3(&self.server.url_base, mf.get_subtitles(conn)?)); }
+        for mf in items { proto_items.push(mf.to_proto3(&self.server.media_base_url, mf.get_subtitles(conn)?)); }
 
         Ok(Response::new(org::DbMediaFileList {
             items: proto_items,
@@ -231,7 +231,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             media_files: upsert_type!([
                 conn, req.media_files, models::MediaFile, models::MediaFileInsert,
                 |it: &proto::MediaFile| it.id.is_empty(),
-                |it: &models::MediaFile| Ok(it.to_proto3(self.server.url_base.as_str(), it.get_subtitles(conn)?))])?,
+                |it: &models::MediaFile| Ok(it.to_proto3(self.server.media_base_url.as_str(), it.get_subtitles(conn)?))])?,
             comments: upsert_type!([
                 conn, req.comments, models::Comment, models::CommentInsert,
                 |it: &proto::Comment| it.id.is_empty(),
@@ -243,7 +243,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
             subtitles: upsert_type!([
                 conn, req.subtitles, models::Subtitle, models::SubtitleInsert,
                 |it: &proto::Subtitle| it.id.is_empty(),
-                |it: &models::Subtitle| Ok(it.to_proto3(self.server.url_base.as_str()))])?,
+                |it: &models::Subtitle| Ok(it.to_proto3(self.server.media_base_url.as_str()))])?,
         }))
     }
 

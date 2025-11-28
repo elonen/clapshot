@@ -3,7 +3,7 @@ use clap::Parser;
 use clapshot_server::{
     api_server::validate_org_http_headers_regex,
     grpc::{grpc_client::prepare_organizer, grpc_server::make_grpc_server_bind},
-    run_clapshot, PKG_NAME, PKG_VERSION,
+    run_clapshot, storage::StorageBackend, PKG_NAME, PKG_VERSION,
     video_pipeline::IngestUsernameFrom,
 };
 use std::{path::PathBuf, sync::Arc, str::FromStr};
@@ -127,6 +127,38 @@ struct Args {
     /// Case-insensitive matching. Default is disabled for security.
     #[arg(long, value_name="REGEX", default_value="^$")]
     org_http_headers: String,
+
+    /// Storage backend (local or s3-compatible object storage)
+    #[arg(long, value_name="BACKEND", default_value="local")]
+    storage_backend: String,
+
+    /// S3-compatible endpoint base URL, e.g. https://s3.example.com
+    #[arg(long, value_name="URL")]
+    s3_endpoint: Option<String>,
+
+    /// S3 region (required for S3 backend)
+    #[arg(long, value_name="REGION")]
+    s3_region: Option<String>,
+
+    /// S3 bucket (required for S3 backend)
+    #[arg(long, value_name="BUCKET")]
+    s3_bucket: Option<String>,
+
+    /// S3 access key (required for S3 backend)
+    #[arg(long, value_name="KEY")]
+    s3_access_key: Option<String>,
+
+    /// S3 secret key (required for S3 backend)
+    #[arg(long, value_name="SECRET")]
+    s3_secret_key: Option<String>,
+
+    /// Path/prefix inside the bucket where media files are stored
+    #[arg(long, value_name="PREFIX", default_value="videos")]
+    s3_prefix: String,
+
+    /// Public base URL for accessing the bucket/prefix (used for playback URLs)
+    #[arg(long, value_name="URL")]
+    s3_public_url: Option<String>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -179,6 +211,32 @@ fn main() -> anyhow::Result<()> {
     // Validate and compile the org_http_headers regex
     let org_http_headers_regex = validate_org_http_headers_regex(&args.org_http_headers)?;
 
+    let storage = match args.storage_backend.as_str() {
+        "local" => StorageBackend::local(args.data_dir.join("videos"), &url_base),
+        "s3" => {
+            let endpoint = args.s3_endpoint.clone().ok_or_else(|| anyhow::anyhow!("--s3-endpoint is required for S3 backend"))?;
+            let region = args.s3_region.clone().ok_or_else(|| anyhow::anyhow!("--s3-region is required for S3 backend"))?;
+            let bucket = args.s3_bucket.clone().ok_or_else(|| anyhow::anyhow!("--s3-bucket is required for S3 backend"))?;
+            let access_key = args.s3_access_key.clone().ok_or_else(|| anyhow::anyhow!("--s3-access-key is required for S3 backend"))?;
+            let secret_key = args.s3_secret_key.clone().ok_or_else(|| anyhow::anyhow!("--s3-secret-key is required for S3 backend"))?;
+
+            let public_base_url = args.s3_public_url.clone()
+                .unwrap_or_else(|| format!("{}/{}", endpoint.trim_end_matches('/'), bucket));
+
+            StorageBackend::s3(
+                args.data_dir.join("videos"),
+                bucket,
+                region,
+                access_key,
+                secret_key,
+                endpoint,
+                args.s3_prefix.clone(),
+                public_base_url,
+            )?
+        },
+        other => bail!("Unknown storage backend '{}'. Valid options: local, s3", other),
+    };
+
     // Run the server (blocking)
     if let Err(e) = run_clapshot(
         args.data_dir.to_path_buf(),
@@ -198,6 +256,7 @@ fn main() -> anyhow::Result<()> {
         args.transcode_script,
         args.thumbnail_script,
         org_http_headers_regex,
+        storage,
     ) {
         error!("run_clapshot() failed: {}", e);
     }

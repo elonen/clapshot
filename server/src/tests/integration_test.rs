@@ -24,6 +24,7 @@ mod integration_test
 
     use crate::api_server::tests::expect_user_msg;
     use crate::api_server::validate_org_http_headers_regex;
+    use crate::storage::StorageBackend;
 
     use crate::database::schema::media_files::{thumb_sheet_cols, thumb_sheet_rows};
     use crate::{expect_client_cmd, send_server_cmd};
@@ -65,6 +66,7 @@ mod integration_test
             file_path: PathBuf::from_str(data_dir.join("NASA_Red_Lettuce_excerpt.mov").to_str().unwrap())?,
             user_id: "nobody".to_string(),
             cookies: HashMap::new(),
+            transcode_preference: crate::video_pipeline::TranscodePreference::Auto,
         };
         arg_sender.send(args.clone())?;
 
@@ -131,9 +133,10 @@ mod integration_test
                     let data_dir = $data_dir.path().to_path_buf();
                     let url_base = url_base.clone();
                     let org_uri = org_uri.clone();
+                    let storage = crate::storage::StorageBackend::local(data_dir.join("videos"), &url_base);
                     let tf = terminate_flag.clone();
                     thread::spawn(move || {
-                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), regex, tf)?;
+                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), regex, storage, tf)?;
                         clapshot.wait_for_termination()
                 })};
 
@@ -590,6 +593,7 @@ mod integration_test
             file_path: test_file.clone(),
             user_id: "test_user".to_string(),
             cookies: HashMap::new(),
+            transcode_preference: crate::video_pipeline::TranscodePreference::Auto,
         };
 
         let (tx, rx) = crossbeam_channel::unbounded();

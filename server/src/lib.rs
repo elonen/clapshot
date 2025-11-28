@@ -12,6 +12,7 @@ pub mod api_server;
 pub mod database;
 pub mod tests;
 pub mod grpc;
+pub mod storage;
 
 pub const PKG_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const PKG_NAME: &'static str = env!("CARGO_PKG_NAME");
@@ -46,6 +47,7 @@ impl ClapshotInit {
         transcode_script: String,
         thumbnail_script: String,
         org_http_headers_regex: regex::Regex,
+        storage: crate::storage::StorageBackend,
         terminate_flag: Arc<AtomicBool>)
         -> anyhow::Result<Self>
     {
@@ -61,7 +63,7 @@ impl ClapshotInit {
         }
 
         // Create subdirectories
-        for d in &["videos", "incoming", "videos"] {
+        for d in &["videos", "incoming", "upload"] {
             std::fs::create_dir_all(&data_dir.join(d))?;
         }
 
@@ -84,6 +86,7 @@ impl ClapshotInit {
                 &data_dir.join("videos"),
                 &data_dir.join("upload"),
                 &url_base,
+                storage.clone(),
                 organizer_uri.clone(),
                 grpc_srv_listening_flag.clone(),
                 default_user,
@@ -124,7 +127,7 @@ impl ClapshotInit {
         let vpp_thread = Some({
             let db = db.clone();
             thread::spawn(move || { video_pipeline::run_forever(
-                db, tf.clone(), dd, user_msg_tx, poll_interval, resubmit_delay, target_bitrate, upload_rx, n_workers, ingest_username_from, ts, ths)})
+                db, tf.clone(), dd, storage.clone(), user_msg_tx, poll_interval, resubmit_delay, target_bitrate, upload_rx, n_workers, ingest_username_from, ts, ths)})
         });
 
 
@@ -363,6 +366,7 @@ pub fn run_clapshot(
     transcode_script: String,
     thumbnail_script: String,
     org_http_headers_regex: regex::Regex,
+    storage: crate::storage::StorageBackend,
 ) -> anyhow::Result<()> {
 
     let terminate_flag = Arc::new(AtomicBool::new(false));
@@ -386,6 +390,7 @@ pub fn run_clapshot(
         transcode_script,
         thumbnail_script,
         org_http_headers_regex,
+        storage,
         terminate_flag.clone()
     )?;
 

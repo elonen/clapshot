@@ -14,6 +14,7 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::video_pipeline::IncomingFile;
 use crate::api_server::{UserMessage};
 use crate::database::{DB, models};
+use crate::storage::StorageBackend;
 
 
 
@@ -190,12 +191,14 @@ macro_rules! api_test {
             let ws_url = url_base.replace("http", "ws") + "/api/ws";
             let media_files_dir = data_dir.join("videos");
             let upload_dir = data_dir.join("upload");
+            let storage = StorageBackend::local(media_files_dir.clone(), &url_base);
 
             let test_regex = validate_org_http_headers_regex("^X[-_]REMOTE[-_]").expect("Test regex failed");
             let server_state = ServerState::new( db.clone(),
                 &media_files_dir.clone(),
                 &upload_dir.clone(),
                 &url_base.clone(),
+                storage,
                 None,
                 grpc_srv_listening_flag.clone(),
                 "anonymous".to_string(),

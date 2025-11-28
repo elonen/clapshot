@@ -10,6 +10,7 @@ use crate::video_pipeline::IncomingFile;
 use super::parse_auth_headers;
 use super::server_state::ServerState;
 use super::user_session::{org_authz_with_default, AuthzTopic, AuthzError};
+use crate::video_pipeline::TranscodePreference;
 
 use lib_clapshot_grpc::proto;
 use proto::org::authz_user_action_request as authz_req;
@@ -33,7 +34,7 @@ pub async fn handle_multipart_upload(
     body: impl warp::Stream<Item = Result<impl bytes::Buf, warp::Error>> + Unpin)
         -> Result<warp::reply::WithStatus<String>, Infallible>
 {
-    let (user_id, user_name, is_admin, cookies, filtered_headers, remote_error) = parse_auth_headers(&hdrs, &server.default_user, &server.org_http_headers_regex);
+    let (user_id, user_name, is_admin, mut cookies, filtered_headers, remote_error) = parse_auth_headers(&hdrs, &server.default_user, &server.org_http_headers_regex);
 
     // If X-Remote-Error is set, return error response
     if let Some(error_msg) = remote_error {
@@ -72,6 +73,17 @@ pub async fn handle_multipart_upload(
             }
         }
     }
+
+    // Determine transcoding preference from header
+    let transcode_preference = hdrs.get("x-clapshot-transcode")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_ascii_lowercase())
+        .map(|s| match s.as_str() {
+            "true" | "1" | "yes" => TranscodePreference::Force,
+            "false" | "0" | "no" => TranscodePreference::Skip,
+            _ => TranscodePreference::Auto,
+        }).unwrap_or(TranscodePreference::Auto);
+    cookies.insert("transcode_preference".into(), format!("{:?}", transcode_preference));
 
     // Parse the multipart stream
     let boundary = mime.get_param("boundary").map(|v| v.to_string());
@@ -165,7 +177,12 @@ pub async fn handle_multipart_upload(
         }
     }
 
-    if let Err(e) = upload_done.send(IncomingFile{ file_path: uploaded_file, user_id: user_id, cookies }) {
+    if let Err(e) = upload_done.send(IncomingFile{
+        file_path: uploaded_file,
+        user_id,
+        cookies,
+        transcode_preference,
+    }) {
         tracing::error!("Failed to send upload ok signal: {:?}", e);
         return Ok(warp::reply::with_status("Internal error: failed to send upload ok signal".into(), warp::http::StatusCode::INTERNAL_SERVER_ERROR));
     }

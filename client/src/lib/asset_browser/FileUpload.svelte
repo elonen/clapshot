@@ -14,6 +14,7 @@ let files = {
         // Passed to HTTP POST request:
         listingData: Object;
         mediaFileAddedAction: string|undefined;
+        transcodePreferred?: boolean;
         children?: import('svelte').Snippet;
     }
 
@@ -21,6 +22,7 @@ let files = {
         postUrl,
         listingData,
         mediaFileAddedAction,
+        transcodePreferred = true,
         children
     }: Props = $props();
 
@@ -79,11 +81,13 @@ function upload() {
         ajax.addEventListener("abort", abortHandler, false);
         ajax.open("POST", postUrl);
         ajax.setRequestHeader("X-FILE-NAME", encodeURIComponent(file.name));
+        ajax.setRequestHeader("X-CLAPSHOT-TRANSCODE", transcodePreferred ? "true" : "false");
 
         let upload_cookies = { ...LocalStorageCookies.getAllNonExpired() };
         if (mediaFileAddedAction)
             upload_cookies["media_file_added_action"] = mediaFileAddedAction;
         upload_cookies["listing_data_json"] = JSON.stringify(listingData);
+        upload_cookies["transcode_preference"] = transcodePreferred ? "true" : "false";
         ajax.setRequestHeader("X-CLAPSHOT-COOKIES", JSON.stringify(upload_cookies));
 
         ajax.send(formdata);

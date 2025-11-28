@@ -53,7 +53,7 @@ impl models::MediaFile
         })
     }
 
-    pub fn to_proto3(&self, url_base: &str, subtitles: Vec<models::Subtitle>) -> proto::MediaFile
+    pub fn to_proto3(&self, media_base_url: &str, subtitles: Vec<models::Subtitle>) -> proto::MediaFile
     {
         let duration = match (self.duration, self.total_frames, &self.fps) {
             (Some(dur), Some(total_frames), Some(fps)) => Some(proto::MediaFileDuration {
@@ -75,12 +75,12 @@ impl models::MediaFile
 
         // Make preview data (thumb sheet and/or thumb url)
         let thumb_url = if matches!(self.has_thumbnail, Some(true)) {
-            Some(format!("{}/videos/{}/thumbs/thumb.webp", &url_base, &self.id))
+            Some(format!("{}/thumbs/thumb.webp", format!("{}/{}", media_base_url, &self.id)))
         } else { None };
 
         let thumb_sheet = match (self.thumb_sheet_cols, self.thumb_sheet_rows) {
             (Some(cols), Some(rows)) => Some(proto::media_file_preview_data::ThumbSheet {
-                url: format!("{}/videos/{}/thumbs/sheet-{}x{}.webp", &url_base, &self.id, cols, rows),
+                url: format!("{}/thumbs/sheet-{}x{}.webp", format!("{}/{}", media_base_url, &self.id), cols, rows),
                 rows: rows as u32,
                 cols: cols as u32,
             }),
@@ -110,10 +110,10 @@ impl models::MediaFile
             added_time: Some(datetime_to_proto3(&self.added_time)),
             preview_data,
             processing_metadata,
-            subtitles: subtitles.into_iter().map(|s| s.to_proto3(url_base)).collect(),
+            subtitles: subtitles.into_iter().map(|s| s.to_proto3(media_base_url)).collect(),
             default_subtitle_id: self.default_subtitle_id.map(|id| id.to_string()),
-            playback_url: playback_uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri)),
-            orig_url: orig_uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri))
+            playback_url: playback_uri.map(|uri| format!("{}/{}/{}", media_base_url, &self.id, uri)),
+            orig_url: orig_uri.map(|uri| format!("{}/{}/{}", media_base_url, &self.id, uri))
         }
     }
 
@@ -165,12 +165,13 @@ impl models::Subtitle
         })
     }
 
-    pub fn to_proto3(&self, url_base: &str) -> proto::Subtitle
+    pub fn to_proto3(&self, media_base_url: &str) -> proto::Subtitle
     {
-        let orig_url = format!("{}/videos/{}/subs/orig/{}", url_base, &self.media_file_id, &self.orig_filename);
+        let base = format!("{}/{}", media_base_url, &self.media_file_id);
+        let orig_url = format!("{}/subs/orig/{}", base, &self.orig_filename);
         let playback_url = match &self.filename {
-            Some(f) => format!("{}/videos/{}/subs/{}", url_base, &self.media_file_id, f),
-            None => orig_url.clone()
+            Some(f) => format!("{}/subs/{}", base, f),
+            None => orig_url.clone(),
         };
         proto::Subtitle {
             id: self.id.to_string(),

@@ -433,6 +433,7 @@ else
 
 
 let uploadUrl: string = $state("");
+let transcodePreferred: boolean = $state(true);
 
 
 // -------------------------------------------------------------
@@ -1131,11 +1132,19 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                         <div class="my-6">
                             <!-- ========== upload widget ============= -->
                             {#if pit.folderListing.allowUpload}
+                                <div class="flex justify-end items-center text-gray-400 text-sm mb-2 gap-3">
+                                    <span class="uppercase tracking-wide text-xs text-gray-500">Transcode</span>
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="checkbox" bind:checked={transcodePreferred} class="h-4 w-4 rounded border-gray-600 bg-slate-900" />
+                                        <span class="text-gray-200">{transcodePreferred ? "Transcode then upload" : "Upload directly to storage"}</span>
+                                    </label>
+                                </div>
                                 <div class="h-24 border-4 border-dashed border-gray-700">
                                     <FileUpload
                                         postUrl={uploadUrl}
                                         listingData={pit.folderListing.listingData ?? {}}
                                         mediaFileAddedAction={pit.folderListing.mediaFileAddedAction}
+                                        transcodePreferred={transcodePreferred}
                                     >
                                         <div class="flex flex-col justify-center items-center h-full">
                                             <div class="text-2xl text-gray-700">
