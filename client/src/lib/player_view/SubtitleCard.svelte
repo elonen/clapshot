@@ -3,6 +3,7 @@
 import { scale, slide } from "svelte/transition";
 import { curSubtitle, curUserId, curUserIsAdmin, curVideo, subtitleEditingId } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
+import { t } from '@/i18n';
 
 
     interface Props {
@@ -58,7 +59,7 @@ function handleKeyDown(event: { key: string; }) {
     </button>
     {#if $curVideo?.userId == $curUserId || $curUserIsAdmin}
     <span class="flex-shrink-0">
-        <button class="fa {($subtitleEditingId==sub.id) ? "fa-angle-down" : "fa-angle-right"} hover:text-white" title="Edit subtitle" aria-label="Edit subtitle" onclick={() => { toggleEditing(); }}></button>
+        <button class="fa {($subtitleEditingId==sub.id) ? "fa-angle-down" : "fa-angle-right"} hover:text-white" title={$t('subtitles.edit')} aria-label={$t('subtitles.edit')} onclick={() => { toggleEditing(); }}></button>
     </span>
     {/if}
 </div>
@@ -67,30 +68,30 @@ function handleKeyDown(event: { key: string; }) {
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <form class="space-y-2 p-2 mb-4 rounded-lg bg-gray-800 shadow-lg shadow-black" transition:slide="{{ duration: 200 }}" onkeydown={handleKeyDown}>
     <div>
-        <label for="title" class="block text-sm font-medium text-gray-500">Title</label>
+        <label for="title" class="block text-sm font-medium text-gray-500">{$t('subtitles.label')}</label>
         <input id="title" type="text" bind:value={title} class="mt-1 block w-full rounded-md shadow-sm text-gray-400 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300">
     </div>
     <div class="flex space-x-2">
         <div>
             <label for="language_code" class="block text-sm font-medium text-gray-500">
-                Language code
+                {$t('subtitles.languageCode')}
                 <a href="https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes" target="_blank" class="text-xs text-gray-500 hover:text-gray-300" aria-label="ISO 639 language codes information"><i class="fas fa-circle-info"></i></a>
             </label>
             <input id="language_code" minlength="2" maxlength="3"  type="text" bind:value={languageCode} class="mt-1 block w-full uppercase font-mono rounded-md shadow-sm text-gray-400 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300">
         </div>
         <div>
-            <label for="time_offset" class="block text-sm font-medium text-gray-500">Time offset (sec)</label>
+            <label for="time_offset" class="block text-sm font-medium text-gray-500">{$t('subtitles.timeOffset')}</label>
             <input id="time_offset" type="number" step="0.01" bind:value={timeOffset} class="mt-1 block w-full rounded-md shadow-sm text-gray-400 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300">
         </div>
     </div>
     <div class="flex space-x-2">
         <input id="isDefault" type="checkbox" bind:checked={isDefaultState} class="mt-1 block rounded-md shadow-sm text-gray-400 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300">
-        <label for="isDefault" class="block text-sm font-medium text-gray-500">Default Subtitle</label>
+        <label for="isDefault" class="block text-sm font-medium text-gray-500">{$t('subtitles.defaultSubtitle')}</label>
     </div>
     <div class="py-2 flex space-x-2 place-content-end">
-        <button type="button" class="border rounded-lg px-1 text-sm border-cyan-500 text-cyan-500" onclick={doSave}>Save</button>
-        <a type="button" class="border rounded-lg px-1 text-sm border-cyan-600 text-cyan-600" href="{sub.origUrl}" download>Download</a>
-        <button type="button" class="border rounded-lg px-1 text-sm border-red-300 text-red-300" onclick={doDelete}>Del</button>
+        <button type="button" class="border rounded-lg px-1 text-sm border-cyan-500 text-cyan-500" onclick={doSave}>{$t('subtitles.save')}</button>
+        <a type="button" class="border rounded-lg px-1 text-sm border-cyan-600 text-cyan-600" href="{sub.origUrl}" download>{$t('subtitles.download')}</a>
+        <button type="button" class="border rounded-lg px-1 text-sm border-red-300 text-red-300" onclick={doDelete}>{$t('subtitles.delete')}</button>
     </div>
 </form>
 {/if}

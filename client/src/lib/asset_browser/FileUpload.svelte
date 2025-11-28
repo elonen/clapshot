@@ -1,6 +1,7 @@
 <script lang="ts">
 import LocalStorageCookies from "@/cookies";
 import Dropzone from "svelte-file-dropzone"
+import { t } from "@/i18n";
 
 let dragActive: boolean = $state(false);
 let files = {
@@ -47,7 +48,7 @@ function progressHandler(event: ProgressEvent<XMLHttpRequestEventTarget>)
     // loaded_total = "Uploaded " + event.loaded + " bytes of " + event.total;
     var percent = (event.loaded / event.total) * 100;
     if (progressBar) progressBar.value = Math.round(percent);
-    statusTxt = Math.round(percent) + "% uploaded... please wait";
+    statusTxt = $t('upload.progress', { percent: Math.round(percent) });
 }
 
 function completeHandler(event: ProgressEvent<XMLHttpRequestEventTarget>) {
@@ -57,12 +58,12 @@ function completeHandler(event: ProgressEvent<XMLHttpRequestEventTarget>) {
 }
 
 function errorHandler(_event: ProgressEvent<XMLHttpRequestEventTarget>) {
-    statusTxt = "Upload Failed";
+    statusTxt = $t('upload.failed');
     afterUpload();
 }
 
 function abortHandler(_event: ProgressEvent<XMLHttpRequestEventTarget>) {
-    statusTxt = "Upload Aborted";
+    statusTxt = $t('upload.aborted');
     afterUpload();
 }
 
@@ -72,7 +73,7 @@ function upload() {
         var formdata = new FormData();
         formdata.append("fileupload", file);
         var ajax = new XMLHttpRequest();
-        statusTxt = "Uploading: " + file.name + "...";
+        statusTxt = $t('upload.uploading', { filename: file.name });
         ajax.upload.addEventListener("progress", progressHandler, false);
         ajax.addEventListener("load", completeHandler, false);
         ajax.addEventListener("error", errorHandler, false) ;
@@ -97,7 +98,7 @@ function onDropFiles(e: any) {
     files.accepted = e.detail.acceptedFiles || [];
     files.rejected = e.detail.fileRejections || [];
     if (files.rejected.length > 0 && files.accepted.length == 0) {
-        alert("Drop rejected. Only video files are allowed.");
+        alert($t('upload.rejected'));
     }
     upload();
 }

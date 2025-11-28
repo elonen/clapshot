@@ -6,6 +6,7 @@ import { scale, slide } from "svelte/transition";
 import Avatar from '@/lib/Avatar.svelte';
 import { curUserId, curUserIsAdmin, allComments, curSubtitle, curVideo } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
+import { t } from '@/i18n';
 
 
     interface Props {
@@ -40,7 +41,7 @@ function onTimecodeClick(tc: string) {
 }
 
 function onClickDeleteComment() {
-    var result = confirm("Delete comment?");
+    var result = confirm($t('comments.deleteConfirm'));
     if (result && ondeletecomment) {
         ondeletecomment({'id': comment.id});
     }
@@ -102,9 +103,9 @@ function onClickShare() {
         const url = `${base}#comment_${comment.id}`;
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(url).then(() => {
-                alert("Link copied to clipboard");
-            }).catch(() => { alert("Copy link: " + url); });
-        } else { alert("Copy link: " + url); }
+                alert($t('comments.linkCopied'));
+            }).catch(() => { alert($t('comments.copyLink') + ": " + url); });
+        } else { alert($t('comments.copyLink') + ": " + url); }
     } catch (e) {
         console.error('Failed to copy link', e);
     }
@@ -151,7 +152,7 @@ function onClickShare() {
             <p class="text-gray-300 text-base hyphenate">
                 {comment.comment}
                 {#if comment.edited}
-                    <span class="text-xs italic text-gray-500"> (edited)</span>
+                    <span class="text-xs italic text-gray-500"> {$t('comments.editedSuffix')}</span>
                 {/if}
             </p>
         {/if}
@@ -163,19 +164,19 @@ function onClickShare() {
         <div class="flex-none">
             <button
                 class="fa fa-link border rounded-lg px-2 py-1 text-sm border-gray-500 text-gray-300 hover:bg-gray-700"
-                title="Copy link"
-                aria-label="Copy link"
+                title={$t('comments.copyLink')}
+                aria-label={$t('comments.copyLink')}
                 onclick={onClickShare}
             ></button>
         </div>
 
         <!-- Right: existing action buttons -->
         <div class="flex-1 flex justify-end">
-            <button class="border rounded-lg px-1 placeholder: ml-2 text-sm border-cyan-500 text-cyan-500" onclick={()=>showReply=true}>Reply</button>
+            <button class="border rounded-lg px-1 placeholder: ml-2 text-sm border-cyan-500 text-cyan-500" onclick={()=>showReply=true}>{$t('comments.reply')}</button>
             {#if comment.userId == $curUserId || $curUserIsAdmin}
-                <button class="border rounded-lg px-1 ml-2 text-sm border-cyan-600 text-cyan-600" onclick={()=>{editing=true;}}>Edit</button>
+                <button class="border rounded-lg px-1 ml-2 text-sm border-cyan-600 text-cyan-600" onclick={()=>{editing=true;}}>{$t('comments.edit')}</button>
                 {#if !hasChildren()}
-                <button class="border rounded-lg px-1 ml-2 text-sm border-red-300 text-red-300" onclick={onClickDeleteComment}>Del</button>
+                <button class="border rounded-lg px-1 ml-2 text-sm border-red-300 text-red-300" onclick={onClickDeleteComment}>{$t('comments.deleteShort')}</button>
                 {/if}
             {/if}
         </div>
@@ -186,7 +187,7 @@ function onClickShare() {
     <form class="p-2" onsubmit={(e) => {e.preventDefault(); onReplySubmit();}}>
             <input
                 class="w-full border p-1 rounded bg-gray-900"
-                type="text" placeholder="Your reply..."
+                type="text" placeholder={$t('comments.yourReply')}
                 use:callFocus
                 bind:this={replyInput}
         onblur={()=>showReply=false} />

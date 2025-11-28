@@ -11,4 +11,10 @@ attempts to connect to the server via websocket.
 
 If you have installed it in a Debian system, the config file is
 symlinked to `/etc/clapshot_client.conf`. Otherwise it's located
-in the same directory as the `index.html` file. 
+in the same directory as the `index.html` file.
+
+## Localization
+
+The UI supports multiple locales (English and Simplified Chinese included).
+Set `default_locale`/`supported_locales` in `clapshot_client.conf.json`, then
+switch languages from the user menu in the header.
