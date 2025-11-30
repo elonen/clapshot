@@ -153,16 +153,28 @@ export function setLocale(lang: string) {
     }
 }
 
-export function initLocale(preferred?: string | null, allowed?: string[] | null) {
+export function initLocale(configDefault?: string | null, allowed?: string[] | null) {
     const stored = localStorage.getItem(STORAGE_KEY);
     const browser = typeof navigator !== 'undefined' ? navigator.language : 'en';
-    const candidates = [stored, preferred, browser].filter(Boolean) as string[];
     const normalizedAllowed = allowed && allowed.length > 0 ? allowed : ['en', 'zh'];
 
+    // Check candidates in priority order: stored > configDefault > browser
+    // stored: user's previously saved choice from localStorage
+    // configDefault: server-provided default_locale from config file
+    // browser: browser's language setting
+    const checkMatch = (candidate: string | null | undefined): string | null => {
+        if (!candidate) return null;
+        const matched = normalizedAllowed.find((allowedLocale) =>
+            candidate.toLowerCase().startsWith(allowedLocale.toLowerCase())
+        );
+        return matched || null;
+    };
+
     const selected =
-        candidates.find((c) =>
-            normalizedAllowed.some((allowedLocale) => c?.toLowerCase().startsWith(allowedLocale.toLowerCase()))
-        ) ?? normalizedAllowed[0];
+        checkMatch(stored) ??
+        checkMatch(configDefault) ??
+        checkMatch(browser) ??
+        normalizedAllowed[0];
 
     setLocale(selected);
 }

@@ -461,7 +461,7 @@ fetch(CONF_FILE)
     uploadUrl = json.upload_url;
 
     $clientConfig = json;
-    initLocale(json.default_locale ?? json.locale, json.supported_locales ?? null);
+    initLocale(json.default_locale, json.supported_locales ?? null);
 
     console.log("Connecting to WS API at: " + json.ws_url);
     connectWebsocket(json.ws_url);
