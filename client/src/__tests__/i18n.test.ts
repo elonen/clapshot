@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { locale, setLocale, initLocale, t } from '@/i18n';
+import { locale, setLocale, initLocale, t, availableLocales, SUPPORTED_LOCALES } from '@/i18n';
 
 describe('i18n', () => {
     beforeEach(() => {
@@ -164,6 +164,14 @@ describe('i18n', () => {
             setLocale('en');
             const $t = get(t);
             expect($t('nonexistent.key' as any)).toBe('nonexistent.key');
+        });
+    });
+
+    describe('availableLocales', () => {
+        it('should have an entry for every supported translation', () => {
+            const availableIds = availableLocales.map(l => l.id).sort();
+            const supportedIds = [...SUPPORTED_LOCALES].sort();
+            expect(availableIds).toEqual(supportedIds);
         });
     });
 });

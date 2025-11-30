@@ -182,7 +182,7 @@ const translations = {
 export type Locale = keyof typeof translations;
 export type TranslationKey = keyof typeof translations.en;
 
-const SUPPORTED_LOCALES = Object.keys(translations) as Locale[];
+export const SUPPORTED_LOCALES = Object.keys(translations) as Locale[];
 
 export const locale = writable<Locale>('en');
 
