@@ -134,7 +134,8 @@ function format(template: string, vars?: Record<string, string | number>): strin
 export const t = derived(locale, ($locale) => {
     return (key: TranslationKey, vars?: Record<string, string | number>) => {
         const lang = translations[$locale] ? $locale : 'en';
-        const msg = (translations as any)[lang]?.[key] ?? (translations as any).en?.[key] ?? key;
+        const langTranslations = translations[lang];
+        const msg = langTranslations[key] ?? translations.en[key] ?? key;
         return format(msg, vars);
     };
 });
