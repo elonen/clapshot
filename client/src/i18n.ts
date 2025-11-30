@@ -164,7 +164,7 @@ const translations = {
         'upload.progress': '{percent}% ladattu... odota hetki',
         'upload.failed': 'Lataus epäonnistui',
         'upload.aborted': 'Lataus keskeytetty',
-        'upload.rejected': 'Pudotus hylätty. Vain video-, kuva- ja äänitiedostot sallittu.',
+        'upload.rejected': 'Tiedostotyyppiä ei tueta. Sallitut: video, kuva ja ääni.',
         'upload.complete': 'Lataus valmis',
 
         'comments.placeholderTimed': 'Lisää kommentti (nykyiseen kohtaan)...',
