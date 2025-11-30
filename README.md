@@ -175,9 +175,13 @@ The [development setup guide](doc/development-setup.md) covers setting up the se
 
 Contributions are welcome, especially for features and improvements that benefit the wider user base. Please add your copyright notice for significant contributions.
 
+### Contributors
+
+  - **Client i18n, Chinese (Simplified) translations** – Mike-Solar
+
 ## Licensing
 
-Copyright 2022 – 2025 by Jarno Elonen
+Copyright 2022 – 2025 by Jarno Elonen and contributors
 
 - Clapshot Server and Client are licensed under the **GNU General Public License, GPLv2**.
 - gRPC/proto3 libraries and example organizer plugins are under the **MIT License**.
