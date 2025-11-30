@@ -106,7 +106,7 @@ const translations = {
         'upload.progress': '已上传 {percent}% ... 请稍候',
         'upload.failed': '上传失败',
         'upload.aborted': '上传已中止',
-        'upload.rejected': '拖拽被拒绝。只允许上传视频、图片或音频文件。',
+        'upload.rejected': '不支持此文件类型。仅支持视频、音频和图片。',
         'upload.complete': '上传完成',
 
         'comments.placeholderTimed': '添加评论 —— 使用当前时间点...',
