@@ -119,10 +119,70 @@ const translations = {
 
         'general.ok': '确定',
     },
+    fi: {
+        'status.connecting': 'Yhdistetään palvelimeen...',
+        'status.viewConnectionErrors': 'Näytä yhteysvirheet',
+        'status.latestMessages': 'Viimeisimmät viestit',
+        'status.collabActiveTitle': 'Yhteiskatseluistunto aktiivinen.',
+        'status.collabSessionId': 'Istunnon tunnus on {id}',
+        'status.collabActionsMirrored': 'Toiminnot kuten kelaus, toisto ja piirtäminen peilataan kaikille osallistujille.',
+        'status.collabInvite': 'Kutsuaksesi muita, kopioi selaimen osoite ja lähetä se heille.',
+        'status.collabExit': 'Poistu napsauttamalla vihreää kuvaketta ylätunnisteessa.',
+        'status.collabUnderstood': 'Selvä',
+        'status.reloadToLogin': 'Lataa sivu uudelleen kirjautuaksesi.',
+        'status.subtitles': 'Tekstitykset',
+        'status.dropInstruction': 'Pudota video-, ääni- ja kuvatiedostoja tähän ladataksesi',
+
+        'nav.shareToLoggedInUsers': 'Jaa kirjautuneille käyttäjille',
+        'nav.downloadOriginal': 'Lataa alkuperäinen',
+        'nav.leaveCollab': 'Poistu yhteisistunnosta',
+        'nav.startCollab': 'Aloita yhteisistunto',
+        'nav.experimentalTools': 'Kokeelliset työkalut',
+        'nav.importEdl': 'Tuo EDL kommentteina',
+        'nav.about': 'Tietoja',
+        'nav.logout': 'Kirjaudu ulos',
+        'nav.language': 'Kieli',
+
+        'upload.uploading': 'Ladataan: {filename}...',
+        'upload.progress': '{percent}% ladattu... odota hetki',
+        'upload.failed': 'Lataus epäonnistui',
+        'upload.aborted': 'Lataus keskeytetty',
+        'upload.rejected': 'Pudotus hylätty. Vain video-, kuva- ja äänitiedostot sallittu.',
+        'upload.complete': 'Lataus valmis',
+
+        'comments.placeholderTimed': 'Lisää kommentti (nykyiseen kohtaan)...',
+        'comments.placeholderUntimed': 'Lisää kommentti...',
+        'comments.timedToggleTitle': 'Kommentti on aikakohtainen?',
+        'comments.drawOnVideo': 'Piirrä videoon',
+        'comments.send': 'Lähetä',
+        'comments.undo': 'Kumoa',
+        'comments.redo': 'Tee uudelleen',
+        'comments.deleteConfirm': 'Poista kommentti?',
+        'comments.copyLink': 'Kopioi linkki',
+        'comments.linkCopied': 'Linkki kopioitu leikepöydälle',
+        'comments.reply': 'Vastaa',
+        'comments.edit': 'Muokkaa',
+        'comments.deleteShort': 'Poista',
+        'comments.yourReply': 'Vastauksesi...',
+        'comments.editedSuffix': '(muokattu)',
+
+        'subtitles.edit': 'Muokkaa tekstitystä',
+        'subtitles.label': 'Otsikko',
+        'subtitles.languageCode': 'Kielikoodi',
+        'subtitles.timeOffset': 'Aikasiirtymä (sek)',
+        'subtitles.defaultSubtitle': 'Oletustekstitys',
+        'subtitles.save': 'Tallenna',
+        'subtitles.download': 'Lataa',
+        'subtitles.delete': 'Poista',
+
+        'general.ok': 'OK',
+    },
 };
 
 export type Locale = keyof typeof translations;
 export type TranslationKey = keyof typeof translations.en;
+
+const SUPPORTED_LOCALES = Object.keys(translations) as Locale[];
 
 export const locale = writable<Locale>('en');
 
@@ -142,11 +202,12 @@ export const t = derived(locale, ($locale) => {
 
 export const availableLocales: { id: Locale; label: string }[] = [
     { id: 'en', label: 'English' },
+    { id: 'fi', label: 'Suomi' },
     { id: 'zh', label: '中文' },
 ];
 
 export function setLocale(lang: string) {
-    const normalized = (['en', 'zh'] as string[]).includes(lang) ? (lang as Locale) : 'en';
+    const normalized = SUPPORTED_LOCALES.includes(lang as Locale) ? (lang as Locale) : 'en';
     locale.set(normalized);
     localStorage.setItem(STORAGE_KEY, normalized);
     if (typeof document !== 'undefined') {
@@ -157,7 +218,7 @@ export function setLocale(lang: string) {
 export function initLocale(configDefault?: string | null, allowed?: string[] | null) {
     const stored = localStorage.getItem(STORAGE_KEY);
     const browser = typeof navigator !== 'undefined' ? navigator.language : 'en';
-    const normalizedAllowed = allowed && allowed.length > 0 ? allowed : ['en', 'zh'];
+    const normalizedAllowed = allowed && allowed.length > 0 ? allowed : SUPPORTED_LOCALES;
 
     // Check candidates in priority order: stored > configDefault > browser
     // stored: user's previously saved choice from localStorage
