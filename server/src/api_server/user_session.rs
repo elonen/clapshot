@@ -1,11 +1,7 @@
-use crate::{
-    client_cmd,
-    database::models::{self, Comment, MediaFile},
-    grpc::grpc_client::OrganizerConnection,
-};
 use std::sync::Arc;
+use crate::{database::models::{self, MediaFile, Comment}, grpc::grpc_client::OrganizerConnection, client_cmd};
 
-use super::{server_state::ServerState, SendTo, WsMsgSender};
+use super::{WsMsgSender, server_state::ServerState, SendTo};
 use lib_clapshot_grpc::proto;
 use tracing::{debug, error};
 
@@ -14,7 +10,7 @@ type Res<T> = anyhow::Result<T>;
 pub enum Topic<'a> {
     MediaFile(&'a str),
     Comment(i32),
-    None,
+    None
 }
 
 #[macro_export]
@@ -59,31 +55,23 @@ macro_rules! send_user_ok(
     ($user_id:expr, $server:expr, $topic:expr, $msg:expr) => { send_user_ok!($user_id, $server, $topic, $msg, String::new(), false); };
 );
 
-#[derive(Debug, Clone)]
+#[derive (Debug, Clone)]
 pub enum AuthzTopic<'a> {
-    MediaFile(
-        &'a MediaFile,
-        proto::org::authz_user_action_request::media_file_op::Op,
-    ),
-    Comment(
-        &'a Comment,
-        proto::org::authz_user_action_request::comment_op::Op,
-    ),
-    Other(
-        Option<&'a str>,
-        proto::org::authz_user_action_request::other_op::Op,
-    ),
+    MediaFile(&'a MediaFile, proto::org::authz_user_action_request::media_file_op::Op),
+    Comment(&'a Comment, proto::org::authz_user_action_request::comment_op::Op),
+    Other(Option<&'a str>, proto::org::authz_user_action_request::other_op::Op)
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive (thiserror::Error, Debug)]
 pub enum AuthzError {
     #[error("Permission denied")]
     Denied,
 }
 
+
 pub type OpaqueGuard = Arc<tokio::sync::Mutex<dyn Send>>;
 
-#[derive(Clone)]
+#[derive (Clone)]
 pub struct UserSession {
     pub sid: String,
     pub sender: WsMsgSender,
@@ -101,25 +89,16 @@ pub struct UserSession {
 }
 
 impl UserSession {
-    pub async fn emit_new_comment(
-        &self,
-        server: &ServerState,
-        mut c: models::Comment,
-        send_to: SendTo<'_>,
-    ) -> Res<()> {
+
+    pub async fn emit_new_comment(&self, server: &ServerState, mut c: models::Comment, send_to: SendTo<'_>) -> Res<()> {
         server.fetch_drawing_data_into_comment(&mut c).await?;
         let cmd = client_cmd!(AddComments, {comments: vec![c.to_proto3()]});
         server.emit_cmd(cmd, send_to).map(|_| ())
     }
 }
 
-fn try_send_error<'a>(
-    user_id: &str,
-    server: &ServerState,
-    msg: String,
-    details: Option<String>,
-    op: &AuthzTopic<'a>,
-) -> anyhow::Result<()> {
+
+fn try_send_error<'a>(user_id: &str, server: &ServerState, msg: String, details: Option<String>, op: &AuthzTopic<'a>) -> anyhow::Result<()> {
     let topic = match op {
         AuthzTopic::MediaFile(v, _op) => Topic::MediaFile(&v.id),
         AuthzTopic::Comment(c, _op) => Topic::Comment(c.id),
@@ -132,6 +111,8 @@ fn try_send_error<'a>(
     }
     Ok(())
 }
+
+
 
 /// Check from Organizer if the user is allowed to perform given action.
 ///
@@ -149,7 +130,8 @@ pub async fn org_authz<'a>(
     server: &ServerState,
     organizer: &Option<Arc<tokio::sync::Mutex<OrganizerConnection>>>,
     op: AuthzTopic<'a>,
-) -> Option<bool> {
+) -> Option<bool>
+{
     let user_id = match &session.user {
         Some(ui) => ui.id.clone(),
         None => {
@@ -160,77 +142,60 @@ pub async fn org_authz<'a>(
 
     let org = match &organizer {
         Some(org) => org,
-        None => {
-            return None;
-        }
+        None => { return None; }
     };
     tracing::debug!(op=?op, user=user_id, desc, "Checking authz from Organizer");
 
     use proto::org::authz_user_action_request as authz_op;
     let pop = match op {
-        AuthzTopic::MediaFile(v, op) => authz_op::Op::MediaFileOp(authz_op::MediaFileOp {
-            op: op.into(),
-            media_file: Some(v.to_proto3(&server.media_base_url, vec![])),
-        }), // omit subtitles for authz check
-        AuthzTopic::Comment(c, op) => authz_op::Op::CommentOp(authz_op::CommentOp {
-            op: op.into(),
-            comment: Some(c.to_proto3()),
-        }),
-        AuthzTopic::Other(subj, op) => authz_op::Op::OtherOp(authz_op::OtherOp {
-            op: op.into(),
-            subject: subj.map(|s| s.into()),
-        }),
+        AuthzTopic::MediaFile(v, op) => authz_op::Op::MediaFileOp(
+            authz_op::MediaFileOp {
+                op: op.into(),
+                media_file: Some(v.to_proto3(&server.media_base_url, vec![])) }), // omit subtitles for authz check
+        AuthzTopic::Comment(c, op) => authz_op::Op::CommentOp(
+            authz_op::CommentOp {
+                op: op.into(),
+                comment: Some(c.to_proto3()) }),
+        AuthzTopic::Other(subj, op) => authz_op::Op::OtherOp(
+            authz_op::OtherOp {
+                op: op.into(),
+                subject: subj.map(|s| s.into()) }),
     };
-    let req = proto::org::AuthzUserActionRequest {
-        ses: Some(session.clone()),
-        op: Some(pop),
-    };
+    let req = proto::org::AuthzUserActionRequest { ses: Some(session.clone()), op: Some(pop) };
     let res = org.lock().await.authz_user_action(req).await;
     match res {
         Err(e) => {
             if e.code() == tonic::Code::Unimplemented {
-                tracing::debug!(desc, user = user_id, "Organizer doesn't support authz");
+                tracing::debug!(desc, user=user_id, "Organizer doesn't support authz");
                 None
             } else if e.code() == tonic::Code::Aborted {
                 tracing::warn!(desc, user=user_id, "Organizer gRPC.ABORTED authz request. Unsupported behavior for authz_user_action. Denying by default.");
                 Some(false)
             } else {
                 error!(desc, user=&user_id, err=?e, "Error while authorizing user action");
-                try_send_error(
-                    &user_id,
-                    &server,
-                    format!("Internal error in authz: {}", desc),
-                    None,
-                    &op,
-                )
-                .ok();
+                try_send_error(&user_id, &server, format!("Internal error in authz: {}", desc), None, &op).ok();
                 Some(false)
-            }
-        }
-        Ok(res) => match res.get_ref().is_authorized {
-            Some(false) => {
-                let msg = res
-                    .get_ref()
-                    .message
-                    .clone()
-                    .map(|s| s)
-                    .unwrap_or_else(|| "Permission denied".to_string());
-                let details = res.get_ref().details.clone();
-                if msg_on_deny {
-                    try_send_error(&user_id, &server, msg, details, &op).ok();
-                }
-                debug!(desc, user = user_id, "Organizer: Permission denied");
-                Some(false)
-            }
-            Some(true) => {
-                debug!(desc, user = user_id, "Organizer: Authorized OK");
-                Some(true)
-            }
-            None => {
-                debug!(desc, user = user_id, "Organizer: don't care, use defaults");
-                None
             }
         },
+        Ok(res) => {
+            match res.get_ref().is_authorized {
+                Some(false) => {
+                    let msg = res.get_ref().message.clone().map(|s| s).unwrap_or_else(|| "Permission denied".to_string());
+                    let details = res.get_ref().details.clone();
+                    if msg_on_deny { try_send_error(&user_id, &server, msg, details, &op).ok(); }
+                    debug!(desc, user=user_id, "Organizer: Permission denied");
+                    Some(false)
+                },
+                Some(true) => {
+                    debug!(desc, user=user_id, "Organizer: Authorized OK");
+                    Some(true)
+                },
+                None => {
+                    debug!(desc, user=user_id, "Organizer: don't care, use defaults");
+                    None
+                }
+            }
+        }
     }
 }
 
@@ -244,25 +209,12 @@ pub async fn org_authz_with_default<'a>(
     op: AuthzTopic<'a>,
 ) -> Result<(), AuthzError> {
     if let Some(res) = org_authz(session, desc, msg_on_deny, server, organizer, op.clone()).await {
-        if res {
-            Ok(())
-        } else {
-            Err(AuthzError::Denied)
-        }
+        if res { Ok(()) } else { Err(AuthzError::Denied) }
     } else {
-        if default {
-            Ok(())
-        } else {
+        if default { Ok(()) } else {
             if msg_on_deny {
                 if let Some(ui) = &session.user {
-                    try_send_error(
-                        &ui.id,
-                        &server,
-                        format!("Permission denied: {}", desc),
-                        Some(format!("{:?}", &op)),
-                        &op,
-                    )
-                    .ok();
+                    try_send_error(&ui.id, &server, format!("Permission denied: {}", desc), Some(format!("{:?}", &op)), &op).ok();
                 } else {
                     tracing::error!(desc, "No user ID in session. Couldn't send deny message from org_authz_with_default");
                 }

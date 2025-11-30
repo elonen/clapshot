@@ -1,19 +1,20 @@
-use futures::stream::TryStreamExt;
 use futures_util::stream::StreamExt;
+use warp::http::HeaderMap;
+use futures::stream::TryStreamExt;
 use mpart_async::server::MultipartStream;
 use std::convert::Infallible;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use warp::http::HeaderMap;
 
-use super::parse_auth_headers;
-use super::server_state::ServerState;
-use super::user_session::{org_authz_with_default, AuthzError, AuthzTopic};
 use crate::video_pipeline::IncomingFile;
 use crate::video_pipeline::TranscodePreference;
+use super::parse_auth_headers;
+use super::server_state::ServerState;
+use super::user_session::{org_authz_with_default, AuthzTopic, AuthzError};
 
 use lib_clapshot_grpc::proto;
 use proto::org::authz_user_action_request as authz_req;
+
 
 /// Warp filter for multipart/form-data file upload
 ///
@@ -30,66 +31,45 @@ pub async fn handle_multipart_upload(
     mime: mime::Mime,
     hdrs: HeaderMap,
     server: ServerState,
-    body: impl warp::Stream<Item = Result<impl bytes::Buf, warp::Error>> + Unpin,
-) -> Result<warp::reply::WithStatus<String>, Infallible> {
-    let (user_id, user_name, is_admin, mut cookies, filtered_headers, remote_error) =
-        parse_auth_headers(&hdrs, &server.default_user, &server.org_http_headers_regex);
+    body: impl warp::Stream<Item = Result<impl bytes::Buf, warp::Error>> + Unpin)
+        -> Result<warp::reply::WithStatus<String>, Infallible>
+{
+    let (user_id, user_name, is_admin, mut cookies, filtered_headers, remote_error) = parse_auth_headers(&hdrs, &server.default_user, &server.org_http_headers_regex);
 
     // If X-Remote-Error is set, return error response
     if let Some(error_msg) = remote_error {
         return Ok(warp::reply::with_status(
             format!("Authentication Error: {}", error_msg),
-            warp::http::StatusCode::FORBIDDEN,
+            warp::http::StatusCode::FORBIDDEN
         ));
     }
 
     // Check from organizer if user is allowed to upload.
     // Allow by default if organizer is not configured or doesn't care.
     if let Some(uri) = &server.organizer_uri {
-        if server
-            .organizer_has_connected
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
+        if server.organizer_has_connected.load(std::sync::atomic::Ordering::Relaxed) {
             let organizer = match crate::grpc::grpc_client::connect(uri.clone()).await {
                 Ok(c) => Arc::new(tokio::sync::Mutex::new(c)),
                 Err(e) => {
                     tracing::error!("Failed to connect to organizer: {}", e);
-                    return Ok(warp::reply::with_status(
-                        "Internal error: failed to connect to organizer".into(),
-                        warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    ));
+                    return Ok(warp::reply::with_status("Internal error: failed to connect to organizer".into(), warp::http::StatusCode::INTERNAL_SERVER_ERROR));
                 }
             };
 
             let org_session = proto::org::UserSessionData {
                 sid: "<upload--not-set>".to_string(),
-                user: Some(proto::UserInfo {
-                    id: user_id.clone(),
-                    name: user_name.clone(),
-                }),
+                user: Some(proto::UserInfo { id: user_id.clone(), name: user_name.clone() }),
                 is_admin,
                 cookies: cookies.clone(),
                 http_headers: filtered_headers,
             };
 
-            match org_authz_with_default(
-                &org_session,
-                "upload media file",
-                true,
-                &server,
-                &Some(organizer),
-                true,
-                AuthzTopic::Other(None, authz_req::other_op::Op::UploadMediaFile),
-            )
-            .await
-            {
-                Ok(_) => {}
+            match org_authz_with_default(&org_session, "upload media file", true, &server, &Some(organizer),
+                true, AuthzTopic::Other(None, authz_req::other_op::Op::UploadMediaFile)).await {
+                Ok(_) => {},
                 Err(AuthzError::Denied) => {
-                    return Ok(warp::reply::with_status(
-                        "Permission denied".into(),
-                        warp::http::StatusCode::FORBIDDEN,
-                    ));
-                }
+                    return Ok(warp::reply::with_status("Permission denied".into(), warp::http::StatusCode::FORBIDDEN));
+                },
             }
         }
     }
@@ -114,17 +94,9 @@ pub async fn handle_multipart_upload(
     let boundary = mime.get_param("boundary").map(|v| v.to_string());
     let boundary = match boundary {
         Some(b) => b,
-        None => {
-            return Ok(warp::reply::with_status(
-                "Missing boundary".into(),
-                warp::http::StatusCode::BAD_REQUEST,
-            ))
-        }
+        None => return Ok(warp::reply::with_status("Missing boundary".into(), warp::http::StatusCode::BAD_REQUEST)),
     };
-    let mut stream = MultipartStream::new(
-        boundary,
-        body.map_ok(|mut buf| buf.copy_to_bytes(buf.remaining())),
-    );
+    let mut stream = MultipartStream::new(boundary, body.map_ok(|mut buf| buf.copy_to_bytes(buf.remaining())));
     let mut uploaded_file: PathBuf = PathBuf::new();
 
     while let Ok(Some(mut field)) = stream.try_next().await {
@@ -134,79 +106,55 @@ pub async fn handle_multipart_upload(
                     Err(e) => {
                         let msg = format!("Error getting filename: {}", e);
                         tracing::error!(msg);
-                        return Ok(warp::reply::with_status(
-                            msg,
-                            warp::http::StatusCode::BAD_REQUEST,
-                        ));
-                    }
-                    Ok(filename) => {
+                        return Ok(warp::reply::with_status(msg, warp::http::StatusCode::BAD_REQUEST));
+                    },
+                    Ok(filename) =>
+                    {
                         let path = Path::new(&filename);
                         if path.file_name() != Some(path.as_os_str()) {
-                            return Ok(warp::reply::with_status(
-                                "Filename must not contain path".into(),
-                                warp::http::StatusCode::BAD_REQUEST,
-                            ));
+                            return Ok(warp::reply::with_status("Filename must not contain path".into(), warp::http::StatusCode::BAD_REQUEST));
                         }
 
                         // Make a unique upload dir
                         let uuid = uuid::Uuid::new_v4();
-                        let new_dir =
-                            async_std::path::PathBuf::from(&upload_dir).join(uuid.to_string());
-                        let dst = new_dir.join(path.file_name().unwrap());
+                        let new_dir = async_std::path::PathBuf::from(&upload_dir).join(uuid.to_string());
+                        let dst =  new_dir.join(path.file_name().unwrap());
                         if dst.exists().await {
                             tracing::error!("Upload dst '{}' already exists, even tough it was prefixed with uuid4. Bug??", dst.display());
-                            return Ok(warp::reply::with_status(
-                                "Internal error: file already exists".into(),
-                                warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-                            ));
+                            return Ok(warp::reply::with_status("Internal error: file already exists".into(), warp::http::StatusCode::INTERNAL_SERVER_ERROR));
                         }
                         if let Err(e) = async_std::fs::create_dir_all(&new_dir).await {
                             tracing::error!("Failed to create upload dir: {}", e);
-                            return Ok(warp::reply::with_status(
-                                "Internal error: failed to create upload dir".into(),
-                                warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-                            ));
+                            return Ok(warp::reply::with_status("Internal error: failed to create upload dir".into(), warp::http::StatusCode::INTERNAL_SERVER_ERROR));
                         }
 
                         // Create the file and stream the data into it
                         match async_std::fs::File::create(&dst).await {
                             Err(e) => {
-                                let msg =
-                                    format!("Failed to create file '{}': {}", dst.display(), e);
+                                let msg = format!("Failed to create file '{}': {}", dst.display(), e);
                                 tracing::error!(msg);
-                                return Ok(warp::reply::with_status(
-                                    msg,
-                                    warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-                                ));
-                            }
-                            Ok(mut f) => {
+                                return Ok(warp::reply::with_status(msg, warp::http::StatusCode::INTERNAL_SERVER_ERROR));
+                            },
+                            Ok(mut f) =>
+                            {
                                 // Read and write in parallel
-                                let (buff_tx, mut buff_rx) =
-                                    tokio::sync::mpsc::channel::<bytes::Bytes>(16);
+                                let (buff_tx, mut buff_rx) = tokio::sync::mpsc::channel::<bytes::Bytes>(16);
 
                                 // Read chunks from HTTP
                                 let read_all_chunks = async move {
                                     while let Some(chunk) = field.next().await {
                                         match chunk {
-                                            Ok(data) => {
-                                                buff_tx.send(data).await.unwrap();
-                                            }
-                                            Err(e) => {
-                                                return Err(e.to_string());
-                                            }
-                                        }
-                                    }
-                                    Ok(()) // buff_tx dropped
+                                            Ok(data) => { buff_tx.send(data).await.unwrap(); },
+                                            Err(e) => { return Err(e.to_string()); }
+                                    }}; Ok(())  // buff_tx dropped
                                 };
 
                                 // Write chunks to the file
                                 let write_all_chunks = async move {
                                     while let Some(data) = buff_rx.recv().await {
-                                        futures_util::AsyncWriteExt::write_all(&mut f, &data)
-                                            .await
+                                        futures_util::AsyncWriteExt::write_all(&mut f, &data).await
                                             .map_err(|e| e.to_string())?;
-                                    }
-                                    Ok(())
+                                    }; Ok(())
                                 };
 
                                 // Run both tasks in parallel, cleanup on error
@@ -215,49 +163,28 @@ pub async fn handle_multipart_upload(
                                     tracing::error!("Upload failed: {}", e);
                                     // Remove the file & dir, since it's incomplete
                                     if let Err(e) = async_std::fs::remove_file(&dst).await {
-                                        tracing::warn!(
-                                            "Failed to remove incomplete upload file: {}",
-                                            e
-                                        );
-                                    } else if let Err(e) = async_std::fs::remove_dir(new_dir).await
-                                    {
-                                        tracing::warn!(
-                                            "Failed to remove incomplete upload dir: {}",
-                                            e
-                                        );
+                                        tracing::warn!("Failed to remove incomplete upload file: {}", e);
+                                    } else if let Err(e) = async_std::fs::remove_dir(new_dir).await {
+                                        tracing::warn!("Failed to remove incomplete upload dir: {}", e);
                                     }
-                                    return Ok(warp::reply::with_status(
-                                        format!("Upload failed: {e}"),
-                                        warp::http::StatusCode::BAD_REQUEST,
-                                    ));
+                                    return Ok(warp::reply::with_status(format!("Upload failed: {e}"), warp::http::StatusCode::BAD_REQUEST));
                                 }
-                                tracing::info!(dst = dst.display().to_string(), "File uploaded.");
+                                tracing::info!(dst=dst.display().to_string(), "File uploaded.");
                                 uploaded_file = dst.into();
                             }
                         };
                     }
                 }
-            }
+            },
             fieldname => {
                 tracing::info!("Skipping UNKNOWN multipart POST field '{fieldname}'");
-            }
+            },
         }
     }
 
-    if let Err(e) = upload_done.send(IncomingFile {
-        file_path: uploaded_file,
-        user_id,
-        cookies,
-        transcode_preference,
-    }) {
+    if let Err(e) = upload_done.send(IncomingFile{ file_path: uploaded_file, user_id, cookies, transcode_preference }) {
         tracing::error!("Failed to send upload ok signal: {:?}", e);
-        return Ok(warp::reply::with_status(
-            "Internal error: failed to send upload ok signal".into(),
-            warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-        ));
+        return Ok(warp::reply::with_status("Internal error: failed to send upload ok signal".into(), warp::http::StatusCode::INTERNAL_SERVER_ERROR));
     }
-    Ok(warp::reply::with_status(
-        "Ok".into(),
-        warp::http::StatusCode::OK,
-    ))
+    Ok(warp::reply::with_status("Ok".into(), warp::http::StatusCode::OK))
 }

@@ -2,4 +2,4 @@ dist_deb/
 .DS_Store
 .claude
 .idea
-server/Cargo.lock
+.local-tmp/

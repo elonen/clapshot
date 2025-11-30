@@ -1,24 +1,18 @@
-use anyhow::{anyhow, bail};
 use std::path::Path;
+use anyhow::{anyhow, bail};
 use tracing;
+
 
 /// Clean up after a processing error. Attempts to preserve the original file
 /// by moving it under the rejected directory. Then deletes any dangling files that were
 /// created during the failed ingestion.
-pub fn clean_up_rejected_file(
-    data_dir: &Path,
-    src_file: &Path,
-    media_file_id: Option<String>,
-) -> anyhow::Result<()> {
+pub fn clean_up_rejected_file(data_dir: &Path, src_file: &Path, media_file_id: Option<String>) -> anyhow::Result<()>
+{
     // Create rejected directory if it doesn't exist
     let rejected_dir = data_dir.join("rejected");
-    if !rejected_dir.exists() {
-        std::fs::create_dir(&rejected_dir)?;
-    };
+    if !rejected_dir.exists() { std::fs::create_dir(&rejected_dir)?; };
 
-    let src_file_name = src_file
-        .file_name()
-        .ok_or(anyhow!("Invalid filename {:?}", src_file))?;
+    let src_file_name = src_file.file_name().ok_or(anyhow!("Invalid filename {:?}", src_file))?;
     let move_to = rejected_dir.join(src_file_name);
     if !move_to.exists() {
         // Move the original file to the root of rejected directory
@@ -28,11 +22,9 @@ pub fn clean_up_rejected_file(
         // Use media file id if available, otherwise an UUID4.
         let extra_dir = match &media_file_id {
             Some(id) => rejected_dir.join(id),
-            None => rejected_dir.join(uuid::Uuid::new_v4().to_string()),
+            None => rejected_dir.join( uuid::Uuid::new_v4().to_string() ),
         };
-        if !extra_dir.exists() {
-            std::fs::create_dir(&extra_dir)?;
-        };
+        if !extra_dir.exists() { std::fs::create_dir(&extra_dir)?; };
 
         let move_to = extra_dir.join(src_file_name);
         if !move_to.exists() {

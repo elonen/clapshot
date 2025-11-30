@@ -2,30 +2,29 @@
 //#![allow(unused_variables)]
 //#![allow(unused_imports)]
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 use futures_util::stream::StreamExt;
 use futures_util::SinkExt;
 use lib_clapshot_grpc::proto;
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::api_server::UserMessage;
-use crate::database::{models, DB};
-use crate::storage::StorageBackend;
 use crate::video_pipeline::IncomingFile;
+use crate::api_server::{UserMessage};
+use crate::database::{DB, models};
+use crate::storage::StorageBackend;
+
+
 
 #[macro_export]
 macro_rules! send_server_cmd {
     ($ws:expr, $cmd_name:ident, $options:expr) => {{
         let cmd = proto::client::ClientToServerCmd {
-            cmd: Some(proto::client::client_to_server_cmd::Cmd::$cmd_name(
-                $options,
-            )),
+            cmd: Some(proto::client::client_to_server_cmd::Cmd::$cmd_name($options)),
         };
-        let json_cmd =
-            serde_json::to_string(&cmd).expect("Failed to serialize ClientToServerCmd to JSON");
+        let json_cmd = serde_json::to_string(&cmd).expect("Failed to serialize ClientToServerCmd to JSON");
         crate::api_server::test_utils::write(&mut $ws, &json_cmd).await;
     }};
 }
@@ -44,21 +43,16 @@ pub(crate) struct ApiTestState {
     pub(crate) ws_url: String,
 }
 
-pub(crate) type WsClient =
-    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+pub(crate) type WsClient = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 pub(crate) async fn read(ws: &mut WsClient) -> Option<String> {
-    let res = match async_std::future::timeout(std::time::Duration::from_secs_f32(0.25), ws.next())
-        .await
-    {
-        Ok(Some(m)) => Some(m.expect("Failed to read server message")).map(|m| m.to_string()),
-        _ => None,
+    let res = match async_std::future::timeout(
+        std::time::Duration::from_secs_f32(0.25), ws.next()).await {
+            Ok(Some(m)) => Some(m.expect("Failed to read server message")).map(|m| m.to_string()),
+            _ => None,
     };
     let res_str = res.as_ref().map(|s| s.as_str()).unwrap_or("<none>");
-    if let Some(Some(res_json)) = res
-        .as_ref()
-        .map(|s| serde_json::from_str::<serde_json::Value>(s).ok())
-    {
+    if let Some(Some(res_json)) = res.as_ref().map(|s| serde_json::from_str::<serde_json::Value>(s).ok()) {
         println!("<--- [Client got]: {:#}", res_json);
     } else {
         println!("<--- [Client got]: {:#}", res_str);
@@ -71,33 +65,17 @@ pub(crate) async fn expect_msg(ws: &mut WsClient) -> String {
 }
 
 pub(crate) async fn expect_parsed<T>(ws: &mut WsClient) -> T
-where
-    T: serde::de::DeserializeOwned,
+    where T: serde::de::DeserializeOwned
 {
     let msg = expect_msg(ws).await;
-    serde_json::from_str::<T>(&msg).expect(
-        format!(
-            "Failed to parse type '{}' message from JSON",
-            std::any::type_name::<T>()
-        )
-        .as_str(),
-    )
+    serde_json::from_str::<T>(&msg).expect(format!("Failed to parse type '{}' message from JSON", std::any::type_name::<T>()).as_str())
 }
 
 pub(crate) async fn try_get_parsed<T>(ws: &mut WsClient) -> Option<T>
-where
-    T: serde::de::DeserializeOwned,
+    where T: serde::de::DeserializeOwned
 {
     if let Some(msg) = read(ws).await {
-        Some(
-            serde_json::from_str::<T>(&msg).expect(
-                format!(
-                    "Failed to parse type '{}' message from JSON",
-                    std::any::type_name::<T>()
-                )
-                .as_str(),
-            ),
-        )
+        Some(serde_json::from_str::<T>(&msg).expect(format!("Failed to parse type '{}' message from JSON", std::any::type_name::<T>()).as_str()))
     } else {
         None
     }
@@ -107,21 +85,15 @@ where
 macro_rules! expect_client_cmd {
     ($ws:expr, $variant:ident) => {{
         println!("Client expecting command '{}'...", stringify!($variant));
-        match crate::api_server::test_utils::expect_parsed::<proto::client::ServerToClientCmd>($ws)
-            .await
-            .cmd
-        {
+        match crate::api_server::test_utils::expect_parsed::<proto::client::ServerToClientCmd>($ws).await.cmd {
             Some(lib_clapshot_grpc::proto::client::server_to_client_cmd::Cmd::$variant(v)) => {
                 println!("...got '{}' ok.", stringify!($variant));
                 println!(". . .");
                 v
-            }
-            _ => panic!(
-                "Client expected command '{}' BUT GOT SOMETHING ELSE.",
-                stringify!($variant)
-            ),
+            },
+            _ => panic!("Client expected command '{}' BUT GOT SOMETHING ELSE.", stringify!($variant)),
         }
-    }};
+    }}
 }
 
 /*
@@ -142,15 +114,12 @@ pub(crate) async fn read_cmd_data(ws: &mut WsClient) -> Option<(serde_json::Valu
 }
 */
 
-pub(crate) async fn wait_for_thumbnails(ws: &mut WsClient) {
+pub (crate) async fn wait_for_thumbnails(ws: &mut WsClient) {
     println!("Waiting for thumbnail generation...");
     let mut thumb_done = false;
     for _ in 0..12 {
-        match crate::api_server::test_utils::try_get_parsed::<proto::client::ServerToClientCmd>(ws)
-            .await
-            .map(|c| c.cmd)
-            .flatten()
-        {
+        match crate::api_server::test_utils::try_get_parsed::<proto::client::ServerToClientCmd>(ws).await
+        .map(|c| c.cmd).flatten() {
             Some(proto::client::server_to_client_cmd::Cmd::ShowMessages(m)) => {
                 if m.msgs[0].r#type == proto::user_message::Type::MediaFileUpdated as i32 {
                     thumb_done = true;
@@ -158,14 +127,14 @@ pub(crate) async fn wait_for_thumbnails(ws: &mut WsClient) {
                 } else {
                     println!("  (... got some other message: {:?})", m.msgs[0]);
                 }
-            }
+            },
             None => {
                 // Wait for file to be processed
                 tokio::time::sleep(Duration::from_secs_f32(0.2)).await;
-            }
+            },
             _ => panic!("Unexpected message while waitig for thumbnail generation"),
         }
-    }
+    };
     if !thumb_done {
         panic!("... thumbnail generation TIMED OUT");
     }
@@ -174,37 +143,28 @@ pub(crate) async fn wait_for_thumbnails(ws: &mut WsClient) {
 }
 
 pub(crate) async fn expect_no_msg(ws: &mut WsClient) {
-    assert!(
-        read(ws).await.is_none(),
-        "Got unexpected message from server"
-    );
+    assert!(read(ws).await.is_none(), "Got unexpected message from server");
 }
 
 pub(crate) async fn write(ws: &mut WsClient, msg: &str) {
     println!("---> [Client sending]: {:#}", msg);
-    ws.send(Message::text(msg))
-        .await
-        .expect("Failed to send WS message");
+    ws.send(Message::text(msg)).await.expect("Failed to send WS message");
 }
 
 pub(crate) async fn connect_client_ws(ws_url: &str, user_id: &str) -> WsClient {
-    use tokio_tungstenite::connect_async;
     use tokio_tungstenite::tungstenite::http;
+    use tokio_tungstenite::connect_async;
 
     let request = http::Request::builder()
         .uri(ws_url)
         .header("Host", "127.0.0.1")
         .header("HTTP_X_REMOTE_USER_ID", user_id)
-        .header(
-            "HTTP_X_REMOTE_USER_NAME",
-            format!("Username for {}", user_id),
-        )
+        .header("HTTP_X_REMOTE_USER_NAME", format!("Username for {}", user_id))
         .header("Connection", "Upgrade")
         .header("Upgrade", "websocket")
         .header("Sec-WebSocket-Version", "13")
         .header("Sec-WebSocket-Key", "1234567890")
-        .body(())
-        .unwrap();
+        .body(()).unwrap();
 
     let (mut ws, _) = connect_async(request).await.unwrap();
 
@@ -272,38 +232,29 @@ macro_rules! api_test {
 ///
 /// # Returns
 /// * OpenMediaFile message from the server
-pub(crate) async fn open_media_file(
-    ws: &mut WsClient,
-    vid: &str,
-) -> proto::client::server_to_client_cmd::OpenMediaFile {
+pub(crate) async fn open_media_file(ws: &mut WsClient, vid: &str) -> proto::client::server_to_client_cmd::OpenMediaFile
+{
     println!("--------- TEST: open_media_file '{}'...", vid);
 
     use lib_clapshot_grpc::proto::client::client_to_server_cmd as cmd_enum;
-    send_server_cmd!(
-        *ws,
-        OpenMediaFile,
-        cmd_enum::OpenMediaFile {
-            media_file_id: vid.into()
-        }
-    );
+    send_server_cmd!(*ws, OpenMediaFile, cmd_enum::OpenMediaFile{ media_file_id: vid.into() });
 
     let ov = expect_client_cmd!(ws, OpenMediaFile);
 
     while let Some(msg) = read(ws).await {
-        let cmd: proto::client::ServerToClientCmd =
-            serde_json::from_str(&msg).expect("Failed to parse ServerToClientCmd from JSON");
+        let cmd: proto::client::ServerToClientCmd = serde_json::from_str(&msg).expect("Failed to parse ServerToClientCmd from JSON");
         match cmd.cmd {
             // Make sure the comments are for the media file we opened
             Some(proto::client::server_to_client_cmd::Cmd::AddComments(m)) => {
                 assert!(m.comments.iter().all(|c| c.media_file_id == vid));
-            }
+            },
             // Thumbnail generation can take a while, so ignore it if it happens to be in the queue
             Some(proto::client::server_to_client_cmd::Cmd::ShowMessages(m)) => {
                 assert!(m.msgs.iter().any(|m| m.message.contains("thumbnail")));
-            }
-            None => {}
+            },
+            None => {},
             _ => panic!("Unexpected message from server: {}", msg),
         }
-    }
+    };
     ov
 }

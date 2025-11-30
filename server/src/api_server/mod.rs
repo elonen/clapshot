@@ -3,23 +3,23 @@
 //#![allow(unused_imports)]
 
 use async_std::task::block_on;
-use core::panic;
-use futures_util::stream::StreamExt;
-use futures_util::SinkExt;
+use lib_clapshot_grpc::GrpcBindAddr;
 use lib_clapshot_grpc::proto;
 use lib_clapshot_grpc::proto::org::OnStartUserSessionResponse;
-use lib_clapshot_grpc::GrpcBindAddr;
-use parking_lot::RwLock;
-use regex::Regex;
+use tracing::debug;
+use warp::Filter;
+use core::panic;
 use std::collections::HashMap;
-use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::debug;
-use warp::http::HeaderMap;
+use parking_lot::RwLock;
+use futures_util::stream::StreamExt;
+use futures_util::SinkExt;
 use warp::ws::Message;
-use warp::Filter;
+use warp::http::HeaderMap;
+use regex::Regex;
+use std::sync::atomic::Ordering::Relaxed;
 
 use anyhow::{anyhow, bail};
 
@@ -35,23 +35,23 @@ use ws_handers::msg_dispatch;
 #[cfg(test)]
 pub mod test_utils;
 
-mod file_upload;
 #[cfg(test)]
 pub mod tests;
-use self::user_session::UserSession;
-use crate::api_server::user_session::org_authz;
+mod file_upload;
+use file_upload::handle_multipart_upload;
 use crate::api_server::user_session::AuthzTopic;
-use crate::api_server::ws_handers::SessionClose;
+use crate::api_server::user_session::org_authz;
 use crate::client_cmd;
-use crate::database::models;
 use crate::database::DbBasicQuery;
+use crate::database::models;
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 use crate::grpc::grpc_client::OrganizerConnection;
 use crate::grpc::grpc_client::OrganizerURI;
 use crate::grpc::{grpc_server, make_media_file_popup_actions};
+use crate::api_server::ws_handers::SessionClose;
 use crate::video_pipeline::IncomingFile;
 use crate::PKG_VERSION;
-use file_upload::handle_multipart_upload;
+use self::user_session::UserSession;
 
 type Res<T> = anyhow::Result<T>;
 type WsMsgSender = tokio::sync::mpsc::UnboundedSender<Message>;
@@ -71,7 +71,7 @@ pub enum SendTo<'a> {
 pub type UserMessageTopic = proto::user_message::Type;
 
 /// Message from other server modules to user(s)
-#[derive(Clone, Debug, Default)]
+#[derive (Clone, Debug, Default)]
 pub struct UserMessage {
     pub topic: UserMessageTopic,
     pub user_id: Option<String>,
@@ -92,24 +92,23 @@ fn abbrv(msg: &str) -> String {
     }
 }
 
+
 /// User has connected to our WebSocket endpoint.
 /// This function will run (potentially forever) for each individual user that connects.
 async fn handle_ws_session(
-    ws: warp::ws::WebSocket,
-    sid: String,
-    user_id: String,
-    username: String,
-    is_admin: bool,
-    cookies: HashMap<String, String>,
-    filtered_headers: HashMap<String, String>,
-    server: ServerState,
-) {
+        ws: warp::ws::WebSocket,
+        sid: String,
+        user_id: String,
+        username: String,
+        is_admin: bool,
+        cookies: HashMap<String, String>,
+        filtered_headers: HashMap<String, String>,
+        server: ServerState)
+{
     let (msgq_tx, mut msgq_rx) = tokio::sync::mpsc::unbounded_channel();
 
-    let user = match server
-        .db
-        .conn()
-        .and_then(|mut conn| models::User::get_or_create(&mut conn, &user_id, Some(&username)))
+    let user = match server.db.conn().and_then(|mut conn|
+        models::User::get_or_create(&mut conn, &user_id, Some(&username)))
     {
         Ok(u) => u,
         Err(e) => {
@@ -138,7 +137,7 @@ async fn handle_ws_session(
             is_admin,
             cookies,
             http_headers: filtered_headers,
-        },
+        }
     };
 
     let _user_session_guard = Some(server.register_user_session(&sid, &user_id, ses.clone()));
@@ -151,31 +150,24 @@ async fn handle_ws_session(
             is_admin: is_admin,
             server_version: PKG_VERSION.to_string(),
         }),
-        SendTo::MsgSender(&ses.sender),
+        SendTo::MsgSender(&ses.sender)
     ) {
         tracing::error!(details=%e, "Error sending welcome message. Closing session.");
         return;
     }
 
-    async fn connect_organizer(
-        uri: OrganizerURI,
-        ses: &proto::org::UserSessionData,
-    ) -> Res<(OrganizerConnection, OnStartUserSessionResponse)> {
+    async fn connect_organizer(uri: OrganizerURI, ses: &proto::org::UserSessionData) -> Res<(OrganizerConnection, OnStartUserSessionResponse)> {
         let mut c = crate::grpc::grpc_client::connect(uri).await?;
-        let start_ses_req = proto::org::OnStartUserSessionRequest {
-            ses: Some(ses.clone()),
-        };
+        let start_ses_req = proto::org::OnStartUserSessionRequest { ses: Some(ses.clone()) };
 
         let res = match c.on_start_user_session(start_ses_req).await {
             Ok(res) => res.into_inner(),
             Err(e) => {
                 if e.code() == tonic::Code::Unimplemented {
-                    tracing::debug!(
-                        "Organizer does not implement on_start_user_session. Ignoring.",
-                    );
+                    tracing::debug!("Organizer does not implement on_start_user_session. Ignoring.",);
                     OnStartUserSessionResponse::default()
                 } else {
-                    return Err(e.into());
+                    return Err(e.into())
                 }
             }
         };
@@ -184,9 +176,8 @@ async fn handle_ws_session(
 
     // Define default actions. Organizer may call DefineActions later to override these.
     if let Err(e) = server.emit_cmd(
-        client_cmd!(DefineActions, {actions: make_media_file_popup_actions()}),
-        SendTo::MsgSender(&ses.sender),
-    ) {
+            client_cmd!(DefineActions, {actions: make_media_file_popup_actions()}),
+            SendTo::MsgSender(&ses.sender)) {
         tracing::error!(details=%e, "Error sending define_actions to client. Closing session.");
         return;
     }
@@ -196,42 +187,30 @@ async fn handle_ws_session(
         match connect_organizer(uri, &ses.org_session).await {
             Ok((c, _res)) => {
                 ses.organizer = Some(tokio::sync::Mutex::new(c).into());
-                let op = AuthzTopic::Other(
-                    None,
-                    proto::org::authz_user_action_request::other_op::Op::Login,
-                );
-                if org_authz(&ses.org_session, "login", true, &server, &ses.organizer, op).await
-                    == Some(false)
-                {
-                    tracing::info!(
-                        "User '{}' not authorized to login. Closing session.",
-                        ses.user_id
-                    );
-                    server
-                        .emit_cmd(
-                            client_cmd!(Error, {msg: "Login permission denied.".into()}),
-                            SendTo::MsgSender(&ses.sender),
-                        )
-                        .ok();
+                let op = AuthzTopic::Other(None, proto::org::authz_user_action_request::other_op::Op::Login);
+                if org_authz(&ses.org_session, "login", true, &server, &ses.organizer, op).await == Some(false) {
+                    tracing::info!("User '{}' not authorized to login. Closing session.", ses.user_id);
+                    server.emit_cmd(
+                        client_cmd!(Error, {msg: "Login permission denied.".into()}),
+                        SendTo::MsgSender(&ses.sender)).ok();
                     return;
                 }
-            }
+            },
             Err(e) => {
                 const MSG: &str = "Error connecting to Organizer. Closing session.";
                 tracing::error!(details=%e, MSG);
-                server
-                    .emit_cmd(
-                        client_cmd!(Error, {msg: MSG.into()}),
-                        SendTo::MsgSender(&ses.sender),
-                    )
-                    .ok();
+                server.emit_cmd(
+                    client_cmd!(Error, {msg: MSG.into()}),
+                    SendTo::MsgSender(&ses.sender)).ok();
                 return;
             }
         }
     };
 
-    loop {
-        tokio::select! {
+    loop
+    {
+        tokio::select!
+        {
             // Termination flag set? Exit.
             _ = sleep(Duration::from_millis(100)) => {
                 if server.terminate_flag.load(Relaxed) {
@@ -360,13 +339,8 @@ async fn handle_ws_session(
 /// * `Ok(Regex)` - Compiled regex with case-insensitive matching
 /// * `Err(anyhow::Error)` - If pattern is invalid
 pub fn validate_org_http_headers_regex(pattern: &str) -> anyhow::Result<Regex> {
-    Regex::new(&format!("(?i){}", pattern)).map_err(|e| {
-        anyhow!(
-            "Invalid org-http-headers regex pattern '{}': {}",
-            pattern,
-            e
-        )
-    })
+    Regex::new(&format!("(?i){}", pattern))
+        .map_err(|e| anyhow!("Invalid org-http-headers regex pattern '{}': {}", pattern, e))
 }
 
 /// Extract user id, name and clapshot_cookies from HTTP headers (set by nginx)
@@ -382,102 +356,44 @@ pub fn validate_org_http_headers_regex(pattern: &str) -> anyhow::Result<Regex> {
 /// * `filter_regex` - Regex to filter headers for organizer (case-insensitive)
 ///
 /// * Returns: (user_id: String, user_name: String, is_admin: bool, clapshot_cookies: HashMap<String, String>, filtered_headers: HashMap<String, String>, remote_error: Option<String>)
-fn parse_auth_headers(
-    hdrs: &HeaderMap,
-    default_user_id: &str,
-    filter_regex: &Regex,
-) -> (
-    String,
-    String,
-    bool,
-    HashMap<String, String>,
-    HashMap<String, String>,
-    Option<String>,
-) {
+fn parse_auth_headers(hdrs: &HeaderMap, default_user_id: &str, filter_regex: &Regex) -> (String, String, bool, HashMap<String, String>, HashMap<String, String>, Option<String>)
+{
     fn try_get_first_named_hdr<T>(hdrs: &HeaderMap, names: T) -> Option<String>
-    where
-        T: IntoIterator<Item = &'static str>,
-    {
+        where T: IntoIterator<Item=&'static str> {
         for n in names {
             if let Some(val) = hdrs.get(n).or(hdrs.get(n.to_lowercase())) {
                 match val.to_str() {
                     Ok(s) => return Some(s.into()),
                     Err(e) => tracing::warn!(details=%e, "Error parsing header '{}'.", n),
-                }
-            }
-        }
+        }}}
         None
     }
 
-    let user_id = match try_get_first_named_hdr(
-        &hdrs,
-        vec![
-            "X-Remote-User-Id",
-            "X_Remote_User_Id",
-            "HTTP_X_REMOTE_USER_ID",
-        ],
-    ) {
+    let user_id = match try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Id", "X_Remote_User_Id", "HTTP_X_REMOTE_USER_ID"]) {
         Some(id) => id,
         None => {
-            tracing::warn!(
-                "Missing X-Remote-User-Id in HTTP headers. Using '{}' instead.",
-                default_user_id
-            );
+            tracing::warn!("Missing X-Remote-User-Id in HTTP headers. Using '{}' instead.", default_user_id);
             default_user_id.into()
-        }
-    };
-    let user_name = try_get_first_named_hdr(
-        &hdrs,
-        vec![
-            "X-Remote-User-Name",
-            "X_Remote_User_Name",
-            "HTTP_X_REMOTE_USER_NAME",
-        ],
-    )
-    .unwrap_or_else(|| user_id.clone());
+        }};
+    let user_name = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Name", "X_Remote_User_Name", "HTTP_X_REMOTE_USER_NAME"])
+        .unwrap_or_else(|| user_id.clone());
 
-    let cookies_str = try_get_first_named_hdr(
-        &hdrs,
-        vec![
-            "X-Clapshot-Cookies",
-            "X_Clapshot_Cookies",
-            "HTTP_X_CLAPSHOT_COOKIES",
-        ],
-    )
-    .unwrap_or_else(|| "{}".into());
+    let cookies_str = try_get_first_named_hdr(&hdrs, vec!["X-Clapshot-Cookies", "X_Clapshot_Cookies", "HTTP_X_CLAPSHOT_COOKIES"])
+        .unwrap_or_else(|| "{}".into());
 
-    let is_admin: bool = try_get_first_named_hdr(
-        &hdrs,
-        vec![
-            "X-Remote-User-Is-Admin",
-            "X_Remote_User_Is_Admin",
-            "HTTP_X_REMOTE_USER_IS_ADMIN",
-        ],
-    )
-    .map(|s| s.to_lowercase() == "true" || s == "1")
-    .unwrap_or(user_id == "admin");
+    let is_admin: bool = try_get_first_named_hdr(&hdrs, vec!["X-Remote-User-Is-Admin", "X_Remote_User_Is_Admin", "HTTP_X_REMOTE_USER_IS_ADMIN"])
+        .map(|s| s.to_lowercase() == "true" || s == "1").unwrap_or(user_id == "admin");
 
-    let remote_error = try_get_first_named_hdr(
-        &hdrs,
-        vec!["X-Remote-Error", "X_Remote_Error", "HTTP_X_REMOTE_ERROR"],
-    );
+    let remote_error = try_get_first_named_hdr(&hdrs, vec!["X-Remote-Error", "X_Remote_Error", "HTTP_X_REMOTE_ERROR"]);
 
     let app_cookies = match cookies_str.parse::<serde_json::Value>() {
-        Ok(c) => match c.as_object() {
-            Some(c) => c
-                .iter()
-                .map(|(k, v)| {
-                    (
-                        k.clone(),
-                        v.as_str()
-                            .unwrap_or("<!ERROR: NON-STRING COOKIE VALUE!>")
-                            .to_string(),
-                    )
-                })
-                .collect(),
-            None => {
-                tracing::error!("'clapshot_cookies' was not a JSON dict, ignoring.");
-                HashMap::new()
+        Ok(c) => {
+            match c.as_object() {
+                Some(c) => c.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("<!ERROR: NON-STRING COOKIE VALUE!>").to_string())).collect(),
+                None => {
+                    tracing::error!("'clapshot_cookies' was not a JSON dict, ignoring.");
+                    HashMap::new()
+                }
             }
         },
         Err(e) => {
@@ -499,14 +415,7 @@ fn parse_auth_headers(
         }
     }
 
-    (
-        user_id,
-        user_name,
-        is_admin,
-        app_cookies,
-        filtered_headers,
-        remote_error,
-    )
+    (user_id, user_name, is_admin, app_cookies, filtered_headers, remote_error)
 }
 
 /// Handle HTTP requests, read authentication headers and dispatch to WebSocket handler.
@@ -517,8 +426,8 @@ async fn run_api_server_async(
     user_msg_rx: crossbeam_channel::Receiver<UserMessage>,
     upload_results_tx: crossbeam_channel::Sender<IncomingFile>,
     grpc_server_bind: Option<GrpcBindAddr>,
-    port: u16,
-) {
+    port: u16)
+{
     let session_counter = Arc::new(RwLock::new(0u64));
     let server_state_cln1 = server_state.clone();
     let server_state_cln2 = server_state.clone();
@@ -535,10 +444,9 @@ async fn run_api_server_async(
             tracing::info!("Starting gRPC server for org->srv.");
             let server = server_state.clone();
             let b = bind.clone();
-            let hdl =
-                tokio::spawn(
-                    async move { grpc_server::run_org_to_srv_grpc_server(b, server).await },
-                );
+            let hdl = tokio::spawn(async move {
+                grpc_server::run_org_to_srv_grpc_server(b, server).await
+            });
             let server = server_state.clone();
             let mut wait_time = Duration::from_millis(10);
             sleep(wait_time).await;
@@ -548,37 +456,28 @@ async fn run_api_server_async(
                     tracing::debug!("Waiting for org->srv connection...");
                 }
                 wait_time = std::cmp::min(wait_time * 2, Duration::from_secs(4));
-                if server.terminate_flag.load(Relaxed) {
-                    return;
-                }
+                if server.terminate_flag.load(Relaxed) { return; }
             }
             if let Some(org_info) = server.organizer_info.lock().await.as_ref() {
                 tracing::info!(
                     org_name = &org_info.name,
                     description = &org_info.description,
-                    version = org_info
-                        .version
-                        .as_ref()
-                        .map(|v| format!("{}.{}.{}", v.major, v.minor, v.patch)),
-                    "org->srv connected, bidirectional gRPC established."
-                );
+                    version = org_info.version.as_ref().map(|v| format!("{}.{}.{}", v.major, v.minor, v.patch)),
+                    "org->srv connected, bidirectional gRPC established.");
             } else {
                 panic!("Organizer connected, but no info received. This is a bug in server code.");
             }
             Some(hdl)
-        }
+        },
         None => None,
     };
 
-    tracing::info!(port = port, "Starting websocket API.");
+    tracing::info!(port=port, "Starting websocket API.");
 
-    let rt_health = warp::path("api")
-        .and(warp::path("health"))
-        .map(|| "I'm alive!");
+    let rt_health = warp::path("api").and(warp::path("health")).map(|| "I'm alive!");
 
     let upload_dir = server_state.upload_dir.clone();
-    let rt_upload = warp::path("api")
-        .and(warp::path("upload"))
+    let rt_upload = warp::path("api").and(warp::path("upload"))
         .and(warp::post())
         .and(warp::any().map(move || upload_dir.clone()))
         .and(warp::any().map(move || upload_results_tx.clone()))
@@ -588,21 +487,17 @@ async fn run_api_server_async(
         .and(warp::body::stream())
         .and_then(handle_multipart_upload);
 
-    let rt_videos = warp::path("videos")
-        .and(warp::fs::dir(server_state_cln1.media_files_dir.clone()).with(warp::log("videos")));
+    let rt_videos = warp::path("videos").and(
+        warp::fs::dir(server_state_cln1.media_files_dir.clone())
+            .with(warp::log("videos")));
 
-    let rt_api_ws = warp::path("api")
-        .and(warp::path("ws"))
+    let rt_api_ws = warp::path("api").and(warp::path("ws"))
         .and(warp::header::headers_cloned())
         .and(warp::ws())
-        .map(move |hdrs: HeaderMap, ws: warp::ws::Ws| {
+        .map (move|hdrs: HeaderMap, ws: warp::ws::Ws| {
+
             // Get user ID and username (from reverse proxy)
-            let (user_id, user_name, is_admin, app_cookies, filtered_headers, remote_error) =
-                parse_auth_headers(
-                    &hdrs,
-                    &server_state.default_user,
-                    &server_state.org_http_headers_regex,
-                );
+            let (user_id, user_name, is_admin, app_cookies, filtered_headers, remote_error) = parse_auth_headers(&hdrs, &server_state.default_user, &server_state.org_http_headers_regex);
 
             // Increment session counter
             let sid = {
@@ -617,10 +512,9 @@ async fn run_api_server_async(
                 // Check for X-Remote-Error and send error message if present
                 if let Some(error_msg) = remote_error {
                     let err_msg = proto::client::server_to_client_cmd::Error {
-                        msg: format!("Authentication Error: {}", error_msg),
+                        msg: format!("Authentication Error: {}", error_msg)
                     };
-                    let json_txt =
-                        serde_json::to_string(&err_msg).expect("Error serializing error message");
+                    let json_txt = serde_json::to_string(&err_msg).expect("Error serializing error message");
                     if let Err(e) = ws.send(warp::ws::Message::text(json_txt)).await {
                         tracing::error!("Failed to send error message: {}", e);
                     }
@@ -633,49 +527,25 @@ async fn run_api_server_async(
                 // Diesel SQLite calls are blocking, so run a thread per user session
                 // even though we're using async/await
                 tokio::task::spawn_blocking(move || {
-                    let _span =
-                        tracing::info_span!("ws_session", sid=%sid, user=%user_id).entered();
-                    block_on(handle_ws_session(
-                        ws,
-                        sid,
-                        user_id,
-                        user_name,
-                        is_admin,
-                        app_cookies,
-                        filtered_headers,
-                        server_state,
-                    ));
-                })
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::error!(details=%e, "Error joining handle_ws_session thread.");
-                });
+                    let _span = tracing::info_span!("ws_session", sid=%sid, user=%user_id).entered();
+                    block_on(handle_ws_session(ws, sid, user_id, user_name, is_admin, app_cookies, filtered_headers, server_state));
+                }).await.unwrap_or_else(|e| {
+                    tracing::error!(details=%e, "Error joining handle_ws_session thread."); });
             })
         });
 
-    let routes = rt_health
-        .or(rt_api_ws)
-        .or(rt_upload)
-        .or(rt_videos)
+    let routes = rt_health.or(rt_api_ws).or(rt_upload).or(rt_videos)
         .with(warp::log("api_server"));
 
-    let mut cors_origins: Vec<&str> = cors_origins
-        .iter()
+
+    let mut cors_origins: Vec<&str> = cors_origins.iter()
         .map(|s| s.as_str())
         .filter(|s| !s.is_empty())
         .collect();
     tracing::info!("Allowed CORS origins: {:?}", cors_origins);
 
     let cors_methods = ["GET", "POST", "HEAD", "OPTIONS"];
-    let cors_headers = [
-        "x-file-name",
-        "x-clapshot-cookies",
-        "x-clapshot-transcode",
-        "content-type",
-        "upgrade",
-        "sec-websocket-protocol",
-        "sec-websocket-version",
-    ];
+    let cors_headers = ["x-file-name", "x-clapshot-cookies", "x-clapshot-transcode", "content-type", "upgrade", "sec-websocket-protocol", "sec-websocket-version"];
 
     let routes = if cors_origins.contains(&"*") {
         tracing::warn!(concat!(
@@ -684,32 +554,17 @@ async fn run_api_server_async(
             "Do NOT use '*' in production! ",
             "Instead, specify the allowed origin, such as 'https://clapshot.example.com'."
         ));
-        routes
-            .with(
-                warp::cors()
-                    .allow_methods(cors_methods)
-                    .allow_headers(cors_headers)
-                    .allow_any_origin(),
-            )
-            .boxed()
+        routes.with(warp::cors().allow_methods(cors_methods).allow_headers(cors_headers)
+            .allow_any_origin()).boxed()
     } else {
         if cors_origins.is_empty() {
             cors_origins.push(url_base.as_str());
-            tracing::info!(
-                "No CORS origins specified. Using url_base for it: '{}'",
-                url_base
-            );
+            tracing::info!("No CORS origins specified. Using url_base for it: '{}'", url_base);
         } else {
             tracing::info!("Using CORS origins: {:?}", cors_origins);
         }
-        routes
-            .with(
-                warp::cors()
-                    .allow_methods(cors_methods)
-                    .allow_headers(cors_headers)
-                    .allow_origins(cors_origins),
-            )
-            .boxed()
+        routes.with(warp::cors().allow_methods(cors_methods).allow_headers(cors_headers)
+            .allow_origins(cors_origins)).boxed()
     };
 
     debug!("Binding Websocket API to {}:{}", bind_addr, port);
@@ -730,13 +585,12 @@ async fn run_api_server_async(
             while let Ok(m) = user_msg_rx.try_recv() {
                 let topic_str = proto_msg_type_to_event_name(m.topic);
 
-                let msg_insert = models::MessageInsert {
+                let msg_insert = models::MessageInsert  {
                     event_name: topic_str.into(),
                     user_id: m.user_id.clone().unwrap_or("".into()),
                     message: m.msg.clone(),
                     details: m.details.clone().unwrap_or("".into()),
-                    seen: false,
-                    comment_id: None,
+                    seen: false, comment_id: None,
                     media_file_id: m.media_file_id.clone(),
                     subtitle_id: m.subtitle_id.clone(),
                 };
@@ -748,12 +602,9 @@ async fn run_api_server_async(
                 if let Some(vid) = m.media_file_id {
                     if let Err(_) = server_state.emit_cmd(
                         client_cmd!(ShowMessages, { msgs: vec![proto_msg.clone()] }),
-                        SendTo::MediaFileId(&vid),
+                        SendTo::MediaFileId(&vid)
                     ) {
-                        tracing::error!(
-                            media_file = vid,
-                            "Failed to send notification to media file watchers."
-                        );
+                        tracing::error!(media_file=vid, "Failed to send notification to media file watchers.");
                     }
                 };
 
@@ -763,19 +614,12 @@ async fn run_api_server_async(
                     let mut user_was_online = false;
                     match server_state.emit_cmd(
                         client_cmd!(ShowMessages, { msgs: vec![proto_msg.clone()] }),
-                        SendTo::UserId(&user_id),
-                    ) {
-                        Ok(session_cnt) => user_was_online = session_cnt > 0,
-                        Err(e) => {
-                            tracing::error!(user=user_id, details=%e, "Failed to send user notification.")
-                        }
+                        SendTo::UserId(&user_id))
+                    {
+                        Ok(session_cnt) => { user_was_online = session_cnt>0 },
+                        Err(e) => tracing::error!(user=user_id, details=%e, "Failed to send user notification."),
                     }
-                    if !(matches!(
-                        m.topic,
-                        UserMessageTopic::Progress
-                            | UserMessageTopic::MediaFileAdded
-                            | UserMessageTopic::MediaFileUpdated
-                    )) {
+                    if !(matches!(m.topic, UserMessageTopic::Progress | UserMessageTopic::MediaFileAdded | UserMessageTopic::MediaFileUpdated)) {
                         let msg = models::MessageInsert {
                             seen: msg_insert.seen || user_was_online,
                             ..msg_insert
@@ -787,7 +631,7 @@ async fn run_api_server_async(
                     }
                 };
             }
-        }
+        };
         server_state.terminate_flag.store(true, Relaxed);
     };
 
@@ -801,15 +645,14 @@ async fn run_api_server_async(
         debug!("Waiting for gRPC server to exit...");
         match tokio::try_join!(g) {
             Ok((Ok(_),)) => tracing::debug!("gRPC server for org->srv exited OK."),
-            Ok((Err(e),)) => {
-                tracing::error!(details=%e, "gRPC server for org->srv exited with error.")
-            }
+            Ok((Err(e),)) => tracing::error!(details=%e, "gRPC server for org->srv exited with error."),
             Err(e) => tracing::error!(details=%e, "gRPC server for org->srv panicked."),
         };
     }
 
     tracing::debug!("Exiting.");
 }
+
 
 #[tokio::main]
 pub async fn run_forever(
@@ -820,8 +663,8 @@ pub async fn run_forever(
     url_base: String,
     cors_origins: Vec<String>,
     state: ServerState,
-    port: u16,
-) {
+    port: u16)
+{
     assert!(!url_base.ends_with('/')); // Should have been stripped by caller
 
     let bind_addr = match bind_addr.parse::<std::net::IpAddr>() {
@@ -833,14 +676,5 @@ pub async fn run_forever(
     };
 
     let _span = tracing::info_span!("API").entered();
-    run_api_server_async(
-        bind_addr,
-        cors_origins,
-        state,
-        user_msg_rx,
-        upload_res_tx,
-        grpc_server_bind,
-        port,
-    )
-    .await;
+    run_api_server_async(bind_addr, cors_origins, state, user_msg_rx, upload_res_tx, grpc_server_bind, port).await;
 }

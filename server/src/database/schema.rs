@@ -84,6 +84,7 @@ diesel::table! {
 }
 diesel::joinable!(comments -> subtitles (subtitle_id));
 
+
 diesel::allow_tables_to_appear_in_same_query!(
     users,
     comments,
