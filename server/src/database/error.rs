@@ -1,5 +1,5 @@
-use thiserror;
 use anyhow;
+use thiserror;
 
 #[derive(thiserror::Error, Debug)]
 pub enum DBError {

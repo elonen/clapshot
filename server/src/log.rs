@@ -1,3 +1,4 @@
+use signal_hook::{consts::SIGUSR1, iterator::Signals};
 use std::{
     fs::OpenOptions,
     io::{self, stdout, Write},
@@ -5,9 +6,8 @@ use std::{
     sync::{Arc, Mutex},
     thread,
 };
-use signal_hook::{consts::SIGUSR1, iterator::Signals};
 use tracing::subscriber::set_global_default;
-use tracing_subscriber::{fmt, EnvFilter, fmt::time::OffsetTime};
+use tracing_subscriber::{fmt, fmt::time::OffsetTime, EnvFilter};
 
 /// Custom logger with the ability to write to a file or stdout.
 /// It supports transparent file reopen on SIGUSR1 (for `logrotate`),
@@ -17,14 +17,18 @@ pub struct ClapshotLogger {
     pub _guard: tracing_appender::non_blocking::WorkerGuard,
 }
 
-impl ClapshotLogger
-{
+impl ClapshotLogger {
     /// Create a new Logger instance.
     /// - `time_offset`: Time offset for the log timestamps.
     /// - `level`: Tracing level to log.
     /// - `log_file`: Path to the log file or "-" for stdout.
     /// - `json_log`: Enable or disable JSON formatted logging.
-    pub fn new(time_offset: time::UtcOffset, level: tracing::Level, log_file: &str, json_log: bool) -> anyhow::Result<Self> {
+    pub fn new(
+        time_offset: time::UtcOffset,
+        level: tracing::Level,
+        log_file: &str,
+        json_log: bool,
+    ) -> anyhow::Result<Self> {
         let log_writer = Arc::new(Mutex::new(None));
         let log_to_stdout = log_file.is_empty() || log_file == "-";
 
@@ -39,7 +43,8 @@ impl ClapshotLogger
             let log_writer_cloned = log_writer.clone();
             thread::spawn(move || {
                 for _ in signals.forever() {
-                    let mut log_writer = log_writer_cloned.lock().expect("Failed to lock log writer");
+                    let mut log_writer =
+                        log_writer_cloned.lock().expect("Failed to lock log writer");
                     if let Some(file) = log_writer.as_mut() {
                         file.sync_and_reopen().expect("Failed to reopen log file");
                     }
@@ -50,12 +55,17 @@ impl ClapshotLogger
 
         if std::env::var_os("RUST_LOG").is_none() {
             std::env::set_var(
-                "RUST_LOG", match level {
+                "RUST_LOG",
+                match level {
                     tracing::Level::ERROR => "error",
                     tracing::Level::WARN => "warn",
                     tracing::Level::INFO => "info,clapshot_server=info",
-                    tracing::Level::DEBUG => "debug,clapshot_server=debug,h2=info,hyper::proto::h1=info",
-                    tracing::Level::TRACE => "trace,clapshot_server=trace,h2=debug,hyper::proto::h1=debug,async_io=debug",
+                    tracing::Level::DEBUG => {
+                        "debug,clapshot_server=debug,h2=info,hyper::proto::h1=info"
+                    }
+                    tracing::Level::TRACE => {
+                        "trace,clapshot_server=trace,h2=debug,hyper::proto::h1=debug,async_io=debug"
+                    }
                 },
             );
         }
@@ -67,13 +77,11 @@ impl ClapshotLogger
             (true, _) => "[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:4][offset_hour sign:mandatory]:[offset_minute]",
         };
 
-        let time_format = time::format_description::parse(
-            if json_log {
-                "[unix_timestamp].[subsecond digits:4]]"
-            } else {
-                iso_fmt
-            },
-        )
+        let time_format = time::format_description::parse(if json_log {
+            "[unix_timestamp].[subsecond digits:4]]"
+        } else {
+            iso_fmt
+        })
         .expect("invalid time format");
 
         let timer = OffsetTime::new(time_offset, time_format);
@@ -95,10 +103,12 @@ impl ClapshotLogger
         }
         .expect("tracing::subscriber::set_global_default failed");
 
-        Ok(ClapshotLogger { _log_writer: log_writer, _guard: guard })
+        Ok(ClapshotLogger {
+            _log_writer: log_writer,
+            _guard: guard,
+        })
     }
 }
-
 
 /// ReopenableFileWriter provides functionality to write to a file
 /// that can be reopened, allowing for log rotation without losing log entries.
@@ -114,7 +124,11 @@ impl ReopenableFileWriter {
     }
 
     fn open_file(path: &PathBuf) -> io::Result<std::fs::File> {
-        OpenOptions::new().create(true).write(true).append(true).open(path)
+        OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(path)
     }
 
     /// Sync the current log file to disk and reopen it under a new file descriptor.
@@ -130,40 +144,52 @@ impl ReopenableFileWriter {
 
 impl Clone for ReopenableFileWriter {
     fn clone(&self) -> Self {
-        Self { file: self.file.clone(), path: self.path.clone() }
+        Self {
+            file: self.file.clone(),
+            path: self.path.clone(),
+        }
     }
 }
 
 impl Write for ReopenableFileWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let mut file_lock = self.file.lock().unwrap();
-        if let Some(file) = file_lock.as_mut() { file.write(buf) } else { Ok(0) }
+        if let Some(file) = file_lock.as_mut() {
+            file.write(buf)
+        } else {
+            Ok(0)
+        }
     }
 
     fn flush(&mut self) -> io::Result<()> {
         let mut file_lock = self.file.lock().unwrap();
-        if let Some(file) = file_lock.as_mut() { file.flush() } else { Ok(()) }
+        if let Some(file) = file_lock.as_mut() {
+            file.flush()
+        } else {
+            Ok(())
+        }
     }
 }
 
-
 #[test]
 fn test_log_rotation_on_sigusr1() {
-    use std::{
-        fs::File,
-        io::Read,
-        sync::Arc,
-        thread,
-        time::Duration,
-    };
     use assert_fs::TempDir;
+    use std::{fs::File, io::Read, sync::Arc, thread, time::Duration};
 
     let log_dir = TempDir::new().expect("Failed to create temp dir");
     let log_file = log_dir.path().join("test_log.log");
     let log_file_backup = log_dir.path().join("test_log_backup.log");
 
     let time_offset = time::UtcOffset::from_whole_seconds(0).unwrap();
-    let logger = Arc::new(ClapshotLogger::new(time_offset, tracing::Level::DEBUG, log_file.to_str().unwrap(), false).expect("Failed to setup logger"));
+    let logger = Arc::new(
+        ClapshotLogger::new(
+            time_offset,
+            tracing::Level::DEBUG,
+            log_file.to_str().unwrap(),
+            false,
+        )
+        .expect("Failed to setup logger"),
+    );
 
     tracing::info!("Logging before rotation");
 
@@ -186,12 +212,25 @@ fn test_log_rotation_on_sigusr1() {
 
     let mut old_log_content = String::new();
     let mut old_log_file = File::open(&log_file_backup).expect("Failed to open old log file");
-    old_log_file.read_to_string(&mut old_log_content).expect("Failed to read old log file");
-    assert!(old_log_content.contains("Logging before rotation"), "Old log file does not contain the expected log entry");
-    assert!(!old_log_content.contains("Logging after rotation"), "Old log file contains the second log entry");
+    old_log_file
+        .read_to_string(&mut old_log_content)
+        .expect("Failed to read old log file");
+    assert!(
+        old_log_content.contains("Logging before rotation"),
+        "Old log file does not contain the expected log entry"
+    );
+    assert!(
+        !old_log_content.contains("Logging after rotation"),
+        "Old log file contains the second log entry"
+    );
 
     let mut new_log_content = String::new();
     let mut new_log_file = File::open(&log_file).expect("Failed to open new log file");
-    new_log_file.read_to_string(&mut new_log_content).expect("Failed to read new log file");
-    assert!(new_log_content.contains("Logging after rotation"), "New log file does not contain the expected log entry");
+    new_log_file
+        .read_to_string(&mut new_log_content)
+        .expect("Failed to read new log file");
+    assert!(
+        new_log_content.contains("Logging after rotation"),
+        "New log file does not contain the expected log entry"
+    );
 }

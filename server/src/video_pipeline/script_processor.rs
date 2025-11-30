@@ -1,12 +1,12 @@
-use std::{process::Command, io::BufRead, collections::HashMap};
-use std::path::PathBuf;
-use crossbeam_channel::{Sender, Receiver};
-use rust_decimal::Decimal;
-use rust_decimal::prelude::ToPrimitive;
-use tracing;
-use threadpool::ThreadPool;
-use std::fs;
 use chrono;
+use crossbeam_channel::{Receiver, Sender};
+use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
+use std::fs;
+use std::path::PathBuf;
+use std::{collections::HashMap, io::BufRead, process::Command};
+use threadpool::ThreadPool;
+use tracing;
 
 use super::metadata_reader::MediaType;
 use super::DetailedMsg;
@@ -17,7 +17,7 @@ pub type ProgressSender = crossbeam_channel::Sender<(String, String, String, Opt
 #[derive(Debug, Clone)]
 pub enum CmprInput {
     Transcode {
-        video_dst_dir: PathBuf,  // Directory where script should output
+        video_dst_dir: PathBuf,   // Directory where script should output
         video_dst_prefix: String, // Filename prefix (script decides extension)
         video_bitrate: u32,
         src: CmprInputSource,
@@ -27,7 +27,7 @@ pub enum CmprInput {
         thumb_sheet_dims: (u32, u32),
         thumb_size: (u32, u32),
         src: CmprInputSource,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -43,16 +43,20 @@ pub struct CmprInputSource {
 #[derive(Debug, Clone)]
 pub enum CmprOutput {
     TranscodeSuccess {
-        video_dst: PathBuf,  // Final output file path (determined by script)
-        logs: CmprLogs
+        video_dst: PathBuf, // Final output file path (determined by script)
+        logs: CmprLogs,
     },
     ThumbsSuccess {
         thumb_dir: Option<PathBuf>,
         thumb_sheet_dims: Option<(u32, u32)>,
-        logs: CmprLogs
+        logs: CmprLogs,
     },
-    TranscodeFailure { logs: CmprLogs },
-    ThumbsFailure { logs: CmprLogs }
+    TranscodeFailure {
+        logs: CmprLogs,
+    },
+    ThumbsFailure {
+        logs: CmprLogs,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -64,7 +68,6 @@ pub struct CmprLogs {
     pub dmsg: DetailedMsg,
 }
 
-
 /// Validate and sanitize values passed to scripts via environment variables
 fn validate_env_value(key: &str, value: &str) -> Result<String, String> {
     match key {
@@ -75,22 +78,25 @@ fn validate_env_value(key: &str, value: &str) -> Result<String, String> {
             } else {
                 Err(format!("Invalid bitrate format: {}", value))
             }
-        },
+        }
         "CLAPSHOT_MEDIA_TYPE" => {
             // Media type should be one of known values
             match value {
                 "video" | "audio" | "image" => Ok(value.to_string()),
-                _ => Err(format!("Invalid media type: {}", value))
+                _ => Err(format!("Invalid media type: {}", value)),
             }
-        },
+        }
         "CLAPSHOT_USER_ID" | "CLAPSHOT_MEDIA_ID" => {
             // User/media IDs should be alphanumeric + basic chars only
-            if value.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+            if value
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+            {
                 Ok(value.to_string())
             } else {
                 Err(format!("Invalid {} format: {}", key, value))
             }
-        },
+        }
         "CLAPSHOT_DURATION" => {
             // Duration should be numeric (can have decimal point)
             if value.chars().all(|c| c.is_numeric() || c == '.') {
@@ -98,31 +104,51 @@ fn validate_env_value(key: &str, value: &str) -> Result<String, String> {
             } else {
                 Err(format!("Invalid duration format: {}", value))
             }
-        },
+        }
         "CLAPSHOT_THUMB_SIZE" | "CLAPSHOT_SHEET_DIMS" => {
             // Dimensions should be in format "NxN" where N is numeric
-            if value.matches('x').count() == 1 &&
-               value.split('x').all(|part| part.chars().all(|c| c.is_numeric()) && !part.is_empty()) {
+            if value.matches('x').count() == 1
+                && value
+                    .split('x')
+                    .all(|part| part.chars().all(|c| c.is_numeric()) && !part.is_empty())
+            {
                 Ok(value.to_string())
             } else {
-                Err(format!("Invalid dimension format (expected NxN): {}", value))
+                Err(format!(
+                    "Invalid dimension format (expected NxN): {}",
+                    value
+                ))
             }
-        },
+        }
         "CLAPSHOT_OUTPUT_PREFIX" => {
             // Output prefix should be alphanumeric + basic chars only (no path separators)
-            if value.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+            if value
+                .chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+            {
                 Ok(value.to_string())
             } else {
                 Err(format!("Invalid output prefix format: {}", value))
             }
-        },
+        }
         _ => {
             // For file paths, allow basic path chars but reject dangerous sequences
-            if value.contains("..") || value.contains(";") || value.contains("|") || value.contains("&") ||
-               value.contains("`") || value.contains("$") || value.contains("'") || value.contains("\"") ||
-               value.contains("\\") || value.contains("\n") || value.contains("\r") {
+            if value.contains("..")
+                || value.contains(";")
+                || value.contains("|")
+                || value.contains("&")
+                || value.contains("`")
+                || value.contains("$")
+                || value.contains("'")
+                || value.contains("\"")
+                || value.contains("\\")
+                || value.contains("\n")
+                || value.contains("\r")
+            {
                 Err(format!("Potentially unsafe value for {}: {}", key, value))
-            } else if !value.chars().all(|c| c.is_alphanumeric() || c == '/' || c == '_' || c == '-' || c == '.' || c == ' ') {
+            } else if !value.chars().all(|c| {
+                c.is_alphanumeric() || c == '/' || c == '_' || c == '-' || c == '.' || c == ' '
+            }) {
                 Err(format!("Invalid characters in {}: {}", key, value))
             } else {
                 Ok(value.to_string())
@@ -133,10 +159,12 @@ fn validate_env_value(key: &str, value: &str) -> Result<String, String> {
 
 /// Create a sanitized symlink in the orig directory for script access
 fn create_sanitized_symlink(src_path: &PathBuf) -> Result<PathBuf, String> {
-    let orig_dir = src_path.parent()
+    let orig_dir = src_path
+        .parent()
         .ok_or("Source file has no parent directory")?;
 
-    let extension = src_path.extension()
+    let extension = src_path
+        .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("bin");
 
@@ -149,7 +177,10 @@ fn create_sanitized_symlink(src_path: &PathBuf) -> Result<PathBuf, String> {
 
     // Check if source file exists
     if !src_path.exists() {
-        return Err(format!("Source file does not exist: {}", src_path.display()));
+        return Err(format!(
+            "Source file does not exist: {}",
+            src_path.display()
+        ));
     }
 
     // Always create a fresh symlink (remove any existing one first)
@@ -160,12 +191,15 @@ fn create_sanitized_symlink(src_path: &PathBuf) -> Result<PathBuf, String> {
     }
 
     // Use relative path for symlink target (just the filename) since both files are in the same directory
-    let src_filename = src_path.file_name()
-        .ok_or("Source file has no filename")?;
+    let src_filename = src_path.file_name().ok_or("Source file has no filename")?;
 
     if let Err(e) = std::os::unix::fs::symlink(src_filename, &sanitized_path) {
-        return Err(format!("Failed to create sanitized symlink from {} to {}: {}",
-                          src_filename.to_string_lossy(), sanitized_path.display(), e));
+        return Err(format!(
+            "Failed to create sanitized symlink from {} to {}: {}",
+            src_filename.to_string_lossy(),
+            sanitized_path.display(),
+            e
+        ));
     }
 
     tracing::debug!(src=?src_path, symlink=?sanitized_path, "Created sanitized symlink");
@@ -173,32 +207,55 @@ fn create_sanitized_symlink(src_path: &PathBuf) -> Result<PathBuf, String> {
 }
 
 /// Set up environment variables for script execution
-fn setup_script_environment(src: &CmprInputSource, input_file: &PathBuf, output_dir: &PathBuf,
-                           output_prefix: &str, target_bitrate: u32, progress_pipe: &Option<String>)
-                           -> Result<HashMap<String, String>, String> {
+fn setup_script_environment(
+    src: &CmprInputSource,
+    input_file: &PathBuf,
+    output_dir: &PathBuf,
+    output_prefix: &str,
+    target_bitrate: u32,
+    progress_pipe: &Option<String>,
+) -> Result<HashMap<String, String>, String> {
     let mut env_vars = HashMap::new();
 
     // Validate and set environment variables
-    env_vars.insert("CLAPSHOT_INPUT_FILE".to_string(),
-                   validate_env_value("CLAPSHOT_INPUT_FILE", &input_file.to_string_lossy())?);
-    env_vars.insert("CLAPSHOT_OUTPUT_DIR".to_string(),
-                   validate_env_value("CLAPSHOT_OUTPUT_DIR", &output_dir.to_string_lossy())?);
-    env_vars.insert("CLAPSHOT_OUTPUT_PREFIX".to_string(),
-                   validate_env_value("CLAPSHOT_OUTPUT_PREFIX", output_prefix)?);
-    env_vars.insert("CLAPSHOT_MEDIA_TYPE".to_string(),
-                   validate_env_value("CLAPSHOT_MEDIA_TYPE", src.media_type.as_ref())?);
-    env_vars.insert("CLAPSHOT_TARGET_BITRATE".to_string(),
-                   validate_env_value("CLAPSHOT_TARGET_BITRATE", &target_bitrate.to_string())?);
-    env_vars.insert("CLAPSHOT_USER_ID".to_string(),
-                   validate_env_value("CLAPSHOT_USER_ID", &src.user_id)?);
-    env_vars.insert("CLAPSHOT_MEDIA_ID".to_string(),
-                   validate_env_value("CLAPSHOT_MEDIA_ID", &src.media_file_id)?);
-    env_vars.insert("CLAPSHOT_DURATION".to_string(),
-                   validate_env_value("CLAPSHOT_DURATION", &src.duration.to_string())?);
+    env_vars.insert(
+        "CLAPSHOT_INPUT_FILE".to_string(),
+        validate_env_value("CLAPSHOT_INPUT_FILE", &input_file.to_string_lossy())?,
+    );
+    env_vars.insert(
+        "CLAPSHOT_OUTPUT_DIR".to_string(),
+        validate_env_value("CLAPSHOT_OUTPUT_DIR", &output_dir.to_string_lossy())?,
+    );
+    env_vars.insert(
+        "CLAPSHOT_OUTPUT_PREFIX".to_string(),
+        validate_env_value("CLAPSHOT_OUTPUT_PREFIX", output_prefix)?,
+    );
+    env_vars.insert(
+        "CLAPSHOT_MEDIA_TYPE".to_string(),
+        validate_env_value("CLAPSHOT_MEDIA_TYPE", src.media_type.as_ref())?,
+    );
+    env_vars.insert(
+        "CLAPSHOT_TARGET_BITRATE".to_string(),
+        validate_env_value("CLAPSHOT_TARGET_BITRATE", &target_bitrate.to_string())?,
+    );
+    env_vars.insert(
+        "CLAPSHOT_USER_ID".to_string(),
+        validate_env_value("CLAPSHOT_USER_ID", &src.user_id)?,
+    );
+    env_vars.insert(
+        "CLAPSHOT_MEDIA_ID".to_string(),
+        validate_env_value("CLAPSHOT_MEDIA_ID", &src.media_file_id)?,
+    );
+    env_vars.insert(
+        "CLAPSHOT_DURATION".to_string(),
+        validate_env_value("CLAPSHOT_DURATION", &src.duration.to_string())?,
+    );
 
     if let Some(pipe) = progress_pipe {
-        env_vars.insert("CLAPSHOT_PROGRESS_PIPE".to_string(),
-                       validate_env_value("CLAPSHOT_PROGRESS_PIPE", pipe)?);
+        env_vars.insert(
+            "CLAPSHOT_PROGRESS_PIPE".to_string(),
+            validate_env_value("CLAPSHOT_PROGRESS_PIPE", pipe)?,
+        );
     }
 
     Ok(env_vars)
@@ -206,8 +263,8 @@ fn setup_script_environment(src: &CmprInputSource, input_file: &PathBuf, output_
 
 /// Find the actual output file created by the script
 fn find_script_output(output_dir: &PathBuf, output_prefix: &str) -> Result<PathBuf, String> {
-    let entries = fs::read_dir(output_dir)
-        .map_err(|e| format!("Failed to read output directory: {}", e))?;
+    let entries =
+        fs::read_dir(output_dir).map_err(|e| format!("Failed to read output directory: {}", e))?;
 
     let mut candidates = Vec::new();
     for entry in entries {
@@ -230,15 +287,26 @@ fn find_script_output(output_dir: &PathBuf, output_prefix: &str) -> Result<PathB
     }
 
     match candidates.len() {
-        0 => Err(format!("No valid output files found with prefix: {}", output_prefix)),
+        0 => Err(format!(
+            "No valid output files found with prefix: {}",
+            output_prefix
+        )),
         1 => Ok(candidates.into_iter().next().unwrap()),
-        _ => Err(format!("Multiple valid output files found with prefix {}: {:?}", output_prefix, candidates))
+        _ => Err(format!(
+            "Multiple valid output files found with prefix {}: {:?}",
+            output_prefix, candidates
+        )),
     }
 }
 
-fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput, sanitized_symlink: Option<&PathBuf>) -> CmprOutput {
+fn err2cout<E: std::fmt::Debug>(
+    msg_txt: &str,
+    err: E,
+    args: &CmprInput,
+    sanitized_symlink: Option<&PathBuf>,
+) -> CmprOutput {
     let details_str = format!("{:?}", err);
-    tracing::error!(details=&details_str, "err2cout: {}", msg_txt);
+    tracing::error!(details = &details_str, "err2cout: {}", msg_txt);
 
     // Clean up sanitized symlink if provided
     if let Some(symlink_path) = sanitized_symlink {
@@ -260,45 +328,62 @@ fn err2cout<E: std::fmt::Debug>(msg_txt: &str, err: E, args: &CmprInput, sanitiz
             msg: msg_txt.to_string(),
             details: details_str,
             src_file: src.path.clone(),
-            user_id: src.user_id.clone()
-        }
+            user_id: src.user_id.clone(),
+        },
     };
     match args {
-        CmprInput::Transcode { .. } => { CmprOutput::TranscodeFailure { logs } },
-        CmprInput::Thumbs { .. } => { CmprOutput::ThumbsFailure { logs } }
+        CmprInput::Transcode { .. } => CmprOutput::TranscodeFailure { logs },
+        CmprInput::Thumbs { .. } => CmprOutput::ThumbsFailure { logs },
     }
 }
 
 /// Run transcoding script and return the output
-fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefix: String,
-                       video_bitrate: u32, progress: ProgressSender, script_path: &str) -> CmprOutput {
+fn run_transcode_script(
+    src: &CmprInputSource,
+    output_dir: PathBuf,
+    output_prefix: String,
+    video_bitrate: u32,
+    progress: ProgressSender,
+    script_path: &str,
+) -> CmprOutput {
     let _span = tracing::info_span!("run_transcode_script",
         media_file = %src.media_file_id,
         user = %src.user_id,
-        thread = ?std::thread::current().id()).entered();
+        thread = ?std::thread::current().id())
+    .entered();
 
     // Create sanitized symlink for script access
     let sanitized_input = match create_sanitized_symlink(&src.path) {
         Ok(path) => path,
-        Err(e) => return err2cout("Failed to create sanitized symlink", e,
-                                 &CmprInput::Transcode {
-                                     video_dst_dir: output_dir,
-                                     video_dst_prefix: output_prefix,
-                                     video_bitrate,
-                                     src: src.clone()
-                                 }, None)
+        Err(e) => {
+            return err2cout(
+                "Failed to create sanitized symlink",
+                e,
+                &CmprInput::Transcode {
+                    video_dst_dir: output_dir,
+                    video_dst_prefix: output_prefix,
+                    video_bitrate,
+                    src: src.clone(),
+                },
+                None,
+            )
+        }
     };
 
     // Create transcoded/ subdirectory for script to work in
     let script_work_dir = output_dir.join("transcoded");
     if let Err(e) = fs::create_dir_all(&script_work_dir) {
-        return err2cout("Failed to create script work directory", e,
-                       &CmprInput::Transcode {
-                           video_dst_dir: output_dir,
-                           video_dst_prefix: output_prefix,
-                           video_bitrate,
-                           src: src.clone()
-                       }, Some(&sanitized_input));
+        return err2cout(
+            "Failed to create script work directory",
+            e,
+            &CmprInput::Transcode {
+                video_dst_dir: output_dir,
+                video_dst_prefix: output_prefix,
+                video_bitrate,
+                src: src.clone(),
+            },
+            Some(&sanitized_input),
+        );
     }
 
     // Set up progress pipe in a temporary directory (not user-writable space)
@@ -310,10 +395,16 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
         Some(fname) => unix_named_pipe::create(&fname, None)
             .map(|_| fname.to_string())
             .map_err(|e| e.to_string())
-            .map_or_else(|e| {
-                tracing::warn!(details=e, "Won't track script progress; failed to create pipe file.");
-                None
-            }, |f| Some(f))
+            .map_or_else(
+                |e| {
+                    tracing::warn!(
+                        details = e,
+                        "Won't track script progress; failed to create pipe file."
+                    );
+                    None
+                },
+                |f| Some(f),
+            ),
     };
 
     let progress_terminate = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -332,7 +423,8 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
             Some(pfn) => {
                 std::thread::spawn(move || {
                     let _span = tracing::info_span!("script_progress",
-                    thread = ?std::thread::current().id()).entered();
+                    thread = ?std::thread::current().id())
+                    .entered();
 
                     let f = match unix_named_pipe::open_read(&pfn) {
                         Ok(f) => f,
@@ -357,7 +449,7 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
                                 } else {
                                     std::thread::sleep(std::time::Duration::from_millis(250));
                                 }
-                            },
+                            }
                             None => {
                                 tracing::debug!("Progress pipe EOF. Sleeping...");
                                 std::thread::sleep(std::time::Duration::from_millis(250));
@@ -374,35 +466,43 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
                                                 "end" => {
                                                     msg = Some("Transcoding done.".to_string());
                                                     done_ratio = Some(1.0);
-                                                },
+                                                }
                                                 "continue" => {
                                                     msg = Some("Transcoding...".to_string());
                                                     // Calculate progress percentage if we have both current time and duration
                                                     if let Some(time_us) = current_time_us {
                                                         if total_duration_us > 0 {
-                                                            let progress_pct = (time_us as f32 / total_duration_us as f32).min(1.0).max(0.0);
+                                                            let progress_pct = (time_us as f32
+                                                                / total_duration_us as f32)
+                                                                .min(1.0)
+                                                                .max(0.0);
                                                             done_ratio = Some(progress_pct);
                                                         }
                                                     }
-                                                },
+                                                }
                                                 _ => {
                                                     msg = Some("Transcoding...".to_string());
                                                 }
                                             }
-                                        },
+                                        }
                                         "out_time_us" => {
                                             // Parse current position in microseconds
                                             if let Ok(time_us) = val.parse::<u64>() {
                                                 current_time_us = Some(time_us);
                                             }
-                                        },
+                                        }
                                         _ => {} // Ignore other keys
                                     }
                                 }
 
                                 // Send progress message (if any)
                                 if let Some(msg) = msg.take() {
-                                    if let Err(e) = progress.send((vid.clone(), user_id.clone(), msg, done_ratio.clone())) {
+                                    if let Err(e) = progress.send((
+                                        vid.clone(),
+                                        user_id.clone(),
+                                        msg,
+                                        done_ratio.clone(),
+                                    )) {
                                         tracing::debug!(details=%e, "Failed to send script progress message. Ending progress tracking.");
                                         return;
                                     }
@@ -417,16 +517,28 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
     };
 
     // Set up environment variables for script
-    let env_vars = match setup_script_environment(src, &sanitized_input, &script_work_dir, &output_prefix,
-                                                  video_bitrate, &ppipe_fname) {
+    let env_vars = match setup_script_environment(
+        src,
+        &sanitized_input,
+        &script_work_dir,
+        &output_prefix,
+        video_bitrate,
+        &ppipe_fname,
+    ) {
         Ok(vars) => vars,
-        Err(e) => return err2cout("Failed to set up script environment", e,
-                                 &CmprInput::Transcode {
-                                     video_dst_dir: output_dir,
-                                     video_dst_prefix: output_prefix,
-                                     video_bitrate,
-                                     src: src.clone()
-                                 }, Some(&sanitized_input))
+        Err(e) => {
+            return err2cout(
+                "Failed to set up script environment",
+                e,
+                &CmprInput::Transcode {
+                    video_dst_dir: output_dir,
+                    video_dst_prefix: output_prefix,
+                    video_bitrate,
+                    src: src.clone(),
+                },
+                Some(&sanitized_input),
+            )
+        }
     };
 
     // Run the transcoding script
@@ -438,7 +550,8 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
     let script_thread = {
         std::thread::spawn(move || {
             let _span = tracing::info_span!("transcode_script",
-                thread = ?std::thread::current().id()).entered();
+                thread = ?std::thread::current().id())
+            .entered();
 
             let mut cmd = Command::new(&script_path_owned);
 
@@ -484,10 +597,16 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
                         tracing::error!(file=?log_file, details=%e, "Failed to write transcoding log file");
                     }
 
-                    (if res.status.success() {None} else {Some("Script exited with error".to_string())},
+                    (
+                        if res.status.success() {
+                            None
+                        } else {
+                            Some("Script exited with error".to_string())
+                        },
                         format!("Log written to: {}", log_file.display()),
-                        "".to_string() )
-                },
+                        "".to_string(),
+                    )
+                }
                 Err(e) => {
                     tracing::error!(details=%e, "Script exec failed");
 
@@ -514,7 +633,11 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
                         tracing::error!(file=?log_file, details=%write_err, "Failed to write transcoding error log");
                     }
 
-                    (Some(e.to_string()), format!("Log written to: {}", log_file.display()), "".into())
+                    (
+                        Some(e.to_string()),
+                        format!("Log written to: {}", log_file.display()),
+                        "".into(),
+                    )
                 }
             }
         })
@@ -524,7 +647,11 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
     tracing::debug!("Waiting for transcoding script to complete...");
     let (err_msg, stdout, stderr) = script_thread.join().unwrap_or_else(|e| {
         tracing::error!(details=?e, "Script thread panicked.");
-        (Some("Script thread panicked".to_string()), "".into(), format!("{:?}", e))
+        (
+            Some("Script thread panicked".to_string()),
+            "".into(),
+            format!("{:?}", e),
+        )
     });
 
     tracing::debug!("Terminating script progress thread.");
@@ -561,9 +688,9 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
                                     msg: "Failed to get script output filename".to_string(),
                                     details: "Script output has invalid filename".to_string(),
                                     src_file: src.path.clone(),
-                                    user_id: src.user_id.clone()
-                                }
-                            }
+                                    user_id: src.user_id.clone(),
+                                },
+                            },
                         };
                     }
                 };
@@ -591,15 +718,15 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
                                 msg: "Failed to move script output to final location".to_string(),
                                 details: format!("Error moving file: {}", e),
                                 src_file: src.path.clone(),
-                                user_id: src.user_id.clone()
-                            }
-                        }
+                                user_id: src.user_id.clone(),
+                            },
+                        },
                     };
                 }
 
                 tracing::debug!(from=?script_output_path, to=?final_output_path, "Moved script output to final location");
                 final_output_path
-            },
+            }
             Err(e) => {
                 tracing::error!(details=%e, "Script completed but output validation failed");
                 // Clean up progress pipe if it exists
@@ -618,13 +745,13 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
                             msg: "Script output validation failed".to_string(),
                             details: e,
                             src_file: src.path.clone(),
-                            user_id: src.user_id.clone()
-                        }
-                    }
+                            user_id: src.user_id.clone(),
+                        },
+                    },
                 };
             }
         },
-        Some(_) => PathBuf::new() // Error case, path doesn't matter
+        Some(_) => PathBuf::new(), // Error case, path doesn't matter
     };
 
     let logs = CmprLogs {
@@ -633,11 +760,16 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
         stdout,
         _stderr: stderr,
         dmsg: DetailedMsg {
-            msg: if err_msg.is_some() { "Transcoding failed" } else { "Transcoding complete" }.to_string(),
+            msg: if err_msg.is_some() {
+                "Transcoding failed"
+            } else {
+                "Transcoding complete"
+            }
+            .to_string(),
             details: format!("Error in script: {:?}", err_msg.clone().unwrap_or_default()),
             src_file: src.path.clone(),
-            user_id: src.user_id.clone()
-        }
+            user_id: src.user_id.clone(),
+        },
     };
 
     // Clean up progress pipe and sanitized symlink
@@ -660,40 +792,56 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
 
     match err_msg {
         Some(_) => CmprOutput::TranscodeFailure { logs },
-        None => CmprOutput::TranscodeSuccess { video_dst, logs }
+        None => CmprOutput::TranscodeSuccess { video_dst, logs },
     }
 }
 
 /// Run thumbnailing script
-fn run_thumbnail_script(thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_sheet_dims: (u32, u32),
-                       src: CmprInputSource, script_path: &str) -> CmprOutput {
+fn run_thumbnail_script(
+    thumb_dir: PathBuf,
+    thumb_size: (u32, u32),
+    thumb_sheet_dims: (u32, u32),
+    src: CmprInputSource,
+    script_path: &str,
+) -> CmprOutput {
     let _span = tracing::info_span!("run_thumbnail_script",
         media_file = %src.media_file_id,
         user = %src.user_id,
-        thread = ?std::thread::current().id()).entered();
+        thread = ?std::thread::current().id())
+    .entered();
 
     // Create sanitized symlink for script access
     let sanitized_input = match create_sanitized_symlink(&src.path) {
         Ok(path) => path,
-        Err(e) => return err2cout("Failed to create sanitized symlink", e,
-                                 &CmprInput::Thumbs {
-                                     thumb_dir: thumb_dir.clone(),
-                                     thumb_sheet_dims,
-                                     thumb_size,
-                                     src: src.clone()
-                                 }, None)
+        Err(e) => {
+            return err2cout(
+                "Failed to create sanitized symlink",
+                e,
+                &CmprInput::Thumbs {
+                    thumb_dir: thumb_dir.clone(),
+                    thumb_sheet_dims,
+                    thumb_size,
+                    src: src.clone(),
+                },
+                None,
+            )
+        }
     };
 
     // Create isolated script work directory for thumbnailing
     let script_work_dir = thumb_dir.join("transcoded");
     if let Err(e) = fs::create_dir_all(&script_work_dir) {
-        return err2cout("Failed to create script work directory", e.to_string(),
-                       &CmprInput::Thumbs {
-                           thumb_dir: thumb_dir.clone(),
-                           thumb_sheet_dims,
-                           thumb_size,
-                           src: src.clone()
-                       }, Some(&sanitized_input));
+        return err2cout(
+            "Failed to create script work directory",
+            e.to_string(),
+            &CmprInput::Thumbs {
+                thumb_dir: thumb_dir.clone(),
+                thumb_sheet_dims,
+                thumb_size,
+                src: src.clone(),
+            },
+            Some(&sanitized_input),
+        );
     }
 
     // Set up environment variables for script
@@ -701,29 +849,53 @@ fn run_thumbnail_script(thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_sheet_d
 
     // Validate and set environment variables
     if let Err(e) = (|| -> Result<(), String> {
-        env_vars.insert("CLAPSHOT_INPUT_FILE".to_string(),
-                       validate_env_value("CLAPSHOT_INPUT_FILE", &sanitized_input.to_string_lossy())?);
-        env_vars.insert("CLAPSHOT_OUTPUT_DIR".to_string(),
-                       validate_env_value("CLAPSHOT_OUTPUT_DIR", &script_work_dir.to_string_lossy())?);
-        env_vars.insert("CLAPSHOT_MEDIA_TYPE".to_string(),
-                       validate_env_value("CLAPSHOT_MEDIA_TYPE", src.media_type.as_ref())?);
-        env_vars.insert("CLAPSHOT_USER_ID".to_string(),
-                       validate_env_value("CLAPSHOT_USER_ID", &src.user_id)?);
-        env_vars.insert("CLAPSHOT_MEDIA_ID".to_string(),
-                       validate_env_value("CLAPSHOT_MEDIA_ID", &src.media_file_id)?);
-        env_vars.insert("CLAPSHOT_THUMB_SIZE".to_string(),
-                       validate_env_value("CLAPSHOT_THUMB_SIZE", &format!("{}x{}", thumb_size.0, thumb_size.1))?);
-        env_vars.insert("CLAPSHOT_SHEET_DIMS".to_string(),
-                       validate_env_value("CLAPSHOT_SHEET_DIMS", &format!("{}x{}", thumb_sheet_dims.0, thumb_sheet_dims.1))?);
+        env_vars.insert(
+            "CLAPSHOT_INPUT_FILE".to_string(),
+            validate_env_value("CLAPSHOT_INPUT_FILE", &sanitized_input.to_string_lossy())?,
+        );
+        env_vars.insert(
+            "CLAPSHOT_OUTPUT_DIR".to_string(),
+            validate_env_value("CLAPSHOT_OUTPUT_DIR", &script_work_dir.to_string_lossy())?,
+        );
+        env_vars.insert(
+            "CLAPSHOT_MEDIA_TYPE".to_string(),
+            validate_env_value("CLAPSHOT_MEDIA_TYPE", src.media_type.as_ref())?,
+        );
+        env_vars.insert(
+            "CLAPSHOT_USER_ID".to_string(),
+            validate_env_value("CLAPSHOT_USER_ID", &src.user_id)?,
+        );
+        env_vars.insert(
+            "CLAPSHOT_MEDIA_ID".to_string(),
+            validate_env_value("CLAPSHOT_MEDIA_ID", &src.media_file_id)?,
+        );
+        env_vars.insert(
+            "CLAPSHOT_THUMB_SIZE".to_string(),
+            validate_env_value(
+                "CLAPSHOT_THUMB_SIZE",
+                &format!("{}x{}", thumb_size.0, thumb_size.1),
+            )?,
+        );
+        env_vars.insert(
+            "CLAPSHOT_SHEET_DIMS".to_string(),
+            validate_env_value(
+                "CLAPSHOT_SHEET_DIMS",
+                &format!("{}x{}", thumb_sheet_dims.0, thumb_sheet_dims.1),
+            )?,
+        );
         Ok(())
     })() {
-        return err2cout("Failed to set up script environment", e,
-                       &CmprInput::Thumbs {
-                           thumb_dir: thumb_dir.clone(),
-                           thumb_sheet_dims,
-                           thumb_size,
-                           src: src.clone()
-                       }, Some(&sanitized_input));
+        return err2cout(
+            "Failed to set up script environment",
+            e,
+            &CmprInput::Thumbs {
+                thumb_dir: thumb_dir.clone(),
+                thumb_sheet_dims,
+                thumb_size,
+                src: src.clone(),
+            },
+            Some(&sanitized_input),
+        );
     }
 
     // Run the thumbnailing script
@@ -735,7 +907,8 @@ fn run_thumbnail_script(thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_sheet_d
     let script_thread = {
         std::thread::spawn(move || {
             let _span = tracing::info_span!("thumbnail_script",
-                thread = ?std::thread::current().id()).entered();
+                thread = ?std::thread::current().id())
+            .entered();
 
             let mut cmd = Command::new(&script_path_owned);
 
@@ -781,10 +954,16 @@ fn run_thumbnail_script(thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_sheet_d
                         tracing::error!(file=?log_file, details=%e, "Failed to write thumbnailing log file");
                     }
 
-                    (if res.status.success() {None} else {Some("Script exited with error".to_string())},
+                    (
+                        if res.status.success() {
+                            None
+                        } else {
+                            Some("Script exited with error".to_string())
+                        },
                         format!("Log written to: {}", log_file.display()),
-                        "".to_string() )
-                },
+                        "".to_string(),
+                    )
+                }
                 Err(e) => {
                     tracing::error!(details=%e, "Script exec failed");
 
@@ -811,7 +990,11 @@ fn run_thumbnail_script(thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_sheet_d
                         tracing::error!(file=?log_file, details=%write_err, "Failed to write thumbnailing error log");
                     }
 
-                    (Some(e.to_string()), format!("Log written to: {}", log_file.display()), "".into())
+                    (
+                        Some(e.to_string()),
+                        format!("Log written to: {}", log_file.display()),
+                        "".into(),
+                    )
                 }
             }
         })
@@ -821,7 +1004,11 @@ fn run_thumbnail_script(thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_sheet_d
     tracing::debug!("Waiting for thumbnailing script to complete...");
     let (err_msg, stdout, stderr) = script_thread.join().unwrap_or_else(|e| {
         tracing::error!(details=?e, "Script thread panicked.");
-        (Some("Script thread panicked".to_string()), "".into(), format!("{:?}", e))
+        (
+            Some("Script thread panicked".to_string()),
+            "".into(),
+            format!("{:?}", e),
+        )
     });
 
     let logs = CmprLogs {
@@ -830,11 +1017,16 @@ fn run_thumbnail_script(thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_sheet_d
         stdout,
         _stderr: stderr,
         dmsg: DetailedMsg {
-            msg: if err_msg.is_some() { "Thumbnailing failed" } else { "Thumbnailing complete" }.to_string(),
+            msg: if err_msg.is_some() {
+                "Thumbnailing failed"
+            } else {
+                "Thumbnailing complete"
+            }
+            .to_string(),
             details: format!("Error in script: {:?}", err_msg.clone().unwrap_or_default()),
             src_file: src.path.clone(),
-            user_id: src.user_id.clone()
-        }
+            user_id: src.user_id.clone(),
+        },
     };
 
     // Move thumbnail files from script work directory to main thumbnail directory
@@ -851,7 +1043,9 @@ fn run_thumbnail_script(thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_sheet_d
                     if let Err(e) = fs::rename(&src_path, &dest_path) {
                         tracing::warn!(details=%e, from=?src_path, to=?dest_path, "Failed to move thumbnail file to final location");
                         // Try copy + remove as fallback
-                        if let Ok(()) = fs::copy(&src_path, &dest_path).and_then(|_| fs::remove_file(&src_path)) {
+                        if let Ok(()) =
+                            fs::copy(&src_path, &dest_path).and_then(|_| fs::remove_file(&src_path))
+                        {
                             tracing::debug!(from=?src_path, to=?dest_path, "Successfully copied and removed thumbnail file");
                         }
                     } else {
@@ -878,28 +1072,39 @@ fn run_thumbnail_script(thumb_dir: PathBuf, thumb_size: (u32,u32), thumb_sheet_d
         Some(_) => CmprOutput::ThumbsFailure { logs },
         None => {
             // Check if any thumbnail files were actually created
-            let has_thumbnails = thumb_dir.exists() &&
-                fs::read_dir(&thumb_dir)
-                    .map(|entries| entries.filter_map(|e| e.ok()).any(|entry| {
-                        let path = entry.path();
-                        let is_thumb = path.is_file() && path.file_name()
-                            .and_then(|name| name.to_str())
-                            .map(|s| {
-                                // Only consider actual thumbnail files, not log files
-                                s.ends_with(".webp") || 
-                                (s.starts_with("thumb") && s.ends_with(".webp")) || 
-                                (s.starts_with("sheet-") && s.ends_with(".webp"))
-                            })
-                            .unwrap_or(false);
-                        is_thumb
-                    }))
+            let has_thumbnails = thumb_dir.exists()
+                && fs::read_dir(&thumb_dir)
+                    .map(|entries| {
+                        entries.filter_map(|e| e.ok()).any(|entry| {
+                            let path = entry.path();
+                            let is_thumb = path.is_file()
+                                && path
+                                    .file_name()
+                                    .and_then(|name| name.to_str())
+                                    .map(|s| {
+                                        // Only consider actual thumbnail files, not log files
+                                        s.ends_with(".webp")
+                                            || (s.starts_with("thumb") && s.ends_with(".webp"))
+                                            || (s.starts_with("sheet-") && s.ends_with(".webp"))
+                                    })
+                                    .unwrap_or(false);
+                            is_thumb
+                        })
+                    })
                     .unwrap_or(false);
-            
 
             CmprOutput::ThumbsSuccess {
-                thumb_dir: if has_thumbnails { Some(thumb_dir) } else { None },
-                thumb_sheet_dims: if has_thumbnails { Some(thumb_sheet_dims) } else { None },
-                logs
+                thumb_dir: if has_thumbnails {
+                    Some(thumb_dir)
+                } else {
+                    None
+                },
+                thumb_sheet_dims: if has_thumbnails {
+                    Some(thumb_sheet_dims)
+                } else {
+                    None
+                },
+                logs,
             }
         }
     }
@@ -912,8 +1117,8 @@ pub fn run_forever(
     progress: ProgressSender,
     n_workers: usize,
     transcode_script: String,
-    thumbnail_script: String)
-{
+    thumbnail_script: String,
+) {
     let _span = tracing::info_span!("SCRIPT_PROCESSOR").entered();
     tracing::debug!(n_workers = n_workers, "Starting script processor.");
 
@@ -926,12 +1131,12 @@ pub fn run_forever(
                         tracing::info!(id=%src.media_file_id, r#type=?src.media_type,
                             user=%src.user_id, file=%(src.path.file_name().unwrap_or_default().to_string_lossy()),
                             "Media file transcode request (script).");
-                    },
+                    }
                     CmprInput::Thumbs { src, .. } => {
                         tracing::info!(id=%src.media_file_id, r#type=?src.media_type,
                             user=%src.user_id, file=%(src.path.file_name().unwrap_or_default().to_string_lossy()),
                             "Media file thumbnail request (script).");
-                    },
+                    }
                 }
                 tracing::debug!(details=?args, "Spawning script worker thread.");
 
@@ -940,21 +1145,42 @@ pub fn run_forever(
                 let transcode_script_path = transcode_script.clone();
                 let thumbnail_script_path = thumbnail_script.clone();
 
-                pool.execute(move || {
-                    match args {
-                        CmprInput::Transcode { video_dst_dir, video_dst_prefix, video_bitrate, src } => {
-                            if let Err(e) = outq.send(run_transcode_script(&src, video_dst_dir, video_dst_prefix, video_bitrate, prgr_sender, &transcode_script_path)) {
-                                tracing::error!("Transcode result send failed! Aborting. -- {:?}", e);
-                            }
-                        },
-                        CmprInput::Thumbs { thumb_dir, thumb_sheet_dims, thumb_size, src } => {
-                            if let Err(e) = outq.send(run_thumbnail_script(thumb_dir, thumb_size, thumb_sheet_dims, src, &thumbnail_script_path)) {
-                                tracing::error!("Thumbnail result send failed! Aborting. -- {:?}", e);
-                            }
-                        },
+                pool.execute(move || match args {
+                    CmprInput::Transcode {
+                        video_dst_dir,
+                        video_dst_prefix,
+                        video_bitrate,
+                        src,
+                    } => {
+                        if let Err(e) = outq.send(run_transcode_script(
+                            &src,
+                            video_dst_dir,
+                            video_dst_prefix,
+                            video_bitrate,
+                            prgr_sender,
+                            &transcode_script_path,
+                        )) {
+                            tracing::error!("Transcode result send failed! Aborting. -- {:?}", e);
+                        }
+                    }
+                    CmprInput::Thumbs {
+                        thumb_dir,
+                        thumb_sheet_dims,
+                        thumb_size,
+                        src,
+                    } => {
+                        if let Err(e) = outq.send(run_thumbnail_script(
+                            thumb_dir,
+                            thumb_size,
+                            thumb_sheet_dims,
+                            src,
+                            &thumbnail_script_path,
+                        )) {
+                            tracing::error!("Thumbnail result send failed! Aborting. -- {:?}", e);
+                        }
                     }
                 });
-            },
+            }
             Err(e) => {
                 tracing::info!(details=%e, "Input queue closed.");
                 break;

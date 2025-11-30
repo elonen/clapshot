@@ -6,21 +6,21 @@
 
 use std::collections::HashMap;
 use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::thread;
-use std::path::{PathBuf, Path};
 
 use crossbeam_channel;
-use crossbeam_channel::{Receiver, unbounded, select};
+use crossbeam_channel::{select, unbounded, Receiver};
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
 use tracing;
 
-use anyhow::{anyhow, Context, bail};
-use sha2::{Sha256, Digest};
+use anyhow::{anyhow, bail, Context};
 use hex;
+use sha2::{Digest, Sha256};
 
 pub mod incoming_monitor;
 pub mod metadata_reader;
@@ -28,13 +28,13 @@ pub mod metadata_reader;
 mod cleanup_rejected;
 mod script_processor;
 
-use metadata_reader::MetadataResult;
 use crate::api_server::{UserMessage, UserMessageTopic};
 use crate::database::error::DBError;
+use crate::database::{models, DbBasicQuery, DB};
+use crate::storage::StorageBackend;
 use crate::video_pipeline::metadata_reader::MediaType;
 use cleanup_rejected::clean_up_rejected_file;
-use crate::database::{DB, models, DbBasicQuery};
-use crate::storage::StorageBackend;
+use metadata_reader::MetadataResult;
 
 #[derive(Debug, Clone)]
 pub enum IngestUsernameFrom {
@@ -49,7 +49,10 @@ impl std::str::FromStr for IngestUsernameFrom {
         match s {
             "file-owner" => Ok(IngestUsernameFrom::FileOwner),
             "folder-name" => Ok(IngestUsernameFrom::FolderName),
-            _ => Err(format!("Invalid value '{}', must be 'file-owner' or 'folder-name'", s)),
+            _ => Err(format!(
+                "Invalid value '{}', must be 'file-owner' or 'folder-name'",
+                s
+            )),
         }
     }
 }
@@ -66,12 +69,11 @@ pub enum TranscodePreference {
     Skip,
 }
 
-
-#[derive (Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct IncomingFile {
     pub file_path: PathBuf,
     pub user_id: String,
-    pub cookies: HashMap<String, String>,  // Cookies from client, if this was an HTTP upload
+    pub cookies: HashMap<String, String>, // Cookies from client, if this was an HTTP upload
     pub transcode_preference: TranscodePreference,
 }
 
@@ -83,13 +85,61 @@ pub struct DetailedMsg {
     pub user_id: String,
 }
 
+fn send_progress_update(
+    user_msg_tx: &crossbeam_channel::Sender<UserMessage>,
+    user_id: &str,
+    media_file_id: &str,
+    msg: &str,
+    progress: f32,
+) {
+    let _ = user_msg_tx.send(UserMessage {
+        topic: UserMessageTopic::Progress,
+        msg: msg.to_string(),
+        details: None,
+        user_id: Some(user_id.to_string()),
+        media_file_id: Some(media_file_id.to_string()),
+        subtitle_id: None,
+        progress: Some(progress.clamp(0.0, 1.0)),
+    });
+}
+
+fn upload_to_storage_with_progress(
+    storage: &StorageBackend,
+    abs_path: &Path,
+    user_msg_tx: &crossbeam_channel::Sender<UserMessage>,
+    user_id: &str,
+    media_file_id: &str,
+    label: &str,
+) -> anyhow::Result<()> {
+    if !storage.needs_remote_upload() {
+        return storage.upload_local_path(abs_path);
+    }
+
+    let tx = user_msg_tx.clone();
+    let uid = user_id.to_string();
+    let mid = media_file_id.to_string();
+    let label = label.to_string();
+    let callback = Arc::new(move |ratio: f32| {
+        send_progress_update(&tx, &uid, &mid, &label, ratio);
+    });
+
+    // Kick off the bar right away so the client shows it while we stream to S3.
+    callback(0.0);
+    storage.upload_with_progress(abs_path, Some(callback))
+}
 
 /// Calculate hash identifier (media_file_id) for the submitted files,
 /// based on filename, user_id, size and sample of the file contents.
-fn calc_media_file_id(file_path: &PathBuf, user_id: &str, upload_cookies: HashMap<String, String>) -> anyhow::Result<String> {
+fn calc_media_file_id(
+    file_path: &PathBuf,
+    user_id: &str,
+    upload_cookies: HashMap<String, String>,
+) -> anyhow::Result<String> {
     let mut file_hash = Sha256::new();
-    let fname = file_path.file_name()
-        .ok_or(anyhow!("Bad filename: {:?}", file_path))?.to_str()
+    let fname = file_path
+        .file_name()
+        .ok_or(anyhow!("Bad filename: {:?}", file_path))?
+        .to_str()
         .ok_or(anyhow!("Bad filename encoding {:?}", file_path))?;
 
     file_hash.update(fname.as_bytes());
@@ -109,7 +159,7 @@ fn calc_media_file_id(file_path: &PathBuf, user_id: &str, upload_cookies: HashMa
 
     // Read max 32k of contents
     let file = std::fs::File::open(file_path)?;
-    let mut buf = Vec::with_capacity(32*1024);
+    let mut buf = Vec::with_capacity(32 * 1024);
     file.take(32768u64).read_to_end(&mut buf)?;
     file_hash.update(&buf);
 
@@ -122,26 +172,28 @@ fn calc_media_file_id(file_path: &PathBuf, user_id: &str, upload_cookies: HashMa
 /// Move the file to the appropriate directory, and update the database.
 /// See if the file is a duplicate, and submit it for transcoding if necessary.
 fn ingest_media_file(
-        media_id: &str,
-        md: &metadata_reader::Metadata,
-        data_dir: &Path,
-        media_files_dir: &Path,
-        storage: &StorageBackend,
-        target_bitrate: u32,
-        db: &DB,
-        user_msg_tx: &crossbeam_channel::Sender<UserMessage>,
-        cmpr_tx: &crossbeam_channel::Sender<script_processor::CmprInput>)
-            -> anyhow::Result<bool>
-{
+    media_id: &str,
+    md: &metadata_reader::Metadata,
+    data_dir: &Path,
+    media_files_dir: &Path,
+    storage: &StorageBackend,
+    target_bitrate: u32,
+    db: &DB,
+    user_msg_tx: &crossbeam_channel::Sender<UserMessage>,
+    cmpr_tx: &crossbeam_channel::Sender<script_processor::CmprInput>,
+) -> anyhow::Result<bool> {
     let _span = tracing::info_span!("INGEST_MEDIA",
         media_id = %media_id,
         user=md.user_id,
-        filename=%md.src_file.file_name().unwrap_or_default().to_string_lossy()).entered();
+        filename=%md.src_file.file_name().unwrap_or_default().to_string_lossy())
+    .entered();
 
     tracing::info!("Ingesting file.");
 
     let src = PathBuf::from(&md.src_file);
-    if !src.is_file() { bail!("Source file not found: {:?}", src) }
+    if !src.is_file() {
+        bail!("Source file not found: {:?}", src)
+    }
 
     let dir_for_media_file = media_files_dir.join(&media_id);
     tracing::debug!("Media dir = {:?}", dir_for_media_file);
@@ -154,23 +206,27 @@ fn ingest_media_file(
                 let new_owner = &md.user_id;
                 if &v.user_id == new_owner {
                     tracing::info!("User already has this media file.");
-                    user_msg_tx.send(UserMessage {
-                        topic: UserMessageTopic::Ok,
-                        msg: "Media file already exists".to_string(),
-                        user_id: Some(new_owner.clone()),
-                        media_file_id: None,  // Don't pass media file id here, otherwise the pre-existing media would be deleted!
-                        ..Default::default()
-                    }).ok();
+                    user_msg_tx
+                        .send(UserMessage {
+                            topic: UserMessageTopic::Ok,
+                            msg: "Media file already exists".to_string(),
+                            user_id: Some(new_owner.clone()),
+                            media_file_id: None, // Don't pass media file id here, otherwise the pre-existing media would be deleted!
+                            ..Default::default()
+                        })
+                        .ok();
 
-                    clean_up_rejected_file(&data_dir, &src, Some(media_id.into())).unwrap_or_else(|e| {
-                        tracing::error!(details=?e, "Cleanup failed.");
-                    });
+                    clean_up_rejected_file(&data_dir, &src, Some(media_id.into())).unwrap_or_else(
+                        |e| {
+                            tracing::error!(details=?e, "Cleanup failed.");
+                        },
+                    );
 
                     return Ok(false);
                 } else {
                     bail!("Hash collision?!? Media '{media_id}' already owned by another user '{new_owner}'.")
                 }
-            },
+            }
             Err(DBError::NotFound()) => {
                 // File exists, but not in DB. Remove files and reprocess.
                 tracing::info!("Dir for '{media_id}' exists, but not in DB. Deleting old dir and reprocessing.");
@@ -193,52 +249,101 @@ fn ingest_media_file(
 
     tracing::debug!("Moving '{}' to '{}'", src.display(), src_moved.display());
     std::fs::rename(&src, &src_moved)?;
-    if !src_moved.exists() { bail!("Failed to move {:?} file to orig/", src_moved) }
+    if !src_moved.exists() {
+        bail!("Failed to move {:?} file to orig/", src_moved)
+    }
 
-    storage.upload_if_exists(&src_moved);
-
-    let orig_filename = src.file_name().ok_or(anyhow!("Bad filename: {:?}", src))?.to_string_lossy().into_owned();
+    let orig_filename = src
+        .file_name()
+        .ok_or(anyhow!("Bad filename: {:?}", src))?
+        .to_string_lossy()
+        .into_owned();
 
     // Add to DB
     tracing::debug!("Adding media file to DB.");
-    models::MediaFile::insert(&mut db.conn()?, &models::MediaFileInsert {
-        id: media_id.to_string(),
-        user_id: md.user_id.clone(),
-        media_type: Some(md.media_type.as_ref().into()),
-        recompression_done: None,
-        thumbs_done: None,
-        has_thumbnail: None,
-        thumb_sheet_cols: None,
-        thumb_sheet_rows: None,
-        orig_filename: Some(orig_filename.clone()),
-        title: Some(orig_filename),
-        total_frames: Some(md.total_frames as i32),
-        duration: md.duration.to_f32(),
-        fps: Some(md.fps.to_string()),
-        raw_metadata_all: Some(md.metadata_all.clone()),
-        default_subtitle_id: None,
-    })?;
+    models::MediaFile::insert(
+        &mut db.conn()?,
+        &models::MediaFileInsert {
+            id: media_id.to_string(),
+            user_id: md.user_id.clone(),
+            media_type: Some(md.media_type.as_ref().into()),
+            recompression_done: None,
+            thumbs_done: None,
+            has_thumbnail: None,
+            thumb_sheet_cols: None,
+            thumb_sheet_rows: None,
+            orig_filename: Some(orig_filename.clone()),
+            title: Some(orig_filename),
+            total_frames: Some(md.total_frames as i32),
+            duration: md.duration.to_f32(),
+            fps: Some(md.fps.to_string()),
+            raw_metadata_all: Some(md.metadata_all.clone()),
+            default_subtitle_id: None,
+        },
+    )?;
 
+    upload_to_storage_with_progress(
+        storage,
+        &src_moved,
+        user_msg_tx,
+        &md.user_id,
+        media_id,
+        "Uploading to storage",
+    )?;
 
     // Check if it needs recompressing
-    fn auto_transcoding_need(md: &metadata_reader::Metadata, target_max_bitrate: u32) -> Option<(String, u32)> {
+    fn auto_transcoding_need(
+        md: &metadata_reader::Metadata,
+        target_max_bitrate: u32,
+    ) -> Option<(String, u32)> {
         match md.media_type {
-            metadata_reader::MediaType::Audio => Some(("client cannot playback audio only".to_string(), target_max_bitrate)),
-            metadata_reader::MediaType::Image => Some(("client cannot 'playback' still images".to_string(), target_max_bitrate)),
+            metadata_reader::MediaType::Audio => Some((
+                "client cannot playback audio only".to_string(),
+                target_max_bitrate,
+            )),
+            metadata_reader::MediaType::Image => Some((
+                "client cannot 'playback' still images".to_string(),
+                target_max_bitrate,
+            )),
             metadata_reader::MediaType::Video => {
-                let new_bitrate = std::cmp::max(md.bitrate/2, std::cmp::min(md.bitrate, target_max_bitrate));
-                let ext = md.src_file.extension().unwrap_or(std::ffi::OsStr::new("")).to_string_lossy().to_lowercase();
+                let new_bitrate = std::cmp::max(
+                    md.bitrate / 2,
+                    std::cmp::min(md.bitrate, target_max_bitrate),
+                );
+                let ext = md
+                    .src_file
+                    .extension()
+                    .unwrap_or(std::ffi::OsStr::new(""))
+                    .to_string_lossy()
+                    .to_lowercase();
                 {
-                    let bitrate_fine = (new_bitrate >= md.bitrate || (md.bitrate as f32) <= 1.2 * (target_max_bitrate as f32));
-                    let codec_fine = ["h264", "avc", "hevc", "h265"].contains(&md.orig_codec.to_lowercase().as_str());
+                    let bitrate_fine = (new_bitrate >= md.bitrate
+                        || (md.bitrate as f32) <= 1.2 * (target_max_bitrate as f32));
+                    let codec_fine = ["h264", "avc", "hevc", "h265"]
+                        .contains(&md.orig_codec.to_lowercase().as_str());
                     let container_fine = ["mp4", "mkv"].contains(&ext.as_str());
 
-                    if !container_fine { Some(format!("container '{}' not supported", md.src_file.extension().unwrap_or_default().to_string_lossy())) }
-                    else if !codec_fine { Some(format!("codec '{}' not supported", md.orig_codec)) }
-                    else if !bitrate_fine { Some(format!("bitrate is too high: old {} > new {}", md.bitrate, new_bitrate)) }
-                    else { None }
-                }.map(|reason| (reason, new_bitrate))
-            },
+                    if !container_fine {
+                        Some(format!(
+                            "container '{}' not supported",
+                            md.src_file
+                                .extension()
+                                .unwrap_or_default()
+                                .to_string_lossy()
+                        ))
+                    } else if !codec_fine {
+                        Some(format!("codec '{}' not supported", md.orig_codec))
+                    } else if !bitrate_fine {
+                        Some(format!(
+                            "bitrate is too high: old {} > new {}",
+                            md.bitrate, new_bitrate
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                .map(|reason| (reason, new_bitrate))
+            }
         }
     }
 
@@ -251,7 +356,9 @@ fn ingest_media_file(
     };
 
     let requested_transcode = match md.transcode_preference {
-        TranscodePreference::Force => Some(("user requested transcoding".to_string(), target_bitrate)),
+        TranscodePreference::Force => {
+            Some(("user requested transcoding".to_string(), target_bitrate))
+        }
         TranscodePreference::Skip => None,
         TranscodePreference::Auto => auto_transcoding_need(md, target_bitrate),
     };
@@ -259,13 +366,16 @@ fn ingest_media_file(
     let transcode_req = match requested_transcode {
         Some((reason, new_bitrate)) => {
             let video_dst_prefix = format!("transcoded_br{}_{}", new_bitrate, uuid::Uuid::new_v4());
-            cmpr_tx.send(script_processor::CmprInput::Transcode {
-                video_dst_dir: dir_for_media_file.clone(),
-                video_dst_prefix,
-                video_bitrate: new_bitrate,
-                src: src.clone()
-            }).map(|_| (true, reason)).context("Error sending file to transcoding")
-        },
+            cmpr_tx
+                .send(script_processor::CmprInput::Transcode {
+                    video_dst_dir: dir_for_media_file.clone(),
+                    video_dst_prefix,
+                    video_bitrate: new_bitrate,
+                    src: src.clone(),
+                })
+                .map(|_| (true, reason))
+                .context("Error sending file to transcoding")
+        }
         None => {
             tracing::info!("Media OK already, not transcoding.");
             Ok((false, "".to_string()))
@@ -285,18 +395,20 @@ fn ingest_media_file(
                 media_type: md.media_type.clone(),
                 path: src_moved.clone(),
                 duration: md.duration,
-            }
+            },
         }) {
             tracing::error!(details=?e, "Failed to send file to thumbnailing");
             if let Err(e) = user_msg_tx.send(UserMessage {
-                    topic: UserMessageTopic::Error,
-                    msg: "Thumbnailing failed.".to_string(),
-                    details: Some(format!("Error sending file to thumbnailing: {}", e)),
-                    user_id: Some(md.user_id.clone()),
-                    media_file_id: Some(media_id.to_string()),
-                    subtitle_id: None,
-                    progress: None
-                }) { tracing::error!(details=?e, "Failed to send user message") };
+                topic: UserMessageTopic::Error,
+                msg: "Thumbnailing failed.".to_string(),
+                details: Some(format!("Error sending file to thumbnailing: {}", e)),
+                user_id: Some(md.user_id.clone()),
+                media_file_id: Some(media_id.to_string()),
+                subtitle_id: None,
+                progress: None,
+            }) {
+                tracing::error!(details=?e, "Failed to send user message")
+            };
         };
     };
 
@@ -307,25 +419,36 @@ fn ingest_media_file(
             user_msg_tx.send(UserMessage {
                 topic: UserMessageTopic::MediaFileAdded,
                 msg: String::new(),
-                details: Some(serde_json::to_string(&md.upload_cookies).map_err(|e| anyhow!("Error serializing cookies: {}", e))?),
+                details: Some(
+                    serde_json::to_string(&md.upload_cookies)
+                        .map_err(|e| anyhow!("Error serializing cookies: {}", e))?,
+                ),
                 user_id: Some(md.user_id.clone()),
                 media_file_id: Some(media_id.to_string()),
                 subtitle_id: None,
                 progress: None,
             })?;
             // Tell user in text also
-            tracing::debug!(transcode=do_transcode, reason=reason, "Media added to DB. Transcode");
+            tracing::debug!(
+                transcode = do_transcode,
+                reason = reason,
+                "Media added to DB. Transcode"
+            );
             user_msg_tx.send(UserMessage {
                 topic: UserMessageTopic::Ok,
-                msg: "Media added.".to_string() + if do_transcode {" Transcoding..."} else {""},
-                details: if do_transcode { Some(format!("Transcoding because {reason}")) } else { None },
+                msg: "Media added.".to_string() + if do_transcode { " Transcoding..." } else { "" },
+                details: if do_transcode {
+                    Some(format!("Transcoding because {reason}"))
+                } else {
+                    None
+                },
                 user_id: Some(md.user_id.clone()),
                 media_file_id: Some(media_id.to_string()),
                 subtitle_id: None,
                 progress: if do_transcode { Some(0.0) } else { None },
             })?;
             Ok(do_transcode)
-        },
+        }
         Err(e) => {
             tracing::error!(details=?e, "Media added to DB, but failed to send to transcoding.");
             user_msg_tx.send(UserMessage {
@@ -342,9 +465,6 @@ fn ingest_media_file(
     }
 }
 
-
-
-
 pub fn run_forever(
     db: Arc<DB>,
     terminate_flag: Arc<AtomicBool>,
@@ -358,8 +478,8 @@ pub fn run_forever(
     n_workers: usize,
     ingest_username_from: IngestUsernameFrom,
     transcode_script: String,
-    thumbnail_script: String)
-{
+    thumbnail_script: String,
+) {
     tracing::debug!("Starting media file processing pipeline.");
 
     // Create folder for processed media files
@@ -371,14 +491,14 @@ pub fn run_forever(
 
     // Thread for incoming folder scanner
     let (_md_thread, from_md, to_md) = {
-            let (arg_sender, arg_recvr) = unbounded::<IncomingFile>();
-            let (res_sender, res_recvr) = unbounded::<MetadataResult>();
+        let (arg_sender, arg_recvr) = unbounded::<IncomingFile>();
+        let (res_sender, res_recvr) = unbounded::<MetadataResult>();
 
-            let th = thread::spawn(move || {
-                    metadata_reader::run_forever(arg_recvr, res_sender, 4);
-                });
-            (th, res_recvr, arg_sender)
-        };
+        let th = thread::spawn(move || {
+            metadata_reader::run_forever(arg_recvr, res_sender, 4);
+        });
+        (th, res_recvr, arg_sender)
+    };
 
     // Thread for metadata reader
     let (mon_thread, from_mon, mon_exit) = {
@@ -387,15 +507,18 @@ pub fn run_forever(
 
         let data_dir = data_dir.clone();
         let th = thread::spawn(move || {
-                if let Err(e) = incoming_monitor::run_forever(
-                        data_dir.clone(),
-                        (data_dir.join("incoming") ).clone(),
-                        poll_interval, resubmit_delay,
-                        incoming_sender,
-                        exit_recvr,
-                        ingest_username_from) {
-                    tracing::error!(details=?e, "Error from incoming monitor.");
-                }});
+            if let Err(e) = incoming_monitor::run_forever(
+                data_dir.clone(),
+                (data_dir.join("incoming")).clone(),
+                poll_interval,
+                resubmit_delay,
+                incoming_sender,
+                exit_recvr,
+                ingest_username_from,
+            ) {
+                tracing::error!(details=?e, "Error from incoming monitor.");
+            }
+        });
         (th, incoming_recvr, exit_sender)
     };
 
@@ -406,29 +529,46 @@ pub fn run_forever(
     let transcode_script_clone = transcode_script.clone();
     let thumbnail_script_clone = thumbnail_script.clone();
     thread::spawn(move || {
-        script_processor::run_forever(cmpr_in_rx, cmpr_out_tx, cmpr_prog_tx, n_workers, transcode_script_clone, thumbnail_script_clone);
+        script_processor::run_forever(
+            cmpr_in_rx,
+            cmpr_out_tx,
+            cmpr_prog_tx,
+            n_workers,
+            transcode_script_clone,
+            thumbnail_script_clone,
+        );
     });
 
     // Migration from older version: find a media file that is missing thumbnail sheet
-    fn legacy_thumbnail_next_media_file(db: &DB, videos_dir: &PathBuf, cmpr_in: &mut crossbeam_channel::Sender<script_processor::CmprInput>) -> Option<String> {
-
-        let candidates = db.conn()
+    fn legacy_thumbnail_next_media_file(
+        db: &DB,
+        videos_dir: &PathBuf,
+        cmpr_in: &mut crossbeam_channel::Sender<script_processor::CmprInput>,
+    ) -> Option<String> {
+        let candidates = db
+            .conn()
             .and_then(|mut conn| models::MediaFile::get_all_with_missing_thumbnails(&mut conn))
-            .map_err(|e| { tracing::error!(details=?e, "DB: Failed to get media files without thumbnails."); }).ok()?;
+            .map_err(|e| {
+                tracing::error!(details=?e, "DB: Failed to get media files without thumbnails.");
+            })
+            .ok()?;
 
         if let Some(v) = candidates.first() {
             tracing::info!(id=%v.id, "Found legacy media file that needs thumbnailing.");
 
             let media_file_path = if v.recompression_done.is_some() {
-                    Some(videos_dir.join(&v.id).join("video.mp4"))
-                } else {
-                    match v.orig_filename {
-                        Some(ref orig_filename) => Some(videos_dir.join(&v.id).join("orig").join(orig_filename)),
-                        None => {
-                            tracing::error!(media_file_id=%v.id, "Legacy thumbnailing failed. Original filename missing and not recompressed.");
-                            None
-                        }}
-                };
+                Some(videos_dir.join(&v.id).join("video.mp4"))
+            } else {
+                match v.orig_filename {
+                    Some(ref orig_filename) => {
+                        Some(videos_dir.join(&v.id).join("orig").join(orig_filename))
+                    }
+                    None => {
+                        tracing::error!(media_file_id=%v.id, "Legacy thumbnailing failed. Original filename missing and not recompressed.");
+                        None
+                    }
+                }
+            };
 
             match media_file_path {
                 Some(file_path) => {
@@ -444,23 +584,24 @@ pub fn run_forever(
                             media_file_id: v.id.clone(),
                             media_type,
                             path: file_path,
-                            duration: Decimal::from_f32(v.duration.unwrap_or(0.0)).unwrap_or_default(),
+                            duration: Decimal::from_f32(v.duration.unwrap_or(0.0))
+                                .unwrap_or_default(),
                         },
                     };
                     cmpr_in.send(req).unwrap_or_else(|e| {
                             tracing::error!(details=?e, "Error sending legacy thumbnailing request to compressor.");
                         });
                     return Some(v.id.clone());
-                },
+                }
                 _ => {
                     tracing::error!(media_file_id=%v.id, "Legacy thumbnailing failed. User ID or orig filename missing.");
-                },
+                }
             }
         }
         None
     }
-    let mut legacy_media_file_now_thumnailing = legacy_thumbnail_next_media_file(&db, &media_files_dir, &mut cmpr_in_tx.clone());
-
+    let mut legacy_media_file_now_thumnailing =
+        legacy_thumbnail_next_media_file(&db, &media_files_dir, &mut cmpr_in_tx.clone());
 
     let _span = tracing::info_span!("PIPELINE").entered();
     loop {
@@ -617,7 +758,17 @@ pub fn run_forever(
                                     tracing::error!(details=%e, "Failed to create symlink {:?} -> {:?}", symlink_path, video_dst);
                                     return false;
                                 }
-                                storage.upload_if_exists(&symlink_path);
+                                if let Err(e) = upload_to_storage_with_progress(
+                                    &storage,
+                                    &symlink_path,
+                                    &utx,
+                                    &user_id,
+                                    &vid,
+                                    "Uploading transcoded video",
+                                ) {
+                                    tracing::error!(details=%e, "Failed to upload transcoded file to object storage");
+                                    return false;
+                                }
 
                                 if let Err(e) = db.conn().and_then(|mut conn| models::MediaFile::set_recompressed(&mut conn, &vid)) {
                                     tracing::error!(details=%e, "Error marking media file as recompressed in DB");
@@ -742,7 +893,7 @@ pub fn run_forever(
     drop(mon_exit);
     terminate_flag.store(true, std::sync::atomic::Ordering::Relaxed);
     match mon_thread.join() {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             tracing::error!("Error waiting for monitor thread to exit: {:?}", e);
         }

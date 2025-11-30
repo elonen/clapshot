@@ -1,20 +1,40 @@
-use std::fs::File;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use anyhow::{anyhow, bail, Context};
-use aws_sdk_s3::{config::Region, config::endpoint::Endpoint, primitives::ByteStream, Client, config::endpoint::ResolveEndpoint};
-use aws_sdk_s3::config::auth::{ParamsBuilder};
+use anyhow::{anyhow, Context};
+use aws_sdk_s3::config::endpoint::DefaultResolver;
 use aws_sdk_s3::config::Credentials;
-use aws_sdk_s3::config::endpoint::{DefaultResolver, EndpointFuture, SharedEndpointResolver};
+use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
+use aws_sdk_s3::{
+    config::AsyncSleep, config::Region, config::SharedAsyncSleep, config::Sleep,
+    primitives::ByteStream, Client,
+};
 use http::Uri;
-use mime::Params;
+use tokio::fs;
+use tokio::io::AsyncReadExt;
 use tokio::runtime::Runtime;
+use tracing;
+
+pub type ProgressCallback = Arc<dyn Fn(f32) + Send + Sync + 'static>;
+
+const MULTIPART_MIN_SIZE: u64 = 5 * 1024 * 1024;
+const MULTIPART_CHUNK_SIZE: usize = 8 * 1024 * 1024;
+#[derive(Debug)]
+pub struct ForeverSleep;
+
+impl AsyncSleep for ForeverSleep {
+    fn sleep(&self, _duration: std::time::Duration) -> Sleep {
+        Sleep::new(std::future::pending())
+    }
+}
 /// Simple content type guessing for a handful of formats we serve.
 fn guess_content_type(path: &Path) -> &'static str {
-    match path.extension().and_then(|e| e.to_str()).map(|s| s.to_ascii_lowercase()) {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase())
+    {
         Some(ext) if ext == "mp4" => "video/mp4",
         Some(ext) if ext == "mkv" => "video/x-matroska",
         Some(ext) if ext == "webm" => "video/webm",
@@ -55,18 +75,22 @@ impl StorageBackend {
         prefix: String,
         public_base_url: String,
     ) -> anyhow::Result<Self> {
-        let media_base_url = format!("{}/{}", public_base_url.trim_end_matches('/'), prefix.trim_end_matches('/'));
+        let media_base_url = format!(
+            "{}/{}",
+            public_base_url.trim_end_matches('/'),
+            prefix.trim_end_matches('/')
+        );
 
         let rt = Runtime::new().context("create tokio runtime for S3 client")?;
         let client = {
             let region = Region::new(region);
             let credentials = Credentials::new(access_key, secret_key, None, None, "");
-            let url=match Uri::from_str(&endpoint){
+            let _endpoint_uri = match Uri::from_str(&endpoint) {
                 Ok(u) => u,
                 Err(e) => return Err(anyhow!("failed to create uri: {}", e)),
             };
 
-            let resolver=DefaultResolver::new();
+            let resolver = DefaultResolver::new();
             let cfg = rt.block_on(async {
                 let base = aws_config::defaults(aws_config::BehaviorVersion::latest())
                     .region(region)
@@ -76,7 +100,7 @@ impl StorageBackend {
                     .await;
                 aws_sdk_s3::config::Builder::from(&base)
                     .endpoint_resolver(resolver)
-                    .force_path_style(true)
+                    .sleep_impl(SharedAsyncSleep::new(ForeverSleep))
                     .build()
             });
             Client::from_conf(cfg)
@@ -112,10 +136,7 @@ impl StorageBackend {
 
     /// Upload a file that lives under the media root. No-op for LocalFS.
     pub fn upload_local_path(&self, abs_path: &Path) -> anyhow::Result<()> {
-        match self {
-            StorageBackend::LocalFs(_) => Ok(()),
-            StorageBackend::S3(backend) => backend.upload(abs_path),
-        }
+        self.upload_with_progress(abs_path, None)
     }
 
     /// Upload file if it exists and log an error instead of bailing.
@@ -132,9 +153,35 @@ impl StorageBackend {
         }
     }
 
+    /// Upload a file when object storage is enabled, and propagate failures.
+    pub fn upload_required(&self, abs_path: &Path) -> anyhow::Result<()> {
+        if !self.needs_remote_upload() {
+            return Ok(());
+        }
+        self.upload_with_progress(abs_path, None)
+    }
+
+    /// Upload a file, optionally reporting progress (0.0 - 1.0) while streaming to object storage.
+    pub fn upload_with_progress(
+        &self,
+        abs_path: &Path,
+        progress: Option<ProgressCallback>,
+    ) -> anyhow::Result<()> {
+        match self {
+            StorageBackend::LocalFs(_) => {
+                if let Some(cb) = progress {
+                    cb(1.0);
+                }
+                Ok(())
+            }
+            StorageBackend::S3(backend) => backend.upload_with_progress(abs_path, progress),
+        }
+    }
+
     fn key_for_path(&self, abs_path: &Path) -> anyhow::Result<String> {
         let root = self.media_root();
-        let rel = abs_path.strip_prefix(root)
+        let rel = abs_path
+            .strip_prefix(root)
             .with_context(|| format!("Path '{:?}' not under media root '{:?}'", abs_path, root))?;
         let rel = rel.to_string_lossy().replace('\\', "/");
         let prefix = match self {
@@ -169,25 +216,152 @@ pub struct ObjectStorageBackend {
 }
 
 impl ObjectStorageBackend {
-    fn upload(&self, abs_path: &Path) -> anyhow::Result<()> {
+    fn upload_with_progress(
+        &self,
+        abs_path: &Path,
+        progress: Option<ProgressCallback>,
+    ) -> anyhow::Result<()> {
         let key = StorageBackend::S3(self.clone()).key_for_path(abs_path)?;
         let ct = guess_content_type(abs_path);
-        let mut file = File::open(abs_path).with_context(|| format!("Open file {:?}", abs_path))?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
+        let bucket = self.bucket.clone();
+        let client = self.client.clone();
+        let path = abs_path.to_path_buf();
 
-        self.rt.block_on(async {
-            let stream = ByteStream::from(buffer);
-            self.client
-                .put_object()
-                .bucket(&self.bucket)
+        self.rt.block_on(async move {
+            let mut file = fs::File::open(&path)
+                .await
+                .with_context(|| format!("Open file {:?}", path))?;
+            let meta = file.metadata().await?;
+            let total_len = meta.len();
+
+            if total_len == 0 {
+                if let Some(cb) = progress.as_ref() {
+                    cb(1.0);
+                }
+                client
+                    .put_object()
+                    .bucket(&bucket)
+                    .key(&key)
+                    .body(ByteStream::from(Vec::new()))
+                    .content_type(ct)
+                    .send()
+                    .await
+                    .context("upload empty object to storage")?;
+                return Ok(());
+            }
+
+            if total_len <= MULTIPART_MIN_SIZE {
+                let mut buffer = Vec::with_capacity(total_len as usize);
+                file.read_to_end(&mut buffer).await?;
+
+                client
+                    .put_object()
+                    .bucket(&bucket)
+                    .key(&key)
+                    .body(ByteStream::from(buffer))
+                    .content_type(ct)
+                    .send()
+                    .await
+                    .context("upload small object to storage")?;
+
+                if let Some(cb) = progress {
+                    cb(1.0);
+                }
+                return Ok(());
+            }
+
+            let upload = client
+                .create_multipart_upload()
+                .bucket(&bucket)
                 .key(&key)
-                .body(stream)
                 .content_type(ct)
                 .send()
                 .await
-        })
-        .context("upload to object storage")?;
+                .context("initiate multipart upload")?;
+
+            let upload_id = upload
+                .upload_id()
+                .ok_or(anyhow!("Missing upload id from multipart upload"))?
+                .to_string();
+
+            let mut parts = Vec::new();
+            let mut buf = vec![0u8; MULTIPART_CHUNK_SIZE];
+            let mut part_number = 1;
+            let mut uploaded: u64 = 0;
+
+            loop {
+                let bytes_read = file.read(&mut buf).await?;
+                if bytes_read == 0 {
+                    break;
+                }
+
+                let body = ByteStream::from(buf[..bytes_read].to_vec());
+                let res = client
+                    .upload_part()
+                    .bucket(&bucket)
+                    .key(&key)
+                    .upload_id(&upload_id)
+                    .part_number(part_number)
+                    .body(body)
+                    .send()
+                    .await
+                    .with_context(|| format!("upload part {part_number}"))?;
+
+                let etag = res
+                    .e_tag()
+                    .ok_or(anyhow!("Missing etag for uploaded part {part_number}"))?
+                    .to_string();
+
+                parts.push(
+                    CompletedPart::builder()
+                        .e_tag(etag)
+                        .part_number(part_number)
+                        .build(),
+                );
+
+                uploaded += bytes_read as u64;
+                if let Some(cb) = progress.as_ref() {
+                    cb((uploaded as f32 / total_len as f32).clamp(0.0, 1.0));
+                }
+
+                part_number += 1;
+            }
+
+            let multipart = CompletedMultipartUpload::builder()
+                .set_parts(Some(parts))
+                .build();
+
+            if let Err(e) = client
+                .complete_multipart_upload()
+                .bucket(&bucket)
+                .key(&key)
+                .upload_id(&upload_id)
+                .multipart_upload(multipart)
+                .send()
+                .await
+            {
+                tracing::error!(
+                    details=%e,
+                    upload_id=%upload_id,
+                    key=%key,
+                    "Completing multipart upload failed, aborting"
+                );
+                // Best-effort abort; ignore abort error to bubble the original failure.
+                let _ = client
+                    .abort_multipart_upload()
+                    .bucket(&bucket)
+                    .key(&key)
+                    .upload_id(upload_id)
+                    .send()
+                    .await;
+                return Err(anyhow!("complete multipart upload: {e}"));
+            }
+
+            if let Some(cb) = progress {
+                cb(1.0);
+            }
+            Ok::<(), anyhow::Error>(())
+        })?;
 
         Ok(())
     }

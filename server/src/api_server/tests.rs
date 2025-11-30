@@ -1,34 +1,41 @@
 #![allow(dead_code)]
 
 use crate::storage::StorageBackend;
-use std::sync::Arc;
+use lib_clapshot_grpc::proto;
 use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
-use lib_clapshot_grpc::proto;
-use tracing_test::traced_test;
 use std::sync::atomic::Ordering::Relaxed;
+use std::sync::Arc;
+use tracing_test::traced_test;
 
 use reqwest::{multipart, Client};
 
-use crate::database::DbBasicQuery;
-use crate::database::error::DBError;
-use crate::api_server::{parse_auth_headers, run_api_server_async, validate_org_http_headers_regex, UserMessage, UserMessageTopic};
 use crate::api_server::server_state::ServerState;
+use crate::api_server::test_utils::{
+    connect_client_ws, expect_msg, expect_no_msg, open_media_file, write, ApiTestState,
+};
+use crate::api_server::{
+    parse_auth_headers, run_api_server_async, validate_org_http_headers_regex, UserMessage,
+    UserMessageTopic,
+};
+use crate::database::error::DBError;
 use crate::database::models::{self};
 use crate::database::tests::make_test_db;
-use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_no_msg, write, open_media_file, connect_client_ws};
+use crate::database::DbBasicQuery;
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 
 use warp::http::{HeaderMap, HeaderValue};
 
-use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddComment, DelComment, DelMediaFile, EditComment, ListMyMessages, OpenNavigationPage, OpenMediaFile, RenameMediaFile};
+use lib_clapshot_grpc::proto::client::client_to_server_cmd::{
+    AddComment, DelComment, DelMediaFile, EditComment, ListMyMessages, OpenMediaFile,
+    OpenNavigationPage, RenameMediaFile,
+};
 use std::convert::TryFrom;
 
 // ---------------------------------------------------------------------------------------------
 
 #[traced_test]
-async fn test_echo()
-{
+async fn test_echo() {
     api_test! {[ws, _ts]
         write(&mut ws, r#"{"cmd":"echo","data":"hello"}"#).await;
         assert_eq!(expect_msg(&mut ws).await, "Echo: hello");
@@ -37,8 +44,7 @@ async fn test_echo()
 
 #[tokio::test]
 #[traced_test]
-async fn test_api_push_msg()
-{
+async fn test_api_push_msg() {
     api_test! {[ws, ts]
         let mut umsg = UserMessage {
             msg: "test_msg".into(),
@@ -61,11 +67,9 @@ async fn test_api_push_msg()
     }
 }
 
-
 #[tokio::test]
 #[traced_test]
-async fn test_api_navigation_page()
-{
+async fn test_api_navigation_page() {
     api_test! {[ws, ts]
         send_server_cmd!(ws, OpenNavigationPage, OpenNavigationPage{..Default::default()});
         let sp = expect_client_cmd!(&mut ws, ShowPage);
@@ -78,11 +82,9 @@ async fn test_api_navigation_page()
     }
 }
 
-
 #[tokio::test]
 #[traced_test]
-async fn test_api_del_video()
-{
+async fn test_api_del_video() {
     api_test! {[ws, ts]
         let conn = &mut ts.db.conn().unwrap();
 
@@ -124,11 +126,9 @@ async fn test_api_del_video()
     }
 }
 
-
 #[tokio::test]
 #[traced_test]
-async fn test_api_open_media_file()
-{
+async fn test_api_open_media_file() {
     api_test! {[ws, ts]
         for vid in &ts.media_files {
             let v = open_media_file(&mut ws, &vid.id).await.media_file.unwrap();
@@ -152,16 +152,17 @@ async fn test_api_open_media_file()
 
 #[tokio::test]
 #[traced_test]
-async fn test_api_open_bad_media_file()
-{
+async fn test_api_open_bad_media_file() {
     api_test! {[ws, ts]
-        send_server_cmd!(ws, OpenMediaFile, OpenMediaFile{media_file_id: "non-existent".into()});
-        expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
-     }
+       send_server_cmd!(ws, OpenMediaFile, OpenMediaFile{media_file_id: "non-existent".into()});
+       expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
+    }
 }
 
-pub async fn expect_user_msg(ws: &mut crate::api_server::test_utils::WsClient, evt_type: proto::user_message::Type ) -> proto::UserMessage
-{
+pub async fn expect_user_msg(
+    ws: &mut crate::api_server::test_utils::WsClient,
+    evt_type: proto::user_message::Type,
+) -> proto::UserMessage {
     println!(" --expect_user_msg of type {:?} ....", evt_type);
     let cmd = expect_client_cmd!(ws, ShowMessages);
     assert_eq!(cmd.msgs.len(), 1);
@@ -171,8 +172,7 @@ pub async fn expect_user_msg(ws: &mut crate::api_server::test_utils::WsClient, e
 
 #[tokio::test]
 #[traced_test]
-async fn test_api_rename_media_file()
-{
+async fn test_api_rename_media_file() {
     api_test! {[ws, ts]
         let media_file = &ts.media_files[0];
         open_media_file(&mut ws, &media_file.id).await;
@@ -196,12 +196,9 @@ async fn test_api_rename_media_file()
     }
 }
 
-
-
 #[tokio::test]
 #[traced_test]
-async fn test_api_add_plain_comment()
-{
+async fn test_api_add_plain_comment() {
     api_test! {[ws, ts]
         let media = &ts.media_files[0];
         send_server_cmd!(ws, AddComment, AddComment{media_file_id: media.id.clone(), comment: "Test comment".into(), ..Default::default()});
@@ -234,11 +231,9 @@ async fn test_api_add_plain_comment()
     }
 }
 
-
 #[tokio::test]
 #[traced_test]
-async fn test_api_comment_other_users_video()
-{
+async fn test_api_comment_other_users_video() {
     api_test! {[ws, ts]
         let other_users_vid = &ts.media_files[1];
         assert_ne!(other_users_vid.user_id, ts.media_files[0].user_id);
@@ -255,8 +250,7 @@ async fn test_api_comment_other_users_video()
 
 #[tokio::test]
 #[traced_test]
-async fn test_api_edit_comment()
-{
+async fn test_api_edit_comment() {
     api_test! {[ws, ts]
         let media = &ts.media_files[0];
         let com = &ts.comments[0];
@@ -293,11 +287,9 @@ async fn test_api_edit_comment()
     }
 }
 
-
 #[tokio::test]
 #[traced_test]
-async fn test_api_del_comment()
-{
+async fn test_api_del_comment() {
     // Summary of comment thread used in this test:
     //
     //   media_file[0]:
@@ -340,11 +332,9 @@ async fn test_api_del_comment()
     }
 }
 
-
 #[tokio::test]
 #[traced_test]
-async fn test_api_list_my_messages()
-{
+async fn test_api_list_my_messages() {
     api_test! {[ws, ts]
         send_server_cmd!(ws, ListMyMessages, ListMyMessages{});
 
@@ -378,11 +368,9 @@ async fn test_api_list_my_messages()
     }
 }
 
-
 #[tokio::test]
 #[traced_test]
-async fn test_multipart_upload()
-{
+async fn test_multipart_upload() {
     api_test! {[_ws, ts]
         // Upload file
         let file_body = "Testfile 1234";
@@ -406,7 +394,6 @@ async fn test_multipart_upload()
     }
 }
 
-
 #[test]
 fn test_validate_org_http_headers_regex() {
     // Test valid patterns
@@ -428,7 +415,10 @@ fn test_header_filtering() {
     headers.insert("X-Remote-User-Id", HeaderValue::from_static("testuser"));
     headers.insert("X-Remote-User-Name", HeaderValue::from_static("Test User"));
     headers.insert("X-Remote-User-Can-Upload", HeaderValue::from_static("true"));
-    headers.insert("X_REMOTE_USER_GROUPS", HeaderValue::from_static("admins,users"));
+    headers.insert(
+        "X_REMOTE_USER_GROUPS",
+        HeaderValue::from_static("admins,users"),
+    );
     headers.insert("Authorization", HeaderValue::from_static("Bearer token123"));
     headers.insert("Content-Type", HeaderValue::from_static("application/json"));
 
@@ -442,10 +432,22 @@ fn test_header_filtering() {
 
     // Verify header filtering (HeaderMap converts names to lowercase)
     assert_eq!(filtered_headers.len(), 4); // 4 X-Remote headers
-    assert_eq!(filtered_headers.get("x-remote-user-id"), Some(&"testuser".to_string()));
-    assert_eq!(filtered_headers.get("x-remote-user-name"), Some(&"Test User".to_string()));
-    assert_eq!(filtered_headers.get("x-remote-user-can-upload"), Some(&"true".to_string()));
-    assert_eq!(filtered_headers.get("x_remote_user_groups"), Some(&"admins,users".to_string()));
+    assert_eq!(
+        filtered_headers.get("x-remote-user-id"),
+        Some(&"testuser".to_string())
+    );
+    assert_eq!(
+        filtered_headers.get("x-remote-user-name"),
+        Some(&"Test User".to_string())
+    );
+    assert_eq!(
+        filtered_headers.get("x-remote-user-can-upload"),
+        Some(&"true".to_string())
+    );
+    assert_eq!(
+        filtered_headers.get("x_remote_user_groups"),
+        Some(&"admins,users".to_string())
+    );
 
     // Verify non-matching headers are filtered out (also lowercase)
     assert!(!filtered_headers.contains_key("authorization"));
@@ -475,7 +477,10 @@ fn test_remote_error_header() {
 
     // Test with X-Remote-Error header
     let mut headers = HeaderMap::new();
-    headers.insert("X-Remote-Error", HeaderValue::from_static("Access denied by IDP"));
+    headers.insert(
+        "X-Remote-Error",
+        HeaderValue::from_static("Access denied by IDP"),
+    );
     headers.insert("X-Remote-User-Id", HeaderValue::from_static("testuser"));
 
     let (user_id, _user_name, _is_admin, _cookies, filtered_headers, remote_error) =

@@ -1,19 +1,19 @@
+use anyhow::{anyhow, Context};
 use diesel::migration::Migration;
 use diesel::prelude::*;
 use diesel::r2d2::ConnectionManager;
 use diesel::SqliteConnection;
-use anyhow::{Context, anyhow};
 
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
-pub mod schema;
-pub mod models;
+pub mod db_backup;
 pub mod error;
 pub mod migration_solver;
-pub mod db_backup;
+pub mod models;
+pub mod schema;
 
 #[cfg(test)]
 pub mod tests;
@@ -27,7 +27,6 @@ pub type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
-
 #[macro_export]
 macro_rules! retry_if_db_locked {
     ($op:expr) => {
@@ -40,7 +39,12 @@ macro_rules! retry_if_db_locked {
                 } else {
                     let err_msg = res.as_ref().err().unwrap().to_string();
                     if (attempt <= 8) && err_msg.to_lowercase().contains("locked") {
-                        tracing::debug!("DB: '{}, retrying in 100ms (attempt {}/{})", err_msg, attempt, 8);
+                        tracing::debug!(
+                            "DB: '{}, retrying in 100ms (attempt {}/{})",
+                            err_msg,
+                            attempt,
+                            8
+                        );
                         std::thread::sleep(std::time::Duration::from_millis(100));
                         attempt += 1;
                         continue;
@@ -50,7 +54,7 @@ macro_rules! retry_if_db_locked {
                 }
             }
         })()
-    }
+    };
 }
 
 /// Convert a diesel result to a DBResult, turning empty result
@@ -69,13 +73,14 @@ pub struct DB {
     broken_for_test: AtomicBool,
 }
 
-
 impl DB {
-
     /// Connect to SQLite database with an URL (use this for memory databases)
     pub fn open_db_url(db_url: &str) -> DBResult<Self> {
         let manager = ConnectionManager::<SqliteConnection>::new(db_url);
-        let pool = Pool::builder().max_size(16).build(manager).context("Failed to build DB pool")?;
+        let pool = Pool::builder()
+            .max_size(16)
+            .build(manager)
+            .context("Failed to build DB pool")?;
         Ok(DB {
             pool,
             broken_for_test: AtomicBool::new(false),
@@ -83,38 +88,64 @@ impl DB {
     }
 
     /// Connect to SQLite database with a file path
-    pub fn open_db_file( db_file: &Path ) -> DBResult<DB> {
-        let db_url = format!("sqlite://{}", db_file.to_str().ok_or(anyhow!("Invalid DB file path"))
-            .context("Failed to connect DB file")?);
+    pub fn open_db_file(db_file: &Path) -> DBResult<DB> {
+        let db_url = format!(
+            "sqlite://{}",
+            db_file
+                .to_str()
+                .ok_or(anyhow!("Invalid DB file path"))
+                .context("Failed to connect DB file")?
+        );
         let res = DB::open_db_url(&db_url);
         res
     }
 
     /// Get a connection from the pool
     pub fn conn(&self) -> DBResult<PooledConnection> {
-        if self.broken_for_test.load(std::sync::atomic::Ordering::Relaxed) {
+        if self
+            .broken_for_test
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
             let bad_manager = ConnectionManager::<SqliteConnection>::new("sqlite:///dev/urandom");
-            let bad_pool = Pool::builder().build(bad_manager).context("TEST ERROR: Failed to build 'broken' DB pool")?;
-            return bad_pool.get().map_err(|e| anyhow!("TEST ERROR: Failed to get connection from 'broken' pool: {:?}", e).into());
+            let bad_pool = Pool::builder()
+                .build(bad_manager)
+                .context("TEST ERROR: Failed to build 'broken' DB pool")?;
+            return bad_pool.get().map_err(|e| {
+                anyhow!(
+                    "TEST ERROR: Failed to get connection from 'broken' pool: {:?}",
+                    e
+                )
+                .into()
+            });
         }
-        let mut conn = self.pool.get().context("Failed to get connection from pool")?;
-        diesel::sql_query(r#"
+        let mut conn = self
+            .pool
+            .get()
+            .context("Failed to get connection from pool")?;
+        diesel::sql_query(
+            r#"
             PRAGMA foreign_keys = ON;
             PRAGMA journal_mode = WAL;
             PRAGMA wal_autocheckpoint = 1000;
             PRAGMA wal_checkpoint(TRUNCATE);
             PRAGMA synchronous = NORMAL;
             PRAGMA busy_timeout = 15000;
-        "#).execute(&mut conn).context("Failed to set DB pragmas")?;
+        "#,
+        )
+        .execute(&mut conn)
+        .context("Failed to set DB pragmas")?;
         Ok(conn)
     }
 
     /// Return list of any pending (migration_name, version) tuples
     pub fn pending_server_migrations(&self) -> DBResult<Vec<(String, String)>> {
-        Ok(MigrationHarness::pending_migrations(&mut self.conn()?, MIGRATIONS)
-            .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?
-            .iter().map(|m| (format!("{}", m.name()), format!("{}", m.name().version())))
-            .collect())
+        Ok(
+            MigrationHarness::pending_migrations(&mut self.conn()?, MIGRATIONS)
+                .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?
+                .iter()
+                .map(|m| (format!("{}", m.name()), format!("{}", m.name().version())))
+                .collect(),
+        )
     }
 
     /// Return name of the latest applied migration
@@ -127,18 +158,25 @@ impl DB {
     }
 
     /// Run a named migration
-    pub fn apply_server_migration(&self, conn: &mut SqliteConnection, migration_name: &str) -> EmptyDBResult {
-
+    pub fn apply_server_migration(
+        &self,
+        conn: &mut SqliteConnection,
+        migration_name: &str,
+    ) -> EmptyDBResult {
         let pending = MigrationHarness::pending_migrations(conn, MIGRATIONS)
             .map_err(|e| anyhow!("Failed to get migrations: {:?}", e))?;
 
-        let migration = pending.iter().find(|m| m.name().to_string() == migration_name)
+        let migration = pending
+            .iter()
+            .find(|m| m.name().to_string() == migration_name)
             .ok_or_else(|| anyhow!("Migration not found: {}", migration_name))?;
 
-        let _span = tracing::info_span!("apply_server_migration",
+        let _span = tracing::info_span!(
+            "apply_server_migration",
             name = migration.name().to_string(),
             new_ver = migration.name().version().to_string(),
-        ).entered();
+        )
+        .entered();
 
         tracing::debug!("PRAGMA foreign_keys = OFF;");
         diesel::sql_query("PRAGMA foreign_keys = OFF;").execute(conn)?;
@@ -147,7 +185,8 @@ impl DB {
         diesel::sql_query("PRAGMA legacy_alter_table=ON;").execute(conn)?;
 
         let res: EmptyDBResult = conn.transaction(|conn| {
-            sqlite_check_foreign_key_status(conn, false).context("Pragma failed to disable foreign keys")?;
+            sqlite_check_foreign_key_status(conn, false)
+                .context("Pragma failed to disable foreign keys")?;
 
             tracing::info!("Applying...");
             MigrationHarness::run_migration(conn, &**migration)
@@ -159,17 +198,18 @@ impl DB {
         res.and_then(|_| {
             tracing::debug!("PRAGMA foreign_keys = ON;");
             diesel::sql_query("PRAGMA foreign_keys = ON;").execute(conn)?;
-            sqlite_check_foreign_key_status(conn, true).context("Pragma failed to re-enable foreign keys")?;
+            sqlite_check_foreign_key_status(conn, true)
+                .context("Pragma failed to re-enable foreign keys")?;
             Ok(())
         })
     }
 
     /// "Corrupt" the connection for testing so that subsequent queries fail
     pub fn break_db(&self) {
-        self.broken_for_test.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.broken_for_test
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
-
 
 #[derive(QueryableByName, Debug)]
 struct ForeignKeyEnforcement {
@@ -178,12 +218,17 @@ struct ForeignKeyEnforcement {
     value: i32,
 }
 
-pub fn sqlite_check_foreign_key_status(conn: &mut SqliteConnection, should_be_on: bool) -> EmptyDBResult {
+pub fn sqlite_check_foreign_key_status(
+    conn: &mut SqliteConnection,
+    should_be_on: bool,
+) -> EmptyDBResult {
     let fk_status: Vec<ForeignKeyEnforcement> = diesel::sql_query("PRAGMA foreign_keys;")
         .load(conn)
         .map_err(|e| anyhow!("Failed to check foreign key setting: {:?}", e))?;
 
-    if fk_status.is_empty() { return Err(anyhow!("Failed to check foreign key setting"))?; }
+    if fk_status.is_empty() {
+        return Err(anyhow!("Failed to check foreign key setting"))?;
+    }
 
     if should_be_on && fk_status.iter().any(|fk| fk.value != 1) {
         return Err(anyhow!("Assertion failed: SQLite foreign_keys != ON").into());
@@ -193,11 +238,8 @@ pub fn sqlite_check_foreign_key_status(conn: &mut SqliteConnection, should_be_on
     Ok(())
 }
 
-
-
 /// Check for foreign key violations in the database
 pub fn sqlite_foreign_key_check(conn: &mut SqliteConnection, log_as_errors: bool) -> EmptyDBResult {
-
     #[derive(QueryableByName, Debug)]
     struct ForeignKeyCheck {
         #[diesel(sql_type = diesel::sql_types::Text)]
@@ -215,7 +257,8 @@ pub fn sqlite_foreign_key_check(conn: &mut SqliteConnection, log_as_errors: bool
     }
 
     let violations: Vec<ForeignKeyCheck> = diesel::sql_query("PRAGMA foreign_key_check;")
-        .load(conn).map_err(|e| anyhow!("Failed to check foreign key violations: {:?}", e))?;
+        .load(conn)
+        .map_err(|e| anyhow!("Failed to check foreign key violations: {:?}", e))?;
     if violations.is_empty() {
         Ok(())
     } else {
@@ -249,14 +292,17 @@ impl DBPaging {
 
 impl Default for DBPaging {
     fn default() -> Self {
-        Self { page_num: 0, page_size: unsafe { std::num::NonZeroU32::new_unchecked(u32::MAX) } }
+        Self {
+            page_num: 0,
+            page_size: unsafe { std::num::NonZeroU32::new_unchecked(u32::MAX) },
+        }
     }
 }
 
-
 pub trait DbBasicQuery<P, I>: Sized
-    where P: std::str::FromStr + Send + Sync + Clone,
-          I: Send + Sync,
+where
+    P: std::str::FromStr + Send + Sync + Clone,
+    I: Send + Sync,
 {
     /// Insert a new object into the database.
     fn insert(conn: &mut PooledConnection, item: &I) -> DBResult<Self>;
@@ -282,27 +328,62 @@ pub trait DbBasicQuery<P, I>: Sized
 }
 
 pub trait DbUpdate<P>: Sized
-    where P: std::str::FromStr + Send + Sync + Clone,
+where
+    P: std::str::FromStr + Send + Sync + Clone,
 {
     /// Update objects, replaces the entire object except for the primary key.
     fn update_many(conn: &mut PooledConnection, items: &[Self]) -> DBResult<Vec<Self>>;
 }
 
 mod basic_query;
-crate::implement_basic_query_traits!(models::User, models::UserInsert, users, String, created.desc());
-crate::implement_basic_query_traits!(models::MediaType, models::MediaType, media_types, String, id.desc());
-crate::implement_basic_query_traits!(models::MediaFile, models::MediaFileInsert, media_files, String, added_time.desc());
-crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32, created.desc());
-crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32, created.desc());
-crate::implement_basic_query_traits!(models::Subtitle, models::SubtitleInsert, subtitles, i32, added_time.desc());
+crate::implement_basic_query_traits!(
+    models::User,
+    models::UserInsert,
+    users,
+    String,
+    created.desc()
+);
+crate::implement_basic_query_traits!(
+    models::MediaType,
+    models::MediaType,
+    media_types,
+    String,
+    id.desc()
+);
+crate::implement_basic_query_traits!(
+    models::MediaFile,
+    models::MediaFileInsert,
+    media_files,
+    String,
+    added_time.desc()
+);
+crate::implement_basic_query_traits!(
+    models::Comment,
+    models::CommentInsert,
+    comments,
+    i32,
+    created.desc()
+);
+crate::implement_basic_query_traits!(
+    models::Message,
+    models::MessageInsert,
+    messages,
+    i32,
+    created.desc()
+);
+crate::implement_basic_query_traits!(
+    models::Subtitle,
+    models::SubtitleInsert,
+    subtitles,
+    i32,
+    added_time.desc()
+);
 
 crate::implement_update_traits!(models::User, users, String);
 crate::implement_update_traits!(models::MediaFile, media_files, String);
 crate::implement_update_traits!(models::Comment, comments, i32);
 crate::implement_update_traits!(models::Message, messages, i32);
 crate::implement_update_traits!(models::Subtitle, subtitles, i32);
-
-
 
 pub trait DbQueryByUser: Sized {
     /// Get all objects of type Self that belong to given user.
@@ -313,12 +394,29 @@ crate::implement_query_by_user_traits!(models::MediaFile, media_files, user_id, 
 crate::implement_query_by_user_traits!(models::Comment, comments, user_id, created.desc());
 crate::implement_query_by_user_traits!(models::Message, messages, user_id, created.desc());
 
-
-
 pub trait DbQueryByMediaFile: Sized {
     /// Get all objects of type Self that are linked to given media file.
-    fn get_by_media_file(conn: &mut PooledConnection, vid: &str, pg: DBPaging) -> DBResult<Vec<Self>>;
+    fn get_by_media_file(
+        conn: &mut PooledConnection,
+        vid: &str,
+        pg: DBPaging,
+    ) -> DBResult<Vec<Self>>;
 }
-crate::implement_query_by_media_file_traits!(models::Comment, comments, media_file_id, created.desc());
-crate::implement_query_by_media_file_traits!(models::Message, messages, media_file_id, created.desc());
-crate::implement_query_by_media_file_traits!(models::Subtitle, subtitles, media_file_id, added_time.desc());
+crate::implement_query_by_media_file_traits!(
+    models::Comment,
+    comments,
+    media_file_id,
+    created.desc()
+);
+crate::implement_query_by_media_file_traits!(
+    models::Message,
+    messages,
+    media_file_id,
+    created.desc()
+);
+crate::implement_query_by_media_file_traits!(
+    models::Subtitle,
+    subtitles,
+    media_file_id,
+    added_time.desc()
+);

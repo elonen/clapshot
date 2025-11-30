@@ -20,7 +20,7 @@ Clapshot is an open-source, self-hosted tool for collaborative video/media revie
 - **File Organization**: Hierarchical folder system with drag-and-drop, admin user management interface
 - **Media Processing**: FFmpeg transcoding with configurable quality, thumbnail generation
 - **Authentication**: Reverse proxy integration supporting OAuth, JWT, Kerberos, SAML, etc.
-- **Storage**: SQLite database with automatic migrations, file-based media storage
+- **Storage**: SQLite database with automatic migrations, local filesystem or S3-compatible object storage
 - **Extensibility**: Plugin system for custom workflows and integrations
 
 *For a comprehensive feature list, see [FEATURES.md](FEATURES.md).*
@@ -123,6 +123,35 @@ See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on:
 See [Upgrading Guide](doc/upgrading.md) for instructions on installing a new release over an old one.
 
 **Want to customize media processing?** See the [Transcoding and Thumbnailing Guide](doc/transcoding.md) for configuring hardware acceleration, custom encoders, and specialized processing workflows.
+
+
+### Object Storage (S3-compatible)
+
+Clapshot can upload processed media and thumbnails to an S3-compatible object store while still staging files locally under `<data_dir>/videos`.
+
+**Required settings** (CLI flags, `clapshot-server.conf`, or `CLAPSHOT_SERVER__*` env vars):
+- `storage-backend = s3`
+- `s3-endpoint = https://s3.example.com`
+- `s3-region = us-east-1`
+- `s3-bucket = clapshot-media`
+- `s3-access-key`, `s3-secret-key`
+
+**Optional settings:**
+- `s3-prefix` – path inside the bucket (default: `videos`)
+- `s3-public-url` – base URL used in playback links (defaults to `s3-endpoint/bucket`; set to your CDN/domain if different)
+
+**Docker env example:**
+```bash
+-e CLAPSHOT_SERVER__STORAGE_BACKEND=s3 \
+-e CLAPSHOT_SERVER__S3_ENDPOINT=https://s3.example.com \
+-e CLAPSHOT_SERVER__S3_REGION=us-east-1 \
+-e CLAPSHOT_SERVER__S3_BUCKET=clapshot-media \
+-e CLAPSHOT_SERVER__S3_ACCESS_KEY=YOUR_KEY \
+-e CLAPSHOT_SERVER__S3_SECRET_KEY=YOUR_SECRET \
+-e CLAPSHOT_SERVER__S3_PUBLIC_URL=https://cdn.example.com/clapshot-media
+```
+
+Ensure the bucket/prefix is readable at `s3-public-url` for playback, and keep enough local disk for staging uploads under `data_dir/videos`.
 
 
 ## Architecture Overview

@@ -20,13 +20,17 @@ let { onbasicauthlogout, onaddcomments }: Props = $props();
 
 let loggedOut = $state(false);
 
-// Watch for (transcoding) progress reports from server, and update progress bar if one matches this item.
+// Watch for (transcoding/upload) progress reports from server, and show a quick status bar for the current video.
 let videoProgressMsg: string | undefined = $state(undefined);
+let videoProgressVal: number | undefined = $state(undefined);
 
 onMount(async () => {
-	latestProgressReports.subscribe((reports: MediaProgressReport[]) => {
-		videoProgressMsg = reports.find((r: MediaProgressReport) => r.mediaFileId === $mediaFileId)?.msg;
+	const unsubscribe = latestProgressReports.subscribe((reports: MediaProgressReport[]) => {
+		const match = reports.find((r: MediaProgressReport) => r.mediaFileId === $mediaFileId);
+		videoProgressMsg = match?.msg;
+		videoProgressVal = match?.progress;
 	});
+	return () => unsubscribe();
 });
 
 
@@ -138,6 +142,17 @@ function addEDLComments(comments: Proto3.Comment[]) {
 						</div>
 
 					</h2>
+
+					{#if videoProgressVal !== undefined}
+						<div class="flex flex-col items-center gap-1 mt-1 mb-2">
+							<div class="text-xs italic text-gray-500 text-center px-2">
+								{videoProgressMsg || 'Processing...'}
+							</div>
+							<div class="w-48 h-2 rounded-full bg-gray-200 overflow-hidden">
+								<div class="h-full bg-amber-500 transition-all duration-200" style={`width: ${(Math.max(0, Math.min(1, videoProgressVal)) * 100).toFixed(0)}%`}></div>
+							</div>
+						</div>
+					{/if}
 				<span class="mx-4 text-xs text-center">{$curVideo?.title}</span>
 				{#if videoProgressMsg}
 					<span class="text-cyan-800 mx-4 text-xs text-center">{videoProgressMsg}</span>

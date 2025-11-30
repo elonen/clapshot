@@ -1,12 +1,14 @@
-use diesel::{prelude::*, QueryId};
-use serde::{Deserialize, Serialize};
 use super::schema::*;
 use chrono;
 use chrono::naive::serde::{ts_seconds, ts_seconds_option};
 use chrono::TimeZone;
+use diesel::{prelude::*, QueryId};
+use serde::{Deserialize, Serialize};
 use timeago;
 
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, AsChangeset, Clone)]
+#[derive(
+    Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, AsChangeset, Clone,
+)]
 #[diesel(treat_none_as_null = true)]
 pub struct User {
     pub id: String,
@@ -23,7 +25,9 @@ pub struct UserInsert {
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Insertable, Identifiable, QueryId, Clone)]
+#[derive(
+    Serialize, Deserialize, Debug, Queryable, Selectable, Insertable, Identifiable, QueryId, Clone,
+)]
 #[diesel(treat_none_as_null = true)]
 #[diesel(table_name = media_types)]
 #[diesel(primary_key(id))]
@@ -31,8 +35,9 @@ pub struct MediaType {
     pub id: String,
 }
 
-
-#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
+#[derive(
+    Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone,
+)]
 #[diesel(treat_none_as_null = true)]
 #[diesel(table_name = media_files)]
 #[diesel(primary_key(id))]
@@ -81,7 +86,18 @@ pub struct MediaFileInsert {
 
 // -------------------------------------------------------
 
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, Associations, AsChangeset, Clone)]
+#[derive(
+    Serialize,
+    Deserialize,
+    Debug,
+    Default,
+    Queryable,
+    Selectable,
+    Identifiable,
+    Associations,
+    AsChangeset,
+    Clone,
+)]
 #[diesel(belongs_to(MediaFile, foreign_key = media_file_id))]
 #[diesel(treat_none_as_null = true)]
 pub struct Subtitle {
@@ -112,10 +128,20 @@ pub struct SubtitleInsert {
 
 // -------------------------------------------------------
 
-#[derive(Serialize, Deserialize, Debug, Associations, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
+#[derive(
+    Serialize,
+    Deserialize,
+    Debug,
+    Associations,
+    Queryable,
+    Selectable,
+    Identifiable,
+    QueryId,
+    AsChangeset,
+    Clone,
+)]
 #[diesel(belongs_to(User, foreign_key = user_id))]
 #[diesel(belongs_to(MediaFile, foreign_key = media_file_id))]
-
 #[diesel(treat_none_as_null = true)]
 pub struct Comment {
     pub id: i32,
@@ -151,12 +177,22 @@ pub struct CommentInsert {
     pub drawing: Option<String>,
     pub subtitle_id: Option<i32>,
     pub subtitle_filename_ifnull: Option<String>,
-
 }
 
 // -------------------------------------------------------
 
-#[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, Associations, AsChangeset, Clone)]
+#[derive(
+    Serialize,
+    Deserialize,
+    Debug,
+    Default,
+    Queryable,
+    Selectable,
+    Identifiable,
+    Associations,
+    AsChangeset,
+    Clone,
+)]
 #[diesel(belongs_to(User, foreign_key = user_id))]
 #[diesel(belongs_to(MediaFile, foreign_key = media_file_id))]
 #[diesel(belongs_to(Comment, foreign_key = comment_id))]

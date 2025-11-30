@@ -1,8 +1,9 @@
-use tracing_test::traced_test;
 use crate::database::*;
+use tracing_test::traced_test;
 
-use models::{User, MediaType, MediaFile, MediaFileInsert, Message, MessageInsert, Comment, CommentInsert};
-
+use models::{
+    Comment, CommentInsert, MediaFile, MediaFileInsert, MediaType, Message, MessageInsert, User,
+};
 
 fn _dump_db(conn: &mut PooledConnection) {
     println!("================ dump_db ================");
@@ -10,22 +11,31 @@ fn _dump_db(conn: &mut PooledConnection) {
     conn.transaction(|conn| {
         let media_types = MediaType::get_all(conn, DBPaging::default()).unwrap();
         println!("----- Media types -----");
-        for v in media_types { println!("----\n{:#?}", v);}
+        for v in media_types {
+            println!("----\n{:#?}", v);
+        }
 
         let media_files = MediaFile::get_all(conn, DBPaging::default()).unwrap();
         println!("----- Media files -----");
-        for v in media_files { println!("----\n{:#?}", v);}
+        for v in media_files {
+            println!("----\n{:#?}", v);
+        }
 
         let comments = Comment::get_all(conn, DBPaging::default()).unwrap();
         println!("----- Comments -----");
-        for c in comments { println!("----\n{:#?}", c);}
+        for c in comments {
+            println!("----\n{:#?}", c);
+        }
 
         let messages = Message::get_all(conn, DBPaging::default()).unwrap();
         println!("----- Messages -----");
-        for m in messages { println!("----\n{:#?}", m);}
+        for m in messages {
+            println!("----\n{:#?}", m);
+        }
 
         DBResult::Ok(())
-    }).unwrap();
+    })
+    .unwrap();
     println!("=========================================");
 }
 
@@ -46,29 +56,34 @@ fn _dump_db(conn: &mut PooledConnection) {
 /// <Comment(id='6' media_file=HASH0 parent=1 user_id='user.num2' comment='Comment 5' has-drawing=True ...)>
 /// <Comment(id='7' media_file=HASH0 parent=1 user_id='user.num1' comment='Comment 6' has-drawing=True ...)>
 /// ```
-pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<MediaFile>, Vec<Comment>)
-{
+pub fn make_test_db() -> (
+    std::sync::Arc<DB>,
+    assert_fs::TempDir,
+    Vec<MediaFile>,
+    Vec<Comment>,
+) {
     println!("--- make_test_db");
 
     let data_dir = assert_fs::TempDir::new().unwrap();
     std::fs::create_dir(&data_dir.path().join("incoming")).ok();
 
-    let db = std::sync::Arc::new(DB::open_db_file(data_dir.join("clapshot.sqlite").as_path()).unwrap());
+    let db =
+        std::sync::Arc::new(DB::open_db_file(data_dir.join("clapshot.sqlite").as_path()).unwrap());
     let conn = &mut db.conn().unwrap();
 
     for (m, _ver) in db.pending_server_migrations().unwrap() {
         db.apply_server_migration(conn, &m).unwrap();
     }
 
-    _dump_db(conn);   // Uncomment to debug database contents
+    _dump_db(conn); // Uncomment to debug database contents
 
     // Make some videos
     let hashes = vec!["B1DE0", "11111", "22222", "B1DE3", "B1DE4"];
     let mkvid = |i: usize| {
-
         let user_id = format!("user.num{}", 1 + i % 2);
         let username = format!("User Number{}", 1 + i % 2);
-        let user = User::get_or_create(conn, &user_id, Some(&username)).expect("Failed to create user");
+        let user =
+            User::get_or_create(conn, &user_id, Some(&username)).expect("Failed to create user");
 
         let v = MediaFileInsert {
             id: hashes[i].to_string(),
@@ -108,7 +123,8 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<MediaFile>
         let c = Comment::insert(conn, &c).expect("Failed to insert comment");
         let dp = data_dir.join("videos").join(vid).join("drawings");
         std::fs::create_dir_all(&dp).expect("Failed to create drawing directory");
-        std::fs::write(dp.join(&c.drawing.clone().unwrap()), "IMAGE_DATA").expect("Failed to write drawing");
+        std::fs::write(dp.join(&c.drawing.clone().unwrap()), "IMAGE_DATA")
+            .expect("Failed to write drawing");
         c
     };
     let mut comments = (0..5)
@@ -138,7 +154,6 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<MediaFile>
     (db, data_dir, videos, comments)
 }
 
-
 #[test]
 #[traced_test]
 fn test_pagination() -> anyhow::Result<()> {
@@ -146,7 +161,13 @@ fn test_pagination() -> anyhow::Result<()> {
     let conn = &mut db.conn()?;
 
     // Test pagination of comments
-    let mut res = Comment::get_all(conn, DBPaging { page_num: 0, page_size: 3.try_into()? })?;
+    let mut res = Comment::get_all(
+        conn,
+        DBPaging {
+            page_num: 0,
+            page_size: 3.try_into()?,
+        },
+    )?;
     println!("---- page 0, 3");
     println!("res: {:#?}", res);
 
@@ -155,7 +176,13 @@ fn test_pagination() -> anyhow::Result<()> {
     assert_eq!(res[1].id, comments[1].id);
     assert_eq!(res[2].id, comments[2].id);
 
-    res = Comment::get_all(conn, DBPaging { page_num: 1, page_size: 3.try_into()? })?;
+    res = Comment::get_all(
+        conn,
+        DBPaging {
+            page_num: 1,
+            page_size: 3.try_into()?,
+        },
+    )?;
     println!("---- page 1, 3");
     println!("res: {:#?}", res);
     assert_eq!(res.len(), 3);
@@ -163,7 +190,13 @@ fn test_pagination() -> anyhow::Result<()> {
     assert_eq!(res[1].id, comments[4].id);
     assert_eq!(res[2].id, comments[5].id);
 
-    res = Comment::get_all(conn, DBPaging { page_num: 2, page_size: 3.try_into()? })?;
+    res = Comment::get_all(
+        conn,
+        DBPaging {
+            page_num: 2,
+            page_size: 3.try_into()?,
+        },
+    )?;
     println!("---- page 2, 3");
     println!("res: {:#?}", res);
     assert_eq!(res.len(), 2);
@@ -173,20 +206,21 @@ fn test_pagination() -> anyhow::Result<()> {
     Ok(())
 }
 
-
 // ----------------------------------------------------------------------------
-
 
 #[test]
 #[traced_test]
-fn test_fixture_state() -> anyhow::Result<()>
-{
+fn test_fixture_state() -> anyhow::Result<()> {
     let (db, _data_dir, videos, comments) = make_test_db();
     let conn = &mut db.conn()?;
 
     // First 5 comments have no parent, last 2 have parent_id=1
-    for i in 0..5 { assert!(comments[i].parent_id.is_none()); }
-    for i in 5..5 + 2 { assert_eq!(comments[i].parent_id, Some(comments[0].id)); }
+    for i in 0..5 {
+        assert!(comments[i].parent_id.is_none());
+    }
+    for i in 5..5 + 2 {
+        assert_eq!(comments[i].parent_id, Some(comments[0].id));
+    }
 
     // Video #0 has 3 comments, video #1 has 2, video #2 has 1
     assert_eq!(comments[0].media_file_id, comments[3].media_file_id);
@@ -201,14 +235,17 @@ fn test_fixture_state() -> anyhow::Result<()>
     for v in videos.iter() {
         assert_eq!(MediaFile::get(conn, &v.id)?.id, v.id);
         let comments = Comment::get_by_media_file(conn, &v.id, DBPaging::default())?;
-        assert_eq!(comments.len(), match v.id.as_str() {
-            "B1DE0" => 5,
-            "11111" => 2,
-            "22222" => 1,
-            "B1DE3" => 0,
-            "B1DE4" => 0,
-            _ => panic!("Unexpected media file id"),
-        });
+        assert_eq!(
+            comments.len(),
+            match v.id.as_str() {
+                "B1DE0" => 5,
+                "11111" => 2,
+                "22222" => 1,
+                "B1DE3" => 0,
+                "B1DE4" => 0,
+                _ => panic!("Unexpected media file id"),
+            }
+        );
     }
     for c in comments.iter() {
         assert_eq!(models::Comment::get(conn, &c.id)?.id, c.id);
@@ -216,11 +253,16 @@ fn test_fixture_state() -> anyhow::Result<()>
     }
 
     // Check that we can get videos by user
-    assert_eq!(models::MediaFile::get_by_user(conn, "user.num1", DBPaging::default())?.len(), 3);
-    assert_eq!(models::MediaFile::get_by_user(conn, "user.num2", DBPaging::default())?.len(), 2);
+    assert_eq!(
+        models::MediaFile::get_by_user(conn, "user.num1", DBPaging::default())?.len(),
+        3
+    );
+    assert_eq!(
+        models::MediaFile::get_by_user(conn, "user.num2", DBPaging::default())?.len(),
+        2
+    );
     Ok(())
 }
-
 
 #[test]
 #[traced_test]
@@ -228,20 +270,38 @@ fn test_comment_delete() -> anyhow::Result<()> {
     let (db, _data_dir, _vid, com) = make_test_db();
     let conn = &mut db.conn()?;
 
-    assert_eq!(Comment::get_by_media_file(conn, &com[1].media_file_id, DBPaging::default())?.len(), 2, "Media files should have 2 comments before deletion");
+    assert_eq!(
+        Comment::get_by_media_file(conn, &com[1].media_file_id, DBPaging::default())?.len(),
+        2,
+        "Media files should have 2 comments before deletion"
+    );
 
     // Delete comment #2 and check that it was deleted, and nothing else
     models::Comment::delete(&mut db.conn()?, &com[1].id)?;
     for c in com.iter() {
         if c.id == com[1].id {
-            assert!(matches!(models::Comment::get(conn, &c.id).unwrap_err() , DBError::NotFound()), "Comment should be deleted");
+            assert!(
+                matches!(
+                    models::Comment::get(conn, &c.id).unwrap_err(),
+                    DBError::NotFound()
+                ),
+                "Comment should be deleted"
+            );
         } else {
-            assert_eq!(models::Comment::get(conn, &c.id)?.id, c.id, "Deletion removed wrong comment(s)");
+            assert_eq!(
+                models::Comment::get(conn, &c.id)?.id,
+                c.id,
+                "Deletion removed wrong comment(s)"
+            );
         }
     }
 
     // Check that media file still has 1 comment
-    assert_eq!(Comment::get_by_media_file(conn, &com[1].media_file_id, DBPaging::default())?.len(), 1, "Media file should have 1 comment left");
+    assert_eq!(
+        Comment::get_by_media_file(conn, &com[1].media_file_id, DBPaging::default())?.len(),
+        1,
+        "Media file should have 1 comment left"
+    );
 
     // Delete last, add a new one and check for ID reuse
     models::Comment::delete(&mut db.conn()?, &com[6].id)?;
@@ -257,7 +317,10 @@ fn test_comment_delete() -> anyhow::Result<()> {
         subtitle_filename_ifnull: None,
     };
     let new_id = models::Comment::insert(conn, &c)?.id;
-    assert_ne!(new_id, com[6].id, "Comment ID was re-used after deletion. This would mix up comment threads in the UI.");
+    assert_ne!(
+        new_id, com[6].id,
+        "Comment ID was re-used after deletion. This would mix up comment threads in the UI."
+    );
     Ok(())
 }
 
@@ -281,7 +344,6 @@ fn test_rename_video() -> anyhow::Result<()> {
 
     Ok(())
 }
-
 
 #[test]
 #[traced_test]
@@ -331,15 +393,21 @@ fn test_user_messages() -> anyhow::Result<()> {
 
         let a = serde_json::to_value(Message::get(conn, &new_msg.id)?.to_proto3())?;
         let b = serde_json::to_value(new_msg.to_proto3())?;
-        assert_eq!(a,b);
+        assert_eq!(a, b);
 
         assert!(!Message::get(conn, &new_msg.id)?.seen);
         new_msgs.push(new_msg);
     }
 
     // Correctly count messages
-    assert_eq!(Message::get_by_user(conn, "user.num1", DBPaging::default())?.len(), 2);
-    assert_eq!(Message::get_by_user(conn, "user.num2", DBPaging::default())?.len(), 1);
+    assert_eq!(
+        Message::get_by_user(conn, "user.num1", DBPaging::default())?.len(),
+        2
+    );
+    assert_eq!(
+        Message::get_by_user(conn, "user.num2", DBPaging::default())?.len(),
+        1
+    );
 
     // Mark message #2 as seen
     Message::set_seen(conn, new_msgs[1].id, true)?;
@@ -348,8 +416,14 @@ fn test_user_messages() -> anyhow::Result<()> {
     // Delete & recount
     Message::delete(conn, &new_msgs[2].id)?;
     Message::delete(conn, &new_msgs[0].id)?;
-    assert_eq!(Message::get_by_user(conn, "user.num1", DBPaging::default())?.len(), 1);
-    assert_eq!(Message::get_by_user(conn, "user.num2", DBPaging::default())?.len(), 0);
+    assert_eq!(
+        Message::get_by_user(conn, "user.num1", DBPaging::default())?.len(),
+        1
+    );
+    assert_eq!(
+        Message::get_by_user(conn, "user.num2", DBPaging::default())?.len(),
+        0
+    );
 
     Ok(())
 }
@@ -360,15 +434,25 @@ fn test_transaction_rollback() -> anyhow::Result<()> {
     let (db, _data_dir, vid, _com) = make_test_db();
     let conn = &mut db.conn()?;
 
-    assert_eq!(MediaFile::get_all(conn, DBPaging::default()).unwrap().len(), vid.len());
+    assert_eq!(
+        MediaFile::get_all(conn, DBPaging::default()).unwrap().len(),
+        vid.len()
+    );
 
     conn.transaction::<(), _, _>(|conn| {
         MediaFile::delete(conn, &vid[0].id).unwrap();
-        assert_eq!(MediaFile::get_all(conn, DBPaging::default()).unwrap().len(), vid.len()-1);
+        assert_eq!(
+            MediaFile::get_all(conn, DBPaging::default()).unwrap().len(),
+            vid.len() - 1
+        );
         Err(diesel::result::Error::RollbackTransaction)
-    }).ok();
+    })
+    .ok();
 
-    assert_eq!(MediaFile::get_all(conn, DBPaging::default()).unwrap().len(), vid.len());
+    assert_eq!(
+        MediaFile::get_all(conn, DBPaging::default()).unwrap().len(),
+        vid.len()
+    );
     Ok(())
 }
 
@@ -378,13 +462,23 @@ fn test_transaction_commit() -> anyhow::Result<()> {
     let (db, _data_dir, vid, _com) = make_test_db();
     let conn = &mut db.conn()?;
 
-    assert_eq!(MediaFile::get_all(conn, DBPaging::default()).unwrap().len(), vid.len());
+    assert_eq!(
+        MediaFile::get_all(conn, DBPaging::default()).unwrap().len(),
+        vid.len()
+    );
     conn.transaction::<(), _, _>(|conn| {
         MediaFile::delete(conn, &vid[0].id).unwrap();
-        assert_eq!(MediaFile::get_all(conn, DBPaging::default()).unwrap().len(), vid.len()-1);
+        assert_eq!(
+            MediaFile::get_all(conn, DBPaging::default()).unwrap().len(),
+            vid.len() - 1
+        );
         DBResult::Ok(())
-    }).unwrap();
-    assert_eq!(MediaFile::get_all(conn, DBPaging::default()).unwrap().len(), vid.len()-1);
+    })
+    .unwrap();
+    assert_eq!(
+        MediaFile::get_all(conn, DBPaging::default()).unwrap().len(),
+        vid.len() - 1
+    );
 
     Ok(())
 }
@@ -427,11 +521,17 @@ fn test_subtitle_add_update_delete() -> anyhow::Result<()> {
     };
     let c = models::Comment::insert(conn, &c)?;
     assert_eq!(models::Comment::get(conn, &c.id)?.subtitle_id, Some(s.id));
-    assert_eq!(models::Comment::get(conn, &c.id)?.subtitle_filename_ifnull, None);
+    assert_eq!(
+        models::Comment::get(conn, &c.id)?.subtitle_filename_ifnull,
+        None
+    );
 
     // Delete subtitle
     models::Subtitle::delete(conn, &s.id)?;
-    assert!(matches!(models::Subtitle::get(conn, &s.id).unwrap_err(), DBError::NotFound()));
+    assert!(matches!(
+        models::Subtitle::get(conn, &s.id).unwrap_err(),
+        DBError::NotFound()
+    ));
 
     // Check that comment still exists, and that subtitle_filename_ifnull is set
     let c = models::Comment::get(conn, &c.id)?;
@@ -441,14 +541,16 @@ fn test_subtitle_add_update_delete() -> anyhow::Result<()> {
     Ok(())
 }
 
-
 #[test]
 #[traced_test]
 fn test_migrate_existing_v056_db() -> anyhow::Result<()> {
     let data_dir = assert_fs::TempDir::new().unwrap();
     let db_file = data_dir.path().join("clapshot.sqlite");
-    std::fs::copy("src/tests/assets/databases/clapshot-migration-test-1_v056.sqlite", &db_file)
-        .expect("Failed to copy test DB for migration test");
+    std::fs::copy(
+        "src/tests/assets/databases/clapshot-migration-test-1_v056.sqlite",
+        &db_file,
+    )
+    .expect("Failed to copy test DB for migration test");
 
     let db = DB::open_db_file(&db_file).unwrap();
     let conn = &mut db.conn()?;
@@ -459,27 +561,92 @@ fn test_migrate_existing_v056_db() -> anyhow::Result<()> {
     // Check that the database has (some of) the expected contents (still after migrations)
     let media_files = MediaFile::get_all(conn, DBPaging::default())?;
     assert_eq!(media_files.len(), 9);
-    assert_eq!(media_files.iter().filter(|v| v.user_id == "uid-4f9c36a6").count(), 2);
-    assert_eq!(media_files.iter().filter(|v| v.user_id == "uid-9e25df03").count(), 2);
-    assert_eq!(media_files.iter().filter(|v| v.user_id == "uid-d20ec3a4").count(), 5);
+    assert_eq!(
+        media_files
+            .iter()
+            .filter(|v| v.user_id == "uid-4f9c36a6")
+            .count(),
+        2
+    );
+    assert_eq!(
+        media_files
+            .iter()
+            .filter(|v| v.user_id == "uid-9e25df03")
+            .count(),
+        2
+    );
+    assert_eq!(
+        media_files
+            .iter()
+            .filter(|v| v.user_id == "uid-d20ec3a4")
+            .count(),
+        5
+    );
 
     let comments = Comment::get_all(conn, DBPaging::default())?;
     assert_eq!(comments.len(), 41);
-    assert_eq!(comments.iter().filter(|c| c.user_id == Some("uid-9e25df03".into())).count(), 7);
-    assert_eq!(comments.iter().filter(|c| c.user_id == Some("uid-4f9c36a6".into())).count(), 4);
-    assert_eq!(comments.iter().filter(|c| c.user_id == Some("uid-addcb300".into())).count(), 5);
-    assert_eq!(comments.iter().filter(|c| c.user_id == Some("uid-d20ec3a4".into())).count(), 25);
-    assert_eq!(comments.iter().filter(|c| c.media_file_id == "77d7fe01").count(), 14);
-    assert_eq!(comments.iter().filter(|c| c.media_file_id == "338fb82c").count(), 2);
+    assert_eq!(
+        comments
+            .iter()
+            .filter(|c| c.user_id == Some("uid-9e25df03".into()))
+            .count(),
+        7
+    );
+    assert_eq!(
+        comments
+            .iter()
+            .filter(|c| c.user_id == Some("uid-4f9c36a6".into()))
+            .count(),
+        4
+    );
+    assert_eq!(
+        comments
+            .iter()
+            .filter(|c| c.user_id == Some("uid-addcb300".into()))
+            .count(),
+        5
+    );
+    assert_eq!(
+        comments
+            .iter()
+            .filter(|c| c.user_id == Some("uid-d20ec3a4".into()))
+            .count(),
+        25
+    );
+    assert_eq!(
+        comments
+            .iter()
+            .filter(|c| c.media_file_id == "77d7fe01")
+            .count(),
+        14
+    );
+    assert_eq!(
+        comments
+            .iter()
+            .filter(|c| c.media_file_id == "338fb82c")
+            .count(),
+        2
+    );
 
     let messages = Message::get_all(conn, DBPaging::default())?;
     assert_eq!(messages.len(), 36);
-    assert_eq!(messages.iter().filter(|m| m.user_id == "uid-d20ec3a4").count(), 17);
-    assert_eq!(messages.iter().filter(|m| m.media_file_id == Some("338fb82c".into())).count(), 3);
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|m| m.user_id == "uid-d20ec3a4")
+            .count(),
+        17
+    );
+    assert_eq!(
+        messages
+            .iter()
+            .filter(|m| m.media_file_id == Some("338fb82c".into()))
+            .count(),
+        3
+    );
 
     Ok(())
 }
-
 
 #[test]
 #[traced_test]
@@ -497,12 +664,18 @@ fn test_backup_restore() {
         for c in comments.iter() {
             models::Comment::delete(conn, &c.id).expect("Failed to delete comment");
         }
-        assert_eq!(models::Comment::get_all(conn, DBPaging::default()).unwrap().len(), 0);  // Make sure they are gone
+        assert_eq!(
+            models::Comment::get_all(conn, DBPaging::default())
+                .unwrap()
+                .len(),
+            0
+        ); // Make sure they are gone
     }
 
     // Close DB and restore
     drop(db);
-    db_backup::restore_sqlite_database(db_file.clone(), backup_file.clone()).expect("Failed to restore database");
+    db_backup::restore_sqlite_database(db_file.clone(), backup_file.clone())
+        .expect("Failed to restore database");
 
     // Check that comments are back
     {
