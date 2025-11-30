@@ -33,7 +33,7 @@ onMount(async () => {
 
 $effect(() => {
 	if ($clientConfig?.supported_locales && $clientConfig.supported_locales.length > 0) {
-		const allowed = new Set($clientConfig.supported_locales.map((l) => l.toLowerCase()));
+		const allowed = new Set($clientConfig.supported_locales.map((l: string) => l.toLowerCase()));
 		const filtered = availableLocales.filter((loc) => allowed.has(loc.id.toLowerCase()));
 		localeOptions = filtered.length > 0 ? filtered : availableLocales;
 	} else {
@@ -178,7 +178,7 @@ function addEDLComments(comments: Proto3.Comment[]) {
 				<Dropdown class="w-44 text-sm clapshot-dropdown" simple>
 					<DropdownItem class="flex items-center space-x-2">
 						<span>{$t('nav.language')}</span>
-						<select class="bg-gray-800 text-xs rounded px-2 py-1" value={$locale} on:change={onLocaleChange} aria-label={$t('nav.language')}>
+						<select class="bg-gray-800 text-xs rounded px-2 py-1" value={$locale} onchange={onLocaleChange} aria-label={$t('nav.language')}>
 							{#each localeOptions as loc}
 								<option value={loc.id} selected={loc.id === $locale}>{loc.label}</option>
 							{/each}
