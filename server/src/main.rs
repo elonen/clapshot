@@ -3,15 +3,14 @@ use clap::Parser;
 use clapshot_server::{
     api_server::validate_org_http_headers_regex,
     grpc::{grpc_client::prepare_organizer, grpc_server::make_grpc_server_bind},
-    run_clapshot,
+    run_clapshot, PKG_NAME, PKG_VERSION,
     storage::StorageBackend,
     video_pipeline::IngestUsernameFrom,
-    PKG_NAME, PKG_VERSION,
 };
 use http::Uri;
-use indoc::indoc;
-use std::{path::PathBuf, str::FromStr, sync::Arc};
+use std::{path::PathBuf, sync::Arc, str::FromStr};
 use tracing::error;
+use indoc::indoc;
 
 mod log;
 
@@ -32,16 +31,17 @@ mod log;
 )]
 struct Args {
     /// Directory for database, /incoming, /videos and /rejected
-    #[arg(short = 'D', long, required = true, value_name = "DIR")]
+    #[arg(short='D', long, required=true, value_name="DIR" )]
     data_dir: PathBuf,
 
     /// Base URL of the API server, e.g. `https://clapshot.example.com`.
     /// This depends on your proxy server, and is usually different from `--host` and `--port`.
-    #[arg(short = 'U', long, required = true, value_name = "URL")]
+    #[arg(short='U', long, required=true, value_name="URL")]
     url_base: String,
 
+
     /// TCP port to listen on
-    #[arg(short = 'p', long, default_value_t = 8095)]
+    #[arg(short='p', long, default_value_t = 8095)]
     port: u16,
 
     /// Host to listen on
@@ -50,28 +50,31 @@ struct Args {
 
     /// Allowed CORS Origins, separated by commas.
     /// Defaults to the value of `url_base`.
-    #[arg(long, value_name = "ORIGINS")]
+    #[arg(long, value_name="ORIGINS")]
     cors: Option<String>,
 
+
     /// Polling interval for incoming folder
-    #[arg(short = 'P', long, default_value_t = 3.0, value_name = "SECONDS")]
+    #[arg(short='P', long, default_value_t = 3.0, value_name="SECONDS")]
     poll: f32,
 
     /// Max number of workers for media file processing
     /// (0 = number of CPU cores)
-    #[arg(short, long, default_value_t = 0, value_name = "NUM")]
+    #[arg(short, long, default_value_t = 0, value_name="NUM")]
     workers: usize,
 
     /// Target (max) bitrate for transcoding, in Mbps
-    #[arg(short, long, default_value_t = 2.5, value_name = "MBITS")]
+    #[arg(short, long, default_value_t = 2.5, value_name="MBITS")]
     bitrate: f32,
+
 
     /// Migrate database to latest version. Makes an automatic backup.
     #[arg(long)]
     migrate: bool,
 
+
     /// Log to file instead of stdout
-    #[arg(short, long, value_name = "FILE")]
+    #[arg(short, long, value_name="FILE")]
     log: Option<String>,
 
     /// Set debug level by repeating (-d = debug, -dd = trace)
@@ -79,89 +82,84 @@ struct Args {
     debug: u8,
 
     // Enable debug mode (same as -v)
+
     /// Log in JSON format
     #[arg(short, long)]
     json: bool,
 
+
     /// Use this user id if auth headers are not found.
     /// Mainly useful for debugging.
-    #[arg(long, default_value = "anonymous", value_name = "USER")]
+    #[arg(long, default_value="anonymous", value_name="USER")]
     default_user: String,
 
     /// How to determine username for files in incoming/ folder.
     /// 'file-owner' uses filesystem ownership, 'folder-name' uses first subfolder name.
-    #[arg(long, default_value = "file-owner", value_name = "METHOD")]
+    #[arg(long, default_value="file-owner", value_name="METHOD")]
     ingest_username_from: String,
+
 
     /// Shell command to start Organizer plugin.
     /// The command should block until SIGTERM, and log to stdout/stderr without timestamps.
     /// Unless --org-uri is a HTTP(S) URI, the command will get a Unix socket path as an argument when Clapshot server calls it.
-    #[arg(long, value_name = "CMD")]
-    org_cmd: Option<String>, // TODO: turn into a Vec<String> to allow multiple plugins
+    #[arg(long, value_name="CMD")]
+    org_cmd: Option<String>,    // TODO: turn into a Vec<String> to allow multiple plugins
 
     /// Custom endpoint for srv->org connections.
     /// E.g. `/path/to/plugin.sock` or `http://[::1]:50051`
     /// If `--org-cmd` is given, this defaults to a temp .sock in datadir.
-    #[arg(long, value_name = "URI")]
+    #[arg(long, value_name="URI")]
     org_in_uri: Option<String>,
 
     /// Listen in TCP address port for org->srv connections.
     /// Default is to use a Unix socket in datadir. E.g. `[::1]:50052`
-    #[arg(long, value_name = "BIND")]
+    #[arg(long, value_name="BIND")]
     org_out_tcp: Option<String>,
 
     /// Path to custom transcoding script
-    #[arg(
-        long,
-        value_name = "SCRIPT",
-        default_value = "scripts/clapshot-transcode"
-    )]
+    #[arg(long, value_name="SCRIPT", default_value="scripts/clapshot-transcode")]
     transcode_script: String,
 
     /// Path to custom thumbnailing script
-    #[arg(
-        long,
-        value_name = "SCRIPT",
-        default_value = "scripts/clapshot-thumbnail"
-    )]
+    #[arg(long, value_name="SCRIPT", default_value="scripts/clapshot-thumbnail")]
     thumbnail_script: String,
 
     /// Regular expression to filter HTTP headers passed to Organizer.
     /// Only headers matching this pattern will be included in UserSessionData.
     /// Case-insensitive matching. Default is disabled for security.
-    #[arg(long, value_name = "REGEX", default_value = "^$")]
+    #[arg(long, value_name="REGEX", default_value="^$")]
     org_http_headers: String,
 
     /// Storage backend (local or s3-compatible object storage)
-    #[arg(long, value_name = "BACKEND", default_value = "local")]
+    #[arg(long, value_name="BACKEND", default_value="local")]
     storage_backend: String,
 
     /// S3-compatible endpoint base URL, e.g. https://s3.example.com
-    #[arg(long, value_name = "URL")]
+    #[arg(long, value_name="URL")]
     s3_endpoint: Option<String>,
 
     /// S3 region (required for S3 backend)
-    #[arg(long, value_name = "REGION")]
+    #[arg(long, value_name="REGION")]
     s3_region: Option<String>,
 
     /// S3 bucket (required for S3 backend)
-    #[arg(long, value_name = "BUCKET")]
+    #[arg(long, value_name="BUCKET")]
     s3_bucket: Option<String>,
 
     /// S3 access key (required for S3 backend)
-    #[arg(long, value_name = "KEY")]
+    #[arg(long, value_name="KEY")]
     s3_access_key: Option<String>,
 
     /// S3 secret key (required for S3 backend)
-    #[arg(long, value_name = "SECRET")]
+    #[arg(long, value_name="SECRET")]
     s3_secret_key: Option<String>,
 
     /// Path/prefix inside the bucket where media files are stored
-    #[arg(long, value_name = "PREFIX", default_value = "videos")]
+    #[arg(long, value_name="PREFIX", default_value="videos")]
     s3_prefix: String,
 
     /// Public base URL for accessing the bucket/prefix (used for playback URLs)
-    #[arg(long, value_name = "URL")]
+    #[arg(long, value_name="URL")]
     s3_public_url: Option<String>,
 }
 
@@ -206,8 +204,7 @@ fn main() -> anyhow::Result<()> {
         &args.data_dir,
     )?;
 
-    let cors_origins: Vec<String> = args
-        .cors
+    let cors_origins: Vec<String> = args.cors
         .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
         .unwrap_or_default();
 
@@ -219,30 +216,18 @@ fn main() -> anyhow::Result<()> {
     let storage = match args.storage_backend.as_str() {
         "local" => StorageBackend::local(args.data_dir.join("videos"), &url_base),
         "s3" => {
-            let endpoint = args
-                .s3_endpoint
-                .clone()
+            let endpoint = args.s3_endpoint.clone()
                 .ok_or_else(|| anyhow::anyhow!("--s3-endpoint is required for S3 backend"))?;
-            let region = args
-                .s3_region
-                .clone()
+            let region = args.s3_region.clone()
                 .ok_or_else(|| anyhow::anyhow!("--s3-region is required for S3 backend"))?;
-            let bucket = args
-                .s3_bucket
-                .clone()
+            let bucket = args.s3_bucket.clone()
                 .ok_or_else(|| anyhow::anyhow!("--s3-bucket is required for S3 backend"))?;
-            let access_key = args
-                .s3_access_key
-                .clone()
+            let access_key = args.s3_access_key.clone()
                 .ok_or_else(|| anyhow::anyhow!("--s3-access-key is required for S3 backend"))?;
-            let secret_key = args
-                .s3_secret_key
-                .clone()
+            let secret_key = args.s3_secret_key.clone()
                 .ok_or_else(|| anyhow::anyhow!("--s3-secret-key is required for S3 backend"))?;
 
-            let public_base_url = args
-                .s3_public_url
-                .clone()
+            let public_base_url = args.s3_public_url.clone()
                 .or_else(|| {
                     Uri::from_str(&endpoint).ok().and_then(|uri| {
                         let scheme = uri.scheme_str()?;
@@ -263,10 +248,7 @@ fn main() -> anyhow::Result<()> {
                 public_base_url,
             )?
         }
-        other => bail!(
-            "Unknown storage backend '{}'. Valid options: local, s3",
-            other
-        ),
+        other => bail!("Unknown storage backend '{}'. Valid options: local, s3", other),
     };
 
     // Run the server (blocking)
@@ -279,11 +261,7 @@ fn main() -> anyhow::Result<()> {
         args.port,
         org_uri,
         grpc_server_bind,
-        if args.workers == 0 {
-            num_cpus::get()
-        } else {
-            args.workers
-        },
+        if args.workers == 0 { num_cpus::get() } else { args.workers },
         target_bitrate,
         default_user,
         args.poll,
