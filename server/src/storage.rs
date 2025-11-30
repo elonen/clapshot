@@ -1,16 +1,9 @@
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
-use aws_sdk_s3::config::endpoint::DefaultResolver;
-use aws_sdk_s3::config::Credentials;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
-use aws_sdk_s3::{
-    config::AsyncSleep, config::Region, config::SharedAsyncSleep, config::Sleep,
-    primitives::ByteStream, Client,
-};
-use http::Uri;
+use aws_sdk_s3::{primitives::ByteStream, Client};
 use tokio::fs;
 use tokio::io::AsyncReadExt;
 use tokio::runtime::Runtime;
@@ -20,14 +13,6 @@ pub type ProgressCallback = Arc<dyn Fn(f32) + Send + Sync + 'static>;
 
 const MULTIPART_MIN_SIZE: u64 = 5 * 1024 * 1024;
 const MULTIPART_CHUNK_SIZE: usize = 8 * 1024 * 1024;
-#[derive(Debug)]
-pub struct ForeverSleep;
-
-impl AsyncSleep for ForeverSleep {
-    fn sleep(&self, _duration: std::time::Duration) -> Sleep {
-        Sleep::new(std::future::pending())
-    }
-}
 /// Simple content type guessing for a handful of formats we serve.
 fn guess_content_type(path: &Path) -> &'static str {
     match path
@@ -65,13 +50,21 @@ impl StorageBackend {
         })
     }
 
+    /// Create an S3 storage backend using the AWS SDK default credential chain.
+    ///
+    /// Credentials are resolved automatically in this order:
+    /// 1. Environment variables: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+    /// 2. Shared credentials file: ~/.aws/credentials
+    /// 3. AWS config file: ~/.aws/config (with profiles)
+    /// 4. ECS container credentials
+    /// 5. EC2 instance metadata (IAM role)
+    ///
+    /// For MinIO or other S3-compatible storage, set endpoint to the service URL.
+    /// For AWS S3, leave endpoint as None and set AWS_REGION environment variable.
     pub fn s3(
         media_root: PathBuf,
         bucket: String,
-        region: String,
-        access_key: String,
-        secret_key: String,
-        endpoint: String,
+        endpoint: Option<String>,
         prefix: String,
         public_base_url: String,
     ) -> anyhow::Result<Self> {
@@ -82,29 +75,21 @@ impl StorageBackend {
         );
 
         let rt = Runtime::new().context("create tokio runtime for S3 client")?;
-        let client = {
-            let region = Region::new(region);
-            let credentials = Credentials::new(access_key, secret_key, None, None, "");
-            let _endpoint_uri = match Uri::from_str(&endpoint) {
-                Ok(u) => u,
-                Err(e) => return Err(anyhow!("failed to create uri: {}", e)),
-            };
+        let client = rt.block_on(async {
+            let mut config_loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
 
-            let resolver = DefaultResolver::new();
-            let cfg = rt.block_on(async {
-                let base = aws_config::defaults(aws_config::BehaviorVersion::latest())
-                    .region(region)
-                    .endpoint_url(endpoint)
-                    .credentials_provider(credentials)
-                    .load()
-                    .await;
-                aws_sdk_s3::config::Builder::from(&base)
-                    .endpoint_resolver(resolver)
-                    .sleep_impl(SharedAsyncSleep::new(ForeverSleep))
-                    .build()
-            });
-            Client::from_conf(cfg)
-        };
+            // Only override endpoint for non-AWS S3 (MinIO, etc.)
+            if let Some(ref ep) = endpoint {
+                config_loader = config_loader.endpoint_url(ep);
+            }
+
+            let sdk_config = config_loader.load().await;
+            let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
+                // Force path-style for MinIO compatibility
+                .force_path_style(endpoint.is_some())
+                .build();
+            Client::from_conf(s3_config)
+        });
 
         Ok(StorageBackend::S3(ObjectStorageBackend {
             media_root,

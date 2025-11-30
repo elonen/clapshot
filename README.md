@@ -134,7 +134,11 @@ Clapshot can upload processed media and thumbnails to an S3-compatible object st
 - `s3-endpoint = https://s3.example.com`
 - `s3-region = us-east-1`
 - `s3-bucket = clapshot-media`
-- `s3-access-key`, `s3-secret-key`
+
+**Authentication** uses the standard AWS SDK credential chain (in order of precedence):
+1. Environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+2. AWS credentials file (`~/.aws/credentials`)
+3. IAM instance roles (for EC2/ECS deployments)
 
 **Optional settings:**
 - `s3-prefix` – path inside the bucket (default: `videos`)
@@ -146,8 +150,8 @@ Clapshot can upload processed media and thumbnails to an S3-compatible object st
 -e CLAPSHOT_SERVER__S3_ENDPOINT=https://s3.example.com \
 -e CLAPSHOT_SERVER__S3_REGION=us-east-1 \
 -e CLAPSHOT_SERVER__S3_BUCKET=clapshot-media \
--e CLAPSHOT_SERVER__S3_ACCESS_KEY=YOUR_KEY \
--e CLAPSHOT_SERVER__S3_SECRET_KEY=YOUR_SECRET \
+-e AWS_ACCESS_KEY_ID=YOUR_KEY \
+-e AWS_SECRET_ACCESS_KEY=YOUR_SECRET \
 -e CLAPSHOT_SERVER__S3_PUBLIC_URL=https://cdn.example.com/clapshot-media
 ```
 

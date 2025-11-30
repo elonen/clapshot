@@ -7,8 +7,7 @@ use clapshot_server::{
     storage::StorageBackend,
     video_pipeline::IngestUsernameFrom,
 };
-use http::Uri;
-use std::{path::PathBuf, sync::Arc, str::FromStr};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 use tracing::error;
 use indoc::indoc;
 
@@ -134,31 +133,21 @@ struct Args {
     #[arg(long, value_name="BACKEND", default_value="local")]
     storage_backend: String,
 
-    /// S3-compatible endpoint base URL, e.g. https://s3.example.com
+    /// S3-compatible endpoint URL (only needed for non-AWS S3, e.g. MinIO).
+    /// For AWS S3, leave unset and configure AWS_REGION instead.
     #[arg(long, value_name="URL")]
     s3_endpoint: Option<String>,
-
-    /// S3 region (required for S3 backend)
-    #[arg(long, value_name="REGION")]
-    s3_region: Option<String>,
 
     /// S3 bucket (required for S3 backend)
     #[arg(long, value_name="BUCKET")]
     s3_bucket: Option<String>,
 
-    /// S3 access key (required for S3 backend)
-    #[arg(long, value_name="KEY")]
-    s3_access_key: Option<String>,
-
-    /// S3 secret key (required for S3 backend)
-    #[arg(long, value_name="SECRET")]
-    s3_secret_key: Option<String>,
-
     /// Path/prefix inside the bucket where media files are stored
     #[arg(long, value_name="PREFIX", default_value="videos")]
     s3_prefix: String,
 
-    /// Public base URL for accessing the bucket/prefix (used for playback URLs)
+    /// Public base URL for accessing the bucket/prefix (used for playback URLs).
+    /// If not set, defaults to endpoint/bucket or virtual-hosted style URL.
     #[arg(long, value_name="URL")]
     s3_public_url: Option<String>,
 }
@@ -216,34 +205,25 @@ fn main() -> anyhow::Result<()> {
     let storage = match args.storage_backend.as_str() {
         "local" => StorageBackend::local(args.data_dir.join("videos"), &url_base),
         "s3" => {
-            let endpoint = args.s3_endpoint.clone()
-                .ok_or_else(|| anyhow::anyhow!("--s3-endpoint is required for S3 backend"))?;
-            let region = args.s3_region.clone()
-                .ok_or_else(|| anyhow::anyhow!("--s3-region is required for S3 backend"))?;
             let bucket = args.s3_bucket.clone()
                 .ok_or_else(|| anyhow::anyhow!("--s3-bucket is required for S3 backend"))?;
-            let access_key = args.s3_access_key.clone()
-                .ok_or_else(|| anyhow::anyhow!("--s3-access-key is required for S3 backend"))?;
-            let secret_key = args.s3_secret_key.clone()
-                .ok_or_else(|| anyhow::anyhow!("--s3-secret-key is required for S3 backend"))?;
 
+            // Compute public URL for playback. If not specified, derive from endpoint/bucket.
+            // For custom endpoints (MinIO etc), default to path-style URLs.
             let public_base_url = args.s3_public_url.clone()
                 .or_else(|| {
-                    Uri::from_str(&endpoint).ok().and_then(|uri| {
-                        let scheme = uri.scheme_str()?;
-                        let authority = uri.authority()?;
-                        Some(format!("{scheme}://{bucket}.{}", authority))
-                    })
+                    args.s3_endpoint.as_ref().map(|ep|
+                        format!("{}/{}", ep.trim_end_matches('/'), &bucket)
+                    )
                 })
-                .unwrap_or_else(|| format!("{}/{}", endpoint.trim_end_matches('/'), bucket));
+                .ok_or_else(|| anyhow::anyhow!(
+                    "--s3-public-url is required when --s3-endpoint is not set (AWS S3 requires explicit public URL)"
+                ))?;
 
             StorageBackend::s3(
                 args.data_dir.join("videos"),
                 bucket,
-                region,
-                access_key,
-                secret_key,
-                endpoint,
+                args.s3_endpoint.clone(),
                 args.s3_prefix.clone(),
                 public_base_url,
             )?

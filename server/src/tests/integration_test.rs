@@ -957,4 +957,267 @@ mod integration_test
         Ok(())
     }
 
+    // ==================== S3/MinIO Integration Tests ====================
+
+    const TEST_BUCKET: &str = "clapshot-test";
+
+    /// Helper to manage a temporary MinIO instance for testing.
+    /// Spawns MinIO on a free port with a temp data directory.
+    /// Automatically cleans up when dropped.
+    struct TempMinIO {
+        process: std::process::Child,
+        endpoint: String,
+        port: u16,
+        _data_dir: assert_fs::TempDir,
+    }
+
+    impl TempMinIO {
+        /// Start a new MinIO instance. Returns None if `minio` is not in PATH.
+        fn start() -> Option<Self> {
+            // Check if minio binary is available
+            if std::process::Command::new("minio")
+                .arg("--version")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_err()
+            {
+                tracing::warn!("MinIO binary not found in PATH - skipping S3 tests");
+                return None;
+            }
+
+            let port = portpicker::pick_unused_port().expect("No TCP ports free");
+            let console_port = portpicker::pick_unused_port().expect("No TCP ports free for console");
+            let data_dir = assert_fs::TempDir::new().expect("Failed to create temp dir for MinIO");
+
+            tracing::info!("Starting MinIO on port {} with data dir {:?}", port, data_dir.path());
+
+            let process = std::process::Command::new("minio")
+                .arg("server")
+                .arg(data_dir.path())
+                .arg("--address")
+                .arg(format!("127.0.0.1:{}", port))
+                .arg("--console-address")
+                .arg(format!("127.0.0.1:{}", console_port))
+                .env("MINIO_ROOT_USER", "minioadmin")
+                .env("MINIO_ROOT_PASSWORD", "minioadmin")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .expect("Failed to start MinIO");
+
+            let endpoint = format!("http://127.0.0.1:{}", port);
+
+            // Wait for MinIO to be ready
+            let start = std::time::Instant::now();
+            let timeout = Duration::from_secs(10);
+            loop {
+                if start.elapsed() > timeout {
+                    tracing::error!("MinIO failed to start within timeout");
+                    return None;
+                }
+                if reqwest::blocking::get(format!("{}/minio/health/live", endpoint))
+                    .map(|r| r.status().is_success())
+                    .unwrap_or(false)
+                {
+                    tracing::info!("MinIO is ready on {}", endpoint);
+                    break;
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+
+            Some(TempMinIO {
+                process,
+                endpoint,
+                port,
+                _data_dir: data_dir,
+            })
+        }
+
+        /// Create an S3 client for this MinIO instance (for test verification)
+        fn s3_client(&self) -> aws_sdk_s3::Client {
+            use aws_sdk_s3::config::Region;
+
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let endpoint = self.endpoint.clone();
+            rt.block_on(async move {
+                let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+                    .endpoint_url(&endpoint)
+                    .region(Region::new("us-east-1"))
+                    .load()
+                    .await;
+                let s3_config = aws_sdk_s3::config::Builder::from(&config)
+                    .force_path_style(true)
+                    .build();
+                aws_sdk_s3::Client::from_conf(s3_config)
+            })
+        }
+
+        /// Create the test bucket
+        fn create_bucket(&self) -> anyhow::Result<()> {
+            let client = self.s3_client();
+            let rt = tokio::runtime::Runtime::new()?;
+            rt.block_on(async {
+                client
+                    .create_bucket()
+                    .bucket(TEST_BUCKET)
+                    .send()
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to create bucket: {}", e))?;
+                Ok(())
+            })
+        }
+
+        /// Create a StorageBackend for this MinIO instance
+        fn storage_backend(&self, media_root: PathBuf, prefix: &str) -> anyhow::Result<StorageBackend> {
+            StorageBackend::s3(
+                media_root,
+                TEST_BUCKET.to_string(),
+                Some(self.endpoint.clone()),
+                prefix.to_string(),
+                format!("{}/{}", self.endpoint, TEST_BUCKET),
+            )
+        }
+    }
+
+    impl Drop for TempMinIO {
+        fn drop(&mut self) {
+            tracing::info!("Stopping MinIO on port {}", self.port);
+            let _ = self.process.kill();
+            let _ = self.process.wait();
+        }
+    }
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    fn test_s3_storage_backend_upload() -> anyhow::Result<()> {
+        // Set credentials for AWS SDK (used by both our code and test verification)
+        std::env::set_var("AWS_ACCESS_KEY_ID", "minioadmin");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "minioadmin");
+        std::env::set_var("AWS_REGION", "us-east-1");
+
+        let minio = match TempMinIO::start() {
+            Some(m) => m,
+            None => return Ok(()), // Skip test if MinIO not available
+        };
+        minio.create_bucket()?;
+
+        let data_dir = assert_fs::TempDir::new()?;
+        let media_root = data_dir.path().join("videos");
+        std::fs::create_dir_all(&media_root)?;
+
+        let test_prefix = format!("test-{}", uuid::Uuid::new_v4());
+        let storage = minio.storage_backend(media_root.clone(), &test_prefix)?;
+
+        // Create a test file under media_root
+        let test_media_id = "test-media-123";
+        let media_dir = media_root.join(test_media_id);
+        std::fs::create_dir_all(&media_dir)?;
+        let test_file = media_dir.join("test-video.mp4");
+        std::fs::write(&test_file, b"fake video content for testing")?;
+
+        // Upload the file
+        storage.upload_local_path(&test_file)?;
+
+        // Verify the file was uploaded
+        let client = minio.s3_client();
+        let rt = tokio::runtime::Runtime::new()?;
+        let exists = rt.block_on(async {
+            let key = format!("{}/{}/test-video.mp4", test_prefix, test_media_id);
+            client
+                .head_object()
+                .bucket(TEST_BUCKET)
+                .key(&key)
+                .send()
+                .await
+                .is_ok()
+        });
+
+        assert!(exists, "Uploaded file should exist in S3");
+
+        // Verify media_base_url is correct
+        let expected_url = format!("{}/{}/{}", minio.endpoint, TEST_BUCKET, test_prefix);
+        assert_eq!(storage.media_base_url(), expected_url);
+
+        Ok(())
+    }
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    fn test_s3_storage_progress_callback() -> anyhow::Result<()> {
+        std::env::set_var("AWS_ACCESS_KEY_ID", "minioadmin");
+        std::env::set_var("AWS_SECRET_ACCESS_KEY", "minioadmin");
+        std::env::set_var("AWS_REGION", "us-east-1");
+
+        let minio = match TempMinIO::start() {
+            Some(m) => m,
+            None => return Ok(()),
+        };
+        minio.create_bucket()?;
+
+        let data_dir = assert_fs::TempDir::new()?;
+        let media_root = data_dir.path().join("videos");
+        std::fs::create_dir_all(&media_root)?;
+
+        let test_prefix = format!("test-progress-{}", uuid::Uuid::new_v4());
+        let storage = minio.storage_backend(media_root.clone(), &test_prefix)?;
+
+        // Create a small test file (below multipart threshold)
+        let test_media_id = "test-progress-media";
+        let media_dir = media_root.join(test_media_id);
+        std::fs::create_dir_all(&media_dir)?;
+        let test_file = media_dir.join("test-video.mp4");
+        std::fs::write(&test_file, vec![0u8; 1024 * 1024])?; // 1MB
+
+        // Track progress
+        let progress_values = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let pv = progress_values.clone();
+        let progress_cb: crate::storage::ProgressCallback = Arc::new(move |p| {
+            pv.lock().unwrap().push(p);
+        });
+
+        // Upload with progress tracking
+        storage.upload_with_progress(&test_file, Some(progress_cb))?;
+
+        // Verify progress was reported and reached 1.0
+        let progress = progress_values.lock().unwrap();
+        assert!(!progress.is_empty(), "Progress should have been reported");
+        assert!(
+            progress.last().map(|&p| (p - 1.0).abs() < 0.001).unwrap_or(false),
+            "Final progress should be ~1.0"
+        );
+
+        // Verify file exists in S3
+        let client = minio.s3_client();
+        let rt = tokio::runtime::Runtime::new()?;
+        let exists = rt.block_on(async {
+            let key = format!("{}/{}/test-video.mp4", test_prefix, test_media_id);
+            client
+                .head_object()
+                .bucket(TEST_BUCKET)
+                .key(&key)
+                .send()
+                .await
+                .is_ok()
+        });
+
+        assert!(exists, "Uploaded file should exist in S3");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_s3_storage_needs_remote_upload() -> anyhow::Result<()> {
+        let data_dir = assert_fs::TempDir::new()?;
+        let media_root = data_dir.path().join("videos");
+
+        // Local storage should not need remote upload
+        let local_storage = StorageBackend::local(media_root.clone(), "http://localhost:8080");
+        assert!(!local_storage.needs_remote_upload());
+
+        Ok(())
+    }
+
 }
