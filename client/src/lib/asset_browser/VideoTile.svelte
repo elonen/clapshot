@@ -67,6 +67,10 @@ function fmt_date(d: Date | undefined) {
         <div class="flex-grow">
         <TileVisualizationOverride vis={visualization}/>
         </div>
+    {:else}
+        <div class="flex-grow flex items-center justify-center text-slate-300">
+            <i class="fas fa-video text-5xl" aria-label="video icon"></i>
+        </div>
     {/if}
 
     <!-- Progress bar (if any) -->
@@ -119,4 +123,3 @@ function fmt_date(d: Date | undefined) {
 }
 
 </style>
-

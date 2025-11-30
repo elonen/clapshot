@@ -4,7 +4,7 @@
 
 #![allow(unused_parens)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -126,6 +126,74 @@ fn upload_to_storage_with_progress(
     // Kick off the bar right away so the client shows it while we stream to S3.
     callback(0.0);
     storage.upload_with_progress(abs_path, Some(callback))
+}
+
+fn cleanup_local_media_dir(videos_dir: &Path, media_id: &str) -> anyhow::Result<()> {
+    let media_dir = videos_dir.join(media_id);
+    if !media_dir.exists() {
+        return Ok(());
+    }
+
+    // Remove main video files/symlink in the media root
+    let video_exts = ["mp4", "mkv", "webm", "mov", "avi"];
+    if let Ok(entries) = std::fs::read_dir(&media_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                let remove = path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|ext| video_exts.contains(&ext.to_ascii_lowercase().as_str()))
+                    .unwrap_or(false)
+                    || path.file_name().and_then(|n| n.to_str()) == Some("video.mp4");
+
+                if remove {
+                    if let Err(e) = std::fs::remove_file(&path) {
+                        tracing::warn!(details=%e, file=?path, "Failed to remove local media file after upload");
+                    }
+                }
+            }
+        }
+    }
+
+    for sub in ["orig", "thumbs"] {
+        let dir = media_dir.join(sub);
+        if dir.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&dir) {
+                tracing::warn!(details=%e, dir=?dir, "Failed to remove local media directory after upload");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn maybe_cleanup_local_media(
+    storage: &StorageBackend,
+    videos_dir: &Path,
+    media_id: &str,
+    transcode_pending: bool,
+    db: &DB,
+) {
+    if !storage.needs_remote_upload() {
+        return;
+    }
+
+    let ready = db
+        .conn()
+        .and_then(|mut conn| models::MediaFile::get(&mut conn, &media_id.to_string()))
+        .map(|mf| {
+            let thumbs_done = mf.thumbs_done.is_some();
+            let transcode_done = mf.recompression_done.is_some() || !transcode_pending;
+            thumbs_done && transcode_done
+        })
+        .unwrap_or(false);
+
+    if ready {
+        if let Err(e) = cleanup_local_media_dir(videos_dir, media_id) {
+            tracing::warn!(details=%e, media_file_id=%media_id, "Failed to clean up local media after upload");
+        }
+    }
 }
 
 /// Calculate hash identifier (media_file_id) for the submitted files,
@@ -539,6 +607,8 @@ pub fn run_forever(
         );
     });
 
+    let mut transcode_pending: HashSet<String> = HashSet::new();
+
     // Migration from older version: find a media file that is missing thumbnail sheet
     fn legacy_thumbnail_next_media_file(
         db: &DB,
@@ -657,6 +727,13 @@ pub fn run_forever(
                             }
                             MetadataResult::Err(e) => (None, Err(e))
                         };
+                        if let (Some(vid), Ok(do_transcode)) = (&vid, &ing_res) {
+                            if *do_transcode {
+                                transcode_pending.insert(vid.clone());
+                            } else {
+                                transcode_pending.remove(vid);
+                            }
+                        }
                         // Relay errors, if any.
                         // No need to send ok message here, variations of it are sent from ingest_media_file().
                         if let Err(e) = ing_res {
@@ -730,6 +807,11 @@ pub fn run_forever(
                             let videos_dir = media_files_dir.clone();
                             let vid = logs.media_file_id.clone();
                             let storage = storage.clone();
+                            let cleanup_vid = vid.clone();
+                            let cleanup_storage = storage.clone();
+                            let cleanup_videos_dir = videos_dir.clone();
+                            let cleanup_db = db.clone();
+                            transcode_pending.remove(&vid);
 
                             tracing::info!(media_file=%vid, log_info=%logs.stdout, "Transcoding completed");
 
@@ -798,6 +880,14 @@ pub fn run_forever(
                                     subtitle_id: None,
                                     progress: Some(1.0)
                                 }).unwrap_or_else(|e| { tracing::error!(details=%e, "Error sending user message"); });
+
+                            maybe_cleanup_local_media(
+                                &cleanup_storage,
+                                &cleanup_videos_dir,
+                                &cleanup_vid,
+                                transcode_pending.contains(&cleanup_vid),
+                                &cleanup_db,
+                            );
                         },
 
                         ThumbsSuccess { thumb_dir, thumb_sheet_dims, logs } =>
@@ -856,6 +946,14 @@ pub fn run_forever(
                                     tracing::error!(details=%e, "Error storing thumbs_done in DB");
                                 }
                             }
+
+                            maybe_cleanup_local_media(
+                                &storage,
+                                &videos_dir,
+                                &vid,
+                                transcode_pending.contains(&vid),
+                                &db,
+                            );
                         },
 
                         TranscodeFailure { logs, .. } |
