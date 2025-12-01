@@ -290,12 +290,25 @@ impl ObjectStorageBackend {
             let mut uploaded: u64 = 0;
 
             loop {
-                let bytes_read = file.read(&mut buf).await?;
-                if bytes_read == 0 {
-                    break;
+                // Read a complete chunk (read() may return short reads with async I/O)
+                // S3 requires all parts except the last to be >= 5MB
+                let mut chunk_size = 0;
+                loop {
+                    let bytes_read = file.read(&mut buf[chunk_size..]).await?;
+                    if bytes_read == 0 {
+                        break; // EOF
+                    }
+                    chunk_size += bytes_read;
+                    if chunk_size >= MULTIPART_CHUNK_SIZE {
+                        break; // Full chunk
+                    }
                 }
 
-                let body = ByteStream::from(buf[..bytes_read].to_vec());
+                if chunk_size == 0 {
+                    break; // No more data
+                }
+
+                let body = ByteStream::from(buf[..chunk_size].to_vec());
                 let res = client
                     .upload_part()
                     .bucket(&bucket)
@@ -319,7 +332,7 @@ impl ObjectStorageBackend {
                         .build(),
                 );
 
-                uploaded += bytes_read as u64;
+                uploaded += chunk_size as u64;
                 if let Some(cb) = progress.as_ref() {
                     cb((uploaded as f32 / total_len as f32).clamp(0.0, 1.0));
                 }
