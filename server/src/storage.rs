@@ -6,7 +6,6 @@ use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
 use aws_sdk_s3::{primitives::ByteStream, Client};
 use tokio::fs;
 use tokio::io::AsyncReadExt;
-use tokio::runtime::Runtime;
 use tracing;
 
 pub type ProgressCallback = Arc<dyn Fn(f32) + Send + Sync + 'static>;
@@ -74,22 +73,30 @@ impl StorageBackend {
             prefix.trim_end_matches('/')
         );
 
-        let rt = Runtime::new().context("create tokio runtime for S3 client")?;
-        let client = rt.block_on(async {
-            let mut config_loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
+        // Create a temporary runtime just for client initialization.
+        // The client survives after the runtime is dropped.
+        // We don't persist the runtime to avoid "cannot drop runtime in async context" panics
+        // when the storage is dropped inside another tokio runtime (e.g., during server shutdown).
+        let client = {
+            let rt = tokio::runtime::Runtime::new().context("create tokio runtime for S3 client init")?;
+            let client = rt.block_on(async {
+                let mut config_loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
 
-            // Only override endpoint for non-AWS S3 (MinIO, etc.)
-            if let Some(ref ep) = endpoint {
-                config_loader = config_loader.endpoint_url(ep);
-            }
+                // Only override endpoint for non-AWS S3 (MinIO, etc.)
+                if let Some(ref ep) = endpoint {
+                    config_loader = config_loader.endpoint_url(ep);
+                }
 
-            let sdk_config = config_loader.load().await;
-            let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
-                // Force path-style for MinIO compatibility
-                .force_path_style(endpoint.is_some())
-                .build();
-            Client::from_conf(s3_config)
-        });
+                let sdk_config = config_loader.load().await;
+                let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
+                    // Force path-style for MinIO compatibility
+                    .force_path_style(endpoint.is_some())
+                    .build();
+                Client::from_conf(s3_config)
+            });
+            // rt is dropped here, but client survives
+            client
+        };
 
         Ok(StorageBackend::S3(ObjectStorageBackend {
             media_root,
@@ -97,7 +104,6 @@ impl StorageBackend {
             media_base_url,
             client: Arc::new(client),
             bucket,
-            rt: Arc::new(rt),
         }))
     }
 
@@ -197,7 +203,6 @@ pub struct ObjectStorageBackend {
     pub media_base_url: String,
     pub bucket: String,
     pub client: Arc<Client>,
-    pub rt: Arc<Runtime>,
 }
 
 impl ObjectStorageBackend {
@@ -212,7 +217,11 @@ impl ObjectStorageBackend {
         let client = self.client.clone();
         let path = abs_path.to_path_buf();
 
-        self.rt.block_on(async move {
+        // Create a fresh runtime for each upload to avoid "cannot drop runtime in async context" panics.
+        // This is slightly less efficient than reusing a runtime, but much safer when the storage
+        // is held by code that runs inside another tokio runtime (like the api_server).
+        let rt = tokio::runtime::Runtime::new().context("create tokio runtime for S3 upload")?;
+        rt.block_on(async move {
             let mut file = fs::File::open(&path)
                 .await
                 .with_context(|| format!("Open file {:?}", path))?;

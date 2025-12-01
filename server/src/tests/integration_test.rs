@@ -1239,8 +1239,8 @@ mod integration_test
         cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner, None, storage_factory]
             // Ingest test video
             let video_file_name = "NASA_Red_Lettuce_excerpt.mov";
-            data_dir.copy_from("src/tests/assets/", &[video_file_name])?;
-            std::fs::rename(data_dir.join(video_file_name), incoming_dir.join(video_file_name))?;
+            data_dir.copy_from("src/tests/assets/", &[video_file_name]).unwrap();
+            std::fs::rename(data_dir.join(video_file_name), incoming_dir.join(video_file_name)).unwrap();
 
             // Wait for processing (transcode + thumbnails)
             let wait_res = wait_for_reports(&mut ws, true, true, true, None).await;
@@ -1256,8 +1256,6 @@ mod integration_test
 
             assert!(objects.iter().any(|k| k.contains("video.mp4")), "Transcoded video missing: {:?}", objects);
             assert!(objects.iter().any(|k| k.contains("/thumbs/")), "Thumbnails missing: {:?}", objects);
-
-            Ok::<_, anyhow::Error>(())
         }
 
         Ok(())
