@@ -107,10 +107,23 @@ mod integration_test
     }
 
     macro_rules! cs_main_test {
+        // 8-param variant: default storage, no ws_user_override
         ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr] $($body:tt)*) => {
-            cs_main_test!([$ws, $data_dir, $incoming_dir, $org_conn, $bitrate, $org_cmd, $custom_assertfs, $ingest_username_from, None] $($body)*)
+            cs_main_test!(@impl [$ws, $data_dir, $incoming_dir, $org_conn, $bitrate, $org_cmd, $custom_assertfs, $ingest_username_from, None,
+                |media_root: std::path::PathBuf, url_base: &str| crate::storage::StorageBackend::local(media_root, url_base)] $($body)*)
         };
+        // 9-param variant: default storage, with ws_user_override
         ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr, $ws_user_override:expr] $($body:tt)*) => {
+            cs_main_test!(@impl [$ws, $data_dir, $incoming_dir, $org_conn, $bitrate, $org_cmd, $custom_assertfs, $ingest_username_from, $ws_user_override,
+                |media_root: std::path::PathBuf, url_base: &str| crate::storage::StorageBackend::local(media_root, url_base)] $($body)*)
+        };
+        // 10-param variant: custom storage factory (receives media_root only, url_base captured by caller)
+        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr, $ws_user_override:expr, $storage_factory:expr] $($body:tt)*) => {
+            cs_main_test!(@impl [$ws, $data_dir, $incoming_dir, $org_conn, $bitrate, $org_cmd, $custom_assertfs, $ingest_username_from, $ws_user_override,
+                |media_root: std::path::PathBuf, _url_base: &str| { let f = $storage_factory; f(media_root) }] $($body)*)
+        };
+        // Single implementation - storage_factory takes (media_root, url_base)
+        (@impl [$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr, $ws_user_override:expr, $storage_factory:expr] $($body:tt)*) => {
             {
                 let $data_dir = $custom_assertfs.unwrap_or(assert_fs::TempDir::new().unwrap());
                 let $incoming_dir = $data_dir.join("incoming");
@@ -133,7 +146,8 @@ mod integration_test
                     let data_dir = $data_dir.path().to_path_buf();
                     let url_base = url_base.clone();
                     let org_uri = org_uri.clone();
-                    let storage = crate::storage::StorageBackend::local(data_dir.join("videos"), &url_base);
+                    let media_root = data_dir.join("videos");
+                    let storage = { let f = $storage_factory; f(media_root, &url_base) };
                     let tf = terminate_flag.clone();
                     thread::spawn(move || {
                         let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), regex, storage, tf)?;
@@ -158,7 +172,7 @@ mod integration_test
                 tracing::info!("Waiting for run_clapshot() to terminate...");
                 let _ = th.join().unwrap();
             }
-        }
+        };
     }
 
     #[test]
@@ -248,6 +262,7 @@ mod integration_test
     // --- Transcoding tests ---
 
     pub struct WaitForReportResults {
+        pub media_id: String,
         pub transcode_complete: bool,
         pub thumbs_complete: bool,
         pub got_progress_report: bool,
@@ -265,6 +280,7 @@ mod integration_test
         check_file_outputs: Option<(PathBuf, String)>) -> WaitForReportResults
     {
         let mut res = WaitForReportResults {
+            media_id: String::new(),
             transcode_complete: false, thumbs_complete: false,
             got_progress_report: false, got_transcode_report: false, got_thumbnail_report: false,
             ts_cols: String::new(), ts_rows: String::new(),
@@ -276,6 +292,7 @@ mod integration_test
         thread::sleep(Duration::from_secs_f32(0.5));
         let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
         let vid = msg.refs.unwrap().media_file_id.unwrap();
+        res.media_id = vid.clone();
 
         thread::sleep(Duration::from_secs_f32(0.5));
         let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
@@ -1078,6 +1095,62 @@ mod integration_test
                 format!("{}/{}", self.endpoint, TEST_BUCKET),
             )
         }
+
+        /// Check if an object exists in S3
+        fn object_exists(&self, key: &str) -> bool {
+            let client = self.s3_client();
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async {
+                client
+                    .head_object()
+                    .bucket(TEST_BUCKET)
+                    .key(key)
+                    .send()
+                    .await
+                    .is_ok()
+            })
+        }
+
+        /// List all objects under a prefix (blocking version for non-async tests)
+        fn list_objects(&self, prefix: &str) -> Vec<String> {
+            let client = self.s3_client();
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(Self::list_objects_async(&client, prefix))
+        }
+
+        /// List all objects under a prefix (async version for use inside async contexts)
+        async fn list_objects_async(client: &aws_sdk_s3::Client, prefix: &str) -> Vec<String> {
+            client
+                .list_objects_v2()
+                .bucket(TEST_BUCKET)
+                .prefix(prefix)
+                .send()
+                .await
+                .map(|r| r.contents().iter().filter_map(|o| o.key().map(String::from)).collect())
+                .unwrap_or_default()
+        }
+
+        /// Set up AWS env vars for SDK credential chain
+        fn setup_env_vars() {
+            std::env::set_var("AWS_ACCESS_KEY_ID", "minioadmin");
+            std::env::set_var("AWS_SECRET_ACCESS_KEY", "minioadmin");
+            std::env::set_var("AWS_REGION", "us-east-1");
+        }
+
+        /// Set up a complete test environment. Returns (storage, data_dir, prefix).
+        fn setup_test(&self) -> anyhow::Result<(StorageBackend, assert_fs::TempDir, String)> {
+            TempMinIO::setup_env_vars();
+            self.create_bucket()?;
+
+            let data_dir = assert_fs::TempDir::new()?;
+            let media_root = data_dir.path().join("videos");
+            std::fs::create_dir_all(&media_root)?;
+
+            let prefix = format!("test-{}", uuid::Uuid::new_v4());
+            let storage = self.storage_backend(media_root, &prefix)?;
+
+            Ok((storage, data_dir, prefix))
+        }
     }
 
     impl Drop for TempMinIO {
@@ -1088,122 +1161,104 @@ mod integration_test
         }
     }
 
+    /// Tests S3 upload for both small files (simple PUT) and large files (multipart).
+    /// Also verifies progress callback and media_base_url.
     #[test]
     #[serial]
     #[traced_test]
-    fn test_s3_storage_backend_upload() -> anyhow::Result<()> {
-        // Set credentials for AWS SDK (used by both our code and test verification)
-        std::env::set_var("AWS_ACCESS_KEY_ID", "minioadmin");
-        std::env::set_var("AWS_SECRET_ACCESS_KEY", "minioadmin");
-        std::env::set_var("AWS_REGION", "us-east-1");
-
+    fn test_s3_storage_upload() -> anyhow::Result<()> {
         let minio = match TempMinIO::start() {
             Some(m) => m,
-            None => return Ok(()), // Skip test if MinIO not available
+            None => return Ok(()), // Skip if MinIO not available
         };
-        minio.create_bucket()?;
-
-        let data_dir = assert_fs::TempDir::new()?;
+        let (storage, data_dir, prefix) = minio.setup_test()?;
         let media_root = data_dir.path().join("videos");
-        std::fs::create_dir_all(&media_root)?;
-
-        let test_prefix = format!("test-{}", uuid::Uuid::new_v4());
-        let storage = minio.storage_backend(media_root.clone(), &test_prefix)?;
-
-        // Create a test file under media_root
-        let test_media_id = "test-media-123";
-        let media_dir = media_root.join(test_media_id);
-        std::fs::create_dir_all(&media_dir)?;
-        let test_file = media_dir.join("test-video.mp4");
-        std::fs::write(&test_file, b"fake video content for testing")?;
-
-        // Upload the file
-        storage.upload_local_path(&test_file)?;
-
-        // Verify the file was uploaded
-        let client = minio.s3_client();
-        let rt = tokio::runtime::Runtime::new()?;
-        let exists = rt.block_on(async {
-            let key = format!("{}/{}/test-video.mp4", test_prefix, test_media_id);
-            client
-                .head_object()
-                .bucket(TEST_BUCKET)
-                .key(&key)
-                .send()
-                .await
-                .is_ok()
-        });
-
-        assert!(exists, "Uploaded file should exist in S3");
 
         // Verify media_base_url is correct
-        let expected_url = format!("{}/{}/{}", minio.endpoint, TEST_BUCKET, test_prefix);
+        let expected_url = format!("{}/{}/{}", minio.endpoint, TEST_BUCKET, prefix);
         assert_eq!(storage.media_base_url(), expected_url);
+
+        // Test 1: Small file upload (simple PUT, below 5MB threshold)
+        let small_dir = media_root.join("small-file");
+        std::fs::create_dir_all(&small_dir)?;
+        let small_file = small_dir.join("small.mp4");
+        std::fs::write(&small_file, b"small test content")?;
+        storage.upload_local_path(&small_file)?;
+        assert!(minio.object_exists(&format!("{}/small-file/small.mp4", prefix)),
+            "Small file should exist in S3");
+
+        // Test 2: Large file upload (multipart, 10MB > 5MB threshold) with progress
+        let large_dir = media_root.join("large-file");
+        std::fs::create_dir_all(&large_dir)?;
+        let large_file = large_dir.join("large.mp4");
+        std::fs::write(&large_file, vec![0u8; 10 * 1024 * 1024])?;
+
+        let progress_values = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let pv = progress_values.clone();
+        let progress_cb: crate::storage::ProgressCallback = Arc::new(move |p| {
+            pv.lock().unwrap().push(p);
+        });
+        storage.upload_with_progress(&large_file, Some(progress_cb))?;
+
+        let progress = progress_values.lock().unwrap();
+        assert!(!progress.is_empty(), "Progress should have been reported");
+        assert!((progress.last().unwrap() - 1.0).abs() < 0.001, "Final progress should be ~1.0");
+        assert!(minio.object_exists(&format!("{}/large-file/large.mp4", prefix)),
+            "Large file should exist in S3");
 
         Ok(())
     }
 
+    /// Full E2E test: ingest video → transcode → upload to S3
     #[test]
     #[serial]
     #[traced_test]
-    fn test_s3_storage_progress_callback() -> anyhow::Result<()> {
-        std::env::set_var("AWS_ACCESS_KEY_ID", "minioadmin");
-        std::env::set_var("AWS_SECRET_ACCESS_KEY", "minioadmin");
-        std::env::set_var("AWS_REGION", "us-east-1");
-
+    #[cfg(feature = "include_slow_tests")]
+    fn test_s3_video_ingest_transcode_upload() -> anyhow::Result<()> {
+        TempMinIO::setup_env_vars();
         let minio = match TempMinIO::start() {
             Some(m) => m,
             None => return Ok(()),
         };
         minio.create_bucket()?;
 
-        let data_dir = assert_fs::TempDir::new()?;
-        let media_root = data_dir.path().join("videos");
-        std::fs::create_dir_all(&media_root)?;
+        let test_prefix = format!("test-e2e-{}", uuid::Uuid::new_v4());
+        let minio_endpoint = minio.endpoint.clone();
+        let prefix_clone = test_prefix.clone();
 
-        let test_prefix = format!("test-progress-{}", uuid::Uuid::new_v4());
-        let storage = minio.storage_backend(media_root.clone(), &test_prefix)?;
+        // Get S3 client before entering async context (avoids nested runtime)
+        let s3_client = minio.s3_client();
 
-        // Create a small test file (below multipart threshold)
-        let test_media_id = "test-progress-media";
-        let media_dir = media_root.join(test_media_id);
-        std::fs::create_dir_all(&media_dir)?;
-        let test_file = media_dir.join("test-video.mp4");
-        std::fs::write(&test_file, vec![0u8; 1024 * 1024])?; // 1MB
+        let storage_factory = move |media_root: PathBuf| -> StorageBackend {
+            StorageBackend::s3(
+                media_root, TEST_BUCKET.to_string(), Some(minio_endpoint.clone()),
+                prefix_clone.clone(), format!("{}/{}", minio_endpoint, TEST_BUCKET),
+            ).expect("Failed to create S3 storage backend")
+        };
 
-        // Track progress
-        let progress_values = Arc::new(std::sync::Mutex::new(Vec::new()));
-        let pv = progress_values.clone();
-        let progress_cb: crate::storage::ProgressCallback = Arc::new(move |p| {
-            pv.lock().unwrap().push(p);
-        });
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner, None, storage_factory]
+            // Ingest test video
+            let video_file_name = "NASA_Red_Lettuce_excerpt.mov";
+            data_dir.copy_from("src/tests/assets/", &[video_file_name])?;
+            std::fs::rename(data_dir.join(video_file_name), incoming_dir.join(video_file_name))?;
 
-        // Upload with progress tracking
-        storage.upload_with_progress(&test_file, Some(progress_cb))?;
+            // Wait for processing (transcode + thumbnails)
+            let wait_res = wait_for_reports(&mut ws, true, true, true, None).await;
+            assert!(wait_res.transcode_complete, "Transcode did not complete");
+            assert!(wait_res.thumbs_complete, "Thumbnails did not complete");
 
-        // Verify progress was reported and reached 1.0
-        let progress = progress_values.lock().unwrap();
-        assert!(!progress.is_empty(), "Progress should have been reported");
-        assert!(
-            progress.last().map(|&p| (p - 1.0).abs() < 0.001).unwrap_or(false),
-            "Final progress should be ~1.0"
-        );
+            // Give S3 upload time to finish
+            thread::sleep(Duration::from_secs(2));
 
-        // Verify file exists in S3
-        let client = minio.s3_client();
-        let rt = tokio::runtime::Runtime::new()?;
-        let exists = rt.block_on(async {
-            let key = format!("{}/{}/test-video.mp4", test_prefix, test_media_id);
-            client
-                .head_object()
-                .bucket(TEST_BUCKET)
-                .key(&key)
-                .send()
-                .await
-                .is_ok()
-        });
+            // Verify files in S3 (use async version to avoid nested runtime)
+            let objects = TempMinIO::list_objects_async(&s3_client, &format!("{}/{}/", test_prefix, wait_res.media_id)).await;
+            tracing::info!("S3 objects: {:?}", objects);
 
-        assert!(exists, "Uploaded file should exist in S3");
+            assert!(objects.iter().any(|k| k.contains("video.mp4")), "Transcoded video missing: {:?}", objects);
+            assert!(objects.iter().any(|k| k.contains("/thumbs/")), "Thumbnails missing: {:?}", objects);
+
+            Ok::<_, anyhow::Error>(())
+        }
 
         Ok(())
     }
