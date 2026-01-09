@@ -446,7 +446,7 @@ describe('NavBar.svelte', () => {
       latestProgressReports.set([report]);
 
       const { container } = render(NavBar);
-      expect(screen.getByText('Uploading to storage...')).toBeInTheDocument();
+      expect(screen.getAllByText('Uploading to storage…').length).toBeGreaterThan(0);
       const bars = container.querySelectorAll('.bg-amber-500');
       expect(bars.length).toBeGreaterThan(0);
     });

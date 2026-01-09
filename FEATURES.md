@@ -12,7 +12,6 @@ Clapshot is a self-hosted video/media review and annotation platform designed fo
 - ⚠️ **Limited mobile support:** Clapshot is a desktop-first application
 - **iOS/iPad issues:** Double-tap doesn't open videos/folders, video player controls may not function properly
 - **Touch interface:** Drawing annotation submission fails on mobile browsers
-- **Recommendation:** Use desktop browsers for production work; mobile browsers for viewing only
 
 For details, see [GitHub issue #68](https://github.com/elonen/clapshot/issues/68).
 
@@ -95,13 +94,13 @@ Rust-based server with concurrent processing for media operations.
 
 ### **Scriptable Transcoding and Thumbnailing**
 Customizable media processing through external scripts with hardware acceleration support.
-  - **Custom Scripts**: Configurable transcoding and thumbnailing scripts for specialized workflows
+  - **Custom Scripts**: Configurable transcoding decision, transcoding, and thumbnailing scripts for specialized workflows
   - **Hardware Acceleration**: Support for Intel QSV, NVIDIA NVENC, VA-API, and Apple VideoToolbox
   - **Progress Reporting**: Real-time progress updates during transcoding operations
   - **Environment Variables**: Standardized interface for script parameters and configuration
   - **Audio Waveform Generation**: Automatic waveform visualization for audio files
   - **Multi-Format Output**: Configurable output formats and quality settings
-- *References: [doc/transcoding.md](doc/transcoding.md), [scripts/clapshot-transcode](server/scripts/clapshot-transcode), [scripts/clapshot-thumbnail](server/scripts/clapshot-thumbnail), [src1](server/src/video_pipeline/script_processor.rs)*
+- *References: [doc/transcoding.md](doc/transcoding.md), [scripts/clapshot-transcode-decision](server/scripts/clapshot-transcode-decision), [scripts/clapshot-transcode](server/scripts/clapshot-transcode), [scripts/clapshot-thumbnail](server/scripts/clapshot-thumbnail), [src1](server/src/video_pipeline/script_processor.rs)*
 
 ### **Special `trash/` and `rejected/` folders**
 Special folders for "deleted" (trashed) and non-ingestible files.

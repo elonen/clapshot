@@ -7,5 +7,10 @@
     "user_menu_show_basic_auth_logout": false,
 
     "logo_url": "clapshot-logo.svg",
-    "app_title": "Clapshot"
+    "app_title": "Clapshot",
+
+    "default_locale": "en",
+    "supported_locales": ["en", "zh"],
+
+    "enable_mediabunny": true
 }

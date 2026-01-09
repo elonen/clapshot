@@ -1,6 +1,6 @@
 import os
 
-VERSION = "0.9.0"
+VERSION = "0.9.2"
 MODULE_NAME = "clapshot.organizer.basic_folders"
 PATH_COOKIE_NAME = "folder_path"
 

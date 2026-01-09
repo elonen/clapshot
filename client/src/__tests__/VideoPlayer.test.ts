@@ -312,16 +312,9 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
 
     it('should return number for getCurFrame', () => {
       const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });
-      
-      // getCurFrame might fail if VideoFrame is not initialized properly
-      // This is expected in the test environment
-      try {
-        const frame = component.getCurFrame();
-        expect(typeof frame).toBe('number');
-      } catch (error) {
-        // Expected: VideoFrame not initialized properly in test environment
-        expect(error.message).toContain('fps');
-      }
+
+      // getCurFrame returns 0 if videoDecoder not initialized (graceful fallback)
+      expect(component.getCurFrame()).toBe(0);
     });
   });
 
@@ -1277,16 +1270,14 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
       }
     });
 
-    it('should handle missing VideoFrame for frame calculations', () => {
+    it('should return fallback when videoDecoder is missing for frame calculations', () => {
       const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });
-      
-      // Clear the VideoFrame instance
-      (component as any).vframeCalc = null;
-      
-      expect(() => {
-        const frame = component.getCurFrame();
-        // Should handle missing VideoFrame gracefully
-      }).toThrow(); // Expected to throw with fps error
+
+      // Clear the videoDecoder instance
+      (component as any).videoDecoder = null;
+
+      // Should return 0 as graceful fallback when videoDecoder is missing
+      expect(component.getCurFrame()).toBe(0);
     });
 
     it('should handle volume control edge cases', () => {
@@ -1543,15 +1534,9 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
             // Note: HappyDOM video element properties have limited functionality
           }
         }).not.toThrow();
-        
-        // Test getCurFrame separately as it may throw due to VideoFrame not being initialized
-        try {
-          const currentFrame = component.getCurFrame();
-          expect(typeof currentFrame).toBe('number');
-        } catch (error) {
-          // Expected: VideoFrame not initialized in test environment
-          expect(error.message).toMatch(/fps/);
-        }
+
+        // getCurFrame returns 0 as fallback since videoDecoder is not initialized in test environment
+        expect(component.getCurFrame()).toBe(0);
 
         // CLEANUP VERIFICATION: Component should handle cleanup properly
         expect(() => {

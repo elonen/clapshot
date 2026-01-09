@@ -64,8 +64,8 @@ export default defineConfig({
   define: {
     'process.env.NODE_ENV': '"test"',
     'process.env.CLAPSHOT_MIN_SERVER_VERSION': '"0.9.0"',
-    'process.env.CLAPSHOT_MAX_SERVER_VERSION': '"0.9.0"',
-    'process.env.CLAPSHOT_CLIENT_VERSION': '"0.9.0"',
+    'process.env.CLAPSHOT_MAX_SERVER_VERSION': '"0.9.2"',
+    'process.env.CLAPSHOT_CLIENT_VERSION': '"0.9.2"',
     'import.meta.env.SSR': false,
   },
 })

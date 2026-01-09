@@ -8,6 +8,7 @@ import * as Proto3 from '@clapshot_protobuf/typescript';
 
 import {allComments, curUsername, curUserId, videoIsReady, mediaFileId, curVideo, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle, clientConfig} from './stores';
 import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "./types";
+import { t, initLocale } from './i18n';
 
 import CommentCard from './lib/player_view/CommentCard.svelte'
 import SubtitleCard from './lib/player_view/SubtitleCard.svelte';
@@ -461,6 +462,7 @@ fetch(CONF_FILE)
     uploadUrl = json.upload_url;
 
     $clientConfig = json;
+    initLocale(json.default_locale, json.supported_locales ?? null);
 
     console.log("Connecting to WS API at: " + json.ws_url);
     connectWebsocket(json.ws_url);
@@ -1028,7 +1030,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
         <!-- ========== "connecting" spinner ============= -->
         <div transition:fade class="w-full h-full text-5xl text-slate-600 align-middle text-center">
             <h1 class="m-16" style="font-family: 'Yanone Kaffeesatz', sans-serif;">
-                Connecting server...
+                {$t('status.connecting')}
             </h1>
             <div class="fa-2x block">
                 <i class="fas fa-spinner connecting-spinner"></i>
@@ -1036,7 +1038,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
             <div class="m-16 text-xs">
                 {#if $connectionErrors.length > 0}
                     <details class="connection-errors">
-                        <summary class="connection-errors cursor-pointer text-slate-600">View connection errors</summary>
+                        <summary class="connection-errors cursor-pointer text-slate-600">{$t('status.viewConnectionErrors')}</summary>
                         <ul>
                             {#each $connectionErrors as ce}
                             <li><code>{ce}</code></li>
@@ -1087,7 +1089,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                     {#if $curVideo.subtitles}
                         <!-- Subtitles -->
                         <div class="flex justify-between text-gray-500 items-center py-2 border-t border-gray-500">
-                            <h6>Subtitles</h6>
+                            <h6>{$t('status.subtitles')}</h6>
                             <button class="fa fa-plus-circle" title="Upload subtitles" aria-label="Upload subtitles" onclick={onUploadSubtitles}></button>
                         </div>
                         {#each $curVideo.subtitles as sub}
@@ -1109,12 +1111,12 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
         {#if $collabId && !collabDialogAck}
         <div class="fixed top-0 left-0 w-full h-full flex justify-center items-center">
             <div class="bg-gray-900 text-white p-4 rounded-md shadow-lg text-center leading-loose">
-                <p class="text-xl text-green-500">Collaborative viewing session active.</p>
-                <p class="">Session ID is <code class="text-green-700">{$collabId}</code></p>
-                <p class="">Actions like seek, play and draw are mirrored to all participants.</p>
-                <p class="">To invite people, copy browser URL and send it to them.</p>
-                <p class="">Exit by clicking the green icon in header.</p>
-                <button class="bg-gray-800 hover:bg-gray-700 text-green m-2 p-2 rounded-md shadow-lg" onclick={preventDefault(()=>collabDialogAck=true)}>Understood</button>
+                <p class="text-xl text-green-500">{$t('status.collabActiveTitle')}</p>
+                <p class="">{$t('status.collabSessionId', {id: $collabId})}</p>
+                <p class="">{$t('status.collabActionsMirrored')}</p>
+                <p class="">{$t('status.collabInvite')}</p>
+                <p class="">{$t('status.collabExit')}</p>
+                <button class="bg-gray-800 hover:bg-gray-700 text-green m-2 p-2 rounded-md shadow-lg" onclick={preventDefault(()=>collabDialogAck=true)}>{$t('status.collabUnderstood')}</button>
             </div>
         </div>
         {/if}
@@ -1151,7 +1153,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                                                 <i class="fas fa-upload"></i>
                                             </div>
                                             <div class="text-xl text-gray-700">
-                                                Drop video, audio and image files here to upload
+                                                {$t('status.dropInstruction')}
                                             </div>
                                         </div>
                                     </FileUpload>
@@ -1181,7 +1183,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
             <div>
                 {#if $userMessages.length>0}
                 <h1 class="text-2xl m-6 mt-12 text-slate-500">
-                    Latest messages
+                    {$t('status.latestMessages')}
                 </h1>
                 <div class="gap-4 max-h-56 overflow-y-auto border-l px-2 border-gray-900" role="log">
                     {#each $userMessages as msg}

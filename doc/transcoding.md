@@ -6,12 +6,25 @@ Clapshot supports customizable transcoding and thumbnailing through external scr
 
 Clapshot includes default scripts for media processing that can be customized or replaced:
 
+- **clapshot-transcode-decision**: Determines whether a media file needs transcoding
 - **clapshot-transcode**: Converts media files to web-compatible formats
 - **clapshot-thumbnail**: Generates poster thumbnails and thumbnail sheets
 
 These scripts are invoked by the Clapshot Server during media ingestion and can be customized for specific hardware or encoding requirements.
 
 ## Default Scripts
+
+### Transcoding Decision Script (`clapshot-transcode-decision`)
+
+The transcoding decision script evaluates whether a media file needs transcoding before the actual transcoding process begins. This allows you to:
+
+- Customize which codecs and containers are considered web-compatible
+- Implement site-specific policies for bitrate and quality requirements
+- Skip transcoding for already-compatible formats to save processing time
+
+The script receives media information via environment variables (media type, codec, container, bitrate) and outputs a JSON decision indicating whether transcoding is needed and at what bitrate.
+
+By default, the script skips transcoding for browser-compatible formats (H.264, HEVC, VP8, VP9, AV1 in MP4/MKV/WebM containers) when the bitrate is acceptable.
 
 ### Transcoding Script (`clapshot-transcode`)
 
@@ -39,7 +52,8 @@ Thumbnails are generated only for appropriate media types (no thumbnails for aud
 On low level, the custom scripts are set via command-line arguments to Clapshot Server:
 
 ```bash
-clapshot-server --transcode-script /path/to/custom-transcode \
+clapshot-server --transcode-decision-script /path/to/custom-decision \
+                --transcode-script /path/to/custom-transcode \
                 --thumbnail-script /path/to/custom-thumbnail
 ```
 
@@ -73,9 +87,25 @@ Supported acceleration options:
 
 ### Environment Variables
 
-The transcoding and thumbnailing scripts receive input from Server through environment variables:
+All scripts receive input from Server through environment variables:
 
-#### Common Variables
+#### Transcoding Decision Variables
+- `CLAPSHOT_MEDIA_TYPE`: Media type (`video`, `audio`, or `image`)
+- `CLAPSHOT_ORIG_CODEC`: Original codec (e.g., `h264`, `vp9`)
+- `CLAPSHOT_CONTAINER`: Container extension (e.g., `mp4`, `mkv`)
+- `CLAPSHOT_BITRATE`: Original bitrate in bits per second
+- `CLAPSHOT_TARGET_BITRATE`: Server's target max bitrate
+- `CLAPSHOT_DURATION`: Duration in seconds
+- `CLAPSHOT_INPUT_FILE`: Path to source file
+- `CLAPSHOT_METADATA_JSON`: Full mediainfo JSON output (for advanced decisions)
+
+The decision script must output JSON to stdout:
+```json
+{"transcode": true, "reason": "codec not supported", "bitrate": 2500000}
+{"transcode": false}
+```
+
+#### Common Variables (Transcoding & Thumbnailing)
 - `CLAPSHOT_INPUT_FILE`: Path to source media file
 - `CLAPSHOT_OUTPUT_DIR`: Directory for output files
 - `CLAPSHOT_MEDIA_TYPE`: Media type (`video`, `audio`, or `image`)

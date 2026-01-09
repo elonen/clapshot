@@ -104,7 +104,8 @@ vi.mock('@/stores', () => {
     }),
     curSubtitle: createMockStore(null),
     allComments: createMockStore([]),
-    collabId: createMockStore(null)
+    collabId: createMockStore(null),
+    clientConfig: createMockStore({ enable_mediabunny: false })
   };
 });
 

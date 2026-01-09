@@ -62,6 +62,31 @@ Different configuration options affect specific parts of this communication flow
 - **Static file serving**: Serve client assets and media files
 - **Authentication integration**: Handle user authentication before proxying requests
 
+## Video Player Frame-Stepping Architecture
+
+The video player uses a hybrid decoder architecture for both smooth playback and frame-accurate stepping:
+
+### Decoder Components
+
+- **Html5VideoDecoder**: Browser's native `<video>` element. Provides hardware-accelerated decoding, accurate color/tone mapping, and audio. Frame-stepping is imprecise due to keyframe-based seeking.
+
+- **MediabunnyDecoder**: WebCodecs API via Mediabunny library. Renders to canvas overlay. Provides exact frame-by-frame stepping but lacks audio and may have codec limitations.
+
+- **HybridVideoDecoder**: Orchestrates automatic switching:
+  - Uses HTML5 during playback (color accuracy + audio)
+  - Switches to Mediabunny for frame-stepping operations (arrow keys, jog wheel)
+  - Switches back before resuming playback
+  - Falls back to HTML5-only if WebCodecs unavailable
+
+### Issues Addressed
+
+1. **Frame-stepping accuracy**: HTML5 seeking is keyframe-based and imprecise. Mediabunny provides exact frame-by-frame control.
+2. **Color accuracy**: WebCodecs lacks proper color management. HTML5 provides accurate rendering.
+3. **Audio**: WebCodecs has no audio output.
+4. **Resource management**: Proper VRAM cleanup and serialized seek queue prevent memory leaks and race conditions.
+
+Implementation: `client/src/lib/player_view/video-decoder/` (types.ts, HybridVideoDecoder.ts, Html5VideoDecoder.ts, MediabunnyDecoder.ts, timecode.ts)
+
 ## Common Points of Failure
 
 Understanding this flow helps identify where problems typically occur:

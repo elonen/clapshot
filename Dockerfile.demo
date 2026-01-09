@@ -13,7 +13,7 @@ RUN wget -q https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/de
 RUN dpkg -i deb-multimedia-keyring_2024.9.1_all.deb
 RUN echo "deb https://www.deb-multimedia.org bookworm main non-free" > /etc/apt/sources.list.d/deb-multimedia.list
 RUN apt-get -qy update
-RUN apt-get -qy install sqlite3 ffmpeg mediainfo >/dev/null
+RUN apt-get -qy install sqlite3 ffmpeg mediainfo jq >/dev/null
 
 # Add regular user (to match local user ID)
 ARG UID=1000

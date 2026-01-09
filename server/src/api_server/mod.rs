@@ -215,6 +215,10 @@ async fn handle_ws_session(
             _ = sleep(Duration::from_millis(100)) => {
                 if server.terminate_flag.load(Relaxed) {
                     tracing::debug!("Termination flag set. Closing session.");
+                    // Send WebSocket close frame for proper close handshake
+                    if let Err(e) = ws_tx.send(Message::close()).await {
+                        tracing::debug!(details=%e, "Failed to send close frame (client likely disconnected).");
+                    }
                     break;
              }},
 

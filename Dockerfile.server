@@ -37,6 +37,7 @@ RUN apt-get -qy update >/dev/null
 RUN apt-get -qy install make git >/dev/null
 RUN apt-get -qy install ffmpeg >/dev/null
 RUN apt-get -qy install mediainfo >/dev/null
+RUN apt-get -qy install jq >/dev/null
 RUN apt-get -qy install mscgen >/dev/null
 RUN apt-get -qy install sqlite3 >/dev/null
 

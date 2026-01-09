@@ -13,6 +13,21 @@ use indoc::indoc;
 
 mod log;
 
+/// Validate that a required script exists at the given path.
+/// Returns an error with a helpful message if the script is not found.
+fn validate_script_exists(path: &str, name: &str) -> anyhow::Result<()> {
+    if !std::path::Path::new(path).exists() {
+        bail!(
+            "{} script not found: '{}'\n\
+            If you upgraded the package and kept your old config file, you may need to add \
+            the new '{}' setting.\n\
+            See /usr/share/doc/clapshot-server/examples/clapshot-server.conf for reference.",
+            name, path, name.to_lowercase().replace(" ", "-")
+        );
+    }
+    Ok(())
+}
+
 #[derive(Parser, Debug)]
 #[command(
     name = PKG_NAME,
@@ -123,6 +138,10 @@ struct Args {
     #[arg(long, value_name="SCRIPT", default_value="scripts/clapshot-thumbnail")]
     thumbnail_script: String,
 
+    /// Path to custom transcoding decision script
+    #[arg(long, value_name="SCRIPT", default_value="scripts/clapshot-transcode-decision")]
+    transcode_decision_script: String,
+
     /// Regular expression to filter HTTP headers passed to Organizer.
     /// Only headers matching this pattern will be included in UserSessionData.
     /// Case-insensitive matching. Default is disabled for security.
@@ -166,6 +185,11 @@ fn main() -> anyhow::Result<()> {
     if !args.data_dir.exists() {
         bail!("Data directory does not exist: {:?}", args.data_dir);
     }
+
+    // Validate that all required scripts exist
+    validate_script_exists(&args.transcode_script, "Transcode")?;
+    validate_script_exists(&args.thumbnail_script, "Thumbnail")?;
+    validate_script_exists(&args.transcode_decision_script, "Transcode-decision")?;
 
     let url_base = args.url_base.trim_end_matches('/').to_string();
     let time_offset = time::UtcOffset::current_local_offset().expect("should get local offset");
@@ -249,6 +273,7 @@ fn main() -> anyhow::Result<()> {
         ingest_username_from,
         args.transcode_script,
         args.thumbnail_script,
+        args.transcode_decision_script,
         org_http_headers_regex,
         storage,
     ) {
@@ -256,4 +281,26 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_script_exists_fails_for_missing_script() {
+        let result = validate_script_exists("/nonexistent/path/to/script", "Test-script");
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("not found"));
+        assert!(err_msg.contains("clapshot-server.conf"));
+    }
+
+    #[test]
+    fn test_validate_script_exists_succeeds_for_existing_file() {
+        // Use a file that definitely exists
+        let result = validate_script_exists("/bin/sh", "Shell");
+        assert!(result.is_ok());
+    }
 }

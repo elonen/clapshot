@@ -1,0 +1,133 @@
+#!/bin/bash
+#
+# Clapshot Transcoding Decision Script
+#
+# This script determines whether a media file needs transcoding.
+# It can be customized by users to implement site-specific logic.
+#
+# Environment Variables (set by Clapshot Server):
+#   CLAPSHOT_MEDIA_TYPE      - "video", "audio", or "image"
+#   CLAPSHOT_ORIG_CODEC      - Original codec (e.g., "h264", "vp9")
+#   CLAPSHOT_CONTAINER       - Container extension (e.g., "mp4", "mkv", "avi")
+#   CLAPSHOT_BITRATE         - Original bitrate in bits/sec
+#   CLAPSHOT_TARGET_BITRATE  - Server's target max bitrate (from config)
+#   CLAPSHOT_DURATION        - Duration in seconds
+#   CLAPSHOT_INPUT_FILE      - Path to source file
+#   CLAPSHOT_METADATA_JSON   - Full mediainfo JSON output (for advanced decisions)
+#
+# Output (stdout, JSON format):
+#   {"transcode": true, "reason": "...", "bitrate": 2500000}
+#   {"transcode": false}
+#
+# Dependencies: jq (for JSON output and advanced use cases)
+#
+# SECURITY NOTE: If writing a custom script that uses CLAPSHOT_INPUT_FILE or
+# CLAPSHOT_METADATA_JSON, be careful to properly quote variables and avoid
+# passing them to eval, shell expansion, or unquoted command substitution.
+# Use jq's --arg for safe JSON string handling.
+#
+
+set -euo pipefail
+
+# Validate required environment variables
+: "${CLAPSHOT_MEDIA_TYPE:?Missing media type}"
+: "${CLAPSHOT_TARGET_BITRATE:?Missing target bitrate}"
+
+# Validate numeric fields (defense in depth against arithmetic injection)
+[[ "${CLAPSHOT_BITRATE:-0}" =~ ^[0-9]+$ ]] || { echo "ERROR: Invalid bitrate: '$CLAPSHOT_BITRATE'" >&2; exit 1; }
+[[ "$CLAPSHOT_TARGET_BITRATE" =~ ^[0-9]+$ ]] || { echo "ERROR: Invalid target bitrate: '$CLAPSHOT_TARGET_BITRATE'" >&2; exit 1; }
+
+# Get values with defaults
+MEDIA_TYPE="$CLAPSHOT_MEDIA_TYPE"
+ORIG_CODEC="${CLAPSHOT_ORIG_CODEC:-unknown}"
+CONTAINER="${CLAPSHOT_CONTAINER:-unknown}"
+BITRATE="${CLAPSHOT_BITRATE:-0}"
+TARGET_BITRATE="$CLAPSHOT_TARGET_BITRATE"
+
+# Convert codec to lowercase for comparison
+CODEC_LOWER=$(echo "$ORIG_CODEC" | tr '[:upper:]' '[:lower:]')
+CONTAINER_LOWER=$(echo "$CONTAINER" | tr '[:upper:]' '[:lower:]')
+
+# Helper function to output decision as JSON
+output_transcode() {
+    local reason="$1"
+    local bitrate="$2"
+    jq -n --arg reason "$reason" --argjson bitrate "$bitrate" \
+        '{"transcode": true, "reason": $reason, "bitrate": $bitrate}'
+}
+
+output_skip() {
+    jq -n '{"transcode": false}'
+}
+
+# Main decision logic (replicates original Rust needs_transcoding function)
+case "$MEDIA_TYPE" in
+    "audio")
+        # Audio files always need transcoding to create video visualization
+        output_transcode "client cannot playback audio only" "$TARGET_BITRATE"
+        ;;
+
+    "image")
+        # Image files always need transcoding to create playable video
+        output_transcode "client cannot 'playback' still images" "$TARGET_BITRATE"
+        ;;
+
+    "video")
+        # Calculate new bitrate: max(bitrate/2, min(bitrate, target_max_bitrate))
+        HALF_BITRATE=$((BITRATE / 2))
+        if [ "$BITRATE" -lt "$TARGET_BITRATE" ]; then
+            MIN_BITRATE="$BITRATE"
+        else
+            MIN_BITRATE="$TARGET_BITRATE"
+        fi
+        if [ "$HALF_BITRATE" -gt "$MIN_BITRATE" ]; then
+            NEW_BITRATE="$HALF_BITRATE"
+        else
+            NEW_BITRATE="$MIN_BITRATE"
+        fi
+
+        # Check if bitrate is acceptable (within 1.2x of target)
+        THRESHOLD=$((TARGET_BITRATE * 12 / 10))  # 1.2 * target
+        if [ "$NEW_BITRATE" -ge "$BITRATE" ] || [ "$BITRATE" -le "$THRESHOLD" ]; then
+            BITRATE_FINE=true
+        else
+            BITRATE_FINE=false
+        fi
+
+        # Check if codec is browser-compatible
+        case "$CODEC_LOWER" in
+            h264|avc|hevc|h265|vp8|vp9|av1)
+                CODEC_FINE=true
+                ;;
+            *)
+                CODEC_FINE=false
+                ;;
+        esac
+
+        # Check if container is browser-compatible
+        case "$CONTAINER_LOWER" in
+            mp4|mkv|webm)
+                CONTAINER_FINE=true
+                ;;
+            *)
+                CONTAINER_FINE=false
+                ;;
+        esac
+
+        # Decision logic (same order as Rust implementation)
+        if [ "$CONTAINER_FINE" = false ]; then
+            output_transcode "container '$CONTAINER' not supported" "$NEW_BITRATE"
+        elif [ "$CODEC_FINE" = false ]; then
+            output_transcode "codec '$ORIG_CODEC' not supported" "$NEW_BITRATE"
+        elif [ "$BITRATE_FINE" = false ]; then
+            output_transcode "bitrate is too high: old $BITRATE > new $NEW_BITRATE" "$NEW_BITRATE"
+        else
+            output_skip
+        fi
+        ;;
+
+    *)
+        echo "ERROR: Unknown media type: $MEDIA_TYPE" >&2
+        exit 1
+        ;;
+esac

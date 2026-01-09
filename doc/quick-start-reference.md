@@ -147,6 +147,16 @@ tail -f /var/log/clapshot.log
 curl http://localhost:8080/clapshot_client.conf.json
 ```
 
+### Client Configuration Options
+
+The client configuration file (`clapshot_client.conf.json`) supports several optional settings:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enable_mediabunny` | `true` | Enable frame-accurate video decoder using WebCodecs. If `false`, falls back to HTML5 video element for all seeking operations. |
+
+**Note on `enable_mediabunny`:** The WebCodecs-based decoder (Mediabunny) provides precise frame-by-frame navigation but currently has a known limitation with color space handling - decoded frames may appear slightly darker than HTML5 video playback (see [Chromium issue #40061457](https://issues.chromium.org/issues/40061457)). If accurate color reproduction is more critical than frame-accurate stepping for your workflow, set `"enable_mediabunny": false` in the client config.
+
 ### Test Network Connectivity
 ```bash
 # From another machine, test access

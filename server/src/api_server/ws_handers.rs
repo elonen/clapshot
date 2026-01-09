@@ -268,9 +268,13 @@ pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComm
             // Convert data URI to bytes
             let img_uri = DataUrl::process(&d).map_err(|e| anyhow!("Invalid drawing data URI"))?;
 
-            if img_uri.mime_type().type_ != "image" || img_uri.mime_type().subtype != "webp" {
-                bail!("Invalid mimetype in drawing: {:?}", img_uri.mime_type())
-            }
+            let mime = img_uri.mime_type();
+            let ext = match (mime.type_.as_str(), mime.subtype.as_str()) {
+                ("image", "webp") => "webp",
+                ("image", "jpeg") => "jpg",
+                ("image", "png") => "png",
+                _ => bail!("Invalid mimetype in drawing: {:?}", mime),
+            };
             let img_data = img_uri.decode_to_vec().map_err(|e| anyhow!("Failed to decode drawing data URI: {:?}", e))?;
 
             // Make up a filename
@@ -281,7 +285,7 @@ pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComm
                 hex::encode(result)
             }
             let short_csum = sha256hex(img_data.0.as_ref())[..16].to_string();
-            let fname = format!("{}.webp", short_csum);
+            let fname = format!("{}.{}", short_csum, ext);
 
             // Write to file
             let drawing_path = server.media_files_dir.join(&media_file_id).join("drawings").join(&fname);

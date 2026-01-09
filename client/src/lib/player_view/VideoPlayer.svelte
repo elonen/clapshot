@@ -8,8 +8,9 @@ import {onMount, onDestroy} from 'svelte';
 import {scale} from "svelte/transition";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import * as Proto3 from '@clapshot_protobuf/typescript';
-import {VideoFrame} from './VideoFrame';
-import {allComments, curSubtitle, videoIsReady, collabId, curVideo} from '@/stores';
+import {HybridVideoDecoder} from './video-decoder/HybridVideoDecoder';
+import {TimecodeUtils} from './video-decoder/timecode';
+import {allComments, curSubtitle, videoIsReady, collabId, curVideo, clientConfig} from '@/stores';
 import LocalStorageCookies from '@/cookies';
 import CommentTimelinePin from './CommentTimelinePin.svelte';
 
@@ -63,10 +64,18 @@ let loopStartTime: number = $state(-1);
 let loopEndTime: number = $state(-2);
 
 let videoCanvasContainer: any = $state();
-let vframeCalc: VideoFrame;
+let videoDecoder: HybridVideoDecoder | null = null;
 
 let debug_layout: boolean = false; // Set to true to show CSS layout boxes
-let commentsWithTc: Proto3.Comment[] = $state([]);  // Will be populated by the store once video is ready (=frame rate is known)
+let commentsWithTc: Proto3.Comment[] = $derived(
+    $allComments
+        .filter(c => c.comment.timecode)
+        .map(c => c.comment)
+        .sort((a, b) => {
+            if (!a.timecode || !b.timecode) { return 0; }
+            return a.timecode.localeCompare(b.timecode);
+        })
+);
 
 let animationFrameId: number = 0;
 let audio_volume: number | undefined = $state();
@@ -88,27 +97,13 @@ run(() => {
 
 
 
-function refreshCommentPins(): void {
-    // Make pins for all comments with timecode
-    function _update_comments_with_tc() {
-        commentsWithTc = [];
-        for (let c of $allComments) { if (c.comment.timecode) { commentsWithTc.push(c.comment); } }
-        commentsWithTc = commentsWithTc.sort((a, b) => {
-            if (!a.timecode || !b.timecode) { return 0; }
-            return a.timecode.localeCompare(b.timecode);  // Sort by SMPTE timecode = sort by string
-        });
-    }
-    allComments.subscribe(_ => { _update_comments_with_tc(); });
-    _update_comments_with_tc();
-}
-
 function send_collab_report(): void {
     if ($collabId) {
         let drawing = paused ? getScreenshot() : undefined;
         let report: Proto3.client.ClientToServerCmd_CollabReport = {
             paused: videoElem.paused,
             loop: videoElem.loop,
-            seekTimeSec: videoElem.currentTime,
+            seekTimeSec: videoDecoder?.getPosition().timestamp ?? videoElem.currentTime,
             drawing,
             subtitleId: $curSubtitle?.id,
         };
@@ -132,15 +127,23 @@ function prepare_drawing(): void
     {
         $videoIsReady = true;
 
-        let frameRate = parseFloat($curVideo?.duration?.fps ?? "");
+        const frameRate = parseFloat($curVideo?.duration?.fps ?? "");
         if (isNaN(frameRate)) { throw new Error("VideoPlayer: Invalid frame rate"); }
 
-        vframeCalc = new VideoFrame({
-            video: videoElem,
+        // Initialize hybrid stepper (handles HTML5 + Mediabunny switching internally)
+        videoDecoder = new HybridVideoDecoder({
+            videoElement: videoElem,
+            videoSource: src,
+            container: videoCanvasContainer,
             frameRate,
-            callback: function(response: any) { console.log(response); } });
-
-        refreshCommentPins(); // Creates CommentTimelinePin components, now that we can calculate timecodes properly
+            duration: videoElem.duration || 0,
+            onclick: clickOnVideo,
+            enableMediabunny: $clientConfig?.enable_mediabunny !== false,
+        });
+        videoDecoder.init({
+            frameRate,
+            duration: videoElem.duration || 0,
+        });
 
         // Create the drawing board
         draw_canvas = document.createElement('canvas');
@@ -171,7 +174,6 @@ onMount(async () => {
     if (!videoElem.videoWidth) { videoElem.load(); }
     prepare_drawing();
     offsetTextTracks();
-    allComments.subscribe((_v) => { refreshCommentPins(); });
     curSubtitle.subscribe(() => { offsetTextTracks(); });
     animationFrameId = requestAnimationFrame(handleTimeUpdate);
     initializeVolume();
@@ -180,12 +182,14 @@ onMount(async () => {
 onDestroy(async () => {
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
-        animationFrameId=0;
+        animationFrameId = 0;
     }
     if (draw_board) {
         draw_board.destroy();
         draw_board = null;
     }
+    videoDecoder?.dispose();
+    videoDecoder = null;
 });
 
 // Monitor video elem "loop" property in a timer.
@@ -193,16 +197,28 @@ onDestroy(async () => {
 setInterval(() => { loop = videoElem?.loop }, 500);
 
 
-function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) {
+async function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) {
     if (!target) throw new Error("progress bar missing");
     const effectiveDuration = getEffectiveDuration();
     if (!effectiveDuration) return; // video not loaded yet
-    if (e instanceof MouseEvent && !(e.buttons & 1)) return; // mouse not down
+    // Check for touch event using 'touches' property (TouchEvent global may not exist on desktop Safari)
+    const isTouch = 'touches' in e;
+    if (!isTouch && !(e.buttons & 1)) return; // mouse not down
     videoElem.pause();
-    const clientX = e instanceof TouchEvent ? e.touches[0].clientX : e.clientX;
+    const clientX = isTouch ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
     const { left, right } = (target as HTMLProgressElement).getBoundingClientRect();
-    time = effectiveDuration * (clientX - left) / (right - left);
-    videoElem.currentTime = time;
+    const newTime = effectiveDuration * (clientX - left) / (right - left);
+
+    // Use stepper for seeking (handles both HTML5 and Mediabunny modes)
+    if (videoDecoder) {
+        const pos = await videoDecoder.seekToTime(newTime);
+        time = pos.timestamp;
+    } else {
+        // Fallback before stepper is initialized
+        time = newTime;
+        videoElem.currentTime = time;
+    }
+
     seekSideEffects();
     paused = true;
     send_collab_report();
@@ -221,6 +237,7 @@ export function setPlayback(play: boolean, request_source: string|undefined): bo
         return false;       // "no change"
 
     if (play) {
+        videoDecoder?.prepareForPlayback();
         seekSideEffects();
         videoElem.play();
     }
@@ -264,57 +281,59 @@ function clickOnVideo(event: MouseEvent ) {
 
 function format_tc(seconds: number) : string {
     if (isNaN(seconds)) return '...';
-    if (vframeCalc) {
-        const fr = Math.floor(seconds * vframeCalc.frameRate);
-        return `${vframeCalc.toSMPTE(fr)}`;
+    if (videoDecoder) {
+        const frame = TimecodeUtils.timeToFrame(seconds, videoDecoder.frameRate);
+        return TimecodeUtils.frameToSMPTE(frame, videoDecoder.frameRate);
     }
     else if(seconds==0)
         return '--:--:--:--';
     else {
         const minutes = Math.floor(seconds / 60);
         seconds = Math.floor(seconds % 60);
-        // Return zero padded
         if (seconds < 10) return `${minutes}:0${seconds}`;
         else return `${minutes}:${seconds}`;
     }
 }
 
-function format_frames(seconds: number) : string {
-    if (isNaN(seconds)) return '';
-    if (vframeCalc) {
-        const fr = Math.floor(seconds * vframeCalc.frameRate);
-        return `${fr}`;
+let currentTimecode = $derived.by(() => {
+    time; // reactive dependency - recalculate when time changes
+    if (videoDecoder) {
+        return videoDecoder.getPosition().timecode;
     }
-    else
-        return '----';
-}
+    return '--:--:--:--';
+});
+
+let currentFrame = $derived.by(() => {
+    time; // reactive dependency - recalculate when time changes
+    if (videoDecoder) {
+        return `${videoDecoder.getPosition().frame}`;
+    }
+    return '----';
+});
 
 
 export function getCurTime() {
-    return videoElem.currentTime;
+    return videoDecoder?.getPosition().timestamp ?? videoElem.currentTime;
 }
 
 export function getCurTimecode() {
-    return format_tc(time);
+    return videoDecoder?.getPosition().timecode ?? format_tc(time);
 }
 
 export function getCurFrame() {
-    let fps = vframeCalc.fps ?? NaN;
-    if (isNaN(fps)) console.error("getCurFrame(): VideoFrame not initialized or invalid fps");
-    return Math.floor(time * fps);
+    return videoDecoder?.getPosition().frame ?? 0;
 }
 
 
-function step_video(frames: number) {
-    if (vframeCalc) {
-        if (frames < 0) {
-            vframeCalc.seekBackward(-frames, null);
-        } else {
-            vframeCalc.seekForward(frames, null);
-        }
-        seekSideEffects();
-        send_collab_report();
-    }
+async function step_video(frames: number) {
+    if (!videoDecoder) return;
+
+    const direction = frames < 0 ? -1 : 1;
+    const position = await videoDecoder.stepFrame(direction as 1 | -1, Math.abs(frames));
+    time = position.timestamp;
+
+    seekSideEffects();
+    send_collab_report();
 }
 
 const INTERACTIVE_ELEMS = ['input', 'textarea', 'select', 'option', 'button'];
@@ -358,19 +377,20 @@ function seekSideEffects() {
     if (onseeked) onseeked();
 }
 
-export function seekToSMPTE(smpte: string) {
+export async function seekToSMPTE(smpte: string) {
+    seekSideEffects();
     try {
-        seekSideEffects();
-        vframeCalc.seekToSMPTE(smpte);
+        const time = TimecodeUtils.smpteToTime(smpte, videoDecoder!.frameRate);
+        await videoDecoder!.seekToTime(time);
     } catch(err) {
         acts.add({mode: 'warning', message: `Seek failed to: ${smpte}`, lifetime: 3});
     }
 }
 
-export function seekToFrame(frame: number) {
+export async function seekToFrame(frame: number) {
+    seekSideEffects();
     try {
-        seekSideEffects();
-        vframeCalc.seekToFrame(frame);
+        await videoDecoder!.seekToFrame(frame);
     } catch(err) {
         acts.add({mode: 'warning', message: `Seek failed to: ${frame}`, lifetime: 3});
     }
@@ -384,8 +404,8 @@ export function onToggleDraw(mode_on: boolean) {
         if (mode_on) {
             draw_canvas.style.outline = "5px solid " + draw_color;
             draw_canvas.style.cursor = "crosshair";
-            var ctx = draw_canvas.getContext('2d');
-            ctx.drawImage(videoElem, 0, 0);
+            const ctx = draw_canvas.getContext('2d');
+            if (ctx) videoDecoder?.captureFrame(ctx);
             draw_canvas.style.visibility = "visible";
             draw_canvas.style.pointerEvents = "auto";
         } else {
@@ -422,23 +442,39 @@ export function getScreenshot() : string
         if (!ctx) throw new Error("Cannot get canvas context");
         // ctx.drawImage(videoElem, 0, 0);   // Removed, as bgr frame capture is now done when draw mode is entered
         ctx.drawImage(draw_canvas, 0, 0);
-        return comb.toDataURL("image/webp", 0.8);
+        // Try WebP first, fall back to JPEG if not supported (Safari doesn't support WebP encoding)
+        const webp = comb.toDataURL("image/webp", 0.8);
+        if (webp.startsWith("data:image/webp")) {
+            return webp;
+        }
+        return comb.toDataURL("image/jpeg", 0.85);
 }
 
-export function collabPlay(seek_time: number, looping: boolean) {
+export async function collabPlay(seek_time: number, looping: boolean) {
+    videoDecoder?.prepareForPlayback();
     videoElem.loop = looping;
     videoElem.pause();
-    time = seek_time;
+    if (videoDecoder) {
+        const pos = await videoDecoder.seekToTime(seek_time);
+        time = pos.timestamp;
+    } else {
+        time = seek_time;
+    }
     seekSideEffects();
     videoElem.play();
 }
 
-export function collabPause(seek_time: number, looping: boolean, drawing: string|undefined) {
+export async function collabPause(seek_time: number, looping: boolean, drawing: string|undefined) {
     videoElem.loop = looping;
     if (!paused)
         videoElem.pause();
     if (time != seek_time) {
-        time = seek_time;
+        if (videoDecoder) {
+            const pos = await videoDecoder.seekToTime(seek_time);
+            time = pos.timestamp;
+        } else {
+            time = seek_time;
+        }
         seekSideEffects();
     }
     if (drawing && getScreenshot() != drawing)
@@ -462,8 +498,8 @@ export async function setDrawing(drawing: string) {
 function tcToDurationFract(timecode: string|undefined) {
     /// Convert SMPTE timecode to a fraction of the video duration (0-1)
     if (timecode === undefined) { throw new Error("Timecode is undefined"); }
-    if (!vframeCalc) { return 0; }
-    let pos = vframeCalc.toMilliseconds(timecode)/1000.0;
+    const frameRate = parseFloat($curVideo?.duration?.fps ?? "24");
+    const pos = TimecodeUtils.smpteToMilliseconds(timecode, frameRate) / 1000.0;
     return pos / getEffectiveDuration();
 }
 
@@ -627,8 +663,9 @@ export function activateCommentOnTimeline(commentId: string) {
 
     // Set loop region between this pin and the next one, if looping is enabled
     if ((loop || videoElem.loop) && clicked_pin) {
-        loopStartTime = clicked_pin.timecode ? vframeCalc.toMilliseconds(clicked_pin.timecode) / 1000 : 0;
-        loopEndTime = next_pin?.timecode ? vframeCalc.toMilliseconds(next_pin.timecode) / 1000 : getEffectiveDuration();
+        const frameRate = videoDecoder!.frameRate;
+        loopStartTime = clicked_pin.timecode ? TimecodeUtils.smpteToTime(clicked_pin.timecode, frameRate) : 0;
+        loopEndTime = next_pin?.timecode ? TimecodeUtils.smpteToTime(next_pin.timecode, frameRate) : getEffectiveDuration();
         videoElem.loop = true;
     }
 }
@@ -663,13 +700,15 @@ function handlePinClick(id: string) {
                 ontimeupdate={handleTimeUpdate}
 				bind:duration
 				bind:paused>
+                {#if $curSubtitle?.playbackUrl}
                 <track kind="captions"
-                    src="{$curSubtitle?.playbackUrl}"
+                    src="{$curSubtitle.playbackUrl}"
                     srclang="en"
-                    label="{$curSubtitle?.title}"
+                    label="{$curSubtitle.title}"
                     onloadedmetadata={() => offsetTextTracks()}
                     default
                 />
+                {/if}
 			</video>
 
 			<!--    TODO: maybe show actively controlling collaborator's avatar like this?
@@ -716,8 +755,8 @@ function handlePinClick(id: string) {
 
 				<!-- Timecode -->
 				<span class="flex-0 mx-4 text-sm font-mono">
-					<input class="bg-transparent hover:bg-gray-700 w-32" value="{format_tc(time)}" onchange={(e) => onTimecodeEdited(e)}/>
-					FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{format_frames(time)}" onchange={(e) => onFrameEdited(e)}/>
+					<input class="bg-transparent hover:bg-gray-700 w-32" value="{currentTimecode}" onchange={(e) => onTimecodeEdited(e)}/>
+					FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{currentFrame}" onchange={(e) => onFrameEdited(e)}/>
 				</span>
 
                {#if !$collabId}

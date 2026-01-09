@@ -1,5 +1,9 @@
 dist_deb/
 .DS_Store
 .claude
+<<<<<<< HEAD
 .idea
 .local-tmp/
+=======
+.idea/
+>>>>>>> origin/master

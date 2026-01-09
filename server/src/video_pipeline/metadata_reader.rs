@@ -74,9 +74,20 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
     let link_path = temp_dir.join(format!("tempname{}", extension));
 
     // (symlink wasn't reliable on Windows WSL, so we'll use hard link instead)
-    tracing::debug!("Creating temp hard link from {:?} to {:?}", file, link_path);
+    // However, hard links fail across filesystem boundaries, so we fall back to symlink
+    tracing::debug!("Creating temp link from {:?} to {:?}", file, link_path);
     std::fs::create_dir(&temp_dir).map_err(|e| e.to_string())?;
-    std::fs::hard_link(file, &link_path).map_err(|e| e.to_string())?;
+
+    // Try hardlink first, fallback to symlink if it fails (e.g., cross-device link)
+    match std::fs::hard_link(file, &link_path) {
+        Ok(_) => {
+            tracing::debug!("Created hard link successfully");
+        },
+        Err(e) => {
+            tracing::debug!("Hard link failed ({}), falling back to symlink", e);
+            std::os::unix::fs::symlink(file, &link_path).map_err(|e| e.to_string())?;
+        }
+    }
 
     // Run mediainfo
     let cmd = &mut Command::new("mediainfo");
@@ -85,8 +96,8 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
     tracing::debug!("Exec: {:?}", cmd);
     let mediainfo_res = cmd.output();
 
-    // Remove temp hardlink
-    tracing::debug!("Removing temp hard link and directory ({:?})", link_path);
+    // Remove temp link (hardlink or symlink) and directory
+    tracing::debug!("Removing temp link and directory ({:?})", link_path);
     if let Err(e) = std::fs::remove_file(&link_path) {
         tracing::error!("Failed to remove temporary link file: {}", e);
     } else {

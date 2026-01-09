@@ -5,6 +5,7 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 import { fade } from "svelte/transition";
 
 import { videoIsReady } from '@/stores';
+import { t } from '@/i18n';
 
 
 interface Props {
@@ -62,8 +63,8 @@ function onTextChange(e: any) {
     <!-- Color selector -->
     {#if drawMode}
         <div class="absolute w-full top-[-3em] bg-gray-900 h-10 rounded-md flex place-content-center" transition:fade="{{duration: 100}}">
-            <button type="button" class="fas fa-undo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 mx-2 rounded-lg" title="Undo" aria-label="Undo" onclick={()=>onUndoRedo(true)}></button>
-            <button type="button" class="fas fa-redo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 mx-2 rounded-lg" title="Redo" aria-label="Redo" onclick={()=>onUndoRedo(false)}></button>
+            <button type="button" class="fas fa-undo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 mx-2 rounded-lg" title={$t('comments.undo')} aria-label={$t('comments.undo')} onclick={()=>onUndoRedo(true)}></button>
+            <button type="button" class="fas fa-redo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 mx-2 rounded-lg" title={$t('comments.redo')} aria-label={$t('comments.redo')} onclick={()=>onUndoRedo(false)}></button>
 
             {#each ["red", "green", "blue", "cyan", "yellow", "black", "white"] as c}
                 <button type="button" class="{(curColor==c) ? 'border-2 border-gray-100' : 'border border-gray-600'}  inline-block w-6 h-6 m-2 rounded-lg" style="background: {c};" aria-label="Select {c} color" onclick={() => onColorSelected(c)}></button>
@@ -76,12 +77,12 @@ function onTextChange(e: any) {
         <input
             bind:value={inputText}
             oninput={onTextChange}
-            class="flex-1 p-2 bg-gray-700 rounded-lg" placeholder="Add a comment{timedComment ? ' - at current time' :''}..." />
+            class="flex-1 p-2 bg-gray-700 rounded-lg" placeholder={timedComment ? $t('comments.placeholderTimed') : $t('comments.placeholderUntimed')} />
 
         {#if $videoIsReady}
             <button type="button"
                 id="timedCommentButton"
-                title="Comment is time specific?"
+                title={$t('comments.timedToggleTitle')}
                 class="scale-90 {timedComment ? 'text-amber-600' : 'text-gray-500'}"
                 disabled={drawMode}
                 onclick={() => timedComment = !timedComment}>
@@ -96,7 +97,7 @@ function onTextChange(e: any) {
             <button type="button"
                 onclick={onClickDraw}
                 class="{drawMode ? 'border-2' : ''} fas fa-pen-fancy inline-block h-9 px-3 py-2.5 ml-2 bg-cyan-700 text-white rounded-lg shadow-md hover:bg-cyan-500 hover:shadow-lg focus:bg-cyan-700 focus:shadow-lg focus:outline-none focus:ring-0 active:shadow-lg transition duration-150 ease-in-out"
-                title="Draw on video" aria-label="Draw on video">
+                title={$t('comments.drawOnVideo')} aria-label={$t('comments.drawOnVideo')}>
             </button>
         {/if}
 
@@ -104,7 +105,7 @@ function onTextChange(e: any) {
             id="sendButton"
             disabled={!inputText && !drawMode}
             class="inline-block h-9 px-4 py-2 ml-2 text-sm bg-blue-700 text-white rounded-lg shadow-md hover:bg-blue-500 hover:shadow-lg focus:bg-blue-700 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-blue-800 active:shadow-lg transition duration-150 ease-in-out">
-            Send
+            {$t('comments.send')}
         </button>
 
     </form>
@@ -125,4 +126,3 @@ button {
     cursor: not-allowed;
 }
 </style>
-
