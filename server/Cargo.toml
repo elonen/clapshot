@@ -111,7 +111,7 @@ tower = { version = "0.5.2", features = ["util"] }
 libc = "0.2.142"
 semver = "1.0.27"
 parking_lot = "0.12.1"
-time = "0.3.44"
+time = "0.3.47"
 pbjson = "0.8"
 pbjson-types = "0.8"
 hyper-util = { version = "0.1", features = ["tokio"] }
