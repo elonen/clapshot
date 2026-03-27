@@ -31,7 +31,7 @@
     "happy-dom": "^20.8.9",
     "postcss": "^8.5.2",
     "simple-drawing-board": "^3.1.2",
-    "svelte": "^5.43.6",
+    "svelte": "^5.55.0",
     "svelte-check": "^4.3.4",
     "svelte-dnd-action": "^0.9.61",
     "svelte-file-dropzone": "^2.0.7",
