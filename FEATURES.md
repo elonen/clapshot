@@ -195,6 +195,12 @@ SQLite-based storage with integrity monitoring and maintenance capabilities.
 Health check endpoint, and adjustable verbosity logging for system monitoring.
 - *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [src1](server/src/api_server/mod.rs)*
 
+## Extras
+
+### **Slack Unfurl Bot**
+Optional companion daemon that shows rich Clapshot link previews in Slack channels (thumbnail, title, duration, comment text, timecode). Runs co-located with Clapshot, connects to Slack via Socket Mode (no public endpoint needed), and supports a channel allowlist.
+- *References: [extras/clapshot-slack-unfurl/](extras/clapshot-slack-unfurl/)*
+
 ## Development
 
 ### **Test Suites**

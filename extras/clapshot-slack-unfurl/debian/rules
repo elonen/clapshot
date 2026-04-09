@@ -1,0 +1,18 @@
+#!/usr/bin/make -f
+
+# Python version can be overridden via environment (default: python3.11 for bookworm)
+PYTHON_VER ?= python3.11
+
+%:
+	dh $@ --with python-virtualenv
+
+override_dh_virtualenv:
+	dh_virtualenv --builtin-venv --python $(PYTHON_VER)
+
+override_dh_install:
+	dh_install
+	install -D -m 600 doc/clapshot-slack-unfurl.toml.example \
+		debian/clapshot-slack-unfurl/etc/clapshot-slack-unfurl.toml
+
+override_dh_shlibdeps:
+	dh_shlibdeps -XPIL -Xpillow

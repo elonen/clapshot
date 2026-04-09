@@ -1,0 +1,5 @@
+setuptools
+wheel
+slack_bolt
+slack_sdk
+Pillow

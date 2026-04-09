@@ -82,7 +82,7 @@ If you have a virtualization platform (e.g. Proxmox) or a spare computer, here's
 how to install and configure a Debian 12 host for Clapshot:
 
 1. Prepare a Debian 12 with a mounted block device (or just directory) at `/mnt/clapshot-data`.
-2. Download [Clapshot Debian Bookworm Deployment Script](https://gist.github.com/elonen/80a721f13bb4ec1378765270094ed5d5)
+2. Download [Clapshot Debian Bookworm Deployment Script](extras/install-clapshot-deb12.sh)
 3. Run the script as root to install and auto-configure Clapshot.
 4. **!! Change the default `admin` and `htadmin` passwords, and delete example users in Htadmin !!**
 
@@ -123,6 +123,8 @@ See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on:
 See [Upgrading Guide](doc/upgrading.md) for instructions on installing a new release over an old one.
 
 **Want to customize media processing?** See the [Transcoding and Thumbnailing Guide](doc/transcoding.md) for configuring hardware acceleration, custom encoders, and specialized processing workflows.
+
+**Using Slack?** An optional [Slack unfurl bot](extras/clapshot-slack-unfurl/) is available in `extras/` — it runs alongside Clapshot and shows rich link previews (thumbnail, title, timecode) when Clapshot URLs are posted in Slack channels.
 
 
 ## Architecture Overview

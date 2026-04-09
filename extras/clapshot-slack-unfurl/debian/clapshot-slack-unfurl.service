@@ -1,0 +1,19 @@
+[Unit]
+Description=Clapshot Slack Link Unfurler
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+ExecStart=/usr/bin/clapshot-slack-unfurl -c /etc/clapshot-slack-unfurl.toml --log /var/log/clapshot-slack-unfurl/unfurl.log
+Restart=on-failure
+RestartSec=5
+LogsDirectory=clapshot-slack-unfurl
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

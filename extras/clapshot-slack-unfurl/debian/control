@@ -1,0 +1,18 @@
+Source: clapshot-slack-unfurl
+Section: python
+Priority: optional
+Maintainer: Jarno Elonen <elonen@iki.fi>
+Build-Depends: debhelper (>= 11), dh-virtualenv (>= 1.0), dh-python, python3.11, python3-setuptools, python3-pip, python3-dev
+Standards-Version: 3.9.5
+X-DH-Virtualenv-Depends: python3.11-venv, python3.11
+Homepage: https://github.com/elonen/clapshot
+
+Package: clapshot-slack-unfurl
+Architecture: any
+Depends: ${misc:Depends}
+Enhances: clapshot-server (>=0.6.0)
+Description: Slack link unfurler for Clapshot
+    .
+    A Slack bot that unfurls Clapshot video and comment
+    links posted in allowed Slack channels, showing
+    thumbnails, metadata, and drawing annotations.
