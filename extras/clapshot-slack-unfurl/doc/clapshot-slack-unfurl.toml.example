@@ -20,6 +20,12 @@ sqlite_path = "/mnt/clapshot-data/data/clapshot.sqlite"
 #image_min_width = 800
 #image_max_width = 1200
 
+# Enable debug logging (also settable via --debug CLI flag).
+#debug = false
+
+# Log to a file instead of stdout (also settable via --log PATH CLI flag).
+#log_path = "/var/log/clapshot-slack-unfurl.log"
+
 # Note: name regexes only work for public channels (or private ones where
 # the bot has been invited). For private channels, use channel IDs instead.
 allowed_channels = [

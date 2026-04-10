@@ -1,7 +1,6 @@
 """Entry point: Slack app setup, Socket Mode, event wiring."""
 
 import logging
-from pathlib import Path
 from typing import Any
 
 from slack_bolt import App
@@ -24,10 +23,15 @@ def main() -> None:
     app = App(token=conf.slack_bot_token)
 
     @app.event("link_shared")
-    def handle_link_shared(event: dict[str, Any], client: WebClient) -> None:
+    def handle_link_shared(event: dict[str, Any], client: WebClient, context: dict[str, Any]) -> None:
         channel: str = event.get("channel", "")
         user: str = event.get("user", "")
         ts: str = event.get("message_ts", "")
+
+        # Guard against self-posted links in case future extensions make the bot
+        # post messages with Clapshot URLs.
+        if user == context.get("bot_user_id"):
+            return
 
         # Composer previews (typing, not yet sent) — skip to avoid
         # unfurling before the message is actually posted.

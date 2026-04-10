@@ -6,6 +6,7 @@ import time
 from typing import Any
 
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 from .cache import TTLCache
 
 log = logging.getLogger(__name__)
@@ -34,32 +35,9 @@ def resolve_channel_name(client: WebClient, channel_id: str) -> str:
         return ""
 
 
-def _wait_for_file(client: WebClient, file_id: str,
-                   max_wait: float = 30.0, interval: float = 0.5) -> bool:
-    """Poll files.info until the file is processed, or timeout."""
-    deadline = time.monotonic() + max_wait
-    while time.monotonic() < deadline:
-        try:
-            resp = client.files_info(file=file_id)
-            file_obj = resp.data.get("file", {}) if isinstance(resp.data, dict) else {}  # type: ignore[union-attr]
-            mode = file_obj.get("mode", "")
-            # "hosted" means fully processed; "tombstone" means deleted
-            if mode == "hosted":
-                return True
-        except Exception:
-            pass
-        time.sleep(interval)
-    log.warning("File %s not ready after %.1fs", file_id, max_wait)
-    return False
-
-
 def upload_image(client: WebClient, image_bytes: bytes, filename: str,
                  file_path_key: str, file_mtime: float) -> str | None:
-    """Upload image to Slack, return file ID. Uses cache to avoid re-uploads.
-
-    Waits for the file to be fully processed before returning, since
-    chat.unfurl will reject slack_file references to unprocessed files.
-    """
+    """Upload image to Slack, return file ID. Uses cache to avoid re-uploads."""
     cache_key = (file_path_key, file_mtime)
     cached = _file_cache.get(cache_key)
     if cached is not None:
@@ -67,7 +45,6 @@ def upload_image(client: WebClient, image_bytes: bytes, filename: str,
     try:
         resp = client.files_upload_v2(content=image_bytes, filename=filename)
         file_id: str = resp["file"]["id"]
-        _wait_for_file(client, file_id)
         _file_cache.put(cache_key, file_id)
         return file_id
     except Exception:
@@ -82,6 +59,10 @@ def send_unfurl(client: WebClient, channel: str, ts: str, url: str,
 
     Uses an image block for the thumbnail/drawing, then a section with
     fields for compact two-column metadata display.
+
+    If an image is included and the unfurl is rejected (file may not be fully
+    processed yet), retries with exponential backoff before falling back to
+    a text-only unfurl.
     """
     blocks: list[dict[str, Any]] = []
     if file_id:
@@ -112,17 +93,37 @@ def send_unfurl(client: WebClient, channel: str, ts: str, url: str,
 
     unfurls: dict[str, dict[str, Any]] = {url: {"blocks": blocks}}
     log.debug("chat.unfurl payload: %s", json.dumps(unfurls, indent=2))
-    try:
-        resp = client.chat_unfurl(channel=channel, ts=ts, unfurls=unfurls)
-        if not resp.get("ok"):
-            log.warning("chat.unfurl rejected (%s), retrying without image block",
-                        resp.get("error"))
-            # Retry with text-only (drop image block)
-            fallback_blocks = [b for b in blocks if b["type"] != "image"]
-            fallback_unfurls = {url: {"blocks": fallback_blocks}}
-            client.chat_unfurl(channel=channel, ts=ts, unfurls=fallback_unfurls)
-    except Exception:
-        log.exception("chat.unfurl failed")
+
+    # Retry with backoff when an image is present — Slack may not have finished
+    # processing the uploaded file yet. Falls back to text-only after all retries.
+    delays = [1, 2, 4, 8, 16] if file_id else []
+    last_error = ""
+    for attempt, delay in enumerate([0] + delays):
+        if delay:
+            log.debug("chat.unfurl attempt %d failed (%s), retrying in %ds",
+                      attempt, last_error, delay)
+            time.sleep(delay)
+        try:
+            resp = client.chat_unfurl(channel=channel, ts=ts, unfurls=unfurls)
+            if resp.get("ok"):
+                return
+            last_error = str(resp.get("error", "unknown"))
+        except SlackApiError as e:
+            last_error = str(e.response.get("error", e))
+        except Exception:
+            log.exception("chat.unfurl failed")
+            return
+
+    if file_id:
+        log.warning("chat.unfurl with image failed after %d attempts (%s), falling back to text-only",
+                    len(delays) + 1, last_error)
+        fallback_blocks = [b for b in blocks if b["type"] != "image"]
+        try:
+            client.chat_unfurl(channel=channel, ts=ts, unfurls={url: {"blocks": fallback_blocks}})
+        except Exception:
+            log.exception("chat.unfurl text-only fallback also failed")
+    else:
+        log.warning("chat.unfurl failed: %s", last_error)
 
 
 def send_ephemeral(client: WebClient, channel: str, user: str, text: str) -> None:

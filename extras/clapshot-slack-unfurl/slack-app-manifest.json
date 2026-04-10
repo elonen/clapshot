@@ -6,7 +6,7 @@
   "display_information": {
     "name": "Clapshot Unfurl",
     "description": "Unfurls Clapshot video and comment links with thumbnails and metadata",
-    "background_color": "#2c2d30"
+    "background_color": "#202b4d"
   },
   "settings": {
     "socket_mode_enabled": true,
