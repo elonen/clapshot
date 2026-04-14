@@ -61,10 +61,10 @@ pub type MetadataResult = Result<Metadata, DetailedMsg>;
 fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
 {
     // Link to source file to a temporary file to avoid problems with
-    // special characters in the path with mediainfo
+    // special characters in the path with mediainfo.
+    // Use system temp dir so the link is never inside incoming_dir (which the file monitor scans).
     let uuid = uuid::Uuid::new_v4();
-    let file_dir = file.parent().ok_or("Failed to get parent directory")?;
-    let temp_dir = file_dir.join(uuid.to_string());
+    let temp_dir = std::env::temp_dir().join(uuid.to_string());
     
     // Preserve original file extension to help mediainfo detect format correctly
     let extension = file.extension()

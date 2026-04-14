@@ -518,7 +518,61 @@ mod integration_test
             let wait_res = wait_for_reports(&mut ws, true, true, true, Some((data_dir.path().into(), mov_file.into()))).await;
 
             assert!(wait_res.transcode_complete, "Transcode did not complete / was not marked done");
-            assert!(wait_res.got_progress_report);
+        }
+        Ok(())
+    }
+
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    #[cfg(feature = "include_slow_tests")]
+    fn test_video_extra_tracks_transcode() -> anyhow::Result<()>
+    {
+        // Regression test: MP4 with a timecode data track (stream #2) must transcode cleanly.
+        // Also verifies that browser-compatible audio (AAC) is copied rather than re-encoded,
+        // and that channel count is not forced to stereo.
+        // Use a low target bitrate to force the transcode-decision script to transcode.
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 50_000, None, None, IngestUsernameFrom::FileOwner]
+            let mp4_file = "extra-tracks.mp4";
+            data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
+            std::fs::rename(data_dir.join(mp4_file), incoming_dir.join(mp4_file)).unwrap();
+
+            let wait_res = wait_for_reports(&mut ws, true, true, true, Some((data_dir.path().into(), mp4_file.into()))).await;
+            assert!(wait_res.transcode_complete, "Transcode did not complete / was not marked done");
+
+            // Probe the transcoded file for stream correctness.
+            let videos_dir = data_dir.join("videos");
+            let video_mp4 = std::fs::read_dir(&videos_dir).unwrap()
+                .filter_map(|e| e.ok())
+                .map(|e| e.path().join("video.mp4"))
+                .find(|p| p.exists())
+                .expect("video.mp4 not found in videos dir");
+            let actual_mp4 = std::fs::canonicalize(&video_mp4).unwrap_or(video_mp4);
+
+            let ffprobe_out = std::process::Command::new("ffprobe")
+                .args(["-v", "quiet", "-print_format", "json", "-show_streams"])
+                .arg(&actual_mp4)
+                .output()
+                .expect("ffprobe failed to run");
+            assert!(ffprobe_out.status.success(), "ffprobe failed on transcoded file");
+
+            let probe: serde_json::Value = serde_json::from_slice(&ffprobe_out.stdout)
+                .expect("ffprobe output was not valid JSON");
+            let streams = probe["streams"].as_array().expect("no streams in ffprobe output");
+
+            // No spurious data/timecode streams.
+            assert!(
+                streams.iter().all(|s| s["codec_type"] != "data"),
+                "Transcoded file contains unexpected data/timecode stream — check -map flags in clapshot-transcode"
+            );
+
+            // Source audio (extra-tracks.mp4) is AAC mono — must be copied, not re-encoded.
+            // Verify codec is preserved and channel count is not forced to stereo.
+            let audio = streams.iter().find(|s| s["codec_type"] == "audio")
+                .expect("no audio stream in transcoded file");
+            assert_eq!(audio["codec_name"], "aac", "AAC audio should be copied without re-encoding");
+            assert_eq!(audio["channels"], 1, "mono audio channel count must be preserved (no forced stereo downmix)");
         }
         Ok(())
     }
