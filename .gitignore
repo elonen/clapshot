@@ -2,3 +2,4 @@ dist_deb/
 .DS_Store
 .claude
 .idea/
+.local-temp

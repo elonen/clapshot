@@ -645,6 +645,24 @@ pub fn run_forever(
                                     return false;
                                 }
 
+                                // Refresh fps/total_frames from the transcoded output. The source file's
+                                // values are wrong when the playable video is synthesized (audio waveform
+                                // videos are rendered at a fixed fps; the source audio has no fps at all),
+                                // and the client computes SMPTE timecodes from these values.
+                                match metadata_reader::read_fps_and_frame_count(video_dst) {
+                                    Ok((out_fps, out_frames)) => {
+                                        if let Err(e) = db.conn().and_then(|mut conn|
+                                            models::MediaFile::set_fps_and_frame_count(&mut conn, &vid, &out_fps.to_string(), out_frames as i32))
+                                        {
+                                            tracing::error!(details=%e, "Error updating fps/total_frames in DB after transcoding");
+                                            return false;
+                                        }
+                                    },
+                                    Err(e) => {
+                                        tracing::warn!(details=%e, "Could not read fps/frame count from transcoded output; keeping source values");
+                                    }
+                                }
+
                                 if let Err(e) = db.conn().and_then(|mut conn| models::MediaFile::set_recompressed(&mut conn, &vid)) {
                                     tracing::error!(details=%e, "Error marking media file as recompressed in DB");
                                     return false;

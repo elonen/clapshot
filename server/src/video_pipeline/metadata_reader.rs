@@ -211,6 +211,24 @@ fn read_metadata_from_file(args: &IncomingFile) -> Result<Metadata, String>
     extract_variables(json, args, || Ok(args.file_path.metadata().map_err(|e| format!("Failed to get file size: {:?}", e))?.len()))
 }
 
+/// Read fps and total frame count from a (transcoded) media file.
+///
+/// The metadata stored at ingest time comes from the *source* file, which has no fps
+/// for audio (and a misleading one for still images). After transcoding, the playable
+/// video is what the client uses to compute SMPTE timecodes, so its fps/frame count
+/// must be read back from the produced file.
+pub(super) fn read_fps_and_frame_count(file: &PathBuf) -> Result<(Decimal, u32), String>
+{
+    let json = run_mediainfo(file)?;
+    let args = IncomingFile {
+        file_path: file.clone(),
+        user_id: String::new(),
+        cookies: Default::default(),
+    };
+    let md = extract_variables(json, &args, || file.metadata().map(|m| m.len()).map_err(|e| e.to_string()))?;
+    Ok((md.fps, md.total_frames))
+}
+
 /// Listens to inq for new files to scan for metadata with Mediainfo shell command.
 /// When a new file is received, it is processed and the result is sent to outq.
 /// Starts a thread pool of `n_workers` workers to support simultaneous processing of multiple files.

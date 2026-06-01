@@ -261,6 +261,7 @@ mod integration_test
     // --- Transcoding tests ---
 
     pub struct WaitForReportResults {
+        pub media_file_id: String,
         pub transcode_complete: bool,
         pub thumbs_complete: bool,
         pub got_progress_report: bool,
@@ -278,6 +279,7 @@ mod integration_test
         check_file_outputs: Option<(PathBuf, String)>) -> WaitForReportResults
     {
         let mut res = WaitForReportResults {
+            media_file_id: String::new(),
             transcode_complete: false, thumbs_complete: false,
             got_progress_report: false, got_transcode_report: false, got_thumbnail_report: false,
             ts_cols: String::new(), ts_rows: String::new(),
@@ -296,6 +298,7 @@ mod integration_test
         assert_eq!(vid, vid2);
 
         assert!(vid.len() > 0);
+        res.media_file_id = vid.clone();
         if expect_transcode {
             assert!(msg.details.unwrap().to_ascii_lowercase().contains("transcod"));
         }
@@ -605,6 +608,39 @@ mod integration_test
                 }
             }
             assert!(found_video, "Audio transcoding should create waveform video file");
+        }
+        Ok(())
+    }
+
+    /// Regression test for the audio fps=0 bug.
+    ///
+    /// Audio source files carry no fps in their metadata (mediainfo reports none for
+    /// FLAC/WAV/MP3), so the DB row is initially stored with fps=0 / total_frames=0.
+    /// The transcoded waveform video, however, is rendered at 60 fps. Once transcoding
+    /// is done, the media file's reported duration must reflect the *playable* video
+    /// (fps != 0); otherwise the client builds a "NaN:NaN:NaN:NaN" SMPTE timecode and
+    /// the player UI crashes.
+    #[test]
+    #[serial]
+    #[traced_test]
+    #[cfg(feature = "include_slow_tests")]
+    fn test_audio_transcode_updates_fps_from_output() -> anyhow::Result<()>
+    {
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner]
+            let audio_file_name = "sweep-tone.flac";   // shortest audio fixture (5s)
+            data_dir.copy_from("src/tests/assets/", &[audio_file_name]).unwrap();
+            std::fs::rename(data_dir.join(audio_file_name), incoming_dir.join(audio_file_name)).unwrap();
+
+            let wait_res = wait_for_reports(&mut ws, true, false, false, Some((data_dir.path().into(), audio_file_name.into()))).await;    // No thumbnail for audio
+
+            // Open the file through the public API and inspect the metadata the client receives.
+            let media_file = open_media_file(&mut ws, &wait_res.media_file_id).await.media_file.unwrap();
+            let dur = media_file.duration.expect("media file has no duration metadata");
+
+            let fps: f64 = dur.fps.parse().unwrap_or_else(|_| panic!("fps is not a number: {:?}", dur.fps));
+            assert!(fps > 0.0, "audio fps must reflect the transcoded waveform video, not the source audio's missing fps (got {:?})", dur.fps);
+            assert!((fps - 60.0).abs() < 0.01, "waveform video is rendered at 60 fps (got {:?})", dur.fps);
+            assert!(dur.total_frames > 0, "total_frames must be set from the transcoded video (got {})", dur.total_frames);
         }
         Ok(())
     }
