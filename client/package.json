@@ -41,7 +41,7 @@
     "typescript": "^5.7.2",
     "vite": "^7.3.2",
     "vite-plugin-checker": "^0.8.0",
-    "vitest": "^4.0.8"
+    "vitest": "^4.1.0"
   },
   "dependencies": {
     "flowbite": "^4.0.0",
