@@ -228,6 +228,12 @@ function activateComment(e: any) {
         return;
     }
 
+    // Showing a comment: pause playback and leave fullscreen so the comment panel is visible
+    if (videoPlayer) {
+        videoPlayer.setPlayback(false, "comment_activate");
+        videoPlayer.exitFullscreen();
+    }
+
     // If comment has a timecode, activate it on the timeline (seek, set loop points)
     if (c.comment.timecode && videoPlayer) {
         videoPlayer.activateCommentOnTimeline(commentId);

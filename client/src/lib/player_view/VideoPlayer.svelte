@@ -66,6 +66,16 @@ let loopEndTime: number = $state(-2);
 let videoCanvasContainer: any = $state();
 let videoDecoder: HybridVideoDecoder | null = null;
 
+// Fullscreen: we fullscreen `playerRoot` (the wrapper holding BOTH the video
+// container and the controls), so the HTML5<->Mediabunny render-mode switch (which
+// only toggles visibility of children inside videoCanvasContainer) survives without
+// breaking out of fullscreen. In fullscreen the control bar becomes an auto-hiding
+// overlay so the video/frame image fills the whole screen.
+let playerRoot: HTMLElement | undefined = $state();
+let isFullscreen: boolean = $state(false);
+let controlsVisible: boolean = $state(true);
+let hideControlsTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+
 let debug_layout: boolean = false; // Set to true to show CSS layout boxes
 let commentsWithTc: Proto3.Comment[] = $derived(
     $allComments
@@ -177,6 +187,8 @@ onMount(async () => {
     curSubtitle.subscribe(() => { offsetTextTracks(); });
     animationFrameId = requestAnimationFrame(handleTimeUpdate);
     initializeVolume();
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 });
 
 onDestroy(async () => {
@@ -190,6 +202,9 @@ onDestroy(async () => {
     }
     videoDecoder?.dispose();
     videoDecoder = null;
+    clearTimeout(hideControlsTimer);
+    document.removeEventListener('fullscreenchange', onFullscreenChange);
+    document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
 });
 
 // Monitor video elem "loop" property in a timer.
@@ -267,6 +282,42 @@ function togglePlay() {
     setPlayback(should_play, "VideoPlayer");
 }
 
+// Exit fullscreen if currently active (e.g. when showing a comment, whose panel
+// lives outside the fullscreen element). No-op when not in fullscreen.
+export function exitFullscreen() {
+    const doc = document as any;
+    if (document.fullscreenElement ?? doc.webkitFullscreenElement) {
+        (document.exitFullscreen ?? doc.webkitExitFullscreen)?.call(document);
+    }
+}
+
+function toggleFullscreen() {
+    const el = playerRoot as any;
+    const doc = document as any;
+    if (document.fullscreenElement ?? doc.webkitFullscreenElement) {
+        exitFullscreen();
+    } else {
+        (el?.requestFullscreen ?? el?.webkitRequestFullscreen)?.call(el);
+    }
+}
+
+// While fullscreen, hide the control overlay after a short idle; reveal on mouse move.
+function showControlsTemporarily() {
+    controlsVisible = true;
+    clearTimeout(hideControlsTimer);
+    hideControlsTimer = setTimeout(() => { if (isFullscreen) controlsVisible = false; }, 2500);
+}
+
+function onFullscreenChange() {
+    isFullscreen = !!(document.fullscreenElement ?? (document as any).webkitFullscreenElement);
+    if (isFullscreen) {
+        showControlsTemporarily();
+    } else {
+        clearTimeout(hideControlsTimer);
+        controlsVisible = true;
+    }
+}
+
 function clickOnVideo(event: MouseEvent ) {
     if ($curVideo?.mediaType.toLowerCase().startsWith("audio")) {
         // Audio file videos show a waveform, so use clicks for seeking instead of play/pause
@@ -327,6 +378,7 @@ export function getCurFrame() {
 
 async function step_video(frames: number) {
     if (!videoDecoder) return;
+    if (!videoElem.paused) { videoElem.pause(); }  // stepping frames implies pausing playback
 
     const direction = frames < 0 ? -1 : 1;
     const position = await videoDecoder.stepFrame(direction as 1 | -1, Math.abs(frames));
@@ -352,6 +404,7 @@ const WINDOW_KEY_ACTIONS: {[key: string]: (e: KeyboardEvent)=>any} = {
             if (videoElem) { videoElem.loop = !videoElem.loop; }
             if (!videoElem.loop) { loopStartTime = -1; loopEndTime = -2; }
         },
+        'f': () => toggleFullscreen(),
     };
 
 function onWindowKeyPress(e: KeyboardEvent): void {
@@ -679,8 +732,10 @@ function handlePinClick(id: string) {
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
+    bind:this={playerRoot}
     onkeydown={onWindowKeyPress}
-    class="w-full h-full flex flex-col object-contain"
+    onmousemove={() => { if (isFullscreen) showControlsTemporarily(); }}
+    class="w-full h-full flex flex-col object-contain relative {isFullscreen ? 'bg-black' : ''} {isFullscreen && !controlsVisible ? 'cursor-none' : ''}"
     role="main"
 >
 	<div  class="flex-1 grid place-items-center relative min-h-[12em]"
@@ -721,7 +776,7 @@ function handlePinClick(id: string) {
 		</div>
 	</div>
 
-	<div class="flex-none relative {debug_layout?'border-2 border-red-600':''}">
+	<div class="flex-none {debug_layout?'border-2 border-red-600':''} {isFullscreen ? 'absolute bottom-0 left-0 right-0 z-[200] bg-black/60 transition-opacity duration-300 ' + (controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none') : 'relative'}">
 
 		<div class="flex-1 space-y-0 leading-none relative">
 			<progress value="{(time / getEffectiveDuration()) || 0}"
@@ -805,6 +860,16 @@ function handlePinClick(id: string) {
 
 			<!-- Video duration -->
 			<span class="flex-0 text-lg mx-4">{format_tc(getEffectiveDuration())}</span>
+
+			<!-- Fullscreen toggle -->
+			<span class="flex-0 text-center whitespace-nowrap">
+				<button
+					class="hover:text-amber-600 fa-solid {isFullscreen ? 'fa-compress' : 'fa-expand'} mx-2"
+					onclick={toggleFullscreen}
+					title="Toggle fullscreen (f)"
+					aria-label="Toggle fullscreen"
+				></button>
+			</span>
 		</div>
 	</div>
 
