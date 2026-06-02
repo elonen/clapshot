@@ -1,3 +1,12 @@
+clapshot-client (0.11.0) unstable; urgency=low
+
+  * New feature: Fullscreen button and 'f' shortcut key, with associated
+    frame stepping fixes (closes #141, #139)
+  * Fix: Audio player crash on fps=0 (guard client timecode, closes #136)
+  * Upgrade npm dependencies
+
+ -- Jarno Elonen <elonen@iki.fi>  Tue, 02 Jun 2026 12:00:00 +0300
+
 clapshot-client (0.10.0) unstable; urgency=low
 
   * New feature: "Sort by Timecode" toggle for comments

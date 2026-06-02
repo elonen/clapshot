@@ -1,3 +1,9 @@
+clapshot-organizer-basic-folders (0.11.0) unstable; urgency=low
+
+  * (Follow client and server versioning)
+
+ -- Jarno Elonen <elonen@iki.fi>  Tue, 02 Jun 2026 12:00:00 +0300
+
 clapshot-organizer-basic-folders (0.10.0) unstable; urgency=low
 
   * New feature: Notify non-owner clients observing a folder about changes

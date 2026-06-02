@@ -46,7 +46,7 @@ fi
 
 set -x
 
-RELEASE="0.10.0"
+RELEASE="0.11.0"
 CLIENT_LINK="https://github.com/elonen/clapshot/releases/download/v${RELEASE}/clapshot-client_${RELEASE}_bookworm_all.deb"
 # Detect system architecture and adjust SERVER_LINK accordingly
 ARCH=$(uname -m)
