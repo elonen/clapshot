@@ -89,7 +89,7 @@ message Comment {
 }
 
 // ---------------------------------------------------------
-// User messages (notifications)
+// User messages
 // ---------------------------------------------------------
 
 message UserMessage {

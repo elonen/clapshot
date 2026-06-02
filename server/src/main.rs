@@ -19,8 +19,7 @@ fn validate_script_exists(path: &str, name: &str) -> anyhow::Result<()> {
         bail!(
             "{} script not found: '{}'\n\
             If you upgraded the package and kept your old config file, you may need to add \
-            the new '{}' setting.\n\
-            See /usr/share/doc/clapshot-server/examples/clapshot-server.conf for reference.",
+            the new '{}' setting. See docs for examples.",
             name, path, name.to_lowercase().replace(" ", "-")
         );
     }
@@ -141,6 +140,15 @@ struct Args {
     #[arg(long, value_name="SCRIPT", default_value="scripts/clapshot-transcode-decision")]
     transcode_decision_script: String,
 
+    /// Path to an external notification hook script (optional).
+    #[arg(long, value_name="SCRIPT")]
+    notification_script: Option<String>,
+
+    /// Comma-separated glob allowlist of notification events to deliver.
+    /// Only has effect together with --notification-script. Default '*' = all events.
+    #[arg(long, value_name="GLOBS", default_value="*")]
+    notification_events: String,
+
     /// Regular expression to filter HTTP headers passed to Organizer.
     /// Only headers matching this pattern will be included in UserSessionData.
     /// Case-insensitive matching. Default is disabled for security.
@@ -167,6 +175,9 @@ fn main() -> anyhow::Result<()> {
     validate_script_exists(&args.transcode_script, "Transcode")?;
     validate_script_exists(&args.thumbnail_script, "Thumbnail")?;
     validate_script_exists(&args.transcode_decision_script, "Transcode-decision")?;
+    if let Some(ref s) = args.notification_script {
+        validate_script_exists(s, "Notification")?;
+    }
 
     let url_base = args.url_base.trim_end_matches('/').to_string();
     let time_offset = time::UtcOffset::current_local_offset().expect("should get local offset");
@@ -222,6 +233,8 @@ fn main() -> anyhow::Result<()> {
         args.transcode_script,
         args.thumbnail_script,
         args.transcode_decision_script,
+        args.notification_script,
+        args.notification_events,
         org_http_headers_regex,
     ) {
         error!("run_clapshot() failed: {}", e);
@@ -241,7 +254,6 @@ mod tests {
 
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("not found"));
-        assert!(err_msg.contains("clapshot-server.conf"));
     }
 
     #[test]

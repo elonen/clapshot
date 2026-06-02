@@ -22,7 +22,7 @@ macro_rules! send_user_msg(
             Topic::None => (None, None)
         };
         use crate::grpc::db_models::proto_msg_type_to_event_name;
-        $server.push_notify_message(&models::MessageInsert {
+        $server.push_user_message(&models::MessageInsert {
             event_name: proto_msg_type_to_event_name($msg_type).to_string(),
             user_id: $user_id.clone(),
             comment_id,
@@ -31,7 +31,7 @@ macro_rules! send_user_msg(
             message: $msg.into(),
             details: $details.into(),
             subtitle_id: None,
-        }, crate::api_server::SendTo::UserId(&$user_id), $persist, None)?;
+        }, crate::api_server::SendTo::UserId(&$user_id), $persist, None, crate::notification::MessageOrigin::Server)?;
     };
     ($event_name:expr, $user_id:expr, $server:expr, $topic:expr, $msg:expr, $persist:expr) => {
         send_user_error!($user_id, $server, $topic, $msg, String::new(), $persist)

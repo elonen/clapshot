@@ -1,0 +1,125 @@
+#!/bin/bash
+#
+# Clapshot notification hook — EXAMPLE / TEMPLATE (does not send anything as-is).
+#
+# Enable it by copying this file somewhere, making it executable, filling in one
+# of the transports below, and pointing the server at it:
+#
+#   notification-script = /path/to/your-clapshot-notification     (in clapshot-server.conf)
+#   # or: clapshot-server --notification-script=/path/to/script ...
+#
+# HOW IT IS CALLED
+#   - The event type is in the CLAPSHOT_NOTIFICATION_EVENT environment variable.
+#   - A single JSON object describing the event is fed on STDIN.
+#   - Exit code is logged but otherwise ignored; the server never blocks on you.
+#   - The server kills the script after 30 s. If your transport can be slow
+#     (SMTP, webhooks), do NOT block here: write the job to your own queue/spool
+#     and return immediately, then deliver from a separate worker.
+#
+# Requires `jq` for the JSON parsing shown below.
+
+set -euo pipefail
+
+EVENT="${CLAPSHOT_NOTIFICATION_EVENT:-unknown}"
+PAYLOAD="$(cat)"            # stdin can only be read once; capture it.
+
+jqr() { printf '%s' "$PAYLOAD" | jq -r "$1 // empty"; }
+
+# ---------------------------------------------------------------------------
+# 1) Server-side filtering happens BEFORE this script runs, via
+#       notification-events = comment_*,media_file_added         (glob allowlist)
+#    so unwanted events never even spawn this script. Use that as the coarse
+#    filter. Below is the FINE filter: ignore everything except the events and
+#    sub-conditions this particular integration cares about.
+# ---------------------------------------------------------------------------
+case "$EVENT" in
+    comment_added|comment_deleted)
+        ;;  # handled below
+    media_file_added)
+        ;;  # handled below
+    message_persisted)
+        # Only care about error messages here; skip routine "ok" notices.
+        [ "$(jqr '.message.event_name')" = "error" ] || exit 0
+        ;;
+    *)
+        # comment_edited, media_file_updated, anything else: not interesting.
+        exit 0
+        ;;
+esac
+
+# Build a short human summary used by the transports below.
+URL_BASE="$(jqr '.server.url_base')"
+case "$EVENT" in
+    comment_added|comment_deleted)
+        ACTOR="$(jqr '.actor.username')"
+        TEXT="$(jqr '.comment.text')"
+        TITLE="$(jqr '.media_file.title')"
+        OWNER="$(jqr '.media_file.owner_user_id')"
+        LINK="$(jqr '.url')"
+        SUBJECT="Clapshot: ${ACTOR} ${EVENT#comment_} a comment on '${TITLE}'"
+        BODY="${ACTOR} ${EVENT#comment_} a comment on '${TITLE}' (owner: ${OWNER}):
+
+${TEXT}
+
+${LINK}"
+        # A drawing/screenshot, if any, is an absolute path you can attach:
+        DRAWING="$(jqr '.comment.drawing')"   # e.g. /.../videos/<id>/drawings/<hash>.webp
+        ;;
+    media_file_added)
+        OWNER="$(jqr '.media_file.owner_user_id')"
+        TITLE="$(jqr '.media_file.title')"
+        LINK="$(jqr '.url')"
+        SUBJECT="Clapshot: new media '${TITLE}' from ${OWNER}"
+        BODY="${OWNER} uploaded '${TITLE}'. ${LINK}"
+        ;;
+    message_persisted)
+        RECIP="$(jqr '.message.recipient_user_id')"
+        SUBJECT="Clapshot error for ${RECIP}"
+        BODY="$(jqr '.message.text')
+
+$(jqr '.message.details')"
+        ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Pick ONE transport (or combine). These are drafts — adapt to your setup.
+# ---------------------------------------------------------------------------
+
+# --- Transport A: e-mail (sendmail/mail) ------------------------------------
+send_email() {
+    local to="admin@example.com"
+    # Map the Clapshot user id to an address however your org does it (LDAP, a
+    # lookup table, "${OWNER}@example.com", ...). Here we just notify an admin.
+    printf 'Subject: %s\n\n%s\n' "$SUBJECT" "$BODY" | /usr/sbin/sendmail -t "$to"
+    # Or, with the `mailutils`/`bsd-mailx` `mail` command:
+    #   printf '%s\n' "$BODY" | mail -s "$SUBJECT" "$to"
+}
+
+# --- Transport B: Slack incoming webhook ------------------------------------
+send_slack() {
+    local webhook="${SLACK_WEBHOOK_URL:-}"   # set this in the service environment
+    [ -n "$webhook" ] || { echo "SLACK_WEBHOOK_URL not set" >&2; return 0; }
+    # jq -Rs safely JSON-encodes the text (handles newlines/quotes).
+    local json
+    json="$(printf '%s' "$BODY" | jq -Rs '{text: .}')"
+    # NOTE: curl can hang on a slow network. Use --max-time, and prefer spooling
+    # for real deployments (see the header comment about the 30 s timeout).
+    curl -sS --max-time 10 -X POST -H 'Content-type: application/json' \
+        --data "$json" "$webhook" >/dev/null
+}
+
+# --- Transport C: append to a log file (handy for testing / auditing) -------
+send_file() {
+    local out="${CLAPSHOT_NOTIFY_LOG:-/var/log/clapshot-notifications.log}"
+    printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$EVENT" "$SUBJECT" >> "$out"
+    # Or dump the whole payload for debugging:
+    #   printf '%s\n' "$PAYLOAD" >> "$out"
+}
+
+# By default this example only does the harmless file transport. Uncomment the
+# transport(s) you actually want:
+send_file
+# send_email
+# send_slack
+
+exit 0

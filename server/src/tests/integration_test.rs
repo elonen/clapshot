@@ -133,7 +133,7 @@ mod integration_test
                     let org_uri = org_uri.clone();
                     let tf = terminate_flag.clone();
                     thread::spawn(move || {
-                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), "scripts/clapshot-transcode-decision".to_string(), regex, tf)?;
+                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), "scripts/clapshot-transcode-decision".to_string(), None, "*".to_string(), regex, tf)?;
                         clapshot.wait_for_termination()
                 })};
 
