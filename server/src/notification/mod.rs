@@ -265,16 +265,27 @@ fn run_one(script: &Path, ev: &NotificationEvent, timeout: Duration) {
     };
 
     let stderr = err.and_then(|h| h.join().ok()).unwrap_or_default();
-    let _stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();
+    let stdout = out.and_then(|h| h.join().ok()).unwrap_or_default();
 
     match status {
         Some(s) if s.success() => {
-            tracing::debug!(event = ev.kind.as_str(), "Notification script ok.");
+            tracing::info!(event = ev.kind.as_str(), "Notification script ok.");
+            // The script's own output is only interesting when debugging; surface
+            // it at DEBUG so a script that "succeeded but did nothing" is visible.
+            if !stdout.trim().is_empty() || !stderr.trim().is_empty() {
+                tracing::debug!(
+                    event = ev.kind.as_str(),
+                    stdout = %abbrev(&stdout),
+                    stderr = %abbrev(&stderr),
+                    "Notification script output."
+                );
+            }
         }
         Some(s) => {
             tracing::warn!(
                 event = ev.kind.as_str(),
                 code = ?s.code(),
+                stdout = %abbrev(&stdout),
                 stderr = %abbrev(&stderr),
                 "Notification script exited with error."
             );
