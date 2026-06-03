@@ -102,6 +102,14 @@ Customizable media processing through external scripts with hardware acceleratio
   - **Multi-Format Output**: Configurable output formats and quality settings
 - *References: [doc/transcoding.md](doc/transcoding.md), [scripts/clapshot-transcode-decision](server/scripts/clapshot-transcode-decision), [scripts/clapshot-transcode](server/scripts/clapshot-transcode), [scripts/clapshot-thumbnail](server/scripts/clapshot-thumbnail), [src1](server/src/video_pipeline/script_processor.rs)*
 
+### **Notification Hook**
+Optional external script invoked on comment add/edit/delete, persisted user messages, and media file add/update — for e‑mail, Slack, or other integrations. Off by default; organizer-agnostic.
+  - **Event types**: `comment_added`, `comment_edited`, `comment_deleted`, `message_persisted`, `media_file_added`, `media_file_updated`
+  - **Interface**: event name in `CLAPSHOT_NOTIFICATION_EVENT`, full event as a JSON object on stdin
+  - **Non-blocking**: queued, run on a dedicated worker, never blocks or fails commenting/uploads
+  - **Filtering**: server-side glob allowlist (`--notification-events`) plus in-script filtering
+- *References: [doc/notification-hook.md](doc/notification-hook.md), [example](server/scripts/clapshot-notification.example), [src](server/src/notification/mod.rs)*
+
 ### **Special `trash/` and `rejected/` folders**
 Special folders for "deleted" (trashed) and non-ingestible files.
 - *References: [src1](server/src/video_pipeline/cleanup_rejected.rs)*

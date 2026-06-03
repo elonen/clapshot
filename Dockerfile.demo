@@ -15,6 +15,10 @@ RUN echo "deb https://www.deb-multimedia.org bookworm main non-free" > /etc/apt/
 RUN apt-get -qy update
 RUN apt-get -qy install sqlite3 ffmpeg mediainfo jq >/dev/null
 
+# Tools for the example notification hook (Slack via curl, e-mail via msmtp;
+# msmtp-mta provides /usr/sbin/sendmail). Optional, only used if you enable it.
+RUN apt-get -qy install curl msmtp msmtp-mta >/dev/null
+
 # Add regular user (to match local user ID)
 ARG UID=1000
 ARG GID=1000

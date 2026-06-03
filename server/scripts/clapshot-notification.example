@@ -1,0 +1,166 @@
+#!/bin/bash
+#
+# Clapshot notification hook — EXAMPLE / TEMPLATE (does not send anything as-is).
+# You can also replace this script with a Python/Ruby/Node/...
+# script if you prefer, as long as it follows the same contract.
+#
+# Enable it by copying this file somewhere, making it executable, filling in one
+# of the transports below, and pointing the server at it:
+#
+#   notification-script = /path/to/your-clapshot-notification     (in clapshot-server.conf)
+#   # or: clapshot-server --notification-script=/path/to/script ...
+#
+# How Clapshot server calls this script:
+#
+#   - The event type is in the CLAPSHOT_NOTIFICATION_EVENT environment variable.
+#   - A single JSON object describing the event is fed on STDIN.
+#   - Exit code is logged but otherwise ignored; the server never blocks on you.
+#   - The server kills the script after 30 s. If your transport can be slow
+#     (SMTP, webhooks), do NOT block here: write the job to your own queue/spool
+#     and return immediately, then deliver from a separate worker.
+#
+# SECURITY — the JSON on STDIN contains untrusted, user-supplied text: comment
+# bodies, media titles, usernames, etc. Be sure to sanitize them:
+#
+#   - Mail headers: strip CR/LF or an attacker injects headers (see send_email).
+#   - HTML e-mail: HTML-escape BODY, or it's stored XSS in the recipient's client.
+#   - Log files: strip control chars, or users forge log lines / smuggle terminal
+#     escape sequences that fire when you `cat` the log (see send_file).
+#   - Chat/Markdown (Slack, ...): the platform still interprets its own markup
+#     (mentions, links) inside the text you send (see send_slack).
+#   - NEVER pass these values to `eval`, `bash -c`, or an unquoted expansion.
+#
+# This script also runs as the server's user, with its full environment (which
+# may hold secrets), so keep the file non-world-writable.
+#
+# Requires `jq` for the JSON parsing shown below.
+
+set -euo pipefail
+
+EVENT="${CLAPSHOT_NOTIFICATION_EVENT:-unknown}"
+PAYLOAD="$(cat)" # read JSON from stdin
+
+jqr() { printf '%s' "$PAYLOAD" | jq -r "$1 // empty"; }
+
+# ---------------------------------------------------------------------------
+# 1) Server-side filtering happens BEFORE this script runs, via
+#      notification-events = comment_*,media_file_added      (glob allowlist)
+#   so unwanted events never even spawn this script. Use that as the coarse
+#   filter. Below is the FINE filter: ignore everything except the events and
+#   sub-conditions this particular integration cares about.
+# ---------------------------------------------------------------------------
+case "$EVENT" in
+    comment_added|comment_deleted)
+        ;;  # handled below
+    media_file_added)
+        ;;  # handled below
+    message_persisted)
+        # Only care about error messages here; skip routine "ok" notices.
+        [ "$(jqr '.message.event_name')" = "error" ] || exit 0
+        ;;
+    *)
+        # comment_edited, media_file_updated, anything else: not interesting.
+        exit 0
+        ;;
+esac
+
+# Build a short human summary used by the transports below.
+
+URL_BASE="$(jqr '.server.url_base')"
+case "$EVENT" in
+
+    # Comment events
+    comment_added|comment_deleted)
+        ACTOR="$(jqr '.actor.username')"
+        TEXT="$(jqr '.comment.text')"
+        TITLE="$(jqr '.media_file.title')"
+        OWNER="$(jqr '.media_file.owner_user_id')"
+        LINK="$(jqr '.url')"
+        SUBJECT="Clapshot: ${ACTOR} ${EVENT#comment_} a comment on '${TITLE}'"
+        # A drawing/screenshot, if any, is an absolute path you could attach if you want:
+        DRAWING="$(jqr '.comment.drawing')"   # e.g. /.../videos/<id>/drawings/<hash>.webp
+        BODY="${ACTOR} ${EVENT#comment_} a comment on '${TITLE}' (owner: ${OWNER}):
+
+${TEXT}
+
+${LINK}"
+        ;;
+
+    # New media file
+    media_file_added)
+        OWNER="$(jqr '.media_file.owner_user_id')"
+        TITLE="$(jqr '.media_file.title')"
+        LINK="$(jqr '.url')"
+        SUBJECT="Clapshot: new media '${TITLE}' from ${OWNER}"
+        BODY="${OWNER} uploaded '${TITLE}'. ${LINK}"
+        ;;
+
+    # Messages from server to user
+    message_persisted)
+        RECIP="$(jqr '.message.recipient_user_id')"
+        SUBJECT="Clapshot error for ${RECIP}"
+        BODY="$(jqr '.message.text')
+
+$(jqr '.message.details')"
+        ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Example transport drafts — adapt to your setup.
+# ---------------------------------------------------------------------------
+
+# --- Transport A: e-mail (sendmail/mail) ------------------------------------
+# SECURITY: Strip CR/LF from anything that ends up in a header. Without this, a username or
+# title like $'x\nBcc: victim@example.com' injects mail headers (header injection).
+# Also avoid `sendmail -t` here: -t reads recipients FROM the message headers, so
+# combined with header injection it turns the hook into a way to mail arbitrary
+# people (an open relay). So: sanitize, and pass the recipient explicitly.
+hdr_safe() { printf '%s' "$1" | tr -d '\r\n'; }
+
+send_email() {
+    local to="admin@example.com"
+    # Map the Clapshot user id to an address however your org does it (LDAP, a
+    # lookup table, ...). If you derive it from a Clapshot user id, validate the
+    # result — user ids are not guaranteed to be safe e-mail addresses. Here we
+    # just notify a fixed admin address.
+    printf 'To: %s\nSubject: %s\n\n%s\n' "$to" "$(hdr_safe "$SUBJECT")" "$BODY" \
+        | /usr/sbin/sendmail "$to"
+}
+
+# --- Transport B: Slack incoming webhook ------------------------------------
+send_slack() {
+    local webhook="${SLACK_WEBHOOK_URL:-}"   # set this in the service environment
+    [ -n "$webhook" ] || { echo "SLACK_WEBHOOK_URL not set" >&2; return 0; }
+    # SECURITY: jq -Rs safely JSON-encodes the text (handles newlines/quotes). This is the
+    # correct way to put untrusted text into JSON — never hand-assemble the JSON
+    # string yourself. (Slack still interprets its own markup inside the text:
+    # `<!channel>` would ping everyone, `<http://x|label>` builds a link. If that
+    # matters to you, strip `<`/`>` or the control sequences before sending.)
+    local json
+    json="$(printf '%s' "$BODY" | jq -Rs '{text: .}')"
+    # NOTE: curl can hang on a slow network. Use --max-time, and prefer spooling
+    # for real deployments (see the header comment about the 30 s timeout).
+    curl -sS --max-time 10 -X POST -H 'Content-type: application/json' \
+        --data "$json" "$webhook" >/dev/null
+}
+
+# --- Transport C: append to a log file (handy for testing / auditing) -------
+send_file() {
+    local out="${CLAPSHOT_NOTIFY_LOG:-/var/log/clapshot-notifications.log}"
+    # SECURITY: SUBJECT holds untrusted text; drop control chars (incl. CR/LF/TAB/ESC) so a
+    # user can't forge extra log lines or smuggle terminal escapes into the log.
+    local safe_subject
+    safe_subject="$(printf '%s' "$SUBJECT" | tr -d '\000-\037\177')"
+    printf -- '--- %s ---\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$out"
+    printf '%s\t%s\n' "$EVENT" "$safe_subject" >> "$out"
+    # Dump the whole raw payload for debugging (but beware of control chars!):
+    printf '%s\n' "$PAYLOAD" >> "$out"
+}
+
+# By default this example only does the harmless file transport. Uncomment the
+# transport(s) you actually want:
+send_file
+# send_email
+# send_slack
+
+exit 0

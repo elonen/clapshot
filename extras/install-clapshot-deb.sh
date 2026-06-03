@@ -2,7 +2,7 @@
 set -e
 
 # This script install Clapshot with Htadmin Basic auth
-# on Debian 12 Bookworm (might also work on Bullseye).
+# on Debian 12 Bookworm or Debian 13 Trixie
 #
 # It doesn't set up HTTPS, you are encouraged to
 # set use a reverse proxy in front of it.
@@ -43,24 +43,34 @@ if [ -z "$PUBLIC_ADDRESS" ]; then
     echo " "
     usage
 fi
+case "$PUBLIC_ADDRESS" in
+    http://*|https://*) ;;
+    *) echo "** Error: PUBLIC_ADDRESS must include a scheme, e.g. http://clapshot.example.com (got: '$PUBLIC_ADDRESS')"; echo " "; usage ;;
+esac
 
 set -x
 
 RELEASE="0.11.0"
-CLIENT_LINK="https://github.com/elonen/clapshot/releases/download/v${RELEASE}/clapshot-client_${RELEASE}_bookworm_all.deb"
-# Detect system architecture and adjust SERVER_LINK accordingly
-ARCH=$(uname -m)
-case "$ARCH" in
-    x86_64)
-      SERVER_LINK="https://github.com/elonen/clapshot/releases/download/v${RELEASE}/clapshot-server_${RELEASE}-1_bookworm_amd64.deb"
-      ORG_LINK="https://github.com/elonen/clapshot/releases/download/v${RELEASE}/clapshot-organizer-basic-folders_${RELEASE}_bookworm_amd64.deb"
-    ;;
-    aarch64)
-      SERVER_LINK="https://github.com/elonen/clapshot/releases/download/v${RELEASE}/clapshot-server_${RELEASE}-1_bookworm_arm64.deb"
-      ORG_LINK="https://github.com/elonen/clapshot/releases/download/v${RELEASE}/clapshot-organizer-basic-folders_${RELEASE}_bookworm_arm64.deb"
-    ;;
-    *) echo "Unsupported architecture: $ARCH"; exit 1;;
+
+# Autodetect Debian release (codename) and architecture from the running system
+. /etc/os-release
+DEBIAN_VER="$VERSION_CODENAME"
+case "$DEBIAN_VER" in
+    bookworm) PYTHON_VER="3.11" ;;
+    trixie)   PYTHON_VER="3.13" ;;
+    *) echo "Unsupported Debian release: '${DEBIAN_VER}' (supported: bookworm, trixie)"; exit 1 ;;
 esac
+
+case "$(uname -m)" in
+    x86_64)  DEB_ARCH="amd64" ;;
+    aarch64) DEB_ARCH="arm64" ;;
+    *) echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
+esac
+
+BASE="https://github.com/elonen/clapshot/releases/download/v${RELEASE}"
+CLIENT_LINK="${BASE}/clapshot-client_${RELEASE}_${DEBIAN_VER}_all.deb"
+SERVER_LINK="${BASE}/clapshot-server_${RELEASE}-1_${DEBIAN_VER}_${DEB_ARCH}.deb"
+ORG_LINK="${BASE}/clapshot-organizer-basic-folders_${RELEASE}_${DEBIAN_VER}_${DEB_ARCH}.deb"
 
 # -------------------------------------------------------
 # Some helpers
@@ -100,26 +110,37 @@ replace_cfg() {
 
 # -------------------------------------------------------
 
-# Set up Debian Multimedia repo for newer FFmpeg
 apt-get install -y gnupg2 wget git sudo acl
-wget -q https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb
-dpkg -i deb-multimedia-keyring_2016.8.1_all.deb
-echo "deb https://www.deb-multimedia.org bookworm main non-free" > /etc/apt/sources.list.d/deb-multimedia.list
-apt-get -qy update
-apt-get -qy install ffmpeg mediainfo
 
-# Install other dependencies
-apt-get install -y nginx python3 python3.11 sqlite3    # For Clapshot
-apt-get install -y php-fpm                             # For installation and Htadmin
+# On Bookworm, add the Debian Multimedia repo for a newer FFmpeg.
+# (Trixie's stock FFmpeg is recent enough, so the repo isn't needed there.)
+# ffmpeg/mediainfo themselves are pulled in as dependencies of the server .deb below.
+if [ "${DEBIAN_VER}" = "bookworm" ]; then
+  wget -q https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2016.8.1_all.deb
+  dpkg -i deb-multimedia-keyring_2016.8.1_all.deb
+  echo "deb https://www.deb-multimedia.org bookworm main non-free" > /etc/apt/sources.list.d/deb-multimedia.list
+  apt-get -qy update
+fi
+
+
+# Install other dependencies.
+# Python is required by some Clapshot modules (e.g. the organizer); install the
+# release-matching interpreter explicitly. ffmpeg/mediainfo are pulled in as
+# dependencies of the server .deb below.
+apt-get install -y nginx sqlite3 python3 jq "python${PYTHON_VER}"   # For Clapshot
+apt-get install -y php-fpm                                       # For installation and Htadmin
 
 # Make sure data directory is mounted and useable
 test -e "$DATA_DIR" || { echo "Data directory '$DATA_DIR' missing. Please mount/create it and run again."; exit 1; }
 chown www-data:www-data "$DATA_DIR"
 sudo -u www-data mkdir -p "$DATA_DIR/data" || { echo "Data directory not writable by www-data."; exit 1; }
 
-# Get the Clapshot .deb packages
+# Get and install the Clapshot .deb packages.
+# Using 'apt-get install ./*.deb' (not 'dpkg -i *.deb') so their dependencies
+# (ffmpeg, mediainfo, ...) get resolved, and so we don't try to
+# (re)install unrelated .deb files left in this directory (e.g. the deb-multimedia keyring).
 wget --no-clobber $SERVER_LINK $ORG_LINK $CLIENT_LINK   # Download if necessary
-dpkg -i *.deb
+apt-get install -y ./clapshot-*.deb
 
 # Configure server
 replace_cfg /etc/clapshot-server.conf   "^url-base.*"   "url-base = $PUBLIC_ADDRESS"   # Set url-base
@@ -136,7 +157,7 @@ restart_and_check_service clapshot-server.service
 WS_ADDR=$(echo "$PUBLIC_ADDRESS" | sed 's/^http/ws/')
 replace_cfg /etc/clapshot_client.conf   "^ *\"ws_url.*"                            "    \"ws_url\": \"${WS_ADDR}/api/ws\","
 replace_cfg /etc/clapshot_client.conf   "^ *\"upload_url.*"                        "    \"upload_url\": \"${PUBLIC_ADDRESS}/api/upload\","
-replace_cfg /etc/clapshot_client.conf   "^ *\"user_menu_show_basic_auth_logout.*"  "    \"user_menu_show_basic_auth_logout\": true"
+replace_cfg /etc/clapshot_client.conf   "^ *\"user_menu_show_basic_auth_logout.*"  "    \"user_menu_show_basic_auth_logout\": true,"
 display_config /etc/clapshot_client.conf
 
 # Configure and restart Nginx
@@ -149,6 +170,7 @@ NGINX_CONF="/etc/nginx/sites-enabled/clapshot+htadmin.nginx.conf"
 HOSTNAME=$(echo "$PUBLIC_ADDRESS" | sed -E "s|^[^/]*//([^:/]*).*|\\1|")
 replace_cfg "$NGINX_CONF"   "^([ \t]*alias).*"         "\\1 ${DATA_DIR}/data/videos;"
 replace_cfg "$NGINX_CONF"   "^([ \t]*server_name).*"   "\\1 ${HOSTNAME};"
+# Debian's php-fpm provides a version-agnostic /run/php/php-fpm.sock on both Bookworm and Trixie.
 replace_cfg "$NGINX_CONF"  "^([ \t]*fastcgi_pass).*"  "\\1 unix:/var/run/php/php-fpm.sock;"
 display_config $NGINX_CONF
 restart_and_check_service nginx.service
@@ -170,7 +192,7 @@ replace_cfg /var/www/htadmin/config/config.ini  "admin_user *= .*"       "admin_
 replace_cfg /var/www/htadmin/config/config.ini  "admin_pwd_hash *= .*"   "admin_pwd_hash = Askg15BrpF11g"
 
 # Show some results
-THIS_IP="$(ip addr show | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d/ -f1)"		# Get local IPv4 address
+THIS_IP="$(ip addr show | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d/ -f1)"     # Get local IPv4 address
 set +x
 echo "-------------------------------------------------------------"
 echo "All done!"

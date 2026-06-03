@@ -164,6 +164,14 @@ User assignment security depends on the chosen method:
 - Consider that any user who can create directories in `incoming/` can impersonate other users
 - This mode is ideal for (S)FTP scenarios where you control directory creation through the FTP server configuration
 
+### Notifications (e‑mail / Slack / …)
+
+Clapshot can call an external script on comment, user-message, and media-file
+events so you can send e‑mail, Slack messages, etc. It is **off by default**;
+enable it with `notification-script` (and optionally `notification-events`) in
+the config. See the **[Notification Hook guide](notification-hook.md)** for setup,
+the event list, and the JSON payload reference.
+
 ### Docker Environment Configuration
 
 Clapshot's Docker demo containers support comprehensive configuration via environment variables, allowing you to customize server behavior without rebuilding images or mounting custom config files.

@@ -83,6 +83,8 @@ Clapshot provides professional video review capabilities similar to cloud servic
 
 [doc/transcoding.md](doc/transcoding.md): Configuring custom transcoding and thumbnailing scripts, hardware acceleration (Intel QSV, NVIDIA NVENC, VA-API, VideoToolbox), and progress reporting
 
+[doc/notification-hook.md](doc/notification-hook.md): Configuring an external notification script for e‑mail/Slack/webhook integrations on comment, message, and media-file events - invocation contract (`CLAPSHOT_NOTIFICATION_EVENT` + JSON on stdin), payload reference, event filtering (`--notification-events`), Docker deployment, and security guidance for untrusted user content
+
 ### Common Issues and Solutions
 
 **"Connecting server..." / CORS errors:**

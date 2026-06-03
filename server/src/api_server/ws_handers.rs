@@ -32,6 +32,8 @@ use crate::api_server::server_state::ServerState;
 use crate::api_server::user_session::Topic;
 use crate::database::error::DBError;
 use crate::database::{models, DBPaging, DbBasicQuery, DbQueryByMediaFile, DbQueryByUser, DbUpdate, DB};
+use crate::notification::NotificationKind;
+use crate::notification::build_comment_notification_event;
 use crate::{client_cmd, optional_str_to_i32_or_tonic_error, send_user_error, send_user_ok, str_to_i32_or_tonic_error};
 
 use lib_clapshot_grpc::proto;
@@ -248,6 +250,29 @@ pub async fn msg_rename_media_file(data: &RenameMediaFile, ses: &mut UserSession
 }
 
 
+/// Fire a comment notification hook event (no-op unless the hook is enabled for this kind).
+/// The closure (incl. the media-file lookup) only runs when the event is allowlisted.
+fn notify_comment(server: &ServerState, ses: &UserSession, kind: NotificationKind,
+                  comment: &models::Comment, previous_text: Option<&str>)
+{
+    server.notification.emit(kind, || {
+        let (owner, title) = match server.db.conn().ok()
+            .and_then(|mut c| models::MediaFile::get(&mut c, &comment.media_file_id).ok())
+        {
+            Some(mf) => (Some(mf.user_id), mf.title),
+            None => (None, None),
+        };
+        let drawing_abs = comment.drawing.as_ref()
+            .filter(|d| !d.is_empty())
+            .map(|d| server.media_files_dir.join(&comment.media_file_id).join("drawings").join(d)
+                .to_string_lossy().into_owned());
+        let actor = crate::notification::ActorRef {
+            user_id: &ses.user_id, username: &ses.user_name, is_admin: ses.is_admin };
+        build_comment_notification_event(kind, comment, owner.as_deref(), title.as_deref(),
+            drawing_abs, Some(actor), previous_text, &server.url_base)
+    });
+}
+
 pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComment, ses: &mut UserSession, server: &ServerState) -> Res<()> {
 
     let media_file_id = match get_media_file_or_send_error(Some(&data.media_file_id), &Some(ses), server).await? {
@@ -313,7 +338,9 @@ pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComm
     let c = models::Comment::insert(&mut server.db.conn()?, &c)
         .map_err(|e| anyhow!("Failed to add comment: {:?}", e))?;
 
-    // If this is a reply, notify the parent comment's author by email
+    notify_comment(server, ses, NotificationKind::CommentAdded, &c, None);
+
+    // Si c'est une réponse, envoyer un email à l'auteur du commentaire parent
     if let Some(parent_id) = c.parent_id {
         if let Some(smtp) = &server.smtp_config {
             let smtp = smtp.clone();
@@ -386,6 +413,7 @@ pub async fn msg_edit_comment(data: &EditComment, ses: &mut UserSession, server:
                 super::SendTo::MediaFileId(&vid))?;
 
             let c = models::Comment::get(conn, &id)?;
+            notify_comment(server, ses, NotificationKind::CommentEdited, &c, Some(&old.comment));
             ses.emit_new_comment(server, c, super::SendTo::MediaFileId(&vid)).await?;
         }
         Err(DBError::NotFound()) => {
@@ -406,7 +434,7 @@ pub async fn msg_del_comment(data: &DelComment, ses: &mut UserSession, server: &
             org_authz_with_default(&ses.org_session, "delete comment", true, server, &ses.organizer,
                 default_perm, AuthzTopic::Comment(&cmt, authz_req::comment_op::Op::Delete)).await?;
 
-            let vid = cmt.media_file_id;
+            let vid = cmt.media_file_id.clone();
             if Some(&ses.user_id) != cmt.user_id.as_ref() && !ses.is_admin {
                 send_user_error!(&ses.user_id, server, Topic::MediaFile(&vid), "Failed to delete comment.", "You can only delete your own comments", true);
                 return Ok(());
@@ -417,6 +445,7 @@ pub async fn msg_del_comment(data: &DelComment, ses: &mut UserSession, server: &
                 return Ok(());
             }
             models::Comment::delete(conn, &id)?;
+            notify_comment(server, ses, NotificationKind::CommentDeleted, &cmt, None);
             server.emit_cmd(
                 client_cmd!(DelComment, {comment_id: id.to_string()}),
                 super::SendTo::MediaFileId(&vid))?;

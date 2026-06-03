@@ -25,6 +25,15 @@ endif
 DOCKER_IMG_NAME=clapshot_server_${DEBIAN_VER}_${ARCH}
 DEV_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
 
+# Persistent build caches (Docker named volumes) so repeated/emulated Docker
+# builds don't re-download and recompile every crate from scratch. The cargo
+# registry/git are platform-independent and shared across all builds; the
+# target dir is keyed per distro+arch so objects from different targets never mix.
+CARGO_CACHE_MOUNTS = \
+	--mount type=volume,source=clapshot-cargo-registry,target=/usr/local/cargo/registry \
+	--mount type=volume,source=clapshot-cargo-git,target=/usr/local/cargo/git \
+	--mount type=volume,source=clapshot-target-server-${DEBIAN_VER}-${ARCH},target=/app/server/target
+
 SERVER_CMD=target/debug/clapshot-server
 DEV_DATADIR=DEV_DATADIR
 
@@ -58,8 +67,8 @@ docker: ${DEV_DATADIR}
 
 debian-local: dist_deb/built.${ARCH}.target
 
-dist_deb/built.${ARCH}.target: ${SERVER_CMD} ${DEB_DEPS}
-	cargo install cargo-deb
+dist_deb/built.${ARCH}.target: ${RUST_DEPS} ${DEB_DEPS}
+	@command -v cargo-deb >/dev/null 2>&1 || cargo install cargo-deb
 	cargo deb
 	mkdir -p dist_deb
 	find target/debian/ -maxdepth 1 -type f -exec cp {} dist_deb/ \;
@@ -76,7 +85,7 @@ dist_deb/built.${DEBIAN_VER}.${ARCH}.docker: ${RUST_DEPS} ${DEB_DEPS} ../Dockerf
 	mkdir -p dist_deb
 	cd .. && DOCKER_BUILDKIT=1 docker build $(PLATFORM_STR) -t ${DOCKER_IMG_NAME}:${DEV_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID} --build-arg DEBIAN_VER=${DEBIAN_VER} --build-arg PYTHON_VER=${PYTHON_VER} -f Dockerfile.server .
 	docker tag ${DOCKER_IMG_NAME}:${DEV_VERSION} ${DOCKER_IMG_NAME}:latest
-	docker run --rm $(PLATFORM_STR) --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${DOCKER_IMG_NAME}:latest \
+	docker run --rm $(PLATFORM_STR) --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" $(CARGO_CACHE_MOUNTS) --user root ${DOCKER_IMG_NAME}:latest \
 		bash -c "cd /app/server && cp -r --preserve=mode,ownership,timestamps /deb ./dist_deb && make debian-local && cp dist_deb/*.deb /deb/ && chown -R ${UID}:${GID} /deb"
 	@# Rename .deb files to include Debian version (skip if already renamed)
 	for f in dist_deb/*.deb; do \

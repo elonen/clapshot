@@ -14,6 +14,7 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::video_pipeline::IncomingFile;
 use crate::api_server::{UserMessage};
 use crate::database::{DB, models};
+use crate::notification::NotificationEvent;
 
 
 
@@ -40,6 +41,8 @@ pub(crate) struct ApiTestState {
     pub(crate) url_base: String,
     pub(crate) port: u16,
     pub(crate) ws_url: String,
+    /// Records every notification the hook would fire (allowlist '*'); drain to assert.
+    pub(crate) notification_rx: crossbeam_channel::Receiver<NotificationEvent>,
 }
 
 pub(crate) type WsClient = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
@@ -192,6 +195,8 @@ macro_rules! api_test {
             let upload_dir = data_dir.join("upload");
 
             let test_regex = validate_org_http_headers_regex("^X[-_]REMOTE[-_]").expect("Test regex failed");
+            let (notification_sink, notification_rx) =
+                crate::notification::NotificationSink::new(vec!["*".to_string()]);
             let server_state = ServerState::new( db.clone(),
                 &media_files_dir.clone(),
                 &upload_dir.clone(),
@@ -201,10 +206,11 @@ macro_rules! api_test {
                 "anonymous".to_string(),
                 terminate_flag.clone(),
                 test_regex,
-                None);
+                None,
+                notification_sink);
 
             let bind_addr: std::net::IpAddr = "127.0.0.1".parse().unwrap();
-            let $state = ApiTestState { db, user_msg_tx, upload_res_rx, media_files_dir, upload_dir, terminate_flag, media_files, comments, url_base, port, ws_url };
+            let $state = ApiTestState { db, user_msg_tx, upload_res_rx, media_files_dir, upload_dir, terminate_flag, media_files, comments, url_base, port, ws_url, notification_rx };
             let api = async move { run_api_server_async(bind_addr, vec![], server_state, user_msg_rx, upload_res_tx, None, port).await; Ok(()) };
 
             let tst = tokio::spawn(async move {

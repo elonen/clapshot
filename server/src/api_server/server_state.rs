@@ -17,6 +17,7 @@ use crate::client_cmd;
 use crate::database::{DB, models, DbBasicQuery};
 use crate::grpc::grpc_client::OrganizerURI;
 use crate::email::SmtpConfig;
+use crate::notification::{MessageOrigin, NotificationKind, NotificationSink, build_message_notification_event};
 use lib_clapshot_grpc::proto;
 
 /// Lists of all active connections and other server state vars
@@ -42,6 +43,9 @@ pub struct ServerState {
     pub organizer_info: Arc<Mutex<Option<OrganizerInfo>>>,
 
     pub smtp_config: Option<SmtpConfig>,
+
+    /// External notification hook. Disabled (no-op) unless a script is configured.
+    pub notification: NotificationSink,
 }
 
 impl ServerState {
@@ -56,7 +60,8 @@ impl ServerState {
         default_user: String,
         terminate_flag: Arc<AtomicBool>,
         org_http_headers_regex: Regex,
-        smtp_config: Option<SmtpConfig>) -> ServerState
+        smtp_config: Option<SmtpConfig>,
+        notification: NotificationSink) -> ServerState
     {
         ServerState {
             db,
@@ -76,6 +81,7 @@ impl ServerState {
             organizer_has_connected: Arc::new(AtomicBool::new(false)),
             organizer_info: Arc::new(Mutex::new(None)),
             smtp_config,
+            notification,
         }
     }
 
@@ -132,7 +138,10 @@ impl ServerState {
     }
 
     /// Send a user message to given recipients.
-    pub fn push_notify_message(&self, msg: &models::MessageInsert, send_to: SendTo, persist: bool, progress: Option<f32>) -> Res<()> {
+    ///
+    /// `origin` only affects the notification hook payload (so scripts can tell
+    /// server/organizer/pipeline messages apart); it has no other effect.
+    pub fn push_user_message(&self, msg: &models::MessageInsert, send_to: SendTo, persist: bool, progress: Option<f32>, origin: MessageOrigin) -> Res<()> {
         let mut proto_msg = msg.to_proto3();
         proto_msg.progress = progress;
 
@@ -140,10 +149,12 @@ impl ServerState {
         let send_res = self.emit_cmd(cmd, send_to);
         if let Ok(sent_count) = send_res {
             if persist {
-                models::Message::insert(&mut self.db.conn()?, &models::MessageInsert {
+                let stored = models::Message::insert(&mut self.db.conn()?, &models::MessageInsert {
                     seen: msg.seen || sent_count > 0,
                     ..msg.clone()
                 }).map_err(|e| anyhow!("Failed to persist msg: {}", e))?;
+                self.notification.emit(NotificationKind::MessagePersisted,
+                    || build_message_notification_event(&stored, origin, &self.url_base));
             }
         };
         send_res.map(|_| ())

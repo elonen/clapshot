@@ -16,7 +16,7 @@ copyright = "2022-2024, Jarno Elonen <elonen@iki.fi>"
 section = "unknown"
 changelog = "debian/changelog"
 
-depends = "$auto, python3, ffmpeg, mediainfo, logrotate, psmisc"
+depends = "$auto, python3, ffmpeg, mediainfo, jq, logrotate, psmisc"
 
 extended-description = """\
 Clapshot is a web-based cooperative video review tool.
@@ -35,11 +35,12 @@ assets = [
     ["debian/additional_files/clapshot-server.conf", "etc/", "644"],
     ["debian/additional_files/run-with-conf.sh", "usr/share/clapshot-server/", "755"],
     
-    # Transcoding, thumbnailing, and decision scripts
+    # Transcoding, thumbnailing, decision and notification hook scripts
     ["scripts/clapshot-transcode", "usr/share/clapshot-server/scripts/", "755"],
     ["scripts/clapshot-thumbnail", "usr/share/clapshot-server/scripts/", "755"],
     ["scripts/clapshot-transcode-decision", "usr/share/clapshot-server/scripts/", "755"],
-    
+    ["scripts/clapshot-notification.example", "usr/share/clapshot-server/scripts/", "755"],
+
     # Configuration files
     ["debian/additional_files/clapshot-transcode.conf", "etc/", "644"],
 ]

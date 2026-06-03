@@ -3,17 +3,15 @@
 
 ## Overview
 
-Clapshot is an open-source, self-hosted tool for collaborative video/media review and annotation. It features a Rust-based API server and a Svelte-based web UI. This tool is ideal for scenarios requiring local hosting of videos due to:
-
-1. Policy constraints (*enterprise users*), or
-2. Cost-benefit concerns against paid cloud services (*very small businesses*)
+Clapshot is an open-source, self-hosted tool for collaborative video/media review and annotation.
+Mainly for organizations that can't or won't put their media in commercial cloud services.
 
 ![Review UI screenshot](doc/video-commenting.webp)
 
 ### Key Features
 
 - **Media Support**: Video, audio and image files with subtitle track management
-- **Media Ingestion**: HTTP uploads with progress tracking, or monitored folder processing (files assigned by OS ownership)
+- **Ingestion**: HTTP uploads with progress tracking, or monitored folder processing (files assigned by OS ownership)
 - **Video Player**: Loop region control (i/o shortcuts), frame-by-frame navigation, comprehensive keyboard shortcuts
 - **Collaborative Review**: Real-time synchronized playback, drawing annotations with 7-color palette, threaded comments
 - **Professional Tools**: EDL import as time-coded comments, drawing undo/redo, timeline comment pins
@@ -29,47 +27,43 @@ Clapshot is an open-source, self-hosted tool for collaborative video/media revie
 
 ### When not to use Clapshot
 
-If you don't require local hosting, or are not adept in networking and Linux, consider commercial cloud services which may offer more user-friendly interfaces and additional features out of the box.
+If you don't require local hosting, or are not adept in networking and Linux, consider commercial cloud services. They'll offer more user-friendly interfaces and additional features out of the box.
 
 ## Demo
 
 **Quick Start with Docker:**
 
-- Local **single-user demo:** No authentication
+Local **single-user demo** without authentication
 
 ```bash
 docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/clapshot:latest-demo
 ```
 
-- Local **multi-user demo** with HTTP basic auth:
+Local **multi-user demo** with HTTP basic auth
 
 ```bash
 docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo-htadmin:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htadmin
 ```
 
-After the Docker image starts, access the web UI at `http://127.0.0.1:8080`.
+After the Docker image starts, browse the web UI at `http://127.0.0.1:8080`.
 
-**Testing the demo:** Upload video/audio/image files via the web interface, or drop files into the container's `/mnt/clapshot-data/data/incoming/` directory for automatic processing. Try the keyboard shortcuts: spacebar (play/pause), 'i'/'o' (set loop points), 'l' (toggle loop), arrow keys (frame stepping).
+<details><summary>Tips for testing it</summary>
+
+- Upload video/audio/image files via the web interface, or drop files into the container's `/mnt/clapshot-data/data/incoming/` directory for automatic processing
+- Try the keyboard shortcuts: spacebar (play/pause), `i`/`o` (set loop points), `l` (toggle loop), arrow keys (frame stepping), `f` for fullscreen.
 
 The multi-user demo uses [PHP htadmin](https://github.com/soster/htadmin) for user management. Default credentials are shown in the terminal.
 
-> **Note:** Chrome/Chromium works best. If accessing from a different machine, configure the `CLAPSHOT_SERVER__URL_BASE` environment variable (or legacy `CLAPSHOT_URL_BASE`). See the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
+</details>
+
+> **Note:** Chrome / Chromium-based browsers work best. If accessing from a different machine, configure the `CLAPSHOT_SERVER__URL_BASE` environment variable (or legacy `CLAPSHOT_URL_BASE`). See the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
 
 
-### Known Limitations
+### Known Limitations and Workarounds
 
-**Browser Compatibility:**
-- **Desktop-first design:** Chrome/Chromium recommended for best compatibility
-- **Mobile browsers:** Limited support - double-tap to open doesn't work on iOS/iPad, video player controls may not function properly, drawing annotations fail. Use desktop browsers for full functionality.
-
-**Reverse Proxy Considerations:**
-- **IIS:** Hard 2GB file upload limit (use monitored folder ingestion for larger files)
-- **Cloudflare free tier:** ~100 second upload timeout can interrupt large file uploads
-
-For large file uploads with these proxies, use the [monitored folder ingestion](doc/sysadmin-guide.md#monitored-folder-ingestion) feature with SFTP/SMB instead of HTTP uploads.
-
-**Authentication:**
-- **PHP htadmin:** The included htadmin example is simplistic and limited for user management and security. For production deployments, consider integrating with a modern identity provider (OAuth, LDAP, Kerberos, SAML, etc.) via reverse proxy. See [Advanced Authentication](doc/sysadmin-guide.md#advanced-authentication).
+- **Mobile Browsers:** Mobile/iOS/iPad support is limited. Chrome/Chromium (desktop) recommended.
+- **Authentication:** The bundled PHP htadmin is demo-only — simplistic for user management and security. For production, integrate a modern identity provider (OAuth, LDAP, Kerberos, SAML, etc.) via reverse proxy. See [Advanced Authentication](doc/sysadmin-guide.md#advanced-authentication).
+- **IIS and Cloudflare:** IIS has a hard 2GB upload limit; Cloudflare's free tier times out uploads at ~100 seconds. For large files, you can use [monitored folder ingestion](doc/sysadmin-guide.md#monitored-folder-ingestion) (SFTP/SMB) instead of HTTP uploads. Self-hosted Nginx (also in the Docker images) has no such limitations.
 
 
 ## Simple Small-business Production Deployments
@@ -78,11 +72,12 @@ Here are two alternative ways to deploy Clapshot + PHP Htadmin into a light prod
 
 ### 1. Local Linux VM
 
-If you have a virtualization platform (e.g. Proxmox) or a spare computer, here's
-how to install and configure a Debian 12 host for Clapshot:
+One-shot install via [install-clapshot-deb.sh](extras/install-clapshot-deb.sh) on a Debian 12/13 host (VM) with `/mnt/clapshot-data` mounted.
 
-1. Prepare a Debian 12 with a mounted block device (or just directory) at `/mnt/clapshot-data`.
-2. Download [Clapshot Debian Bookworm Deployment Script](extras/install-clapshot-deb12.sh)
+<details><summary>Step-by-step: Debian 12/13 install</summary>
+
+1. Prepare a Debian host with a mounted block device (or just directory) at `/mnt/clapshot-data`.
+2. Download [Clapshot Debian Bookworm Deployment Script](extras/install-clapshot-deb.sh)
 3. Run the script as root to install and auto-configure Clapshot.
 4. **!! Change the default `admin` and `htadmin` passwords, and delete example users in Htadmin !!**
 
@@ -90,7 +85,13 @@ If you want to expose this to the Internet, you'll probably want to get HTTPS ce
 
 > **Security Note:** Monitored folder ingestion assigns files to users based on OS file ownership. Ensure file system permissions align with your intended user access model before enabling this feature.
 
-### 2. Docker + Cloudflare (make public on the Web)
+</details>
+
+### 2. Docker + Cloudflare, on public Web
+
+Run Clapshot + Htadmin in a Docker container and expose it to the Internet over an HTTPS tunnel via Cloudflared, using [test/run-cloudflare.sh](test/run-cloudflare.sh). (Cloudflare's free plan limits upload size/time.)
+
+<details><summary>Step-by-step: Docker + Cloudflare tunnel</summary>
 
 In this option, you'll run Clapshot + Htadmin in a Docker container (binding a local directory for Clapshot data),
 and then start Cloudflared in another container to expose Clapshot to the Internet over an HTTPS tunnel.
@@ -103,11 +104,13 @@ and then start Cloudflared in another container to expose Clapshot to the Intern
 
 The same process can be adapted to any other *HTTPS-Proxy-as-a-Service* besides Cloudflare. You'll probably need to pay them something.
 
+</details>
+
 ## Configuration and Operation
 
 **New to Clapshot?** Start with the [Quick Start Reference](doc/quick-start-reference.md) for common deployment scenarios.
 
-**Need help?** Point your favorite LLM to [llms.txt](https://raw.githubusercontent.com/elonen/clapshot/refs/heads/master/llms.txt) for comprehensive configuration assistance. Most modern AI assistants (Claude, ChatGPT, Gemini, etc.) can read this file directly from the GitHub repository and help with installation, troubleshooting, and customization. Alternatively, you can try the [Clapshot Config Helper GPT](https://chatgpt.com/g/g-687debd7cfec8191ad14f604552f0121-clapshot-config-helper) (though it may have somewhat outdated documentation).
+**Need help?** Ask your favorite LLM to read [llms.txt](https://raw.githubusercontent.com/elonen/clapshot/refs/heads/master/llms.txt) and to follow the links for comprehensive configuration assistance.
 
 See the [Sysadmin Guide](doc/sysadmin-guide.md) for information on:
 
@@ -129,6 +132,12 @@ See [Upgrading Guide](doc/upgrading.md) for instructions on installing a new rel
 
 ## Architecture Overview
 
+**Core:** Clapshot Client (browser, connects via WebSocket) · Clapshot Server (Rust daemon) · Clapshot Organizer(s) (plugins in Python or any language).
+
+**Also needs:** Nginx (TLS reverse proxy) · Authentication Proxy · SQLite DB · FFmpeg + Mediainfo · File system.
+
+<details><summary>What each component does</summary>
+
 Main components:
 
 - **Clapshot Client** – Single Page Application (SPA) that runs in the browser. Connects to Clapshot Server via Websocket. Written in *Svelte*.
@@ -145,11 +154,15 @@ Production deployments also depend on:
 - **ffmpeg** and **mediainfo** – Clapshot Server processes media files with these commands.
 - **File System** – Media files, HTML, JavaScript, CSS, thumbnail images etc, also `clapshot.sqlite`.
 
+</details>
+
 See [sequence diagram](doc/generated/open-frontpage-process.svg) for details on how these interact when a user opens the main page.
 
 ## Organizer Plugin System
 
 Clapshot includes an extensible [Organizer Plugin system](doc/organizer-plugins.md) that enables custom workflows and integrations. Organizers use gRPC communication and can be implemented in any language.
+
+<details><summary>More on Basic Folders and its Metaplugins</summary>
 
 The included "[basic_folders](organizer/basic_folders/README.md)" organizer (Python) provides:
 - **Hierarchical Folders**: Personal folder structures for organizing media files
@@ -168,6 +181,8 @@ The included "[basic_folders](organizer/basic_folders/README.md)" organizer (Pyt
 - **Run background process** such as automatic video expiration and trashing
 
 This approach is **easier to develop** and **more robust against upgrades** than modifying core code or writing a full custom Organizer (if you're fine with Python). See [METAPLUGINS.md](organizer/basic_folders/METAPLUGINS.md) for complete documentation and a [working example](organizer/basic_folders/example_metaplugins/calculate_sha256.py).
+
+</details>
 
 ## Development Setup
 

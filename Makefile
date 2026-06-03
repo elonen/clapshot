@@ -27,13 +27,16 @@ endef
 
 debian-docker:
 	@echo "Building Debian packages for multiple distributions..."
+	@which jq >/dev/null || (echo "ERROR: Please install jq first." && exit 1)
+	$(eval PVER=$(shell jq -r '.version' client/package.json))
+	@# Only the collection dir is wiped; component dist_deb dirs (and their
+	@# built.*.docker stamps) are kept so unchanged components are skipped.
 	rm -rf dist_deb && mkdir -p dist_deb
 	for debver in bookworm trixie; do \
 		echo ""; \
 		echo "=== Checking availability for Debian $$debver ==="; \
 		if docker build --platform linux/amd64 -q - <<< "FROM rust:1-slim-$$debver" >/dev/null 2>&1; then \
 			echo "=== Building packages for Debian $$debver ==="; \
-			rm -rf server/dist_deb client/dist_deb organizer/basic_folders/dist_deb; \
 			for plat in arm64 amd64; do \
 				echo "--- Building server for $$debver/$$plat ---"; \
 				(cd server && DEBIAN_VER=$$debver TARGET_ARCH=$$plat make debian-docker); \
@@ -43,9 +46,9 @@ debian-docker:
 			echo "--- Building client for $$debver ---"; \
 			(cd client && DEBIAN_VER=$$debver make debian-docker); \
 			echo "--- Collecting $$debver packages ---"; \
-			cp client/dist_deb/*.deb dist_deb/ 2>/dev/null || true; \
-			cp server/dist_deb/*.deb dist_deb/ 2>/dev/null || true; \
-			cp organizer/basic_folders/dist_deb/*.deb dist_deb/ 2>/dev/null || true; \
+			cp client/dist_deb/*$(PVER)*.deb dist_deb/ 2>/dev/null || true; \
+			cp server/dist_deb/*$(PVER)*.deb dist_deb/ 2>/dev/null || true; \
+			cp organizer/basic_folders/dist_deb/*$(PVER)*.deb dist_deb/ 2>/dev/null || true; \
 		else \
 			echo "=== Skipping $$debver (base image not available) ==="; \
 		fi; \
