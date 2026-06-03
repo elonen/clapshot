@@ -196,6 +196,84 @@ transcoding and again after thumbnailing). Use the `message` field
 `recompression_done`/`thumbs_done` timestamps to tell the changes apart, or
 deduplicate by `media_file.id` if you only want one notification.
 
+## Deploying with the demo Docker image
+
+The demo image (`elonen/clapshot:latest-demo`, and the `…-demo-htadmin` variant)
+already bundles everything the example hook needs — `jq`, `curl`, and `msmtp`
+(which provides `/usr/sbin/sendmail`) — so there are only two things to do:
+
+1. **Get your script into the container**, executable.
+2. **Point the server at it.**
+
+The demo keeps its server config at `/etc/clapshot-server.conf` and, at startup,
+rewrites it from any `CLAPSHOT_SERVER__*` environment variables (the part after the
+double underscore becomes the config key, with remaining underscores turned into
+hyphens). So the two notification options map to:
+
+| Environment variable | Config key it sets |
+|---|---|
+| `CLAPSHOT_SERVER__NOTIFICATION_SCRIPT` | `notification-script` |
+| `CLAPSHOT_SERVER__NOTIFICATION_EVENTS` | `notification-events` |
+
+### Recommended procedure
+
+```sh
+# 1. Start from the shipped template, fill in one transport, make it executable.
+cp server/scripts/clapshot-notification.example ./my-clapshot-notification
+$EDITOR ./my-clapshot-notification         # uncomment/define a transport
+chmod a+rx ./my-clapshot-notification      # the server must be able to execute it
+
+# 2. Bind-mount that single file read-only and point the server at it.
+mkdir -p clapshot-data/data
+docker run --rm -it -p 0.0.0.0:8080:80 \
+    --mount type=bind,source="$(pwd)"/clapshot-data,target=/mnt/clapshot-data \
+    --mount type=bind,source="$(pwd)"/my-clapshot-notification,target=/usr/local/bin/clapshot-notification,readonly \
+    -e CLAPSHOT_SERVER__NOTIFICATION_SCRIPT=/usr/local/bin/clapshot-notification \
+    -e CLAPSHOT_SERVER__NOTIFICATION_EVENTS='comment_*,media_file_added' \
+    elonen/clapshot:latest-demo
+```
+
+A single-file, read-only bind mount is the surgical way to do this: it drops one
+script into the running image without rebuilding it, and `readonly` keeps it
+non-writable from inside the container (matching the script's own security note).
+
+**Permissions.** The demo runs the server as the unprivileged `docker` user, so the
+mounted file must be world-readable and executable (`chmod a+rx`). A bind mount keeps
+the host file's ownership/permissions, so a `chmod 700` script owned by a different
+host UID will fail to launch (logged as "Failed to spawn notification script").
+
+### Verifying the wiring
+
+The default template only runs the harmless **file** transport, which is perfect for
+a first test. Point its output into the mounted data volume so you can read it from the
+host — set the path **inside the script** (`out="/mnt/clapshot-data/data/notifications.log"`,
+which the `docker` user owns) — then add a comment in the UI and check:
+
+```sh
+cat clapshot-data/data/notifications.log
+```
+
+> **Heads-up — the hook's own environment.** The demo launches the server via
+> `sudo -u docker`, which sanitizes the environment. So `docker run -e FOO=bar`
+> values — *other than* the `CLAPSHOT_SERVER__*` ones, which are consumed at startup
+> and baked into the config — are **not** guaranteed to reach the hook. Configure the
+> script's runtime settings (Slack webhook, log path, SMTP relay) **inside the script**,
+> or have it `source` a small file you also mount read-only — don't rely on `-e`.
+
+### Real transports (Slack / e-mail)
+
+* **Slack:** put the webhook URL in the script itself (or a mounted, sourced file), per
+  the heads-up above; don't count on `-e SLACK_WEBHOOK_URL=…`.
+* **E-mail:** the image ships `msmtp`/`msmtp-mta` for `/usr/sbin/sendmail`, but `msmtp`
+  still needs an SMTP relay to deliver — mount an `/etc/msmtprc` read-only. Without it,
+  `sendmail` has nowhere to send.
+
+### Building and running locally
+
+If you build and run locally with `make run-docker` (image `clapshot-comb`, data volume
+`test/VOLUME`), add the same `--mount …,readonly` and two `-e CLAPSHOT_SERVER__…` flags to
+that command's `docker run`.
+
 ## See also
 
 * Example script: [`server/scripts/clapshot-notification.example`](../server/scripts/clapshot-notification.example)
