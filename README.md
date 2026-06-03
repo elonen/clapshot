@@ -72,12 +72,12 @@ Here are two alternative ways to deploy Clapshot + PHP Htadmin into a light prod
 
 ### 1. Local Linux VM
 
-One-shot install via [install-clapshot-deb12.sh](extras/install-clapshot-deb12.sh) on a Debian 12 host (VM) with `/mnt/clapshot-data` mounted.
+One-shot install via [install-clapshot-deb.sh](extras/install-clapshot-deb.sh) on a Debian 12/13 host (VM) with `/mnt/clapshot-data` mounted.
 
-<details><summary>Step-by-step: Debian 12 install</summary>
+<details><summary>Step-by-step: Debian 12/13 install</summary>
 
-1. Prepare a Debian 12 with a mounted block device (or just directory) at `/mnt/clapshot-data`.
-2. Download [Clapshot Debian Bookworm Deployment Script](extras/install-clapshot-deb12.sh)
+1. Prepare a Debian host with a mounted block device (or just directory) at `/mnt/clapshot-data`.
+2. Download [Clapshot Debian Bookworm Deployment Script](extras/install-clapshot-deb.sh)
 3. Run the script as root to install and auto-configure Clapshot.
 4. **!! Change the default `admin` and `htadmin` passwords, and delete example users in Htadmin !!**
 

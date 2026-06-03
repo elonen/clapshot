@@ -16,7 +16,7 @@ copyright = "2022-2024, Jarno Elonen <elonen@iki.fi>"
 section = "unknown"
 changelog = "debian/changelog"
 
-depends = "$auto, python3, ffmpeg, mediainfo, logrotate, psmisc"
+depends = "$auto, python3, ffmpeg, mediainfo, jq, logrotate, psmisc"
 
 extended-description = """\
 Clapshot is a web-based cooperative video review tool.
