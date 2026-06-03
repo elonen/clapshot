@@ -14,6 +14,8 @@ pub struct User {
 
     #[serde(with = "ts_seconds")]
     pub created: chrono::NaiveDateTime,
+
+    pub email: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Insertable)]

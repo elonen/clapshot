@@ -150,9 +150,24 @@ EOF
 
 set -v
 
+# Forcer IPv4 pour SMTP_HOST (évite les problèmes IPv6 dans Docker)
+if [ -n "${SMTP_HOST}" ]; then
+    SMTP_IPV4=$(getent ahostsv4 "${SMTP_HOST}" 2>/dev/null | awk 'NR==1{print $1}')
+    if [ -n "${SMTP_IPV4}" ]; then
+        echo "${SMTP_IPV4} ${SMTP_HOST}" >> /etc/hosts
+    fi
+fi
+
 # Dig up start command from systemd script and run it as docker user instead of www-data
 CMD=$(grep 'Exec' /lib/systemd/system/clapshot-server.service | sed 's/^.*=//')
-sudo -u docker $CMD &
+# Pass SMTP_* env vars through sudo (sudo strips env by default)
+sudo -u docker env \
+    SMTP_HOST="${SMTP_HOST:-}" \
+    SMTP_PORT="${SMTP_PORT:-465}" \
+    SMTP_USER="${SMTP_USER:-}" \
+    SMTP_PASSWORD="${SMTP_PASSWORD:-}" \
+    SMTP_FROM="${SMTP_FROM:-}" \
+    $CMD &
 
 # Follow server log
 tail -f /var/log/clapshot.log

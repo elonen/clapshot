@@ -124,6 +124,7 @@ Inflector = "0.11.4"
 serial_test = "3.1.1"
 aspasia = "0.2.0"
 metrics = "0.24"
+lettre = { version = "0.11", default-features = false, features = ["tokio1", "tokio1-rustls-tls", "smtp-transport", "builder"] }
 
 [dev-dependencies]
 assert_fs = "1.0.13"

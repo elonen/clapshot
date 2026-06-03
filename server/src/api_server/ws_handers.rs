@@ -312,6 +312,56 @@ pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComm
     };
     let c = models::Comment::insert(&mut server.db.conn()?, &c)
         .map_err(|e| anyhow!("Failed to add comment: {:?}", e))?;
+
+    // If this is a reply, notify the parent comment's author by email
+    if let Some(parent_id) = c.parent_id {
+        if let Some(smtp) = &server.smtp_config {
+            let smtp = smtp.clone();
+            let replier_name = ses.user_name.clone();
+            let reply_text = c.comment.clone();
+            let url_base = server.url_base.clone();
+            let media_file_id_clone = media_file_id.clone();
+            let db = server.db.clone();
+            let poster_user_id = ses.user_id.clone();
+
+            tokio::spawn(async move {
+                let result: anyhow::Result<()> = async {
+                    let mut conn = db.conn()?;
+                    let parent = models::Comment::get(&mut conn, &parent_id)?;
+                    let parent_user_id = match &parent.user_id {
+                        Some(uid) => uid.clone(),
+                        None => return Ok(()),   // deleted user, skip
+                    };
+                    // Don't notify if replying to yourself
+                    if parent_user_id == poster_user_id { return Ok(()); }
+
+                    let parent_user = models::User::get(&mut conn, &parent_user_id)?;
+                    let email_addr = match &parent_user.email {
+                        Some(e) if !e.is_empty() => e.clone(),
+                        _ => return Ok(()),  // no email configured
+                    };
+
+                    // Récupérer le titre de la vidéo
+                    let media_file = models::MediaFile::get(&mut conn, &media_file_id_clone)?;
+                    let video_title = media_file.title
+                        .unwrap_or_else(|| media_file.orig_filename
+                            .unwrap_or_else(|| media_file_id_clone.clone()));
+
+                    let video_url = format!("{}/m/{}", url_base, media_file_id_clone);
+                    let subject = format!("POWERLOOP - {} a répondu à votre commentaire", replier_name);
+
+                    crate::email::send_reply_notification(
+                        &smtp, &email_addr, &subject,
+                        &replier_name, &reply_text, &video_title, &video_url
+                    ).await
+                }.await;
+                if let Err(e) = result {
+                    tracing::warn!("Failed to send reply notification email: {:?}", e);
+                }
+            });
+        }
+    }
+
     // Send to all clients watching this media file
     ses.emit_new_comment(server, c, super::SendTo::MediaFileId(&media_file_id)).await?;
     Ok(())

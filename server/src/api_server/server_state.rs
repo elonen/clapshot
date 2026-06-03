@@ -16,6 +16,7 @@ use super::{WsMsgSender, SenderList, SessionMap, SenderListMap, StringToStringMa
 use crate::client_cmd;
 use crate::database::{DB, models, DbBasicQuery};
 use crate::grpc::grpc_client::OrganizerURI;
+use crate::email::SmtpConfig;
 use lib_clapshot_grpc::proto;
 
 /// Lists of all active connections and other server state vars
@@ -38,7 +39,9 @@ pub struct ServerState {
 
     pub organizer_uri: Option<OrganizerURI>,
     pub organizer_has_connected: Arc<AtomicBool>,
-    pub organizer_info: Arc<Mutex<Option<OrganizerInfo>>>
+    pub organizer_info: Arc<Mutex<Option<OrganizerInfo>>>,
+
+    pub smtp_config: Option<SmtpConfig>,
 }
 
 impl ServerState {
@@ -52,7 +55,8 @@ impl ServerState {
         grpc_srv_listening_flag: Arc<AtomicBool>,
         default_user: String,
         terminate_flag: Arc<AtomicBool>,
-        org_http_headers_regex: Regex) -> ServerState
+        org_http_headers_regex: Regex,
+        smtp_config: Option<SmtpConfig>) -> ServerState
     {
         ServerState {
             db,
@@ -71,6 +75,7 @@ impl ServerState {
             organizer_uri,
             organizer_has_connected: Arc::new(AtomicBool::new(false)),
             organizer_info: Arc::new(Mutex::new(None)),
+            smtp_config,
         }
     }
 

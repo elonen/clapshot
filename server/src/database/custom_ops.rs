@@ -19,6 +19,17 @@ impl models::User {
         Ok(())
     }
 
+    pub fn set_email(conn: &mut PooledConnection, uid: &str, new_email: Option<&str>) -> EmptyDBResult
+    {
+        use schema::users::dsl::*;
+        retry_if_db_locked!({
+            diesel::update(users.filter(id.eq(uid)))
+                .set(email.eq(new_email))
+                .execute(conn)
+        })?;
+        Ok(())
+    }
+
     /// Get a user by ID, or create a new user if it doesn't exist.
     ///
     /// # Arguments

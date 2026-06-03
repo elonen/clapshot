@@ -200,7 +200,8 @@ macro_rules! api_test {
                 grpc_srv_listening_flag.clone(),
                 "anonymous".to_string(),
                 terminate_flag.clone(),
-                test_regex);
+                test_regex,
+                None);
 
             let bind_addr: std::net::IpAddr = "127.0.0.1".parse().unwrap();
             let $state = ApiTestState { db, user_msg_tx, upload_res_rx, media_files_dir, upload_dir, terminate_flag, media_files, comments, url_base, port, ws_url };

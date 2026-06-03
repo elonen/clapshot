@@ -366,6 +366,38 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                                 details="User still has media files or non-empty folders.",
                                 type=clap.UserMessageType.OK)))
 
+        elif cmd.cmd == "set_user_email":
+            if not cmd.ses.is_admin:
+                raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Only admin can set user email addresses")
+
+            args = parse_json_dict(cmd.args)
+            user_id = args.get("user_id")
+            email = (args.get("email") or "").strip()
+
+            if not user_id:
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "set_user_email command missing 'user_id' argument")
+
+            from .database.models import DbUser
+            with oi.db_new_session() as dbs:
+                user = dbs.query(DbUser).filter(DbUser.id == user_id).one_or_none()
+                if not user:
+                    raise GRPCError(GrpcStatus.NOT_FOUND, f"User '{user_id}' not found")
+                with dbs.begin_nested():
+                    user.email = email if email else None
+                dbs.commit()
+
+            oi.log.info(f"Admin set email for user '{user_id}' to '{email or '(cleared)'}'")
+
+            # Refresh the admin view
+            navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
+            await oi.srv.client_show_page(navi_page)
+
+            await try_send_user_message(oi.srv,
+                org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
+                    msg=clap.UserMessage(
+                        message=f"Email for '{user_id}' updated" if email else f"Email for '{user_id}' cleared",
+                        type=clap.UserMessageType.OK)))
+
         else:
             raise GRPCError(GrpcStatus.INVALID_ARGUMENT, f"Unknown organizer command: {cmd.cmd}")
 

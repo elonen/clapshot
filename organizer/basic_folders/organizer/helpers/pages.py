@@ -75,18 +75,24 @@ class PagesHelper:
                 users_folder = await db_get_or_create_user_root_folder(dbs, clap.UserInfo(id=user.id, name=user.name), self.srv, self.log)
                 assert users_folder, f"User {user.id} has no root folder (should've been autocreated)"
 
+                email_hint = f" ({user.email})" if user.email else " (no email)"
+                set_email_js = (
+                    f"var e = prompt('Email address for {html_escape(user.id)}:', {json.dumps(user.email or '')});"
+                    f"if (e !== null) clapshot.callOrganizer('set_user_email', {{user_id: {json.dumps(user.id)}, email: e}});"
+                )
+
                 folders.append(
                     clap.PageItemFolderListingItem(
                         folder = clap.PageItemFolderListingFolder(
                             id = str(users_folder.id),
-                            title = user.id,
+                            title = user.id + email_hint,
                             preview_items = []),
                         vis = clap.PageItemFolderListingItemVisualization(
                             icon = clap.Icon(
                                 fa_class = clap.IconFaClass(classes="fas fa-user", color=clap.Color(r=184, g=160, b=148)),
                                 size = 3.0),
                             base_color = clap.Color(r=160, g=100, b=50)),
-                        popup_actions = ["popup_builtin_trash", "cleanup_empty_user"],
+                        popup_actions = ["popup_builtin_trash", "cleanup_empty_user", "set_user_email"],
                         open_action = clap.ScriptCall(
                             lang = clap.ScriptCallLang.JAVASCRIPT,
                             code = f'clapshot.callOrganizer("open_folder", {{id: {users_folder.id}}});'),

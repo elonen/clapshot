@@ -12,6 +12,7 @@ pub mod api_server;
 pub mod database;
 pub mod tests;
 pub mod grpc;
+pub mod email;
 
 pub const PKG_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const PKG_NAME: &'static str = env!("CARGO_PKG_NAME");
@@ -80,6 +81,13 @@ impl ClapshotInit {
         // Run API server
         let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
         let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
+        let smtp_config = email::SmtpConfig::from_env();
+        if smtp_config.is_some() {
+            tracing::info!("SMTP email notifications enabled (host: {})", smtp_config.as_ref().unwrap().host);
+        } else {
+            tracing::info!("SMTP not configured (set SMTP_HOST to enable email notifications)");
+        }
+
         let api_thread = Some({
             let server = ServerState::new( db.clone(),
                 &data_dir.join("videos"),
@@ -89,7 +97,8 @@ impl ClapshotInit {
                 grpc_srv_listening_flag.clone(),
                 default_user,
                 terminate_flag.clone(),
-                org_http_headers_regex);
+                org_http_headers_regex,
+                smtp_config);
             let grpc_srv = if (&organizer_uri).is_some() { Some(grpc_server_bind.clone()) } else { None };
             let ub = url_base.clone();
             thread::spawn(move || { api_server::run_forever(user_msg_rx, grpc_srv, upload_tx, bind_api.to_string(), ub, cors_origins, server, port) })

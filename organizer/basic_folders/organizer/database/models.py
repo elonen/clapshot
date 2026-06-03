@@ -80,3 +80,4 @@ class DbUser(Base):
     id: Mapped[str] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column()
     created: Mapped[datetime] = mapped_column(insert_default=sqlalchemy.func.now())
+    email: Mapped[Optional[str]] = mapped_column(nullable=True)
