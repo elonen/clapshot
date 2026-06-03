@@ -3,3 +3,4 @@ dist_deb/
 .claude
 .idea/
 .local-temp
+.local-tmp/
