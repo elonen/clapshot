@@ -1,0 +1,101 @@
+#!/bin/bash
+#
+# Clapshot notification hook — Mattermost (incoming webhook).
+#
+# Posts comment events (added / edited / deleted) and new media uploads to a
+# Mattermost channel as nicely formatted messages, using an Incoming Webhook.
+
+set -euo pipefail
+
+# ============================ configuration ================================
+# Configure these IN THE SCRIPT. Per doc/notification-hook.md, `docker run -e`
+# values (other than CLAPSHOT_SERVER__*) are not guaranteed to reach the hook,
+# so don't rely on the environment in the demo image — paste the URL here, or
+# mount a small file this script `source`s.
+WEBHOOK_URL="${MATTERMOST_WEBHOOK_URL:-https://mattermost.example.com/hooks/REPLACE_WITH_YOUR_TOKEN}"
+
+# Optional overrides (leave empty to use the webhook's own configured defaults):
+CHANNEL="${MATTERMOST_CHANNEL:-}"                  # e.g. "town-square" or "@someuser"
+USERNAME="${MATTERMOST_USERNAME:-clapshot}"        # bot display name
+ICON_EMOJI="${MATTERMOST_ICON_EMOJI:-:clapper:}"   # bot avatar emoji
+# ===========================================================================
+
+EVENT="${CLAPSHOT_NOTIFICATION_EVENT:-unknown}"
+PAYLOAD="$(cat)"   # read the event JSON from stdin
+
+# Coarse filter. The server-side --notification-events allowlist should already
+# narrow things down; this guards against anything else still reaching us.
+case "$EVENT" in
+    comment_added|comment_edited|comment_deleted|media_file_added) ;;
+    *) exit 0 ;;
+esac
+
+# Build the Mattermost message with jq. `walk` first neutralizes @channel/@all/
+# @here in every string of the payload; then we shape one Slack-compatible
+# attachment per event. jq emits nothing for events we don't format.
+BODY="$(printf '%s' "$PAYLOAD" | jq \
+    --arg event    "$EVENT" \
+    --arg channel  "$CHANNEL" \
+    --arg username "$USERNAME" \
+    --arg icon     "$ICON_EMOJI" \
+'
+def san: if type=="string" then gsub("@(?<w>channel|all|here)\\b"; "@\u200b\(.w)") else . end;
+def ne($s): if ($s // "") == "" then null else $s end;
+def field($t; $v; $sh): if ($v // "") == "" then null else {title:$t, value:($v|tostring), short:$sh} end;
+
+(walk(san)) as $p
+| ({ username: ne($username), channel: ne($channel), icon_emoji: ne($icon) }
+   | with_entries(select(.value != null))) as $head
+| ($p.actor.username // $p.comment.author.username // "someone") as $who
+| (
+    if   $event == "comment_added"   then {verb:"added a comment",   emoji:"💬", color:"#2eb886"}
+    elif $event == "comment_edited"  then {verb:"edited a comment",  emoji:"✏️", color:"#e0a800"}
+    elif $event == "comment_deleted" then {verb:"deleted a comment", emoji:"🗑️", color:"#cc3333"}
+    else null end
+  ) as $c
+| ( if $c != null then
+      { attachments: [ {
+          color: $c.color,
+          fallback: "\($c.emoji) \($who) \($c.verb) on “\($p.media_file.title // "media")”",
+          author_name: $who,
+          title: "\($c.emoji) \($who) \($c.verb)",
+          title_link: ($p.url // ""),
+          text: ($p.comment.text // ""),
+          fields: ( [
+            field("Media";    $p.media_file.title;         true),
+            field("Owner";    $p.media_file.owner_user_id; true),
+            field("Timecode"; $p.comment.timecode;         true),
+            (if $event=="comment_edited" then field("Previous text"; $p.comment.previous_text; false) else null end),
+            (if $p.comment.drawing then field("Attachment"; "🖼️ screenshot/drawing"; true) else null end)
+          ] | map(select(. != null)) )
+      } ] }
+    elif $event == "media_file_added" then
+      { attachments: [ {
+          color: "#3a87ad",
+          fallback: "🎬 New media uploaded: “\($p.media_file.title // $p.media_file.orig_filename // "media")”",
+          title: "🎬 New media uploaded: \($p.media_file.title // $p.media_file.orig_filename // "(untitled)")",
+          title_link: ($p.url // ""),
+          fields: ( [
+            field("Owner";    $p.media_file.owner_user_id; true),
+            field("Type";     $p.media_file.media_type;    true),
+            field("Filename"; $p.media_file.orig_filename; true),
+            (if ($p.media_file.duration|type)=="number"
+             then field("Duration"; (($p.media_file.duration|floor|tostring) + " s"); true)
+             else null end)
+          ] | map(select(. != null)) )
+      } ] }
+    else empty end
+  ) as $msg
+| $head + $msg
+')"
+
+# Nothing formatted (e.g. an event we ignore) → nothing to send.
+[ -n "$BODY" ] || exit 0
+
+# Post to Mattermost. Fail-soft and don't hang (the server kills us at 30 s).
+curl -sS --max-time 10 \
+    -H 'Content-Type: application/json' \
+    -X POST -d "$BODY" \
+    "$WEBHOOK_URL" >/dev/null
+
+exit 0
