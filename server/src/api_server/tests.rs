@@ -650,11 +650,14 @@ async fn test_notification_hook_runs_real_script()
         send_server_cmd!(ws, AddComment, AddComment{media_file_id: media_id.clone(), comment: "Ping from a real script".into(), ..Default::default()});
         expect_client_cmd!(&mut ws, AddComments);
 
-        // Poll the on-disk sink the script writes to.
+        // Poll the on-disk sink the script writes to. The script appends the record
+        // in three steps (event name + tab, then the stdin JSON, then a newline), so
+        // only treat it as complete once the trailing newline is present -- otherwise
+        // we can race in and read "comment_added\t" before `cat` has written the JSON.
         let start = Instant::now();
         let recorded = loop {
             if let Ok(s) = std::fs::read_to_string(&sink) {
-                if s.contains("comment_added") { break s; }
+                if s.contains("comment_added") && s.ends_with('\n') { break s; }
             }
             assert!(start.elapsed() < Duration::from_secs(5),
                 "hook script never ran; sink still empty");
