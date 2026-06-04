@@ -23,24 +23,24 @@ class ActiondefsHelper:
     def make_new_folder_action(self) -> clap.ActionDef:
         return clap.ActionDef(
             ui_props=clap.ActionUiProps(
-                label="New folder",
+                label="Nouveau dossier",
                 icon=clap.Icon(fa_class=clap.IconFaClass(classes="fa fa-folder-plus", color=None)),
                 key_shortcut=None,
-                natural_desc="Create a new folder"),
+                natural_desc="Créer un nouveau dossier"),
             action=clap.ScriptCall(
                 lang=clap.ScriptCallLang.JAVASCRIPT,
                 code=dedent("""
-                    var folder_name = (prompt("Name for the new folder", ""))?.trim();
+                    var folder_name = (prompt("Nom du nouveau dossier", ""))?.trim();
                     if (folder_name) { clapshot.callOrganizer("new_folder", {name: folder_name}); }
                 """).strip()))
 
     def make_move_to_parent_action(self) -> clap.ActionDef:
         return clap.ActionDef(
             ui_props=clap.ActionUiProps(
-                label="Move to parent",
+                label="Déplacer vers le parent",
                 icon=clap.Icon(fa_class=clap.IconFaClass(classes="fa fa-arrow-turn-up", color=None)),
                 key_shortcut=None,
-                natural_desc="Move item to parent folder"),
+                natural_desc="Déplacer l'élément vers le dossier parent"),
             action=clap.ScriptCall(
                 lang=clap.ScriptCallLang.JAVASCRIPT,
                 code=dedent("""
@@ -48,7 +48,7 @@ class ActiondefsHelper:
                     var items = _action_args.selected_items;
 
                     if (!listingData.parent_folder_id) {
-                        alert("parent_folder_id missing from listingData.");
+                        alert("parent_folder_id manquant dans listingData.");
                         return;
                     }
                     var folderId = listingData.parent_folder_id;
@@ -67,7 +67,7 @@ class ActiondefsHelper:
                     var folderId = listingData?.folder_id;
 
                     if (!folderId || !mfid) {
-                        var msg = "on_media_file_added error: media_file_id missing, or folder_id from listingData.";
+                        var msg = "Erreur on_media_file_added : media_file_id manquant, ou folder_id absent de listingData.";
                         alert(msg); console.error(msg);
                     } else {
                         clapshot.moveToFolder(folderId, [{mediaFileId: mfid}], listingData);
@@ -77,17 +77,17 @@ class ActiondefsHelper:
     def make_share_folder_action(self) -> clap.ActionDef:
         return clap.ActionDef(
             ui_props=clap.ActionUiProps(
-                label="Share folder",
+                label="Partager le dossier",
                 icon=clap.Icon(fa_class=clap.IconFaClass(classes="fa fa-share-nodes", color=None)),
                 key_shortcut=None,
-                natural_desc="Create a shareable link to this folder"),
+                natural_desc="Créer un lien de partage pour ce dossier"),
             action=clap.ScriptCall(
                 lang=clap.ScriptCallLang.JAVASCRIPT,
                 code=dedent("""
                     var folder = _action_args.selected_items?.[0]?.folder;
                     var folderId = folder?.id || null;
                     if (!folderId) {
-                        alert("No folder selected to share");
+                        alert("Aucun dossier sélectionné à partager");
                         return;
                     }
                     clapshot.callOrganizer("share_folder", {id: folderId});
@@ -96,20 +96,20 @@ class ActiondefsHelper:
     def make_revoke_share_action(self) -> clap.ActionDef:
         return clap.ActionDef(
             ui_props=clap.ActionUiProps(
-                label="Stop sharing",
+                label="Arrêter le partage",
                 icon=clap.Icon(fa_class=clap.IconFaClass(classes="fa fa-link-slash", color=None)),
                 key_shortcut=None,
-                natural_desc="Revoke the shared link for this folder"),
+                natural_desc="Révoquer le lien de partage de ce dossier"),
             action=clap.ScriptCall(
                 lang=clap.ScriptCallLang.JAVASCRIPT,
                 code=dedent("""
                     var folder = _action_args.selected_items?.[0]?.folder;
                     var folderId = folder?.id || null;
                     if (!folderId) {
-                        alert("No folder selected to unshare");
+                        alert("Aucun dossier sélectionné à ne plus partager");
                         return;
                     }
-                    if (confirm("Are you sure you want to revoke the shared link for this folder?")) {
+                    if (confirm("Êtes-vous sûr de vouloir révoquer le lien de partage de ce dossier ?")) {
                         clapshot.callOrganizer("revoke_share", {id: folderId});
                     }
                 """).strip()))
@@ -117,10 +117,10 @@ class ActiondefsHelper:
     def make_copy_shared_link_action(self) -> clap.ActionDef:
         return clap.ActionDef(
             ui_props=clap.ActionUiProps(
-                label="Copy URL",
+                label="Copier l'URL",
                 icon=clap.Icon(fa_class=clap.IconFaClass(classes="fa fa-copy", color=None)),
                 key_shortcut=None,
-                natural_desc="Copy the shared link to clipboard"),
+                natural_desc="Copier le lien de partage dans le presse-papiers"),
             action=clap.ScriptCall(
                 lang=clap.ScriptCallLang.JAVASCRIPT,
                 code=dedent("""
@@ -130,7 +130,7 @@ class ActiondefsHelper:
                     var shareToken = sharedFolderTokens[folderId];
 
                     if (!shareToken) {
-                        alert("No shared link available for this folder");
+                        alert("Aucun lien de partage disponible pour ce dossier");
                         return;
                     }
 
@@ -139,22 +139,22 @@ class ActiondefsHelper:
 
                     if (navigator.clipboard && navigator.clipboard.writeText) {
                         navigator.clipboard.writeText(shareUrl).then(function() {
-                            alert('Shared link copied to clipboard!\\n\\nNOTE: Sharing a folder reveals direct links to all files currently in it, effectively giving recipient PERMANENT access to them, even if remove the folder share later.');
+                            alert('Lien de partage copié dans le presse-papiers !\\n\\nATTENTION : Partager un dossier donne accès permanent aux fichiers qu\\'il contient, même si vous révoquez le partage plus tard.');
                         }).catch(function() {
-                            prompt('Copy this shared link:', shareUrl);
+                            prompt('Copiez ce lien de partage :', shareUrl);
                         });
                     } else {
-                        prompt('Copy this shared link:', shareUrl);
+                        prompt('Copiez ce lien de partage :', shareUrl);
                     }
                 """).strip()))
 
     def make_set_user_email_action(self) -> clap.ActionDef:
         return clap.ActionDef(
             ui_props=clap.ActionUiProps(
-                label="Set email",
+                label="Définir l'email",
                 icon=clap.Icon(fa_class=clap.IconFaClass(classes="fa fa-envelope", color=None)),
                 key_shortcut=None,
-                natural_desc="Set email address for reply notifications"),
+                natural_desc="Définir l'adresse email pour les notifications de réponse"),
             action=clap.ScriptCall(
                 lang=clap.ScriptCallLang.JAVASCRIPT,
                 code=dedent("""
@@ -162,8 +162,8 @@ class ActiondefsHelper:
                     var folderTitle = folder?.title || "";
                     var userId = folderTitle.replace(/ \\(.*\\)$/, "");
                     var currentEmail = (folderTitle.match(/\\((.+)\\)$/) || [])[1] || "";
-                    if (currentEmail === "no email") currentEmail = "";
-                    var newEmail = prompt("Email address for notifications (" + userId + "):", currentEmail);
+                    if (currentEmail === "sans email") currentEmail = "";
+                    var newEmail = prompt("Adresse email pour les notifications (" + userId + ") :", currentEmail);
                     if (newEmail !== null) {
                         clapshot.callOrganizer("set_user_email", {user_id: userId, email: newEmail.trim()});
                     }
@@ -172,20 +172,20 @@ class ActiondefsHelper:
     def make_cleanup_empty_user_action(self) -> clap.ActionDef:
         return clap.ActionDef(
             ui_props=clap.ActionUiProps(
-                label="Del user",
+                label="Suppr. utilisateur",
                 icon=clap.Icon(fa_class=clap.IconFaClass(classes="fa fa-user-minus", color=clap.Color(r=220, g=38, b=38))),
                 key_shortcut=None,
-                natural_desc="Delete user if they have no content (only empty root folder)"),
+                natural_desc="Supprimer l'utilisateur s'il n'a aucun contenu (uniquement un dossier vide)"),
             action=clap.ScriptCall(
                 lang=clap.ScriptCallLang.JAVASCRIPT,
                 code=dedent("""
                     var folder = _action_args.selected_items?.[0]?.folder;
                     var folderId = folder?.id || null;
                     if (!folderId) {
-                        alert("No user folder selected for cleanup");
+                        alert("Aucun dossier utilisateur sélectionné");
                         return;
                     }
-                    if (confirm("This will delete the user if they have no media files and only an empty root folder.\\n\\nComments from this user will be preserved but marked as from a deleted user.\\n\\nAre you sure?")) {
+                    if (confirm("Ceci supprimera l'utilisateur s'il n'a aucun fichier média et uniquement un dossier personnel vide.\\n\\nLes commentaires de cet utilisateur seront conservés mais marqués comme provenant d'un utilisateur supprimé.\\n\\nÊtes-vous sûr ?")) {
                         clapshot.callOrganizer("cleanup_empty_user", {folder_id: folderId});
                     }
                 """).strip()))

@@ -70,7 +70,7 @@ async def navigate_page_impl(oi: organizer.OrganizerInbound, req: org.NavigatePa
                 await try_send_user_message(oi.srv,
                     org.ClientShowUserMessageRequest(sid=ses.sid,
                         msg=clap.UserMessage(
-                            message="This shared folder link is invalid or has been revoked",
+                            message="Ce lien de dossier partagé est invalide ou a été révoqué",
                             type=clap.UserMessageType.ERROR)))
                 ses.cookies.pop(SHARED_FOLDER_TOKEN_COOKIE_NAME, None)
                 ses.cookies.pop(PATH_COOKIE_NAME, None)
@@ -255,8 +255,8 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             await try_send_user_message(oi.srv,
                 org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
                     msg=clap.UserMessage(
-                        message="Folder shared. Use popup/'Copy URL' to get a link.",
-                        details= f"Folder sharing token created for '{folder_title}'.",
+                        message="Dossier partagé. Utilisez le menu contextuel / 'Copier l'URL' pour obtenir le lien.",
+                        details= f"Lien de partage créé pour '{folder_title}'.",
                         type=clap.UserMessageType.OK)))
 
         elif cmd.cmd == "revoke_share":
@@ -282,13 +282,13 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                 await try_send_user_message(oi.srv,
                     org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
                         msg=clap.UserMessage(
-                            message="Folder sharing has been revoked",
+                            message="Le partage du dossier a été révoqué",
                             type=clap.UserMessageType.OK)))
             else:
                 await try_send_user_message(oi.srv,
                     org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
                         msg=clap.UserMessage(
-                            message="This folder is not currently shared",
+                            message="Ce dossier n'est pas actuellement partagé",
                             type=clap.UserMessageType.ERROR)))
 
         elif cmd.cmd == "cleanup_empty_user":
@@ -321,14 +321,14 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                     await try_send_user_message(oi.srv,
                         org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
                             msg=clap.UserMessage(
-                                message=f"Cleaned up {cleaned_count} empty user{'s' if cleaned_count != 1 else ''}",
-                                details="Comments from deleted users are preserved but marked as from deleted users.",
+                                message=f"{cleaned_count} utilisateur{'s' if cleaned_count != 1 else ''} supprimé{'s' if cleaned_count != 1 else ''}",
+                                details="Les commentaires des utilisateurs supprimés sont conservés mais marqués comme tels.",
                                 type=clap.UserMessageType.OK)))
                 else:
                     await try_send_user_message(oi.srv,
                         org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
                             msg=clap.UserMessage(
-                                message="No empty users found to clean up",
+                                message="Aucun utilisateur vide trouvé à supprimer",
                                 type=clap.UserMessageType.OK)))
             else:
                 # Single user cleanup (existing logic)
@@ -355,15 +355,15 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                     await try_send_user_message(oi.srv,
                         org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
                             msg=clap.UserMessage(
-                                message=f"User '{user_id}' has been cleaned up (deleted)",
-                                details="Comments from this user are preserved but marked as from a deleted user.",
+                                message=f"L'utilisateur '{user_id}' a été supprimé",
+                                details="Les commentaires de cet utilisateur sont conservés mais marqués comme provenant d'un utilisateur supprimé.",
                                 type=clap.UserMessageType.OK)))
                 else:
                     await try_send_user_message(oi.srv,
                         org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
                             msg=clap.UserMessage(
-                                message=f"User '{user_id}' was not deleted",
-                                details="User still has media files or non-empty folders.",
+                                message=f"L'utilisateur '{user_id}' n'a pas été supprimé",
+                                details="L'utilisateur a encore des fichiers médias ou des dossiers non vides.",
                                 type=clap.UserMessageType.OK)))
 
         elif cmd.cmd == "set_user_email":
@@ -395,7 +395,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             await try_send_user_message(oi.srv,
                 org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
                     msg=clap.UserMessage(
-                        message=f"Email for '{user_id}' updated" if email else f"Email for '{user_id}' cleared",
+                        message=f"Email de '{user_id}' mis à jour" if email else f"Email de '{user_id}' effacé",
                         type=clap.UserMessageType.OK)))
 
         else:

@@ -58,9 +58,9 @@ class PagesHelper:
         For each user in the database, show a virtual folder that opens their home folder.
         Admin can also trash all user's content from here.
         """
-        pg_items.append(clap.PageItem(html="<h3><strong>ADMIN</strong> – User Folders</h3>"))
+        pg_items.append(clap.PageItem(html="<h3><strong>ADMIN</strong> – Dossiers utilisateurs</h3>"))
 
-        pg_items.append(clap.PageItem(html="<p>The following users currently have a home folder and/or media files.<br/>Uploading files or moving items to these folders will transfer ownership to that user.<br/>Trashing a user's home folder will delete everything they have.</p>"))
+        pg_items.append(clap.PageItem(html="<p>Les utilisateurs suivants ont un dossier personnel et/ou des fichiers médias.<br/>Téléverser des fichiers ou déplacer des éléments dans ces dossiers transfèrera la propriété à cet utilisateur.<br/>Supprimer le dossier personnel d'un utilisateur effacera tout son contenu.</p>"))
 
         with self.db_new_session() as dbs:
             all_users: list[DbUser] = dbs.query(DbUser).order_by(DbUser.id).distinct().all()
@@ -75,9 +75,9 @@ class PagesHelper:
                 users_folder = await db_get_or_create_user_root_folder(dbs, clap.UserInfo(id=user.id, name=user.name), self.srv, self.log)
                 assert users_folder, f"User {user.id} has no root folder (should've been autocreated)"
 
-                email_hint = f" ({user.email})" if user.email else " (no email)"
+                email_hint = f" ({user.email})" if user.email else " (sans email)"
                 set_email_js = (
-                    f"var e = prompt('Email address for {html_escape(user.id)}:', {json.dumps(user.email or '')});"
+                    f"var e = prompt('Adresse email pour {html_escape(user.id)} :', {json.dumps(user.email or '')});"
                     f"if (e !== null) clapshot.callOrganizer('set_user_email', {{user_id: {json.dumps(user.id)}, email: e}});"
                 )
 
@@ -111,9 +111,9 @@ class PagesHelper:
             # Add batch cleanup button
             pg_items.append(clap.PageItem(html="""
                 <div style="margin-top: 2em;">
-                    <button onclick="if(confirm('This will delete ALL users who have no media files and only empty root folders.\\n\\nComments from deleted users will be preserved but marked as from deleted users.\\n\\nAre you sure?')) { clapshot.callOrganizer('cleanup_empty_user', {folder_id: '*'}); }"
+                    <button onclick="if(confirm('Ceci supprimera TOUS les utilisateurs sans fichiers médias et avec uniquement un dossier personnel vide.\\n\\nLes commentaires des utilisateurs supprimés seront conservés mais marqués comme provenant d\\'utilisateurs supprimés.\\n\\nÊtes-vous sûr ?')) { clapshot.callOrganizer('cleanup_empty_user', {folder_id: '*'}); }"
                             style="background-color: #7f4f26; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
-                        🗑️ Delete all users without media
+                        🗑️ Supprimer les utilisateurs sans médias
                     </button>
                 </div>
             """))
