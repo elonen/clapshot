@@ -77,6 +77,8 @@ RUN sed -i 's@admin_pwd_hash *= .*@admin_pwd_hash = Askg15BrpF11g@' /var/www/hta
 COPY test/htadmin_smtp.php /var/www/htadmin/smtp.php
 COPY test/htadmin_nav.php /var/www/htadmin/includes/nav.php
 RUN chown www-data:www-data /var/www/htadmin/smtp.php /var/www/htadmin/includes/nav.php
+# Corriger le socket PHP-FPM (le DEB client référence encore php8.2)
+RUN sed -i 's/php8.2-fpm.sock/php8.4-fpm.sock/' /etc/nginx/sites-enabled/clapshot
 
 COPY test/docker-entry_htadmin.sh /root/docker-entry.sh
 
