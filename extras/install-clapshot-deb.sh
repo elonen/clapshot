@@ -50,7 +50,7 @@ esac
 
 set -x
 
-RELEASE="0.11.0"
+RELEASE="0.11.1"
 
 # Autodetect Debian release (codename) and architecture from the running system
 . /etc/os-release

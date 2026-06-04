@@ -1,3 +1,11 @@
+clapshot-server (0.11.1) unstable; urgency=low
+
+  * New feature: Optional external notification hook for comment, message,
+    and media events (runs a user script; off by default)
+  * Show full notification script output at DEBUG log level
+
+ -- Jarno Elonen <elonen@iki.fi>  Thu, 04 Jun 2026 12:00:00 +0300
+
 clapshot-server (0.11.0) unstable; urgency=low
 
   * Fix: Transcoding of files with extra timecode tracks; preserve audio
