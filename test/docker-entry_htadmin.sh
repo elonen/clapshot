@@ -134,7 +134,7 @@ done
 
 # Start nginx (in the background)
 nginx
-php-fpm8.2
+php-fpm8.4
 
 # Disable log buffering for better docker experience
 export ENV PYTHONDONTWRITEBYTECODE=1

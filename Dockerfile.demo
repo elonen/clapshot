@@ -47,7 +47,12 @@ COPY test/docker-entry_no-auth.sh /root/docker-entry.sh
 # ------------- basic auth (with PHP htadmin for management) -------------
 
 FROM base AS base-git-php
-RUN apt-get -qy install git php8.2-fpm php8.2-sqlite3 >/dev/null
+# Ajouter le dépôt PHP 8.4 (Ondřej Surý)
+RUN apt-get -qy install apt-transport-https lsb-release ca-certificates curl >/dev/null
+RUN curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg
+RUN echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ bookworm main" > /etc/apt/sources.list.d/php.list
+RUN apt-get -qy update >/dev/null
+RUN apt-get -qy install git php8.4-fpm php8.4-sqlite3 >/dev/null
 RUN mkdir -p /run/php
 
 
