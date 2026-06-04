@@ -110,10 +110,11 @@ dist_deb/built.${DEBIAN_VER}.${ARCH}.docker: ${PY_SRC} ${DEB_SRC} ../../Dockerfi
 		bash -c "cd /build/organizer/basic_folders && cp -r --preserve=mode,ownership,timestamps /deb ./dist_deb && \
 			sed -i 's/python3\\.11/${PYTHON_VER}/g' debian/control && \
 			PYTHON_VER=${PYTHON_VER} make debian-local && cp dist_deb/*.deb /deb/ && chown -R ${UID}:${GID} /deb"
-	@# Rename .deb files to include Debian version (skip if already contains it)
+	@# Tag freshly-built .deb files with the Debian version, inserting it just
+	@# before the arch suffix. Already-tagged debs (this or another distro) keep
+	@# their codename, so cross-distro artifacts left in dist_deb aren't re-tagged.
 	for f in dist_deb/*.deb; do \
-		case "$$f" in *_${DEBIAN_VER}_*) continue ;; esac; \
-		newname=$$(echo "$$f" | sed -E 's/(_[0-9.]+-?[0-9]*_)/\1${DEBIAN_VER}_/'); \
+		newname=$$(echo "$$f" | sed -E 's/(_[0-9.]+-?[0-9]*)_(amd64|arm64|all)\.deb$$/\1_${DEBIAN_VER}_\2.deb/'); \
 		[ "$$f" != "$$newname" ] && mv "$$f" "$$newname" || true; \
 	done
 	touch $@

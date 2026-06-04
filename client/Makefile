@@ -60,10 +60,11 @@ dist_deb/built.${DEBIAN_VER}.docker: ${CLIENT_DEPS} ${DEB_DEPS} ../Dockerfile.cl
 	$(eval PKGDIR=${PACKAGE}-${PVER})
 	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:deb \
 		bash -c "mkdir -p /deb/ && cp -a /build /deb/${PKGDIR} && cd /deb/${PKGDIR}/client && make debian-local && cp /deb/${PKGDIR}/*.deb /deb/ && rm -rf /deb/${PKGDIR} && chown -R ${UID}:${GID} /deb"
-	@# Rename .deb files to include Debian version (skip if already contains it)
+	@# Tag freshly-built .deb files with the Debian version, inserting it just
+	@# before the arch suffix. Already-tagged debs (this or another distro) keep
+	@# their codename, so cross-distro artifacts left in dist_deb aren't re-tagged.
 	for f in dist_deb/*.deb; do \
-		case "$$f" in *_${DEBIAN_VER}_*) continue ;; esac; \
-		newname=$$(echo "$$f" | sed -E 's/(_[0-9.]+-?[0-9]*_)/\1${DEBIAN_VER}_/'); \
+		newname=$$(echo "$$f" | sed -E 's/(_[0-9.]+-?[0-9]*)_(amd64|arm64|all)\.deb$$/\1_${DEBIAN_VER}_\2.deb/'); \
 		[ "$$f" != "$$newname" ] && mv "$$f" "$$newname" || true; \
 	done
 	touch $@
