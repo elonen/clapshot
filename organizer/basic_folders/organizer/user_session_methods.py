@@ -13,7 +13,7 @@ from organizer.config import PATH_COOKIE_NAME
 from organizer.helpers.folders import SHARED_FOLDER_TOKEN_COOKIE_NAME
 from organizer.utils import uri_arg_to_folder_path
 
-from .database.models import DbFolder
+from .database.models import DbFolder, DbSetting
 
 import organizer
 
@@ -397,6 +397,55 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                     msg=clap.UserMessage(
                         message=f"Email de '{user_id}' mis à jour" if email else f"Email de '{user_id}' effacé",
                         type=clap.UserMessageType.OK)))
+
+        elif cmd.cmd == "set_smtp_config":
+            if not cmd.ses.is_admin:
+                raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Seul l'admin peut modifier la configuration SMTP")
+
+            args = parse_json_dict(cmd.args)
+            smtp_keys = {
+                "smtp_host":     (args.get("host") or "").strip(),
+                "smtp_port":     (args.get("port") or "587").strip(),
+                "smtp_user":     (args.get("user") or "").strip(),
+                "smtp_from":     (args.get("from") or "").strip(),
+            }
+            # Ne mettre à jour le mot de passe que s'il est fourni
+            new_password = (args.get("password") or "").strip()
+
+            with oi.db_new_session() as dbs:
+                with dbs.begin_nested():
+                    for k, v in smtp_keys.items():
+                        setting = dbs.query(DbSetting).filter(DbSetting.key == k).one_or_none()
+                        if setting:
+                            setting.value = v
+                        else:
+                            dbs.add(DbSetting(key=k, value=v))
+                    if new_password:
+                        setting = dbs.query(DbSetting).filter(DbSetting.key == "smtp_password").one_or_none()
+                        if setting:
+                            setting.value = new_password
+                        else:
+                            dbs.add(DbSetting(key="smtp_password", value=new_password))
+                dbs.commit()
+
+            oi.log.info(f"Admin mis à jour la configuration SMTP (host: {smtp_keys['smtp_host']})")
+
+            # Rafraîchir la page admin
+            navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
+            await oi.srv.client_show_page(navi_page)
+
+            if smtp_keys["smtp_host"]:
+                await try_send_user_message(oi.srv,
+                    org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
+                        msg=clap.UserMessage(
+                            message=f"Configuration SMTP enregistrée ({smtp_keys['smtp_host']}:{smtp_keys['smtp_port']})",
+                            type=clap.UserMessageType.OK)))
+            else:
+                await try_send_user_message(oi.srv,
+                    org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
+                        msg=clap.UserMessage(
+                            message="Configuration SMTP effacée — les emails ne seront plus envoyés",
+                            type=clap.UserMessageType.OK)))
 
         else:
             raise GRPCError(GrpcStatus.INVALID_ARGUMENT, f"Unknown organizer command: {cmd.cmd}")

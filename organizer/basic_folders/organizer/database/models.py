@@ -75,6 +75,13 @@ class DbMediaFile(Base):
     thumb_sheet_rows: Mapped[int] = mapped_column()
 
 
+class DbSetting(Base):
+    """Key-value settings table (managed by clapshot.server, used for SMTP config etc.)"""
+    __tablename__ = "settings"
+    key: Mapped[str] = mapped_column(primary_key=True)
+    value: Mapped[str] = mapped_column()
+
+
 class DbUser(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(primary_key=True)

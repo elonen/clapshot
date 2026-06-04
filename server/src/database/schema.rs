@@ -86,6 +86,13 @@ diesel::table! {
 diesel::joinable!(comments -> subtitles (subtitle_id));
 
 
+diesel::table! {
+    settings (key) {
+        key -> Text,
+        value -> Text,
+    }
+}
+
 diesel::allow_tables_to_appear_in_same_query!(
     users,
     comments,
@@ -93,4 +100,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     media_files,
     media_types,
     subtitles,
+    settings,
 );

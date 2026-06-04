@@ -6,6 +6,22 @@ use chrono::naive::serde::{ts_seconds, ts_seconds_option};
 use chrono::TimeZone;
 use timeago;
 
+/// Generic key-value settings table (e.g. SMTP config) — read-only model
+#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Clone)]
+#[diesel(table_name = settings)]
+pub struct Setting {
+    pub key: String,
+    pub value: String,
+}
+
+/// Used for INSERT OR REPLACE INTO settings
+#[derive(Serialize, Deserialize, Debug, Insertable, Clone)]
+#[diesel(table_name = settings)]
+pub struct SettingInsert {
+    pub key: String,
+    pub value: String,
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Queryable, Selectable, Identifiable, AsChangeset, Clone)]
 #[diesel(treat_none_as_null = true)]
 pub struct User {

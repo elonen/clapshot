@@ -122,6 +122,16 @@ touch "$DIR/clapshot.log"
 chown docker "$DIR/clapshot.log"
 ln -s "$DIR/clapshot.log" /var/log/
 
+# Permettre à www-data (PHP/nginx) d'écrire dans la base SQLite
+# SQLite WAL mode crée des fichiers -shm et -wal qui doivent aussi être accessibles
+chown docker:www-data "$DIR" 2>/dev/null || true
+chmod 775 "$DIR" 2>/dev/null || true
+for f in "$DIR/clapshot.sqlite" "$DIR/clapshot.sqlite-shm" "$DIR/clapshot.sqlite-wal"; do
+    touch "$f" 2>/dev/null || true
+    chown docker:www-data "$f" 2>/dev/null || true
+    chmod 664 "$f" 2>/dev/null || true
+done
+
 # Start nginx (in the background)
 nginx
 php-fpm8.2

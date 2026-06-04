@@ -13,7 +13,7 @@ from organizer.utils import folder_path_to_uri_arg
 import organizer.metaplugin as mp
 
 from .folders import FoldersHelper
-from organizer.database.models import DbMediaFile, DbFolder, DbUser
+from organizer.database.models import DbMediaFile, DbFolder, DbUser, DbSetting
 
 
 class PagesHelper:
@@ -48,6 +48,7 @@ class PagesHelper:
 
         if ses.is_admin and len(folder_path) == 1:
             await self._admin_show_all_user_homes(ses, cur_folder, pg_items)
+            await self._admin_show_smtp_config(ses, pg_items)
 
         page_id = folder_path_to_uri_arg([f.id for f in folder_path])
         return org.ClientShowPageRequest(sid=ses.sid, page_items=pg_items, page_id=page_id, page_title=cur_folder.title)
@@ -117,6 +118,69 @@ class PagesHelper:
                     </button>
                 </div>
             """))
+
+
+    async def _admin_show_smtp_config(self, ses: org.UserSessionData, pg_items: list[clap.PageItem]):
+        """Affiche et permet de modifier la configuration SMTP dans l'admin."""
+        with self.db_new_session() as dbs:
+            rows = dbs.query(DbSetting).filter(
+                DbSetting.key.in_(["smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from"])
+            ).all()
+            cfg = {r.key: r.value for r in rows}
+
+        host     = cfg.get("smtp_host", "")
+        port     = cfg.get("smtp_port", "587")
+        user     = cfg.get("smtp_user", "")
+        password = cfg.get("smtp_password", "")
+        frm      = cfg.get("smtp_from", "")
+
+        # Masquer le mot de passe
+        password_display = "••••••••" if password else "(non défini)"
+        status_color = "#22c55e" if host else "#ef4444"
+        status_text  = "Configuré" if host else "Non configuré"
+
+        html = f"""
+        <div style="margin-top:2em;border:1px solid #374151;border-radius:8px;overflow:hidden;">
+          <div style="background:#917a49;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;">
+            <h3 style="margin:0;color:#fff;font-size:16px;">✉️ Configuration Mail (SMTP)</h3>
+            <span style="background:{status_color};color:#fff;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:bold;">{status_text}</span>
+          </div>
+          <div style="padding:16px 20px;background:#1f2937;">
+            <table style="width:100%;border-collapse:collapse;color:#d1d5db;font-size:14px;">
+              <tr><td style="padding:6px 12px 6px 0;color:#9ca3af;width:140px;">Serveur SMTP</td><td style="padding:6px 0;"><strong>{html_escape(host) or '<em style="color:#6b7280">non défini</em>'}</strong></td></tr>
+              <tr><td style="padding:6px 12px 6px 0;color:#9ca3af;">Port</td><td style="padding:6px 0;"><strong>{html_escape(port)}</strong></td></tr>
+              <tr><td style="padding:6px 12px 6px 0;color:#9ca3af;">Utilisateur</td><td style="padding:6px 0;"><strong>{html_escape(user) or '<em style="color:#6b7280">non défini</em>'}</strong></td></tr>
+              <tr><td style="padding:6px 12px 6px 0;color:#9ca3af;">Mot de passe</td><td style="padding:6px 0;"><strong>{password_display}</strong></td></tr>
+              <tr><td style="padding:6px 12px 6px 0;color:#9ca3af;">Expéditeur</td><td style="padding:6px 0;"><strong>{html_escape(frm) or '<em style="color:#6b7280">non défini</em>'}</strong></td></tr>
+            </table>
+            <div style="margin-top:14px;display:flex;gap:10px;">
+              <button onclick="(function(){{
+                var host = prompt('Serveur SMTP (ex: mail.example.com):', {json.dumps(host)});
+                if (host === null) return;
+                var port = prompt('Port SMTP (465 = SSL, 587 = STARTTLS, 1025 = local):', {json.dumps(port)});
+                if (port === null) return;
+                var user = prompt('Utilisateur SMTP:', {json.dumps(user)});
+                if (user === null) return;
+                var pwd = prompt('Mot de passe SMTP (laisser vide pour ne pas changer):', '');
+                if (pwd === null) return;
+                var from_addr = prompt('Adresse expéditeur (From):', {json.dumps(frm)});
+                if (from_addr === null) return;
+                clapshot.callOrganizer('set_smtp_config', {{
+                  host: host, port: port, user: user, password: pwd, from: from_addr
+                }});
+              }})()"
+                style="background:#917a49;color:#fff;border:none;padding:8px 18px;border-radius:5px;cursor:pointer;font-weight:bold;">
+                ✏️ Modifier
+              </button>
+              <button onclick="if(confirm('Effacer toute la configuration SMTP ?')) {{ clapshot.callOrganizer('set_smtp_config', {{host:'',port:'587',user:'',password:'',from:''}}); }}"
+                style="background:#374151;color:#d1d5db;border:none;padding:8px 18px;border-radius:5px;cursor:pointer;">
+                🗑️ Effacer
+              </button>
+            </div>
+          </div>
+        </div>
+        """
+        pg_items.append(clap.PageItem(html=html))
 
 
     async def _make_folder_listing(

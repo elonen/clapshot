@@ -1,4 +1,6 @@
 use anyhow::{Context, Result};
+use crate::database::{models, PooledConnection};
+use diesel::prelude::*;
 use lettre::{
     message::{header::ContentType, MultiPart, SinglePart},
     transport::smtp::{
@@ -20,7 +22,7 @@ pub struct SmtpConfig {
 }
 
 impl SmtpConfig {
-    /// Load from environment. Returns None if SMTP_HOST is not set.
+    /// Load from environment variables. Returns None if SMTP_HOST is not set.
     pub fn from_env() -> Option<SmtpConfig> {
         let host = std::env::var("SMTP_HOST").ok()?;
         let port = std::env::var("SMTP_PORT")
@@ -31,6 +33,57 @@ impl SmtpConfig {
         let password = std::env::var("SMTP_PASSWORD").unwrap_or_default();
         let from = std::env::var("SMTP_FROM").unwrap_or_else(|_| format!("clapshot@{}", host));
         Some(SmtpConfig { host, port, user, password, from })
+    }
+
+    /// Load from the `settings` table in the DB.
+    /// DB settings take priority over environment variables.
+    /// Returns None if no SMTP host is configured in DB or env.
+    pub fn from_db_or_env(conn: &mut PooledConnection) -> Option<SmtpConfig> {
+        use crate::database::schema::settings::dsl::*;
+
+        let rows: Vec<models::Setting> = settings
+            .load::<models::Setting>(conn)
+            .unwrap_or_default();
+
+        let get = |k: &str| -> Option<String> {
+            rows.iter().find(|r| r.key == k).map(|r| r.value.clone())
+        };
+
+        let host = get("smtp_host").or_else(|| std::env::var("SMTP_HOST").ok())?;
+        if host.is_empty() { return None; }
+
+        let port = get("smtp_port")
+            .and_then(|p| p.parse().ok())
+            .or_else(|| std::env::var("SMTP_PORT").ok().and_then(|p| p.parse().ok()))
+            .unwrap_or(465u16);
+        let user = get("smtp_user").or_else(|| std::env::var("SMTP_USER").ok()).unwrap_or_default();
+        let password = get("smtp_password").or_else(|| std::env::var("SMTP_PASSWORD").ok()).unwrap_or_default();
+        let from = get("smtp_from")
+            .or_else(|| std::env::var("SMTP_FROM").ok())
+            .unwrap_or_else(|| format!("clapshot@{}", host));
+
+        Some(SmtpConfig { host, port, user, password, from })
+    }
+
+    /// Save SMTP config to the `settings` table in the DB.
+    pub fn save_to_db(&self, conn: &mut PooledConnection) -> anyhow::Result<()> {
+        use crate::database::schema::settings::dsl::*;
+        use diesel::replace_into;
+
+        let pairs = vec![
+            ("smtp_host",     self.host.clone()),
+            ("smtp_port",     self.port.to_string()),
+            ("smtp_user",     self.user.clone()),
+            ("smtp_password", self.password.clone()),
+            ("smtp_from",     self.from.clone()),
+        ];
+        for (k, v) in pairs {
+            replace_into(settings)
+                .values(&models::SettingInsert { key: k.to_string(), value: v })
+                .execute(conn)
+                .context("Failed to save SMTP setting")?;
+        }
+        Ok(())
     }
 }
 
