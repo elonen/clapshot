@@ -12,6 +12,13 @@ else
   PLATFORM_STR = --platform linux/$(TARGET_ARCH)
 endif
 
+# On GitHub Actions (CI=true), only build amd64 to avoid slow QEMU cross-compilation
+ifdef CI
+  BUILD_ARCHS := amd64
+else
+  BUILD_ARCHS := arm64 amd64
+endif
+
 
 default:
 	@echo "Make target 'debian-docker' explicitly."
@@ -37,7 +44,7 @@ debian-docker:
 		echo "=== Checking availability for Debian $$debver ==="; \
 		if docker build --platform linux/amd64 -q - <<< "FROM rust:1-slim-$$debver" >/dev/null 2>&1; then \
 			echo "=== Building packages for Debian $$debver ==="; \
-			for plat in arm64 amd64; do \
+			for plat in $(BUILD_ARCHS); do \
 				echo "--- Building server for $$debver/$$plat ---"; \
 				(cd server && DEBIAN_VER=$$debver TARGET_ARCH=$$plat make debian-docker); \
 				echo "--- Building organizer for $$debver/$$plat ---"; \

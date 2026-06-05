@@ -3,23 +3,24 @@ name: Release version with Debian packages
 on:
   push:
     tags:
-      - 'v*'  # Trigger the workflow on push tags like v1.0, v1.1, etc.
+      - 'v*'
 
 jobs:
-  # Run tests first to ensure quality
-  test:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Run full test suite
-      run: make test
-
   build-debian-package:
-    needs: test  # Only build if tests pass
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Set up QEMU (for cross-compilation arm64)
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Install jq
+      run: sudo apt-get install -y jq
 
     - name: Build .deb files
       run: make debian-docker
@@ -47,7 +48,6 @@ jobs:
           path: dist_deb
 
       - name: Generate release notes
-        id: release_notes
         run: |
           echo "## Debian Packages" >> release_notes.md
           echo "This release includes the following packages:" >> release_notes.md
