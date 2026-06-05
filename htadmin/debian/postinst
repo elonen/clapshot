@@ -1,0 +1,89 @@
+#!/bin/bash
+set -e
+
+HTADMIN_DIR=/var/www/htadmin
+HTPASSWD_FILE=/var/www/.htpasswd
+NGINX_CONF=/etc/nginx/sites-available/clapshot+htadmin.nginx.conf
+NGINX_ENABLED=/etc/nginx/sites-enabled/clapshot
+
+case "$1" in
+    configure)
+
+        # --- Cloner htadmin si pas déjà présent ---
+        if [ ! -d "$HTADMIN_DIR/config" ]; then
+            echo "Cloning htadmin from GitHub..."
+            git clone --depth=1 https://github.com/soster/htadmin.git /tmp/htadmin-install
+            cp -r /tmp/htadmin-install/app/htadmin "$HTADMIN_DIR"
+            rm -rf /tmp/htadmin-install
+        fi
+
+        # --- Configurer htadmin ---
+        if [ ! -f "$HTADMIN_DIR/config/config.ini" ]; then
+            cp "$HTADMIN_DIR/config/config.ini.example" "$HTADMIN_DIR/config/config.ini"
+        fi
+        sed -i "s|secure_path *=.*|secure_path = /var/www/|" "$HTADMIN_DIR/config/config.ini"
+        sed -i "s|app_title *=.*|app_title = Clapshot users|" "$HTADMIN_DIR/config/config.ini"
+        sed -i "s|mail_server *=.*|mail_server = localhost|" "$HTADMIN_DIR/config/config.ini"
+        # admin htadmin par défaut (mdp: admin) — à changer en production
+        sed -i "s|admin_user *=.*|admin_user = htadmin|" "$HTADMIN_DIR/config/config.ini"
+        sed -i "s|admin_pwd_hash *=.*|admin_pwd_hash = Askg15BrpF11g|" "$HTADMIN_DIR/config/config.ini"
+
+        # --- Installer les fichiers PHP personnalisés ---
+        cp /usr/share/clapshot-htadmin/htadmin_smtp.php "$HTADMIN_DIR/smtp.php"
+        cp /usr/share/clapshot-htadmin/htadmin_nav.php  "$HTADMIN_DIR/includes/nav.php"
+
+        # --- Droits www-data ---
+        chown -R www-data:www-data "$HTADMIN_DIR"
+
+        # --- Créer .htpasswd initial si absent (admin:admin) ---
+        if [ ! -f "$HTPASSWD_FILE" ]; then
+            echo 'admin:$apr1$xyz$KURMbfRvhQPWs' > "$HTPASSWD_FILE"
+            chown www-data:www-data "$HTPASSWD_FILE"
+            chmod 640 "$HTPASSWD_FILE"
+            echo "ATTENTION: .htpasswd créé avec admin:admin — changez le mot de passe immédiatement !"
+        fi
+
+        # --- Activer la config nginx ---
+        # Désactiver les autres sites par défaut
+        rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+
+        # Activer notre config (lien symbolique)
+        if [ ! -L "$NGINX_ENABLED" ]; then
+            ln -sf "$NGINX_CONF" "$NGINX_ENABLED"
+        fi
+
+        # Déterminer la version de php-fpm disponible
+        PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || echo "8.2")
+        sed -i "s|php[0-9]\+\.[0-9]\+-fpm|php${PHP_VER}-fpm|g" "$NGINX_ENABLED"
+
+        # Recharger nginx si actif
+        if systemctl is-active --quiet nginx 2>/dev/null; then
+            nginx -t && systemctl reload nginx
+        fi
+
+        # Activer et démarrer php-fpm
+        PHP_SERVICE="php${PHP_VER}-fpm"
+        if systemctl list-unit-files "${PHP_SERVICE}.service" >/dev/null 2>&1; then
+            systemctl enable "$PHP_SERVICE" 2>/dev/null || true
+            systemctl start "$PHP_SERVICE" 2>/dev/null || true
+        fi
+
+        echo ""
+        echo "=== clapshot-htadmin installé ==="
+        echo "  Interface de gestion des utilisateurs : http://VOTRE_SERVEUR/htadmin/"
+        echo "  Login htadmin : htadmin / admin  (À CHANGER IMMÉDIATEMENT)"
+        echo "  .htpasswd : $HTPASSWD_FILE"
+        echo ""
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+
+    *)
+        echo "postinst appelé avec argument inconnu: $1" >&2
+        exit 1
+        ;;
+esac
+
+#DEBHELPER#
+exit 0

@@ -1,0 +1,3 @@
+additional_files/clapshot+htadmin.nginx.conf   etc/nginx/sites-available/
+additional_files/htadmin_nav.php               usr/share/clapshot-htadmin/
+additional_files/htadmin_smtp.php              usr/share/clapshot-htadmin/

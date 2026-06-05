@@ -1,0 +1,15 @@
+#!/bin/bash
+set -e
+
+case "$1" in
+    remove|purge)
+        # Désactiver la config nginx
+        if [ -L /etc/nginx/sites-enabled/clapshot ]; then
+            rm -f /etc/nginx/sites-enabled/clapshot
+            systemctl is-active --quiet nginx && systemctl reload nginx || true
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+exit 0

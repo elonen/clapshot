@@ -1,0 +1,25 @@
+Source: clapshot-htadmin
+Section: web
+Priority: optional
+Maintainer: Vincent <vincent@example.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.5.1
+Homepage: https://github.com/vinc13008/clapshot
+Rules-Requires-Root: no
+
+Package: clapshot-htadmin
+Architecture: all
+Depends: ${misc:Depends},
+ clapshot-client (>= 0.11.0),
+ clapshot-server (>= 0.11.0),
+ clapshot-organizer-basic-folders (>= 0.11.0),
+ nginx,
+ php-fpm,
+ php-sqlite3,
+ git
+Description: Clapshot with HTTP basic auth and htadmin user management
+ Meta-package that configures Clapshot with HTTP Basic Auth
+ and the htadmin PHP application for managing users (.htpasswd).
+ .
+ Installs nginx configuration, custom htadmin templates,
+ and a postinst script that clones and configures htadmin.

@@ -1,0 +1,11 @@
+#!/usr/bin/make -f
+
+# Pas de compilation — on override les étapes auto pour éviter que dh appelle make
+override_dh_auto_build:
+	# rien à compiler
+
+override_dh_auto_clean:
+	# rien à nettoyer
+
+%:
+	dh $@

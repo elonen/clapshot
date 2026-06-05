@@ -45,10 +45,13 @@ debian-docker:
 			done; \
 			echo "--- Building client for $$debver ---"; \
 			(cd client && DEBIAN_VER=$$debver make debian-docker); \
+			echo "--- Building htadmin for $$debver ---"; \
+			(cd htadmin && DEBIAN_VER=$$debver make debian-docker); \
 			echo "--- Collecting $$debver packages ---"; \
 			cp client/dist_deb/*$(PVER)*.deb dist_deb/ 2>/dev/null || true; \
 			cp server/dist_deb/*$(PVER)*.deb dist_deb/ 2>/dev/null || true; \
 			cp organizer/basic_folders/dist_deb/*$(PVER)*.deb dist_deb/ 2>/dev/null || true; \
+			cp htadmin/dist_deb/*$(PVER)*.deb dist_deb/ 2>/dev/null || true; \
 		else \
 			echo "=== Skipping $$debver (base image not available) ==="; \
 		fi; \
