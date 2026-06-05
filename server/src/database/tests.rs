@@ -86,6 +86,7 @@ pub fn make_test_db() -> (std::sync::Arc<DB>, assert_fs::TempDir, Vec<MediaFile>
             fps: Some(format!("{}", i * i)),
             raw_metadata_all: Some(format!("{{all: {{video: {}}}}}", i)),
             default_subtitle_id: None,
+            version_set_id: None,
         };
         MediaFile::insert(conn, &v).expect("Failed to insert video");
         MediaFile::get(conn, &v.id.into()).expect("Failed to get video")

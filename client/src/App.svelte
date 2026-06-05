@@ -965,6 +965,9 @@ function openMediaFileListItem(e: { detail: { item: Proto3.PageItem_FolderListin
     renameMediaFile: (mediaFileId: string, newName: string) => { wsEmit({ renameMediaFile: { mediaFileId, newName } }) },
     delMediaFile: (mediaFileId: string) => { wsEmit({ delMediaFile: { mediaFileId } }) },
 
+    groupMediaFiles: (mediaFileId: string, groupWithId: string) => { wsEmit({ groupMediaFiles: { mediaFileId, groupWithId } }) },
+    ungroupMediaFile: (mediaFileId: string) => { wsEmit({ unGroupMediaFile: { mediaFileId } }) },
+
     callOrganizer: (cmd: string, args: Object) => { wsEmit({ organizerCmd: { cmd, args: JSON.stringify(args) } }) },
     itemsToIDs: (items: Proto3.PageItem_FolderListing_Item[]): Proto3.FolderItemID[] => { return folderItemsToIDs(items) },
     moveToFolder: (
@@ -1052,6 +1055,28 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
         <div transition:slide class="flex h-full w-full {debugLayout?'border-2 border-blue-700':''}">
 
             <div transition:slide class="flex-1 flex flex-col {debugLayout?'border-2 border-purple-600':''}">
+
+                <!-- Version switcher: shown when this video has sibling versions -->
+                {#if $curVideo.versionSiblings && $curVideo.versionSiblings.length > 0}
+                <div class="flex-none flex items-center gap-1 px-2 py-1 bg-gray-800 border-b border-gray-700 text-xs overflow-x-auto">
+                    <span class="text-gray-400 mr-1 shrink-0"><i class="fa fa-code-branch"></i> Versions:</span>
+                    <!-- Current video tab -->
+                    <button class="px-2 py-0.5 rounded bg-amber-600 text-white font-mono shrink-0"
+                        title={$curVideo.title ?? $curVideo.id}>
+                        {$curVideo.id}
+                    </button>
+                    <!-- Sibling version tabs -->
+                    {#each $curVideo.versionSiblings as sib}
+                    <button
+                        class="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 font-mono shrink-0 transition-colors"
+                        title={sib.title ?? sib.id}
+                        onclick={() => wsEmit({ openMediaFile: { mediaFileId: sib.id } })}>
+                        {sib.id}
+                    </button>
+                    {/each}
+                </div>
+                {/if}
+
                 <div class="flex-1 bg-cyan-900">
                     <VideoPlayer
                         bind:this={videoPlayer} src={$curVideo.playbackUrl}

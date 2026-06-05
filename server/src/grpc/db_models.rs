@@ -50,10 +50,11 @@ impl models::MediaFile
             fps: v.duration.as_ref().map(|d| d.fps.clone()),
             raw_metadata_all: v.processing_metadata.as_ref().map(|m| m.ffprobe_metadata_all.clone()).flatten(),
             default_subtitle_id: v.default_subtitle_id.as_ref().map(|id| id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid default_subtitle_id")))).transpose()?,
+            version_set_id: None,  // Not set via proto; managed server-side
         })
     }
 
-    pub fn to_proto3(&self, url_base: &str, subtitles: Vec<models::Subtitle>) -> proto::MediaFile
+    pub fn to_proto3(&self, url_base: &str, subtitles: Vec<models::Subtitle>, version_siblings: Vec<proto::VersionSibling>) -> proto::MediaFile
     {
         let duration = match (self.duration, self.total_frames, &self.fps) {
             (Some(dur), Some(total_frames), Some(fps)) => Some(proto::MediaFileDuration {
@@ -112,6 +113,7 @@ impl models::MediaFile
             processing_metadata,
             subtitles: subtitles.into_iter().map(|s| s.to_proto3(url_base)).collect(),
             default_subtitle_id: self.default_subtitle_id.map(|id| id.to_string()),
+            version_siblings,
             playback_url: playback_uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri)),
             orig_url: orig_uri.map(|uri| format!("{}/videos/{}/{}", url_base, &self.id, uri))
         }
@@ -142,6 +144,7 @@ impl models::MediaFileInsert
             fps: v.duration.as_ref().map(|d| d.fps.clone()),
             raw_metadata_all: v.processing_metadata.as_ref().map(|m| m.ffprobe_metadata_all.clone()).flatten(),
             default_subtitle_id: v.default_subtitle_id.as_ref().map(|id| id.parse().map_err(|_| DBError::Other(anyhow::anyhow!("Invalid default_subtitle_id")))).transpose()?,
+            version_set_id: None,  // Not set via proto; managed server-side via group_with/ungroup
         })
     }
 }

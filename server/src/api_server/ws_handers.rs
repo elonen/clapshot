@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::str::FromStr;
 use lib_clapshot_grpc::proto::client::ClientToServerCmd;
-use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddSubtitle, CollabReport, DelComment, DelMediaFile, DelSubtitle, EditComment, EditSubtitleInfo, JoinCollab, LeaveCollab, OpenMediaFile, OpenNavigationPage, RenameMediaFile, ReorderItems};
+use lib_clapshot_grpc::proto::client::client_to_server_cmd::{AddSubtitle, CollabReport, DelComment, DelMediaFile, DelSubtitle, EditComment, EditSubtitleInfo, GroupMediaFiles, JoinCollab, LeaveCollab, OpenMediaFile, OpenNavigationPage, RenameMediaFile, ReorderItems, UnGroupMediaFile};
 use parking_lot::RwLock;
 type WsMsg = warp::ws::Message;
 
@@ -104,7 +104,7 @@ pub async fn msg_open_navigation_page(data: &OpenNavigationPage , ses: &mut User
     let mut media_files: Vec<proto::MediaFile> = Vec::new();
     for m in models::MediaFile::get_by_user(&mut server.db.conn()?, &ses.user_id, DBPaging::default())? {
         let subs = models::Subtitle::get_by_media_file(&mut server.db.conn()?, &m.id, DBPaging::default())?;
-        media_files.push(m.to_proto3(&server.url_base, subs));
+        media_files.push(m.to_proto3(&server.url_base, subs, vec![]));
     }
 
     let h_txt = if media_files.is_empty() { "<h2>You have no media yet.</h2>" } else { "<h2>All your media files</h2>" };
@@ -139,7 +139,13 @@ pub async fn send_open_media_file_cmd(server: &ServerState, session_id: &str, me
     let conn = &mut server.db.conn()?;
     let v_db = models::MediaFile::get(conn, &media_file_id.into())?;
     let subs = models::Subtitle::get_by_media_file(conn, media_file_id, DBPaging::default())?;
-    let v = v_db.to_proto3(&server.url_base, subs);
+    let siblings = models::MediaFile::get_version_siblings(conn, media_file_id)?;
+    let sibling_protos = siblings.into_iter().map(|s| proto::VersionSibling {
+        id: s.id,
+        title: s.title,
+        added_time: Some(crate::grpc::datetime_to_proto3(&s.added_time)),
+    }).collect();
+    let v = v_db.to_proto3(&server.url_base, subs, sibling_protos);
     if v.playback_url.is_none() {
         return Err(anyhow!("No playback file"));
     }
@@ -730,6 +736,69 @@ pub async fn msg_organizer_cmd(data: &proto::client::client_to_server_cmd::Organ
 
 
 
+pub async fn msg_group_media_files(data: &GroupMediaFiles, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    let conn = &mut server.db.conn()?;
+
+    // Verify both files exist and the user is allowed to see them
+    let a = match models::MediaFile::get(conn, &data.media_file_id) {
+        Ok(v) => v,
+        Err(_) => {
+            send_user_error!(&ses.user_id, server, Topic::None, format!("Video '{}' not found.", data.media_file_id));
+            return Ok(());
+        }
+    };
+    let b = match models::MediaFile::get(conn, &data.group_with_id) {
+        Ok(v) => v,
+        Err(_) => {
+            send_user_error!(&ses.user_id, server, Topic::None, format!("Video '{}' not found.", data.group_with_id));
+            return Ok(());
+        }
+    };
+
+    // Only allow grouping if the user owns at least one of the files (or is admin)
+    let can_group = ses.is_admin || ses.user_id == a.user_id || ses.user_id == b.user_id;
+    if !can_group {
+        send_user_error!(&ses.user_id, server, Topic::None, "You don't own either of these videos.");
+        return Ok(());
+    }
+
+    models::MediaFile::group_with(conn, &data.media_file_id, &data.group_with_id)?;
+
+    send_user_ok!(&ses.user_id, server, Topic::None,
+        "Videos grouped as versions.".to_string(),
+        format!("'{}' and '{}' are now linked as versions.", data.media_file_id, data.group_with_id),
+        false);
+    Ok(())
+}
+
+
+pub async fn msg_ungroup_media_file(data: &UnGroupMediaFile, ses: &mut UserSession, server: &ServerState) -> Res<()> {
+    let conn = &mut server.db.conn()?;
+
+    let v = match models::MediaFile::get(conn, &data.media_file_id) {
+        Ok(v) => v,
+        Err(_) => {
+            send_user_error!(&ses.user_id, server, Topic::None, format!("Video '{}' not found.", data.media_file_id));
+            return Ok(());
+        }
+    };
+
+    let can_ungroup = ses.is_admin || ses.user_id == v.user_id;
+    if !can_ungroup {
+        send_user_error!(&ses.user_id, server, Topic::None, "You don't own this video.");
+        return Ok(());
+    }
+
+    models::MediaFile::ungroup(conn, &data.media_file_id)?;
+
+    send_user_ok!(&ses.user_id, server, Topic::None,
+        "Video removed from version group.".to_string(),
+        format!("'{}' is no longer linked to any other version.", data.media_file_id),
+        false);
+    Ok(())
+}
+
+
 #[derive(thiserror::Error, Debug)]
 pub enum SessionClose {
     #[error("User logout")]
@@ -763,6 +832,8 @@ pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server
             Cmd::OrganizerCmd(data) => msg_organizer_cmd(&data, ses, server).await,
             Cmd::MoveToFolder(data) => msg_move_to_folder(&data, ses, server).await,
             Cmd::ReorderItems(data) => msg_reorder_items(&data, ses, server).await,
+            Cmd::GroupMediaFiles(data) => msg_group_media_files(&data, ses, server).await,
+            Cmd::UnGroupMediaFile(data) => msg_ungroup_media_file(&data, ses, server).await,
             Cmd::Logout(_) => {
                 tracing::info!("logout from client: user={}", ses.user_id);
                 return Err(SessionClose::Logout.into());

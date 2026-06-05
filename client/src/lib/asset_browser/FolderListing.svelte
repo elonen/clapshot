@@ -278,6 +278,40 @@ function hidePopupMenus() {
     }
 }
 
+// Built-in action sentinels (not server-defined, handled client-side)
+const BUILTIN_COPY_ID   = "__builtin_copy_id__";
+const BUILTIN_GROUP     = "__builtin_group__";
+const BUILTIN_UNGROUP   = "__builtin_ungroup__";
+
+function makeBuiltinAction(code: string, label: string, icon: string): Proto3.ActionDef {
+    return Proto3.ActionDef.fromJSON({
+        uiProps: { label, icon: { faClass: { classes: icon } } },
+        action:  { code, lang: Proto3.ScriptCall_Lang.JAVASCRIPT }
+    });
+}
+
+function handleBuiltinAction(code: string, targetTiles: VideoListDefItem[]) {
+    const mediaFileId = targetTiles.find(t => t.obj.mediaFile)?.obj.mediaFile?.id;
+    if (!mediaFileId) return;
+
+    if (code === BUILTIN_COPY_ID) {
+        navigator.clipboard.writeText(mediaFileId)
+            .then(() => console.log("Copied video ID:", mediaFileId))
+            .catch(() => alert("Could not copy to clipboard: " + mediaFileId));
+
+    } else if (code === BUILTIN_GROUP) {
+        const other = prompt("Enter the ID of the video to group with:", "");
+        if (other && other.trim()) {
+            (window as any).clapshot?.groupMediaFiles(mediaFileId, other.trim());
+        }
+
+    } else if (code === BUILTIN_UNGROUP) {
+        if (confirm("Remove this video from its version group?")) {
+            (window as any).clapshot?.ungroupMediaFile(mediaFileId);
+        }
+    }
+}
+
 // Show a popup menu when right-clicking on a video tile
 function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
 {
@@ -303,6 +337,17 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
                     return a;
                 })
             .filter(a => a !== undefined);
+
+        // Append built-in actions for media files
+        const hasMediaFile = targetTiles.some(t => t.obj.mediaFile);
+        if (hasMediaFile && targetTiles.length === 1) {
+            if (actions.length > 0) {
+                actions.push(makeBuiltinAction("", "hr", ""));  // separator
+            }
+            actions.push(makeBuiltinAction(BUILTIN_COPY_ID, "Copy video ID", "fa fa-copy"));
+            actions.push(makeBuiltinAction(BUILTIN_GROUP,   "Group as version...", "fa fa-code-branch"));
+            actions.push(makeBuiltinAction(BUILTIN_UNGROUP, "Remove from group", "fa fa-unlink"));
+        }
     }
     else
     {
@@ -323,7 +368,14 @@ function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
                 menuLines: actions,
                 x: e.clientX,
                 y: e.clientY - 16, // Offset a bit to make it look better
-                onaction: (event: any) => dispatch("popup-action", {action: event.action, items: targetTiles, listingData}),
+                onaction: (event: any) => {
+                    const code = event.action?.action?.code ?? "";
+                    if (code === BUILTIN_COPY_ID || code === BUILTIN_GROUP || code === BUILTIN_UNGROUP) {
+                        handleBuiltinAction(code, targetTiles);
+                    } else {
+                        dispatch("popup-action", {action: event.action, items: targetTiles, listingData});
+                    }
+                },
                 onhide: () => unmount(popup)
             },
         });

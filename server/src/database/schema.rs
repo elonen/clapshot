@@ -15,6 +15,13 @@ diesel::table! {
 }
 
 diesel::table! {
+    version_sets (id) {
+        id -> Text,
+        created -> Timestamp,
+    }
+}
+
+diesel::table! {
     media_files (id) {
         id -> Text,
         user_id -> Text,
@@ -32,6 +39,7 @@ diesel::table! {
         fps -> Nullable<Text>,
         raw_metadata_all -> Nullable<Text>,
         default_subtitle_id -> Nullable<Integer>,
+        version_set_id -> Nullable<Text>,
     }
 }
 
@@ -85,6 +93,8 @@ diesel::table! {
 diesel::joinable!(comments -> subtitles (subtitle_id));
 
 
+diesel::joinable!(media_files -> version_sets (version_set_id));
+
 diesel::allow_tables_to_appear_in_same_query!(
     users,
     comments,
@@ -92,4 +102,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     media_files,
     media_types,
     subtitles,
+    version_sets,
 );

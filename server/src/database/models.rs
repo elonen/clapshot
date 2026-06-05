@@ -32,6 +32,21 @@ pub struct MediaType {
 }
 
 
+#[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, AsChangeset, Clone)]
+#[diesel(table_name = version_sets)]
+#[diesel(primary_key(id))]
+pub struct VersionSet {
+    pub id: String,
+    #[serde(with = "ts_seconds")]
+    pub created: chrono::NaiveDateTime,
+}
+
+#[derive(Serialize, Deserialize, Debug, Insertable)]
+#[diesel(table_name = version_sets)]
+pub struct VersionSetInsert {
+    pub id: String,
+}
+
 #[derive(Serialize, Deserialize, Debug, Queryable, Selectable, Identifiable, QueryId, AsChangeset, Clone)]
 #[diesel(treat_none_as_null = true)]
 #[diesel(table_name = media_files)]
@@ -56,6 +71,7 @@ pub struct MediaFile {
     pub fps: Option<String>,
     pub raw_metadata_all: Option<String>,
     pub default_subtitle_id: Option<i32>,
+    pub version_set_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Insertable)]
@@ -77,6 +93,7 @@ pub struct MediaFileInsert {
     pub fps: Option<String>,
     pub raw_metadata_all: Option<String>,
     pub default_subtitle_id: Option<i32>,
+    pub version_set_id: Option<String>,
 }
 
 // -------------------------------------------------------

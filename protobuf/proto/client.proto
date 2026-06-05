@@ -144,6 +144,18 @@ message ClientToServerCmd {
     message Logout {
     }
 
+    // Group two media files as versions of the same content.
+    // If either (or both) already belong to a version set, the sets are merged.
+    message GroupMediaFiles {
+        string media_file_id = 1;   // The file whose context-menu was used
+        string group_with_id = 2;   // The ID the user typed / pasted
+    }
+
+    // Remove a media file from its version set.
+    message UnGroupMediaFile {
+        string media_file_id = 1;
+    }
+
     oneof cmd {
         OpenNavigationPage open_navigation_page = 10;
 
@@ -171,5 +183,8 @@ message ClientToServerCmd {
         ReorderItems reorder_items = 140;
 
         Logout logout = 150;
+
+        GroupMediaFiles group_media_files = 160;
+        UnGroupMediaFile un_group_media_file = 170;
     }
 }

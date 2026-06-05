@@ -297,6 +297,7 @@ pub trait DbUpdate<P>: Sized
 mod basic_query;
 crate::implement_basic_query_traits!(models::User, models::UserInsert, users, String, created.desc());
 crate::implement_basic_query_traits!(models::MediaType, models::MediaType, media_types, String, id.desc());
+crate::implement_basic_query_traits!(models::VersionSet, models::VersionSetInsert, version_sets, String, created.desc());
 crate::implement_basic_query_traits!(models::MediaFile, models::MediaFileInsert, media_files, String, added_time.desc());
 crate::implement_basic_query_traits!(models::Comment, models::CommentInsert, comments, i32, created.desc());
 crate::implement_basic_query_traits!(models::Message, models::MessageInsert, messages, i32, created.desc());

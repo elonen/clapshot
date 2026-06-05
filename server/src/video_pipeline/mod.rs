@@ -221,6 +221,7 @@ fn ingest_media_file(
         fps: Some(md.fps.to_string()),
         raw_metadata_all: Some(md.metadata_all.clone()),
         default_subtitle_id: None,
+        version_set_id: None,
     })?;
 
 

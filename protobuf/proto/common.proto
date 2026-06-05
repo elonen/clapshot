@@ -11,6 +11,12 @@ message Empty {}
 // Media file metadata
 // ---------------------------------------------------------
 
+message VersionSibling {
+    string id = 1;
+    optional string title = 2;
+    optional google.protobuf.Timestamp added_time = 3;
+}
+
 message MediaFile {
     string id = 1;
     optional string title = 2;
@@ -23,6 +29,8 @@ message MediaFile {
 
     repeated Subtitle subtitles = 20;          // Subtitles associated with the media file
     optional string default_subtitle_id = 21;  // Default subtitle track ID
+
+    repeated VersionSibling version_siblings = 30;  // Other videos grouped as versions of the same content
 
     optional string playback_url = 100;         // e.g. "https://example.com/video.mp4"
     optional string orig_url = 101;             // URL to download the original file

@@ -1,6 +1,7 @@
 use anyhow::Context;
 use diesel::prelude::*;
 use chrono::offset::Local;
+use uuid::Uuid;
 use crate::{database::{models, schema, to_db_res, DBResult, EmptyDBResult}, retry_if_db_locked};
 
 use super::{error::DBError, DbBasicQuery, PooledConnection};
@@ -45,6 +46,40 @@ impl models::User {
             },
             Err(e) => { Err(e) }
         }
+    }
+}
+
+
+impl models::VersionSet {
+
+    /// Create a new version set with a fresh UUID.
+    pub fn create_new(conn: &mut PooledConnection) -> DBResult<models::VersionSet> {
+        let new_id = Uuid::new_v4().to_string();
+        models::VersionSet::insert(conn, &models::VersionSetInsert { id: new_id })
+    }
+
+    /// Delete a version set only if it has fewer than 2 members left.
+    /// Called after ungrouping a media file to clean up empty/singleton sets.
+    pub fn cleanup_if_empty(conn: &mut PooledConnection, vs_id: &str) -> EmptyDBResult {
+        use schema::media_files::dsl as mf;
+        let count: i64 = mf::media_files
+            .filter(mf::version_set_id.eq(vs_id))
+            .count()
+            .get_result(conn)
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?;
+        if count < 2 {
+            // Clear the remaining member(s) and delete the set
+            retry_if_db_locked!({
+                diesel::update(mf::media_files.filter(mf::version_set_id.eq(vs_id)))
+                    .set(mf::version_set_id.eq(Option::<String>::None))
+                    .execute(conn)
+            })?;
+            use schema::version_sets::dsl as vs;
+            retry_if_db_locked!({
+                diesel::delete(vs::version_sets.filter(vs::id.eq(vs_id))).execute(conn)
+            })?;
+        }
+        Ok(())
     }
 }
 
@@ -190,6 +225,116 @@ impl models::MediaFile {
         use models::*;
         use schema::media_files::dsl::*;
         to_db_res(retry_if_db_locked!({ media_files.filter(thumbs_done.is_null()).order_by(added_time.desc()).load::<MediaFile>(conn) }))
+    }
+
+    /// Return all media files in the same version set as `media_file_id`, excluding itself.
+    pub fn get_version_siblings(conn: &mut PooledConnection, media_file_id: &str) -> DBResult<Vec<models::MediaFile>> {
+        use schema::media_files::dsl as mf;
+
+        let vs_id: Option<String> = mf::media_files
+            .filter(mf::id.eq(media_file_id))
+            .select(mf::version_set_id)
+            .first(conn)
+            .map_err(|e| DBError::BackendError(e))?;
+
+        match vs_id {
+            None => Ok(vec![]),
+            Some(vs) => {
+                let siblings = mf::media_files
+                    .filter(mf::version_set_id.eq(&vs))
+                    .filter(mf::id.ne(media_file_id))
+                    .order_by(mf::added_time.asc())
+                    .load::<models::MediaFile>(conn)
+                    .map_err(|e| DBError::BackendError(e))?;
+                Ok(siblings)
+            }
+        }
+    }
+
+    /// Group `media_file_id` together with `group_with_id` into the same version set.
+    ///
+    /// Handles all cases:
+    /// - Neither in a set → create a new set for both
+    /// - One in a set → add the other to the existing set
+    /// - Both in different sets → merge: move all members of the smaller set into the larger
+    pub fn group_with(conn: &mut PooledConnection, media_file_id: &str, group_with_id: &str) -> EmptyDBResult {
+        use schema::media_files::dsl as mf;
+
+        if media_file_id == group_with_id {
+            return Err(anyhow::anyhow!("Cannot group a video with itself").into());
+        }
+
+        let a: models::MediaFile = mf::media_files.filter(mf::id.eq(media_file_id))
+            .first(conn).map_err(|_| DBError::NotFound())?;
+        let b: models::MediaFile = mf::media_files.filter(mf::id.eq(group_with_id))
+            .first(conn).map_err(|_| DBError::NotFound())?;
+
+        let target_set_id = match (a.version_set_id.as_deref(), b.version_set_id.as_deref()) {
+            (None, None) => {
+                // Create a new version set and assign both
+                let vs = models::VersionSet::create_new(conn)?;
+                retry_if_db_locked!({
+                    diesel::update(mf::media_files.filter(mf::id.eq(media_file_id).or(mf::id.eq(group_with_id))))
+                        .set(mf::version_set_id.eq(&vs.id))
+                        .execute(conn)
+                })?;
+                return Ok(());
+            }
+            (Some(set_a), None) => set_a.to_string(),
+            (None, Some(set_b)) => set_b.to_string(),
+            (Some(set_a), Some(set_b)) => {
+                if set_a == set_b {
+                    return Ok(()); // Already in the same set
+                }
+                // Merge set_b into set_a (move all of B's members to A's set)
+                retry_if_db_locked!({
+                    diesel::update(mf::media_files.filter(mf::version_set_id.eq(set_b)))
+                        .set(mf::version_set_id.eq(set_a))
+                        .execute(conn)
+                })?;
+                use schema::version_sets::dsl as vs;
+                retry_if_db_locked!({
+                    diesel::delete(vs::version_sets.filter(vs::id.eq(set_b))).execute(conn)
+                })?;
+                return Ok(());
+            }
+        };
+
+        // Assign the ungrouped video to the existing target set
+        let ungrouped_id = if a.version_set_id.is_none() { media_file_id } else { group_with_id };
+        retry_if_db_locked!({
+            diesel::update(mf::media_files.filter(mf::id.eq(ungrouped_id)))
+                .set(mf::version_set_id.eq(&target_set_id))
+                .execute(conn)
+        })?;
+        Ok(())
+    }
+
+    /// Remove `media_file_id` from its version set. If fewer than 2 members remain, the set is dissolved.
+    pub fn ungroup(conn: &mut PooledConnection, media_file_id: &str) -> EmptyDBResult {
+        use schema::media_files::dsl as mf;
+
+        let vs_id: Option<String> = mf::media_files
+            .filter(mf::id.eq(media_file_id))
+            .select(mf::version_set_id)
+            .first(conn)
+            .map_err(|e| DBError::BackendError(e))?;
+
+        let vs_id = match vs_id {
+            None => return Ok(()), // Not in any set, nothing to do
+            Some(id) => id,
+        };
+
+        // Remove this file from the set
+        retry_if_db_locked!({
+            diesel::update(mf::media_files.filter(mf::id.eq(media_file_id)))
+                .set(mf::version_set_id.eq(Option::<String>::None))
+                .execute(conn)
+        })?;
+
+        // Clean up the set if it now has fewer than 2 members
+        models::VersionSet::cleanup_if_empty(conn, &vs_id)?;
+        Ok(())
     }
 }
 
