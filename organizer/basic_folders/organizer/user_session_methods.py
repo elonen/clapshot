@@ -398,6 +398,70 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                         message=f"Email de '{user_id}' mis à jour" if email else f"Email de '{user_id}' effacé",
                         type=clap.UserMessageType.OK)))
 
+        elif cmd.cmd == "link_as_version":
+            args = parse_json_dict(cmd.args)
+            primary_id = (args.get("primary_id") or "").strip()
+            version_id = (args.get("version_id") or "").strip()
+
+            if not primary_id or not version_id:
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "link_as_version: primary_id et version_id requis")
+            if primary_id == version_id:
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "Une vidéo ne peut pas être sa propre version")
+
+            # Vérifier que les deux fichiers existent et que l'utilisateur y a accès
+            from .database.models import DbMediaFile as DbMF
+            with oi.db_new_session() as dbs:
+                primary = dbs.query(DbMF).filter(DbMF.id == primary_id).one_or_none()
+                version = dbs.query(DbMF).filter(DbMF.id == version_id).one_or_none()
+
+                if not primary:
+                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Vidéo principale '{primary_id}' introuvable")
+                if not version:
+                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Vidéo '{version_id}' introuvable")
+                if primary.version_of:
+                    raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "La vidéo principale est elle-même une version — choisissez la version principale du groupe")
+                if not cmd.ses.is_admin and primary.user_id != cmd.ses.user.id:
+                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Vous ne pouvez lier que vos propres vidéos")
+
+                with dbs.begin_nested():
+                    version.version_of = primary_id
+                dbs.commit()
+
+            oi.log.info(f"Lié '{version_id}' comme version de '{primary_id}'")
+            navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
+            await oi.srv.client_show_page(navi_page)
+            await try_send_user_message(oi.srv,
+                org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
+                    msg=clap.UserMessage(
+                        message=f"Version liée avec succès",
+                        type=clap.UserMessageType.OK)))
+
+        elif cmd.cmd == "unlink_version":
+            args = parse_json_dict(cmd.args)
+            version_id = (args.get("version_id") or "").strip()
+            if not version_id:
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "unlink_version: version_id requis")
+
+            from .database.models import DbMediaFile as DbMF
+            with oi.db_new_session() as dbs:
+                version = dbs.query(DbMF).filter(DbMF.id == version_id).one_or_none()
+                if not version:
+                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Vidéo '{version_id}' introuvable")
+                if not cmd.ses.is_admin and version.user_id != cmd.ses.user.id:
+                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Accès refusé")
+                with dbs.begin_nested():
+                    version.version_of = None
+                dbs.commit()
+
+            oi.log.info(f"Délié la version '{version_id}'")
+            navi_page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
+            await oi.srv.client_show_page(navi_page)
+            await try_send_user_message(oi.srv,
+                org.ClientShowUserMessageRequest(sid=cmd.ses.sid,
+                    msg=clap.UserMessage(
+                        message="Version dissociée — la vidéo est de nouveau indépendante",
+                        type=clap.UserMessageType.OK)))
+
         else:
             raise GRPCError(GrpcStatus.INVALID_ARGUMENT, f"Unknown organizer command: {cmd.cmd}")
 

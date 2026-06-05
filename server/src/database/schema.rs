@@ -33,6 +33,7 @@ diesel::table! {
         fps -> Nullable<Text>,
         raw_metadata_all -> Nullable<Text>,
         default_subtitle_id -> Nullable<Integer>,
+        version_of -> Nullable<Text>,
     }
 }
 

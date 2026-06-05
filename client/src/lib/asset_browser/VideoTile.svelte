@@ -80,6 +80,14 @@ function fmt_date(d: Date | undefined) {
             <span class="text-amber-500 font-mono text-xs">{item.id}</span>
         </div>
         <div class="w-full video-title-line h-[3em] mb-0"><span title="{item.title}">{item.title}</span></div>
+        {#if item.versions && item.versions.length > 0}
+            <div class="mt-1">
+                <span class="inline-flex items-center gap-1 bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                    <i class="fa fa-code-branch text-[10px]"></i>
+                    {item.versions.length + 1} versions
+                </span>
+            </div>
+        {/if}
     </div>
 
 </div>

@@ -74,6 +74,8 @@ pub struct MediaFile {
     pub fps: Option<String>,
     pub raw_metadata_all: Option<String>,
     pub default_subtitle_id: Option<i32>,
+    /// ID de la version principale dont ce fichier est une variante (NULL = version principale)
+    pub version_of: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Insertable)]
@@ -95,6 +97,7 @@ pub struct MediaFileInsert {
     pub fps: Option<String>,
     pub raw_metadata_all: Option<String>,
     pub default_subtitle_id: Option<i32>,
+    pub version_of: Option<String>,
 }
 
 // -------------------------------------------------------

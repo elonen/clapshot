@@ -18,6 +18,7 @@ class ActiondefsHelper:
             "revoke_share": self.make_revoke_share_action(),
             "cleanup_empty_user": self.make_cleanup_empty_user_action(),
             "set_user_email": self.make_set_user_email_action(),
+            "add_version": self.make_add_version_action(),
         }
 
     def make_new_folder_action(self) -> clap.ActionDef:
@@ -166,6 +167,25 @@ class ActiondefsHelper:
                     var newEmail = prompt("Adresse email pour les notifications (" + userId + ") :", currentEmail);
                     if (newEmail !== null) {
                         clapshot.callOrganizer("set_user_email", {user_id: userId, email: newEmail.trim()});
+                    }
+                """).strip()))
+
+    def make_add_version_action(self) -> clap.ActionDef:
+        return clap.ActionDef(
+            ui_props=clap.ActionUiProps(
+                label="Ajouter une version",
+                icon=clap.Icon(fa_class=clap.IconFaClass(classes="fa fa-code-branch", color=None)),
+                key_shortcut=None,
+                natural_desc="Lier un autre fichier comme nouvelle version de cette vidéo"),
+            action=clap.ScriptCall(
+                lang=clap.ScriptCallLang.JAVASCRIPT,
+                code=dedent("""
+                    var primary = _action_args.selected_items?.[0]?.mediaFile;
+                    var primaryId = primary?.id || null;
+                    if (!primaryId) { alert("Aucune vidéo sélectionnée"); return; }
+                    var versionId = prompt("ID de la vidéo à lier comme nouvelle version :\\n(copiez l'ID depuis l'autre vidéo via son menu contextuel)");
+                    if (versionId) {
+                        clapshot.callOrganizer("link_as_version", {primary_id: primaryId, version_id: versionId.trim()});
                     }
                 """).strip()))
 

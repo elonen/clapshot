@@ -148,22 +148,41 @@ class PagesHelper:
         media_list = await self.srv.db_get_media_files(org.DbGetMediaFilesRequest(ids=org.IdList(ids=media_ids)))
         media_by_id = {v.id: v for v in media_list.items}
 
+        # Séparer les versions secondaires des versions principales
+        # Les versions secondaires (version_of != None) sont regroupées sous leur principale
+        db_media_by_id = {v.id: v for v in folder_db_items if isinstance(v, DbMediaFile)}
+        versions_by_primary: dict[str, list] = {}  # primary_id -> [version proto objs]
+        secondary_ids: set[str] = set()
+        for db_mf in db_media_by_id.values():
+            if db_mf.version_of and db_mf.version_of in db_media_by_id:
+                # C'est une version secondaire d'une principale présente dans ce dossier
+                secondary_ids.add(db_mf.id)
+                if db_mf.version_of not in versions_by_primary:
+                    versions_by_primary[db_mf.version_of] = []
+                versions_by_primary[db_mf.version_of].append(media_by_id[db_mf.id])
+
         async def media_file_to_page_item(vid_id: str, popup_actions: list[str]) -> clap.PageItemFolderListingItem:
             assert re.match(r"^[0-9a-fA-F]+$", vid_id), f"Unexpected media file ID format: {vid_id}"
+            proto_mf = media_by_id[vid_id]
+            # Attacher les versions à la version principale
+            if vid_id in versions_by_primary:
+                proto_mf.versions.extend(versions_by_primary[vid_id])
             return clap.PageItemFolderListingItem(
-                media_file = media_by_id[vid_id],
+                media_file = proto_mf,
                 open_action = clap.ScriptCall(
                     lang = clap.ScriptCallLang.JAVASCRIPT,
                     code = f'clapshot.openMediaFile("{vid_id}");'),
-                popup_actions = popup_actions,
-                vis = media_type_to_vis_icon(media_by_id[vid_id].media_type))
+                popup_actions = popup_actions + (["add_version"] if not db_media_by_id[vid_id].version_of else []),
+                vis = media_type_to_vis_icon(proto_mf.media_type))
 
         listing_items: list[clap.PageItemFolderListingItem] = []
         for itm in folder_db_items:
             if isinstance(itm, DbFolder):
                 listing_items.append(await self.folders_helper.folder_to_page_item(itm, popup_actions, ses))
             elif isinstance(itm, DbMediaFile):
-                listing_items.append(await media_file_to_page_item(itm.id, popup_actions))
+                # Ignorer les versions secondaires (elles apparaissent sous leur principale)
+                if itm.id not in secondary_ids:
+                    listing_items.append(await media_file_to_page_item(itm.id, popup_actions))
             else:
                 raise ValueError(f"Unknown item type: {itm}")
 

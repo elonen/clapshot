@@ -73,6 +73,7 @@ class DbMediaFile(Base):
     title: Mapped[str] = mapped_column()
     thumb_sheet_cols: Mapped[int] = mapped_column()
     thumb_sheet_rows: Mapped[int] = mapped_column()
+    version_of: Mapped[Optional[str]] = mapped_column(nullable=True)
 
 
 class DbSetting(Base):

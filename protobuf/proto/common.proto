@@ -24,6 +24,9 @@ message MediaFile {
     repeated Subtitle subtitles = 20;          // Subtitles associated with the media file
     optional string default_subtitle_id = 21;  // Default subtitle track ID
 
+    optional string version_of = 22;           // ID of the primary version (null = this IS the primary)
+    repeated MediaFile versions = 23;          // Other versions (only populated for primary files in folder listings)
+
     optional string playback_url = 100;         // e.g. "https://example.com/video.mp4"
     optional string orig_url = 101;             // URL to download the original file
 }

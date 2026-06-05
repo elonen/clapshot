@@ -12,6 +12,7 @@ import { t, initLocale } from './i18n';
 
 import CommentCard from './lib/player_view/CommentCard.svelte'
 import SubtitleCard from './lib/player_view/SubtitleCard.svelte';
+import VersionSelector from './lib/player_view/VersionSelector.svelte';
 import NavBar from './lib/NavBar.svelte'
 import CommentInput from './lib/player_view/CommentInput.svelte';
 import UserMessage from './lib/UserMessage.svelte';
@@ -1052,6 +1053,10 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
         <div transition:slide class="flex h-full w-full {debugLayout?'border-2 border-blue-700':''}">
 
             <div transition:slide class="flex-1 flex flex-col {debugLayout?'border-2 border-purple-600':''}">
+                <VersionSelector
+                    video={$curVideo}
+                    onswitchversion={(e) => wsEmit({ openMediaFile: { mediaFileId: e.mediaFileId } })}
+                />
                 <div class="flex-1 bg-cyan-900">
                     <VideoPlayer
                         bind:this={videoPlayer} src={$curVideo.playbackUrl}
