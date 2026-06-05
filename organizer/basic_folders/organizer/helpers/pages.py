@@ -129,7 +129,7 @@ class PagesHelper:
         """
         Make a folder listing for given folder and its contents.
         """
-        popup_actions = ["popup_builtin_rename", "popup_builtin_trash"]
+        popup_actions = ["popup_builtin_rename", "popup_builtin_trash", "copy_media_id"]
         listing_data = {"folder_id": str(cur_folder.id)}
 
         if parent_folder:
@@ -164,9 +164,10 @@ class PagesHelper:
         async def media_file_to_page_item(vid_id: str, popup_actions: list[str]) -> clap.PageItemFolderListingItem:
             assert re.match(r"^[0-9a-fA-F]+$", vid_id), f"Unexpected media file ID format: {vid_id}"
             proto_mf = media_by_id[vid_id]
-            # Attacher les versions à la version principale
+            # Les objets proto sont immuables — créer un nouvel objet avec versions si nécessaire
             if vid_id in versions_by_primary:
-                proto_mf.versions.extend(versions_by_primary[vid_id])
+                import dataclasses
+                proto_mf = dataclasses.replace(proto_mf, versions=versions_by_primary[vid_id])
             return clap.PageItemFolderListingItem(
                 media_file = proto_mf,
                 open_action = clap.ScriptCall(

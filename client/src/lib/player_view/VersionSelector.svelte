@@ -8,11 +8,11 @@ interface Props {
 
 let { video, onswitchversion }: Props = $props();
 
-// Liste complète : version principale + versions secondaires
-let allVersions = $derived(() => {
-    const primary = { ...video, versions: [] };  // la principale sans sous-versions
-    const secondaries = video.versions ?? [];
-    return [primary, ...secondaries];
+// Combine current video with related versions, primary (no versionOf) first
+let allVersions = $derived((): Proto3.MediaFile[] => {
+    const others = video.versions ?? [];
+    const all = [video, ...others];
+    return all.sort((a, b) => (!a.versionOf ? -1 : !b.versionOf ? 1 : 0));
 });
 
 function onSelect(e: Event) {
@@ -22,8 +22,9 @@ function onSelect(e: Event) {
     }
 }
 
-function versionLabel(v: Proto3.MediaFile, index: number): string {
-    return v.title || v.origUrl?.split('/').pop() || `Version ${index + 1}`;
+function versionLabel(v: Proto3.MediaFile): string {
+    const name = v.title || v.id;
+    return v.versionOf ? name : `⭐ ${name}`;
 }
 </script>
 
@@ -36,10 +37,9 @@ function versionLabel(v: Proto3.MediaFile, index: number): string {
         value={video.id}
         onchange={onSelect}
     >
-        {#each allVersions() as v, i}
+        {#each allVersions() as v}
             <option value={v.id}>
-                {i === 0 ? '⭐ ' : ''}{versionLabel(v, i)}
-                {#if v.id === video.id} (actuelle){/if}
+                {versionLabel(v)}{v.id === video.id ? ' (actuelle)' : ''}
             </option>
         {/each}
     </select>

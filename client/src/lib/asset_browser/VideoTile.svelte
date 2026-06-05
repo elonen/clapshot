@@ -48,17 +48,31 @@ function fmt_date(d: Date | undefined) {
 
     <!-- Preview -->
     {#if item.previewData?.thumbUrl}
-        <div class="flex-grow">
+        <div class="flex-grow relative">
         <ScrubbableVideoThumb
             thumbPosterUrl={item.previewData?.thumbUrl}
             thumbSheetUrl={item.previewData?.thumbSheet?.url}
             thumbSheetRows={item.previewData?.thumbSheet?.rows}
             thumbSheetCols={item.previewData?.thumbSheet?.cols}
         />
+        {#if item.versions && item.versions.length > 0}
+            <div class="absolute top-1 right-1 pointer-events-none">
+                <span class="inline-flex items-center gap-1 bg-blue-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full shadow">
+                    <i class="fa fa-code-branch text-[9px]"></i>{item.versions.length + 1}
+                </span>
+            </div>
+        {/if}
         </div>
     {:else if visualization}
-        <div class="flex-grow">
+        <div class="flex-grow relative">
         <TileVisualizationOverride vis={visualization}/>
+        {#if item.versions && item.versions.length > 0}
+            <div class="absolute top-1 right-1 pointer-events-none">
+                <span class="inline-flex items-center gap-1 bg-blue-600 text-white text-xs font-bold px-1.5 py-0.5 rounded-full shadow">
+                    <i class="fa fa-code-branch text-[9px]"></i>{item.versions.length + 1}
+                </span>
+            </div>
+        {/if}
         </div>
     {/if}
 
@@ -80,14 +94,6 @@ function fmt_date(d: Date | undefined) {
             <span class="text-amber-500 font-mono text-xs">{item.id}</span>
         </div>
         <div class="w-full video-title-line h-[3em] mb-0"><span title="{item.title}">{item.title}</span></div>
-        {#if item.versions && item.versions.length > 0}
-            <div class="mt-1">
-                <span class="inline-flex items-center gap-1 bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                    <i class="fa fa-code-branch text-[10px]"></i>
-                    {item.versions.length + 1} versions
-                </span>
-            </div>
-        {/if}
     </div>
 
 </div>
@@ -107,17 +113,10 @@ function fmt_date(d: Date | undefined) {
 }
 
 .video-title-line {
-    font-size: 0.75rem;
-    line-height: 1em;
-
-    overflow-wrap: break-word;
     overflow: hidden;
-    text-overflow: ellipsis;
     display: -webkit-box;
-    line-clamp: 3;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
 }
-
 </style>
-

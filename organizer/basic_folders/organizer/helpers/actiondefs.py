@@ -19,6 +19,7 @@ class ActiondefsHelper:
             "cleanup_empty_user": self.make_cleanup_empty_user_action(),
             "set_user_email": self.make_set_user_email_action(),
             "add_version": self.make_add_version_action(),
+            "copy_media_id": self.make_copy_media_id_action(),
         }
 
     def make_new_folder_action(self) -> clap.ActionDef:
@@ -167,6 +168,28 @@ class ActiondefsHelper:
                     var newEmail = prompt("Adresse email pour les notifications (" + userId + ") :", currentEmail);
                     if (newEmail !== null) {
                         clapshot.callOrganizer("set_user_email", {user_id: userId, email: newEmail.trim()});
+                    }
+                """).strip()))
+
+    def make_copy_media_id_action(self) -> clap.ActionDef:
+        return clap.ActionDef(
+            ui_props=clap.ActionUiProps(
+                label="Copier l'ID",
+                icon=clap.Icon(fa_class=clap.IconFaClass(classes="fa fa-fingerprint", color=None)),
+                key_shortcut=None,
+                natural_desc="Copier l'identifiant de la vidéo dans le presse-papiers"),
+            action=clap.ScriptCall(
+                lang=clap.ScriptCallLang.JAVASCRIPT,
+                code=dedent("""
+                    var media = _action_args.selected_items?.[0]?.mediaFile;
+                    var id = media?.id || null;
+                    if (!id) { alert("Aucune vidéo sélectionnée"); return; }
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(id).then(function() {
+                            alert('ID copié : ' + id);
+                        }).catch(function() { prompt('ID de la vidéo :', id); });
+                    } else {
+                        prompt('ID de la vidéo :', id);
                     }
                 """).strip()))
 

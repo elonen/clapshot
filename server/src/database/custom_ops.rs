@@ -202,6 +202,22 @@ impl models::MediaFile {
         use schema::media_files::dsl::*;
         to_db_res(retry_if_db_locked!({ media_files.filter(thumbs_done.is_null()).order_by(added_time.desc()).load::<MediaFile>(conn) }))
     }
+
+    /// Get all versions related to a media file (excluding itself).
+    /// Works for both primary files (version_of = None) and secondary files.
+    pub fn get_related_versions(conn: &mut PooledConnection, media_file_id: &str, version_of_id: Option<&str>) -> DBResult<Vec<models::MediaFile>>
+    {
+        use models::*;
+        use schema::media_files::dsl::*;
+        let primary_id = version_of_id.unwrap_or(media_file_id);
+        to_db_res(retry_if_db_locked!({
+            media_files
+                .filter(id.eq(primary_id).or(version_of.eq(primary_id)))
+                .filter(id.ne(media_file_id))
+                .order_by(added_time.asc())
+                .load::<MediaFile>(conn)
+        }))
+    }
 }
 
 

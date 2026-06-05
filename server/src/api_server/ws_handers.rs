@@ -139,9 +139,15 @@ pub async fn send_open_media_file_cmd(server: &ServerState, session_id: &str, me
     let conn = &mut server.db.conn()?;
     let v_db = models::MediaFile::get(conn, &media_file_id.into())?;
     let subs = models::Subtitle::get_by_media_file(conn, media_file_id, DBPaging::default())?;
-    let v = v_db.to_proto3(&server.url_base, subs);
+    let mut v = v_db.to_proto3(&server.url_base, subs);
     if v.playback_url.is_none() {
         return Err(anyhow!("No playback file"));
+    }
+    // Populate versions: fetch all related versions (primary + siblings), excluding self
+    let related = models::MediaFile::get_related_versions(conn, media_file_id, v_db.version_of.as_deref())?;
+    for r in related {
+        let r_subs = models::Subtitle::get_by_media_file(conn, &r.id, DBPaging::default()).unwrap_or_default();
+        v.versions.push(r.to_proto3(&server.url_base, r_subs));
     }
     server.emit_cmd(
         client_cmd!(OpenMediaFile, {media_file: Some(v)}),
