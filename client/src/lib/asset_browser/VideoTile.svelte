@@ -51,7 +51,7 @@ function fmt_date(d: Date | undefined) {
     <!-- Version count badge -->
     {#if versionCount > 1}
     <div class="absolute top-1.5 right-1.5 z-10 bg-amber-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
-        {versionCount}v
+        v{versionCount}
     </div>
     {/if}
 

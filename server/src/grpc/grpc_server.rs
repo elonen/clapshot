@@ -34,8 +34,10 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
     async fn client_show_page(&self, req: Request<org::ClientShowPageRequest>) -> RpcResult<proto::Empty>
     {
         let req = req.into_inner();
+        let conn = &mut self.server.db.conn().map_err(|e| Status::internal(e.to_string()))?;
+        let enriched = crate::grpc::db_models::enrich_page_items_with_siblings(conn, req.page_items);
         to_rpc_empty(self.server.emit_cmd(client_cmd!(ShowPage, {
-            page_items: req.page_items,
+            page_items: enriched,
             page_id: req.page_id,
             page_title: req.page_title,
         }), SendTo::UserSession(&req.sid)))

@@ -454,7 +454,7 @@ function enterKeyInterceptor(node: HTMLElement) {
             <div
                 id="videolist_item__{item.id}"
                 class="video-list-tile-sqr"
-                class:hidden={hiddenVersionIds.has(item.id)}
+                style:display={hiddenVersionIds.has(item.id) ? 'none' : ''}
                 role="button"
                 tabindex="0"
                 class:selectedTile={Object.keys($selectedTiles).includes(item.id)}

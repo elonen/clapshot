@@ -14,6 +14,28 @@ pub fn get_siblings_proto(conn: &mut PooledConnection, media_file_id: &str) -> D
     }).collect())
 }
 
+/// Walk page_items from an organizer ShowPage response and inject versionSiblings
+/// into any MediaFile items that don't already have them. This is needed because
+/// the Python organizer uses betterproto which drops unknown proto fields, so
+/// the siblings populated by db_get_media_files don't survive the round-trip.
+pub fn enrich_page_items_with_siblings(
+    conn: &mut PooledConnection,
+    items: Vec<proto::PageItem>,
+) -> Vec<proto::PageItem> {
+    items.into_iter().map(|mut page_item| {
+        if let Some(proto::page_item::Item::FolderListing(ref mut fl)) = page_item.item {
+            for fl_item in &mut fl.items {
+                if let Some(proto::page_item::folder_listing::item::Item::MediaFile(ref mut mf)) = fl_item.item {
+                    if mf.version_siblings.is_empty() {
+                        mf.version_siblings = get_siblings_proto(conn, &mf.id).unwrap_or_default();
+                    }
+                }
+            }
+        }
+        page_item
+    }).collect()
+}
+
 
 pub fn proto_msg_type_to_event_name(t: proto::user_message::Type) -> &'static str {
     match t {

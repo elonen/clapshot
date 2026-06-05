@@ -87,9 +87,11 @@ pub async fn msg_open_navigation_page(data: &OpenNavigationPage , ses: &mut User
             },
             Ok(res) => {
                 let res = res.into_inner();
+                let enriched = crate::grpc::db_models::enrich_page_items_with_siblings(
+                    &mut server.db.conn()?, res.page_items);
                 server.emit_cmd(
                     client_cmd!(ShowPage, {
-                        page_items: res.page_items,
+                        page_items: enriched,
                         page_id: res.page_id.clone(),
                         page_title: res.page_title,
                     }),
