@@ -108,6 +108,23 @@ const dispatch = createEventDispatcher();
 let isDragging = $state(false);
 let lastSelectedItemId = $state<string | null>(null);
 
+// IDs of tiles that are secondary versions of another tile already shown in this listing.
+// We hide them so each version group shows only one tile (the "primary" = lowest ID).
+const hiddenVersionIds = $derived((() => {
+    const hidden = new Set<string>();
+    for (const item of items) {
+        const mf = item.obj.mediaFile;
+        if (!mf?.versionSiblings?.length) continue;
+        // Determine primary = lexicographically smallest ID in the group
+        const allIds = [mf.id, ...mf.versionSiblings.map((s: any) => s.id)].sort();
+        const primaryId = allIds[0];
+        if (mf.id !== primaryId && items.some(t => t.id === primaryId)) {
+            hidden.add(mf.id);
+        }
+    }
+    return hidden;
+})());
+
 function mapDefItems(items: VideoListDefItem[]) {
     return folderItemsToIDs(items.map((it)=>it.obj));
 }
@@ -437,6 +454,7 @@ function enterKeyInterceptor(node: HTMLElement) {
             <div
                 id="videolist_item__{item.id}"
                 class="video-list-tile-sqr"
+                class:hidden={hiddenVersionIds.has(item.id)}
                 role="button"
                 tabindex="0"
                 class:selectedTile={Object.keys($selectedTiles).includes(item.id)}

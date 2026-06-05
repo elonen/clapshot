@@ -22,6 +22,8 @@ export function data() { return item; }
 let progress: number|undefined = $state(undefined);
 let progressMsg: string|undefined = $state(undefined);
 
+let versionCount = $derived((item.versionSiblings?.length ?? 0) + 1);
+
 // basecolor: gray during transcoding, otherwise derived from visualization prop
 let basecolor = $derived(
     progress !== undefined ? rgbToCssColor(40, 40, 40) :
@@ -43,8 +45,15 @@ function fmt_date(d: Date | undefined) {
 
 </script>
 
-<div class="w-full h-full video-list-video video-list-selector flex flex-col"
+<div class="w-full h-full video-list-video video-list-selector flex flex-col relative"
     use:cssVariables={{basecolor}}>
+
+    <!-- Version count badge -->
+    {#if versionCount > 1}
+    <div class="absolute top-1.5 right-1.5 z-10 bg-amber-500 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+        {versionCount}v
+    </div>
+    {/if}
 
     <!-- Preview -->
     {#if item.previewData?.thumbUrl}

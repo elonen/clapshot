@@ -4,6 +4,16 @@ use crate::database::models;
 
 use super::{datetime_to_proto3, proto3_to_datetime};
 
+/// Fetch version siblings for a media file and return them as proto messages.
+pub fn get_siblings_proto(conn: &mut PooledConnection, media_file_id: &str) -> DBResult<Vec<proto::VersionSibling>> {
+    let siblings = models::MediaFile::get_version_siblings(conn, media_file_id)?;
+    Ok(siblings.into_iter().map(|s| proto::VersionSibling {
+        id: s.id,
+        title: s.title,
+        added_time: Some(datetime_to_proto3(&s.added_time)),
+    }).collect())
+}
+
 
 pub fn proto_msg_type_to_event_name(t: proto::user_message::Type) -> &'static str {
     match t {

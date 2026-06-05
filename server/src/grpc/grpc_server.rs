@@ -131,7 +131,11 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
         };
 
         let mut proto_items = Vec::with_capacity(items.len());
-        for mf in items { proto_items.push(mf.to_proto3(&self.server.url_base, mf.get_subtitles(conn)?, vec![])); }
+        for mf in items {
+            let subs = mf.get_subtitles(conn)?;
+            let siblings = crate::grpc::db_models::get_siblings_proto(conn, &mf.id)?;
+            proto_items.push(mf.to_proto3(&self.server.url_base, subs, siblings));
+        }
 
         Ok(Response::new(org::DbMediaFileList {
             items: proto_items,

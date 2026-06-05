@@ -104,7 +104,8 @@ pub async fn msg_open_navigation_page(data: &OpenNavigationPage , ses: &mut User
     let mut media_files: Vec<proto::MediaFile> = Vec::new();
     for m in models::MediaFile::get_by_user(&mut server.db.conn()?, &ses.user_id, DBPaging::default())? {
         let subs = models::Subtitle::get_by_media_file(&mut server.db.conn()?, &m.id, DBPaging::default())?;
-        media_files.push(m.to_proto3(&server.url_base, subs, vec![]));
+        let siblings = crate::grpc::db_models::get_siblings_proto(&mut server.db.conn()?, &m.id)?;
+        media_files.push(m.to_proto3(&server.url_base, subs, siblings));
     }
 
     let h_txt = if media_files.is_empty() { "<h2>You have no media yet.</h2>" } else { "<h2>All your media files</h2>" };

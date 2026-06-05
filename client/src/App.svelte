@@ -31,6 +31,10 @@ let uiConnectedState: boolean = $state(false); // true if UI should look like we
 
 let commentSortMode: CommentSortMode = $state((LocalStorageCookies.get('comment_sort_mode') as CommentSortMode) ?? 'timecode');
 
+function stripFileExt(name: string): string {
+    return name.replace(/\.[^/.]+$/, '');
+}
+
 function toggleCommentSort() {
     commentSortMode = commentSortMode === 'timecode' ? 'date' : 'timecode';
     LocalStorageCookies.set('comment_sort_mode', commentSortMode, Number.MAX_SAFE_INTEGER);
@@ -1056,24 +1060,20 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
 
             <div transition:slide class="flex-1 flex flex-col {debugLayout?'border-2 border-purple-600':''}">
 
-                <!-- Version switcher: shown when this video has sibling versions -->
+                <!-- Version switcher: dropdown shown when this video has sibling versions -->
                 {#if $curVideo.versionSiblings && $curVideo.versionSiblings.length > 0}
-                <div class="flex-none flex items-center gap-1 px-2 py-1 bg-gray-800 border-b border-gray-700 text-xs overflow-x-auto">
-                    <span class="text-gray-400 mr-1 shrink-0"><i class="fa fa-code-branch"></i> Versions:</span>
-                    <!-- Current video tab -->
-                    <button class="px-2 py-0.5 rounded bg-amber-600 text-white font-mono shrink-0"
-                        title={$curVideo.title ?? $curVideo.id}>
-                        {$curVideo.id}
-                    </button>
-                    <!-- Sibling version tabs -->
-                    {#each $curVideo.versionSiblings as sib}
-                    <button
-                        class="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 font-mono shrink-0 transition-colors"
-                        title={sib.title ?? sib.id}
-                        onclick={() => wsEmit({ openMediaFile: { mediaFileId: sib.id } })}>
-                        {sib.id}
-                    </button>
-                    {/each}
+                <div class="flex-none flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700 text-xs">
+                    <i class="fa fa-code-branch text-amber-400"></i>
+                    <span class="text-gray-400">Version :</span>
+                    <select
+                        class="flex-1 bg-gray-700 border border-gray-600 text-white text-xs px-2 py-0.5 rounded focus:outline-none focus:border-amber-400"
+                        value={$curVideo.id}
+                        onchange={(e) => wsEmit({ openMediaFile: { mediaFileId: (e.target as HTMLSelectElement).value } })}>
+                        <option value={$curVideo.id}>{stripFileExt($curVideo.title ?? $curVideo.id)}</option>
+                        {#each $curVideo.versionSiblings as sib}
+                        <option value={sib.id}>{stripFileExt(sib.title ?? sib.id)}</option>
+                        {/each}
+                    </select>
                 </div>
                 {/if}
 
