@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Optional
 from datetime import datetime
 
@@ -10,6 +11,11 @@ from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, relationship
 # See migrations.py for the actual SQL table creation statements.
 
 
+class FolderKind(str, Enum):
+    NORMAL = "normal"
+    VERSION_SET = "version_set"
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -20,6 +26,15 @@ class DbFolder(Base):
     created: Mapped[datetime] = mapped_column(insert_default=sqlalchemy.func.now())
     user_id: Mapped[str] = mapped_column()
     title: Mapped[str] = mapped_column()
+    kind: Mapped[str] = mapped_column(default=FolderKind.NORMAL.value)
+
+    # Version set specific fields:
+    active_media_file_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("media_files.id", ondelete="SET NULL", onupdate="CASCADE"), nullable=True)
+
+    @property
+    def is_version_set(self) -> bool:
+        return self.kind == FolderKind.VERSION_SET.value
 
 
 class DbFolderItems(Base):
@@ -44,7 +59,7 @@ class DbSharedFolder(Base):
     folder_id: Mapped[int] = mapped_column(ForeignKey("bf_folders.id", ondelete="CASCADE", onupdate="CASCADE"))
     share_token: Mapped[str] = mapped_column(unique=True)
     created: Mapped[datetime] = mapped_column(insert_default=sqlalchemy.func.now())
-    
+
     # Relationship to the folder
     folder: Mapped[DbFolder] = relationship("DbFolder", foreign_keys=[folder_id])
 

@@ -28,6 +28,8 @@ export let latestProgressReports: Writable<MediaProgressReport[]> = writable([])
 
 export let connectionErrors: Writable<string[]> = writable([]);
 
+export let playerHeaderHtml: Writable<string|null> = writable(null);
+
 export let collabId: Writable<string|null> = writable(null);
 export let userMenuItems: Writable<UserMenuItem[]> = writable([]);
 export let selectedTiles: Writable<{[key: string]: VideoListDefItem}> = writable({});

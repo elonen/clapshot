@@ -2,6 +2,7 @@
 
 import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
 import TileVisualizationOverride from './TileVisualizationOverride.svelte';
+import Badges from './Badges.svelte';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import {rgbToCssColor, cssVariables} from './utils';
 import {latestProgressReports} from '@/stores';
@@ -45,6 +46,8 @@ function fmt_date(d: Date | undefined) {
 
 <div class="w-full h-full video-list-video video-list-selector flex flex-col"
     use:cssVariables={{basecolor}}>
+
+    <Badges badges={visualization?.badges}/>
 
     <!-- Preview -->
     {#if item.previewData?.thumbUrl}
@@ -92,6 +95,7 @@ function fmt_date(d: Date | undefined) {
     border-radius: 0.375rem;
     padding: 0.5rem;
     box-shadow: inset 0px -12px 25px 5px rgba(0, 0, 0, 0.4);
+    position: relative;   /* anchor for the Badges (top-right) */
 }
 
 :global(.selectedTile .video-list-video) {

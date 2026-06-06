@@ -50,3 +50,6 @@ async def db_integrity_tests(oi: organizer.OrganizerInbound):
         db_test_orm_mappings(dbs, log)
         db_check_for_folder_loops(dbs, log)
         db_check_and_fix_integrity(dbs, log)
+
+    # Global one-time repair of version-set invariants (empty/subfolder/stale-active sets).
+    await oi.folders_helper.repair_version_sets(None)

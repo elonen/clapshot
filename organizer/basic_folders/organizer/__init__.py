@@ -149,13 +149,33 @@ class OrganizerInbound(org.OrganizerInboundBase):
         await self.notify_folder_viewers(root_folder_id, exclude_sid=None)
         return clap.Empty()
 
+    @override
+    @organizer_grpc_handler
+    async def on_media_file_deleted(self, req: org.OnMediaFileDeletedRequest) -> clap.Empty:
+        # A media file was trashed server-side. Check if versions sets became empty, and repair.
+        affected_parents = await self.folders_helper.repair_version_sets(req.user_id)
+        for parent_id in set(affected_parents):
+            await self.notify_folder_viewers(parent_id, exclude_sid=None)
+        return clap.Empty()
+
 
     # Folder operation methods
 
     @override
     @organizer_grpc_handler
     async def move_to_folder(self, move_to_folder_request: org.MoveToFolderRequest) -> clap.Empty:
-        return await move_to_folder_impl(self, move_to_folder_request)
+        try:
+            return await move_to_folder_impl(self, move_to_folder_request)
+        except Exception:
+            # The client optimistically removes the dragged item(s) from the listing (drag-and-drop).
+            # On ANY failure (e.g. a rejected folder->version-set drop), re-render the client's current
+            # view so the un-moved item reappears, then propagate the error (the server shows its message).
+            try:
+                page = await self.pages_helper.construct_navi_page(move_to_folder_request.ses, None)
+                await self.srv.client_show_page(page)
+            except Exception as e:
+                self.log.warning(f"move_to_folder: failed to refresh client view after a move error: {e}")
+            raise
 
     @override
     @organizer_grpc_handler

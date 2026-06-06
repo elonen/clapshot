@@ -71,6 +71,7 @@ service OrganizerInbound {
 
     // Server lifecycle events
     rpc on_media_file_ingested(OnMediaFileIngestedRequest) returns (Empty);
+    rpc on_media_file_deleted(OnMediaFileDeletedRequest) returns (Empty);
 
     // Calls from client when user interacts with the folder UI
     rpc move_to_folder(MoveToFolderRequest) returns (Empty);
@@ -222,6 +223,11 @@ message ReorderItemsRequest {
 }
 
 message OnMediaFileIngestedRequest {
+    string user_id = 1;
+    string media_file_id = 2;
+}
+
+message OnMediaFileDeletedRequest {
     string user_id = 1;
     string media_file_id = 2;
 }

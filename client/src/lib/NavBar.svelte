@@ -1,7 +1,7 @@
 <script lang="ts">
 
 import { onMount } from 'svelte';
-import { curUsername, curUserPic, curVideo, mediaFileId, collabId, userMenuItems } from "@/stores";
+import { curUsername, curUserPic, curVideo, mediaFileId, collabId, userMenuItems, playerHeaderHtml } from "@/stores";
 import Avatar from '@/lib/Avatar.svelte';
 import {latestProgressReports, clientConfig} from '@/stores';
 import type { MediaProgressReport } from '@/types';
@@ -125,7 +125,11 @@ function addEDLComments(comments: Proto3.Comment[]) {
 			{#if $mediaFileId}
 			<span class="grid grid-flow-row auto-rows-max items-center text-gray-600 mx-4">
 					<h2 class=" text-lg text-center">
-						<span class="font-mono">{$mediaFileId}</span>
+						{#if $playerHeaderHtml}
+							<span data-testid="player-header-html">{@html $playerHeaderHtml}</span>
+						{:else}
+							<span class="font-mono">{$mediaFileId}</span>
+						{/if}
 
 						<div class="relative inline-block text-left">
 							<button type="button"
@@ -142,6 +146,8 @@ function addEDLComments(comments: Proto3.Comment[]) {
 							{/if}
 							{#if $collabId}
 								<DropdownItem href="?vid={$mediaFileId}" class="text-green-400"><i class="fas fa-users"></i> {$t('nav.leaveCollab')}</DropdownItem>
+							{:else if $playerHeaderHtml}
+								<DropdownItem class="text-gray-600 cursor-not-allowed" data-testid="start-collab-disabled" title="Collaboration is disabled here"><i class="fas fa-user-plus"></i> {$t('nav.startCollab')}</DropdownItem>
 							{:else}
 								<DropdownItem href="?vid={$mediaFileId}&collab={randomSessionId}" title="Start collaborative session"><i class="fas fa-user-plus"></i> {$t('nav.startCollab')}</DropdownItem>
 							{/if}
@@ -160,7 +166,9 @@ function addEDLComments(comments: Proto3.Comment[]) {
 						</div>
 
 					</h2>
-				<span class="mx-4 text-xs text-center">{$curVideo?.title}</span>
+				{#if !$playerHeaderHtml}
+					<span class="mx-4 text-xs text-center">{$curVideo?.title}</span>
+				{/if}
 				{#if videoProgressMsg}
 					<span class="text-cyan-800 mx-4 text-xs text-center">{videoProgressMsg}</span>
 				{/if}

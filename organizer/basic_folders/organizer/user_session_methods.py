@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import Optional
+import sqlalchemy
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
 
@@ -13,9 +14,20 @@ from organizer.config import PATH_COOKIE_NAME
 from organizer.helpers.folders import SHARED_FOLDER_TOKEN_COOKIE_NAME
 from organizer.utils import uri_arg_to_folder_path
 
-from .database.models import DbFolder
+from .database.models import DbFolder, DbFolderItems, DbMediaFile, FolderKind
 
 import organizer
+
+
+def _int_arg(args: dict, key: str) -> int:
+    """
+    Parse a required integer command argument. Maps missing/non-numeric client input to a clean
+    INVALID_ARGUMENT instead of an uncaught ValueError (which would bypass the friendly-error path).
+    """
+    try:
+        return int(args[key])
+    except (KeyError, TypeError, ValueError):
+        raise GRPCError(GrpcStatus.INVALID_ARGUMENT, f"Command argument '{key}' must be an integer")
 
 
 async def on_start_user_session_impl(oi: organizer.OrganizerInbound, req: org.OnStartUserSessionRequest) -> org.OnStartUserSessionResponse:
@@ -25,6 +37,9 @@ async def on_start_user_session_impl(oi: organizer.OrganizerInbound, req: org.On
     Called by the server when a user session is started, to define custom actions for the client.
     """
     assert req.ses.sid, "No session ID"
+
+    # Housekeeping for version set integrity, just in case
+    await oi.folders_helper.repair_version_sets(req.ses.user.id)
 
     # Get base actions from organizer
     actions = oi.actions_helper.make_custom_actions_map()
@@ -114,7 +129,8 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             return clap.Empty()
 
         if cmd.cmd == "new_folder":
-            parent_folder = (await oi.folders_helper.get_current_folder_path(cmd.ses, None))[-1]
+            folder_path, _ = await oi.folders_helper.get_current_folder_path(cmd.ses, None)
+            parent_folder = folder_path[-1]  # create the subfolder in the folder currently being viewed
             # Create folder & refresh user's view
             if new_folder_name := args.get("name"):
                 with oi.db_new_session() as dbs:
@@ -126,6 +142,129 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             else:
                 oi.log.error("new_folder command missing 'name' argument")
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "new_folder command missing 'name' argument")
+
+        elif cmd.cmd == "set_folder_kind":
+            # Convert folder to version set or back to normal.
+            # {"id": 123, "kind": "version_set"|"normal"}
+            args = parse_json_dict(cmd.args)
+            if not args or not args.get("id") or not args.get("kind"):
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "set_folder_kind requires 'id' and 'kind'")
+            vs_folder_id = _int_arg(args, "id")
+            new_kind = str(args["kind"])
+            if new_kind not in (FolderKind.NORMAL.value, FolderKind.VERSION_SET.value):
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, f"Invalid folder kind: {new_kind}")
+
+            with oi.db_new_session() as dbs:
+                fld = dbs.query(DbFolder).filter(DbFolder.id == vs_folder_id).one_or_none()
+                if not fld:
+                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{vs_folder_id}' not found")
+                if fld.user_id != cmd.ses.user.id and not cmd.ses.is_admin:
+                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot change another user's folder")
+
+                if fld.kind == new_kind:
+                    oi.log.debug(f"Folder {fld.id} already has kind '{new_kind}', no change needed")
+                    return clap.Empty()
+                elif new_kind == FolderKind.VERSION_SET.value:
+                    has_parent = dbs.query(DbFolderItems).filter(DbFolderItems.subfolder_id == fld.id).first() is not None
+                    if not has_parent:
+                        raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "Cannot turn the root folder into a version set")
+
+                    contents = await oi.folders_helper.fetch_folder_contents(fld, cmd.ses)
+                    if any(isinstance(it, DbFolder) for it in contents):
+                        raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "Cannot make a version set from a folder that contains subfolders")
+
+                    media = [it for it in contents if isinstance(it, DbMediaFile)]
+                    if not media:
+                        raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "A version set needs at least one media file")
+
+                    with dbs.begin_nested():
+                        fld.kind = FolderKind.VERSION_SET.value
+                        fld.active_media_file_id = media[0].id
+                else:
+                    with dbs.begin_nested():
+                        fld.kind = FolderKind.NORMAL.value
+                        fld.active_media_file_id = None
+
+            page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
+            await oi.srv.client_show_page(page)
+            await oi.notify_folder_viewers(vs_folder_id, exclude_sid=cmd.ses.sid)
+
+        elif cmd.cmd == "make_versioned":
+            # Convert a selection of media files into a version set.
+            # (This is
+            # {"ids": [{"mediaFileId": ...} | {"folderId": ...}]}
+            args = parse_json_dict(cmd.args)
+            raw_ids = args.get("ids") or []
+
+            if any(x.get("folderId") for x in raw_ids):
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "Make Versioned works on media files only; deselect folders")
+
+            sel_media_ids = [x.get("mediaFileId") for x in raw_ids if x.get("mediaFileId")]
+            if not sel_media_ids:
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "Select at least one media file to make versioned")
+
+            with oi.db_new_session() as dbs:
+                parent_item = dbs.query(DbFolderItems).filter(DbFolderItems.media_file_id == sel_media_ids[0]).one_or_none()
+                if not parent_item or parent_item.folder_id is None:
+                    raise GRPCError(GrpcStatus.NOT_FOUND, "Selected media file is not in any folder")
+                parent_id = parent_item.folder_id
+                parent_fld = dbs.query(DbFolder).filter(DbFolder.id == parent_id).one()
+                if parent_fld.user_id != cmd.ses.user.id and not cmd.ses.is_admin:
+                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot modify another user's folder")
+
+                # Order the selected media by their current display order in the parent (leftmost first).
+                sel_set = set(sel_media_ids)
+                parent_contents = await oi.folders_helper.fetch_folder_contents(parent_fld, cmd.ses)
+                ordered = [it for it in parent_contents if isinstance(it, DbMediaFile) and it.id in sel_set]
+
+                # Since we are ordering them the same as in current folder, all all selected files
+                # # must live in this one parent
+                if len(ordered) != len(sel_set):
+                    raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "All selected media files must be in the same folder to group them into a version set")
+
+                title = ordered[0].title or "Version Set"
+                with dbs.begin_nested():
+                    new_fld = DbFolder(user_id=parent_fld.user_id, title=title, kind=FolderKind.VERSION_SET.value)
+                    dbs.add(new_fld)
+                    dbs.flush()
+
+                    max_so = dbs.query(sqlalchemy.func.max(DbFolderItems.sort_order)).filter(DbFolderItems.folder_id == parent_id).scalar() or 0
+                    dbs.add(DbFolderItems(folder_id=parent_id, subfolder_id=new_fld.id, sort_order=max_so + 1))
+                    for i, m in enumerate(ordered):
+                        dbs.query(DbFolderItems).filter(DbFolderItems.media_file_id == m.id).update({"folder_id": new_fld.id, "sort_order": i})
+                    new_fld.active_media_file_id = ordered[0].id
+
+            page = await oi.pages_helper.construct_navi_page(cmd.ses, None)
+            await oi.srv.client_show_page(page)
+            await oi.notify_folder_viewers(parent_id, exclude_sid=cmd.ses.sid)
+
+        elif cmd.cmd == "set_active_version":
+            # {"folder_id": ..., "media_file_id": ...} -- set the version set's active version.
+            # Invoked both by the "Set Active Ver" popup and by the player's version dropdown.
+            args = parse_json_dict(cmd.args)
+            if not args or not args.get("folder_id") or not args.get("media_file_id"):
+                raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "set_active_version requires 'folder_id' and 'media_file_id'")
+
+            sa_folder_id = _int_arg(args, "folder_id")
+            sa_media_id = str(args["media_file_id"])
+
+            with oi.db_new_session() as dbs:
+                fld = dbs.query(DbFolder).filter(DbFolder.id == sa_folder_id).one_or_none()
+                if not fld:
+                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{sa_folder_id}' not found")
+                if fld.user_id != cmd.ses.user.id and not cmd.ses.is_admin:
+                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot change another user's version set")
+                member = dbs.query(DbFolderItems).filter(
+                    DbFolderItems.folder_id == sa_folder_id,
+                    DbFolderItems.media_file_id == sa_media_id).first()
+                if not member:
+                    raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "That media file is not in this version set")
+                with dbs.begin_nested():
+                    fld.active_media_file_id = sa_media_id
+
+            # Push a notify only, not full ShowPage, because set_active_version could be called from
+            # player dropdown, where we want to avoid interrupting playback.
+            await oi.notify_folder_viewers(sa_folder_id, exclude_sid=None)
 
         elif cmd.cmd == "open_folder":
             # Validate & parse argument JSON
@@ -179,7 +318,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             args = parse_json_dict(cmd.args)  # {"id": 123, "new_name": "New name"}
             if not args or not args.get("id") or not args.get("new_name"):
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "rename_folder command missing 'id' or 'new_name' argument")
-            folder_id = int(args["id"])
+            folder_id = _int_arg(args, "id")
             with oi.db_new_session() as dbs:
                 fld = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
                 if not fld:
@@ -201,7 +340,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             args = parse_json_dict(cmd.args) # {"id": 123}
             if not args or not args.get("id"):
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "trash_folder command missing 'id' argument")
-            folder_id = int(args["id"])
+            folder_id = _int_arg(args, "id")
 
             # Get folder and check authorization
             from .authz_methods import check_action_authorization
@@ -235,7 +374,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             if not args or not args.get("id"):
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "share_folder command missing 'id' argument")
 
-            folder_id = int(args["id"])
+            folder_id = _int_arg(args, "id")
 
             with oi.db_new_session() as dbs:
                 shared = await oi.folders_helper.create_folder_share(dbs, folder_id, cmd.ses)
@@ -265,7 +404,7 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             if not args or not args.get("id"):
                 raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "revoke_share command missing 'id' argument")
 
-            folder_id = int(args["id"])
+            folder_id = _int_arg(args, "id")
 
             with oi.db_new_session() as dbs:
                 # Revoke the share
@@ -305,7 +444,8 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
             # Check if this is a batch cleanup request (folder_id = '*')
             if folder_id_str == "*":
                 # Batch cleanup all empty users (excluding the admin user who is performing the action)
-                cur_folder_id = (await oi.folders_helper.get_current_folder_path(cmd.ses, None))[-1].id
+                folder_path, _ = await oi.folders_helper.get_current_folder_path(cmd.ses, None)
+                cur_folder_id = folder_path[-1].id  # the folder the admin is currently viewing
                 with oi.db_new_session() as dbs:
                     from .folder_op_methods import find_and_cleanup_empty_users
                     cleaned_count = await find_and_cleanup_empty_users(dbs, oi.log, exclude_user_id=cmd.ses.user.id)

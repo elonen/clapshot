@@ -171,6 +171,29 @@ pub async fn del_media_file_and_cleanup(media_file_id: &str, ses: Option<&mut Us
         }
 
         models::MediaFile::delete(&mut server.db.conn()?, &v.id)?;
+
+        // Notify the organizer that a media file was deleted, for any additional cleanup
+        if let Some(ref uri) = server.organizer_uri {
+            if server.organizer_has_connected.load(std::sync::atomic::Ordering::Relaxed) {
+                let uri = uri.clone();
+                let user_id = v.user_id.clone();
+                let media_file_id = v.id.clone();
+                tokio::spawn(async move {
+                    match crate::grpc::grpc_client::connect(uri).await {
+                        Ok(mut org) => {
+                            let req = proto::org::OnMediaFileDeletedRequest { user_id, media_file_id };
+                            if let Err(e) = org.on_media_file_deleted(req).await {
+                                if e.code() != tonic::Code::Unimplemented {
+                                    tracing::error!(err=?e, "Error in organizer on_media_file_deleted() call");
+                                }
+                            }
+                        },
+                        Err(e) => tracing::error!(err=?e, "Failed to connect to organizer for on_media_file_deleted"),
+                    }
+                });
+            }
+        }
+
         let mut details = format!("Added by '{}' on {}. Filename was {}.",
             v.user_id.clone(),
             v.added_time,

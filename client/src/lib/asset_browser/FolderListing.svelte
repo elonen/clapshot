@@ -410,11 +410,13 @@ function enterKeyInterceptor(node: HTMLElement) {
                             name={item.obj.folder.title}
                             preview_items={item.obj.folder.previewItems }
                             visualization={item.obj.vis}
+                            showAsMediaTile={item.obj.folder.previewAsMediaTile}
                             ondropitemsinto={(event) => {
                                 dispatch("move-to-folder", {
                                     dstFolderId: event.folderId,
                                     ids: mapDefItems(event.items) });
                             }}
+                            onrejectdrop={() => dispatch("refresh-listing")}
                         />
                     {:else}
                         <div>Unknown item type</div>

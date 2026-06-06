@@ -152,4 +152,31 @@ ALL_MIGRATIONS: list[MigrationEntry] = [
                 CREATE INDEX bf_shared_folders_share_token ON bf_shared_folders(share_token);
                 '''),
     ),
+
+    MigrationEntry(
+        metadata = org.Migration(
+            uuid="add_version_sets_2026-06-06_1200",
+            version="0004_add_version_sets",
+            dependencies=[
+                org.MigrationDependency(
+                    name="clapshot.server",
+                    min_ver="20240522163000",
+                    max_ver="20240602173200"
+                ),
+                org.MigrationDependency(
+                    name="clapshot.organizer.basic_folders",
+                    min_ver="0003_add_folder_sharing",
+                    max_ver="0003_add_folder_sharing"
+                )
+            ],
+            description="Add folder kind (normal/version_set) and active version pointer for version sets"
+        ),
+        up_sql= dedent('''
+                ALTER TABLE bf_folders ADD COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'normal'
+                    CHECK (kind IN ('normal', 'version_set'));
+
+                ALTER TABLE bf_folders ADD COLUMN active_media_file_id VARCHAR(255) NULL
+                    REFERENCES media_files(id) ON UPDATE CASCADE ON DELETE SET NULL;
+                '''),
+    ),
 ]

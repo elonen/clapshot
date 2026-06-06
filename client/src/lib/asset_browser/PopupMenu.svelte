@@ -84,7 +84,9 @@ function fmtColorToCSS(c: Proto3.Color | null | undefined) {
 .popupmenu{
     display: inline-flex;
     border: 1px #999 solid;
-    width: 170px;
+    min-width: 170px;
+    width: max-content;
+    white-space: nowrap;
     background-color: #fff;
     border-radius: 10px;
     overflow: hidden;

@@ -6,7 +6,7 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, mediaFileId, curVideo, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle, clientConfig} from './stores';
+import {allComments, curUsername, curUserId, videoIsReady, mediaFileId, curVideo, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle, clientConfig, playerHeaderHtml} from './stores';
 import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "./types";
 import { t, initLocale } from './i18n';
 
@@ -772,6 +772,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 }
 
                 $curPageId = newPageId;
+                $playerHeaderHtml = null;  // showing a folder view => drop any player header HTML
                 closePlayerIfOpen();  // No-op if no video is open
                 $curPageItems = [...cmd.showPage.pageItems];  // force svelte to re-render
             }
@@ -846,8 +847,16 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     $curPageId = null;  // Clear the current page ID, so popHistoryState will know to reopen it if needed
 
                     if ($mediaFileId != v.id) {
-                        console.debug("[Browser history] Pushing new media file state: ", v.id);
-                        history.pushState({mediaFileId: v.id}, '', `/?vid=${v.id}`);
+                        // Push a new history entry only when first ENTERING the player.
+                        // If video is changing inside the player, replace the current history entry instead.
+                        const enteringPlayer = ($mediaFileId == null);
+                        if (enteringPlayer) {
+                            console.debug("[Browser history] Entering player, pushing media file state: ", v.id);
+                            history.pushState({mediaFileId: v.id}, '', `/?vid=${v.id}`);
+                        } else {
+                            console.debug("[Browser history] In-player switch, replacing media file state: ", v.id);
+                            history.replaceState({mediaFileId: v.id}, '', `/?vid=${v.id}`);
+                        }
                         document.title = "Clapshot - " + (v.title ?? v.id);
                     }
 
@@ -961,7 +970,15 @@ function openMediaFileListItem(e: { detail: { item: Proto3.PageItem_FolderListin
 // Expose some API functions to browser JS (=scripts from Server and Organizer)
 
 (window as any).clapshot = {
-    openMediaFile: (mediaFileId: string) => { wsEmit({ openMediaFile: { mediaFileId } }) },
+    openMediaFile: (mediaFileId: string, opts?: { headerHtml?: string, keepHTML?: boolean, preserveTime?: boolean }) => {
+        // Player header HTML: keep it (switching within a header), set it, or clear it (plain open).
+        if (!opts?.keepHTML) { playerHeaderHtml.set(opts?.headerHtml ?? null); }
+        // Optionally resume the current timecode + play state in the newly opened media.
+        const time = (opts?.preserveTime && videoPlayer) ? videoPlayer.getCurTime() : 0;
+        const wasPlaying = (opts?.preserveTime && videoPlayer) ? !videoPlayer.isPaused() : false;
+        wsEmit({ openMediaFile: { mediaFileId } });
+        if (opts?.preserveTime && videoPlayer) { videoPlayer.queueSeekOnLoad(time, wasPlaying); }
+    },
     renameMediaFile: (mediaFileId: string, newName: string) => { wsEmit({ renameMediaFile: { mediaFileId, newName } }) },
     delMediaFile: (mediaFileId: string) => { wsEmit({ delMediaFile: { mediaFileId } }) },
 
@@ -1166,6 +1183,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                                     on:open-item = {openMediaFileListItem}
                                     on:reorder-items = {onReorderItems}
                                     on:move-to-folder = {onMoveItemsToFolder}
+                                    on:refresh-listing = {() => wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}})}
                                     on:popup-action = {onMediaFileListPopupAction}
                                 />
                             </div>

@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import uuid
 import inspect
 from contextlib import redirect_stdout, redirect_stderr
 from io import StringIO
 import traceback
 from types import MethodType
-from typing import Tuple
+from typing import Optional, Tuple
 
 from grpclib import GRPCError
 from grpclib.const import Status as GrpcStatus
@@ -19,7 +20,7 @@ import sqlalchemy
 
 import organizer
 from organizer.config import PATH_COOKIE_NAME
-from organizer.database.models import DbFolder, DbUser, DbMediaFile, DbSharedFolder
+from organizer.database.models import DbFolder, DbFolderItems, DbUser, DbMediaFile, DbSharedFolder, FolderKind
 from organizer.database.operations import db_get_or_create_user_root_folder
 from organizer.helpers.folders import SHARED_FOLDER_TOKEN_COOKIE_NAME
 
@@ -2217,3 +2218,36 @@ async def org_test__on_media_file_ingested(oi: organizer.OrganizerInbound):
         "Observer should receive an empty ShowPage refresh hint"
 
     print("on_media_file_ingested tests passed.")
+
+
+# Import version-set tests so they get discovered by the test framework via inspect.getmembers()
+# These imports are required for test discovery - do NOT remove as "unused" imports!
+# Placed at the BOTTOM so _create_test_folder_and_session (imported by version_sets) is already defined.
+from organizer.testing_methods.version_sets import (  # noqa: F401
+    org_test__version_set__add_into_set_active_follows_latest,  # noqa: F401
+    org_test__version_set__breadcrumb_shows_current_folder_name,  # noqa: F401
+    org_test__version_set__defensive_kind,  # noqa: F401
+    org_test__version_set__into_normal_reverts,  # noqa: F401
+    org_test__version_set__into_version_set,  # noqa: F401
+    org_test__version_set__make_versioned_denied_for_folder,  # noqa: F401
+    org_test__version_set__make_versioned_multi,  # noqa: F401
+    org_test__version_set__make_versioned_offered_on_media,  # noqa: F401
+    org_test__version_set__make_versioned_single,  # noqa: F401
+    org_test__version_set__manage_view_rendering,  # noqa: F401
+    org_test__version_set__media_only_guard,  # noqa: F401
+    org_test__version_set__move_active_out,  # noqa: F401
+    org_test__version_set__move_last_out_deletes_set,  # noqa: F401
+    org_test__version_set__move_nonactive_out,  # noqa: F401
+    org_test__version_set__on_delete_repairs,  # noqa: F401
+    org_test__version_set__previewed_as_media_in_parent_tile,  # noqa: F401
+    org_test__version_set__refused_when_empty_or_root,  # noqa: F401
+    org_test__version_set__refused_with_subfolder,  # noqa: F401
+    org_test__version_set__reorder_keeps_active,  # noqa: F401
+    org_test__version_set__reorder_refreshes_actor,  # noqa: F401
+    org_test__version_set__selfheal_empty_deletes,  # noqa: F401
+    org_test__version_set__selfheal_subfolder_demotes,  # noqa: F401
+    org_test__version_set__set_active_version,  # noqa: F401
+    org_test__version_set__set_active_version_action_uses_camelcase,  # noqa: F401
+    org_test__version_set__set_active_version_sends_refresh_hint,  # noqa: F401
+    org_test__version_set__tile_rendering,  # noqa: F401
+)

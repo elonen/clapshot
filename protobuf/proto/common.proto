@@ -129,11 +129,17 @@ message PageItem {
             string id = 1;
             string title = 2;
             repeated Item preview_items = 4;
+            bool preview_as_media_tile = 5;   // Render like a media tile (using preview_items[0]) instead of a folder grid
         }
         message Item {
             message Visualization {
                 optional Color base_color = 1;
                 optional Icon icon = 2;
+                message Badge {
+                    string text = 1;
+                    optional Color color = 2;
+                }
+                repeated Badge badges = 3;
             }
             oneof item {
                 Folder folder = 1;
@@ -243,7 +249,10 @@ message ScriptCall {
                 - listing_data: StringMap
 
     Available functions:
-        - clapshot.openMediaFile(MediaFileId: string): void - Open a media file by its ID.
+        - clapshot.openMediaFile(mediaFileId: string, opts?: {headerHtml?: string, keepHTML?: boolean, preserveTime?: boolean}): void - Open a media file by its ID.
+            opts.headerHtml:    Organizer HTML to render in the player's title/header slot (e.g. a <select> of alternatives). Cleared by a plain open or page navigation.
+            opts.keepHTML:      Leave the current header HTML in place (use when switching media within it, so its handlers needn't re-embed themselves).
+            opts.preserveTime:  Resume at the current timecode (clamped to the new duration) and play state after the new media loads.
         - clapshot.renameMediaFile(MediaFileId: string, newName: string): void - Rename a media file.
         - clapshot.delMediaFile(MediaFileId: string): void - Delete a media file.
         - clapshot.callOrganizer(cmd: string, args: Object): void - Call an Organizer API command.

@@ -12,7 +12,7 @@ from organizer.helpers import media_type_to_vis_icon
 from organizer.utils import folder_path_to_uri_arg
 import organizer.metaplugin as mp
 
-from .folders import FoldersHelper
+from .folders import FoldersHelper, version_number, VERSION_BADGE_COLOR, VERSION_ACTIVE_COLOR
 from organizer.database.models import DbMediaFile, DbFolder, DbUser
 
 
@@ -141,7 +141,7 @@ class PagesHelper:
         media_list = await self.srv.db_get_media_files(org.DbGetMediaFilesRequest(ids=org.IdList(ids=media_ids)))
         media_by_id = {v.id: v for v in media_list.items}
 
-        async def media_file_to_page_item(vid_id: str, popup_actions: list[str]) -> clap.PageItemFolderListingItem:
+        async def media_file_to_page_item(vid_id: str, popup_actions: list[str], vis: Optional[clap.PageItemFolderListingItemVisualization] = None) -> clap.PageItemFolderListingItem:
             assert re.match(r"^[0-9a-fA-F]+$", vid_id), f"Unexpected media file ID format: {vid_id}"
             return clap.PageItemFolderListingItem(
                 media_file = media_by_id[vid_id],
@@ -149,14 +149,34 @@ class PagesHelper:
                     lang = clap.ScriptCallLang.JAVASCRIPT,
                     code = f'clapshot.openMediaFile("{vid_id}");'),
                 popup_actions = popup_actions,
-                vis = media_type_to_vis_icon(media_by_id[vid_id].media_type))
+                vis = vis if vis is not None else media_type_to_vis_icon(media_by_id[vid_id].media_type))
+
+        # In a version set's "Manage Versions" view, each item is a version: orange vN badge,
+        # the Active one tinted cyan, and a per-version "Set Active Ver" popup.
+        # Read-only classification (the current set may itself be invalid -- render defensively as a
+        # normal folder rather than mutating it here; repair_version_sets() does the actual fix-up).
+        is_vset = self.folders_helper.renders_as_version_set(cur_folder, folder_db_items)
+        ordered_media = [it for it in folder_db_items if isinstance(it, DbMediaFile)]
+        vset_active_id = self.folders_helper.displayed_active_id(cur_folder, ordered_media) if is_vset else None
+        vset_total = len(ordered_media)
+        vset_left_index = {m.id: i for i, m in enumerate(ordered_media)}
 
         listing_items: list[clap.PageItemFolderListingItem] = []
         for itm in folder_db_items:
             if isinstance(itm, DbFolder):
                 listing_items.append(await self.folders_helper.folder_to_page_item(itm, popup_actions, ses))
             elif isinstance(itm, DbMediaFile):
-                listing_items.append(await media_file_to_page_item(itm.id, popup_actions))
+                if is_vset:
+                    n = version_number(vset_left_index[itm.id], vset_total)
+                    base_icon = media_type_to_vis_icon(media_by_id[itm.id].media_type)
+                    vis = clap.PageItemFolderListingItemVisualization(
+                        icon = base_icon.icon,
+                        badges = [clap.PageItemFolderListingItemVisualizationBadge(text=f"v{n}", color=VERSION_BADGE_COLOR)],
+                        base_color = VERSION_ACTIVE_COLOR if itm.id == vset_active_id else None)
+                    listing_items.append(await media_file_to_page_item(itm.id, popup_actions + ["set_active_version"], vis=vis))
+                else:
+                    # Media files in a normal folder can be grouped into a new version set.
+                    listing_items.append(await media_file_to_page_item(itm.id, popup_actions + ["make_versioned"]))
             else:
                 raise ValueError(f"Unknown item type: {itm}")
 
@@ -178,7 +198,7 @@ class PagesHelper:
         folder_listing = clap.PageItemFolderListing(
             items = listing_items,
             allow_reordering = True,
-            popup_actions = ["new_folder"],
+            popup_actions = [] if is_vset else ["new_folder"],   # version sets can't hold subfolders
             listing_data = listing_data,
             allow_upload = can_upload,
             media_file_added_action = "on_media_file_added")

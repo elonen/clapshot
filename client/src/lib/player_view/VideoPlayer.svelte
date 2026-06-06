@@ -32,6 +32,26 @@ let time: number = $state(0);
 let duration: number | undefined = $state();
 let paused: boolean = $state(true);
 
+// Pending seek to apply once the (newly opened) media's metadata is loaded. Used when Organizer
+// wants to open a video at a specific time/frame, but the video isn't loaded yet so we don't know its duration/frame count.
+let queuedSeek: { time: number, resume: boolean } | null = null;
+
+export function queueSeekOnLoad(timeSec: number, resume: boolean) {
+    queuedSeek = { time: timeSec, resume };
+}
+
+function onLoadedMetadata() {
+    prepare_drawing();
+    if (queuedSeek) {
+        const dur = videoElem.duration;
+        const t = (dur && isFinite(dur)) ? Math.min(queuedSeek.time, dur) : queuedSeek.time;
+        time = t;
+        videoElem.currentTime = t;
+        if (queuedSeek.resume) { videoElem.play(); }
+        queuedSeek = null;
+    }
+}
+
 // Duration abstraction for better testability
 export function getEffectiveDuration(): number {
 	// In production, always use the real duration (even if NaN/undefined)
@@ -750,7 +770,7 @@ function handlePinClick(id: string) {
 				class="h-full w-full"
 				style="opacity: {$videoIsReady ? 1.0 : 0}; transition-opacity: 1.0s;"
 				bind:this={videoElem}
-				onloadedmetadata={prepare_drawing}
+				onloadedmetadata={onLoadedMetadata}
 				onclick={clickOnVideo}
 				bind:currentTime={time}
                 ontimeupdate={handleTimeUpdate}
