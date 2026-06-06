@@ -10,7 +10,7 @@
     "app_title": "Clapshot",
 
     "default_locale": "en",
-    "supported_locales": ["en", "zh"],
+    "supported_locales": ["en", "fr", "zh"],
 
     "enable_mediabunny": true
 }
