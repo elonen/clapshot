@@ -84,7 +84,9 @@ function fmtColorToCSS(c: Proto3.Color | null | undefined) {
 .popupmenu{
     display: inline-flex;
     border: 1px #999 solid;
-    width: 170px;
+    min-width: 180px;
+    width: max-content;
+    max-width: 280px;
     background-color: #fff;
     border-radius: 10px;
     overflow: hidden;
@@ -107,6 +109,8 @@ ul li button{
     text-align: left;
     border: 0px;
     background-color: #fff;
+    white-space: nowrap;
+    padding-right: 12px;
 }
 ul li button:hover{
     color: #000;
