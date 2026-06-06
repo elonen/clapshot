@@ -139,8 +139,11 @@ fn executor_survives_nonzero_exit_and_missing_script() {
 #[test]
 fn executor_kills_on_timeout() {
     let dir = tempfile::tempdir().unwrap();
-    let slow = write_script(dir.path(), "slow.sh", "#!/bin/sh\nsleep 10\n");
+    // Use a pure-shell busy loop instead of `sleep N` to avoid forking a child
+    // process that would keep the stdout/stderr pipes open after the shell is
+    // killed, which would cause the drain threads to block until the child exits.
+    let slow = write_script(dir.path(), "slow.sh", "#!/bin/sh\nwhile true; do :; done\n");
     let start = Instant::now();
     run_one(&slow, &ev(1), Duration::from_millis(200));
-    assert!(start.elapsed() < Duration::from_secs(10), "timed-out script should be killed promptly");
+    assert!(start.elapsed() < Duration::from_secs(5), "timed-out script should be killed promptly");
 }
