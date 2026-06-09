@@ -13,6 +13,7 @@ pub mod database;
 pub mod notification;
 pub mod tests;
 pub mod grpc;
+pub mod i18n;
 
 pub const PKG_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub const PKG_NAME: &'static str = env!("CARGO_PKG_NAME");

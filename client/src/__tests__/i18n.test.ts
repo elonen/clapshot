@@ -110,60 +110,59 @@ describe('i18n', () => {
     });
 
     describe('translation function', () => {
-        it('should return translated string for valid key', () => {
+        // msgid IS the English source string; a missing translation falls back to it.
+        it('should return the source string for English (the source language)', () => {
             setLocale('en');
             const $t = get(t);
-            expect($t('status.connecting')).toBe('Connecting server...');
+            expect($t('Connecting server...')).toBe('Connecting server...');
         });
 
         it('should return Chinese translation when locale is zh', () => {
             setLocale('zh');
             const $t = get(t);
-            expect($t('status.connecting')).toBe('正在连接服务器...');
+            expect($t('Connecting server...')).toBe('正在连接服务器...');
         });
 
         it('should return Finnish translation when locale is fi', () => {
             setLocale('fi');
             const $t = get(t);
-            expect($t('status.connecting')).toBe('Yhdistetään palvelimeen...');
+            expect($t('Connecting server...')).toBe('Yhdistetään palvelimeen...');
         });
 
         it('should support parameterized translations', () => {
             setLocale('en');
             const $t = get(t);
-            expect($t('upload.uploading', { filename: 'test.mp4' })).toBe('Uploading: test.mp4...');
+            expect($t('Uploading: {filename}...', { filename: 'test.mp4' })).toBe('Uploading: test.mp4...');
         });
 
         it('should support parameterized Chinese translations', () => {
             setLocale('zh');
             const $t = get(t);
-            expect($t('upload.uploading', { filename: 'test.mp4' })).toBe('正在上传：test.mp4...');
+            expect($t('Uploading: {filename}...', { filename: 'test.mp4' })).toBe('正在上传：test.mp4...');
         });
 
         it('should support parameterized Finnish translations', () => {
             setLocale('fi');
             const $t = get(t);
-            expect($t('upload.uploading', { filename: 'test.mp4' })).toBe('Ladataan: test.mp4...');
+            expect($t('Uploading: {filename}...', { filename: 'test.mp4' })).toBe('Ladataan: test.mp4...');
         });
 
         it('should support multiple parameters', () => {
             setLocale('en');
             const $t = get(t);
-            expect($t('upload.progress', { percent: 50 })).toBe('50% uploaded... please wait');
+            expect($t('{percent}% uploaded... please wait', { percent: 50 })).toBe('50% uploaded... please wait');
         });
 
-        it('should fall back to English for missing Chinese translations', () => {
+        it('should translate a context-scoped string in the target locale', () => {
             setLocale('zh');
             const $t = get(t);
-            // If a key exists in English but not Chinese, it should fall back to English
-            // All keys currently exist in both, so this is more of a safety test
-            expect($t('general.ok')).toBeTruthy();
+            expect($t('About', { context: 'menu' })).toBe('关于');
         });
 
-        it('should return key itself if translation missing in all locales', () => {
-            setLocale('en');
+        it('should fall back to the source string when a translation is missing', () => {
+            setLocale('zh');
             const $t = get(t);
-            expect($t('nonexistent.key' as any)).toBe('nonexistent.key');
+            expect($t('This source has no translation anywhere')).toBe('This source has no translation anywhere');
         });
     });
 

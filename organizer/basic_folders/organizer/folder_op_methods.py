@@ -15,6 +15,8 @@ from .database.models import DbFolder, DbFolderItems, DbMediaFile, DbUser
 
 from organizer.config import PATH_COOKIE_NAME
 
+from .helpers.l10n import _
+
 import organizer
 
 async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFolderRequest) -> clap.Empty:
@@ -33,7 +35,7 @@ async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFol
         min_sort_order = dbs.query(sqlalchemy.func.min(DbFolderItems.sort_order)).filter(DbFolderItems.folder_id == int(req.dst_folder_id)).scalar() or 0
 
     if not dst_folder:
-        raise GRPCError(GrpcStatus.NOT_FOUND, "Destination folder not found")
+        raise GRPCError(GrpcStatus.NOT_FOUND, _("Destination folder not found"))
 
     # Check authorization via metaplugins + default checks
     from .authz_methods import check_action_authorization
@@ -45,7 +47,7 @@ async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFol
     prior_latest_ver: Optional[str] = None
     if dst_is_vset:
         if any(it.folder_id for it in req.ids):
-            raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "A version set can only contain media files")
+            raise GRPCError(GrpcStatus.INVALID_ARGUMENT, _("A version set can only contain media files"))
         prior_media = [it for it in await oi.folders_helper.fetch_folder_contents(dst_folder, req.ses) if isinstance(it, DbMediaFile)]
         prior_latest_ver = prior_media[0].id if prior_media else None
         prior_active = dst_folder.active_media_file_id
@@ -62,17 +64,17 @@ async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFol
                 fld_to_move: Optional[DbFolder] = dbs.query(DbFolder).filter(DbFolder.id == int(it.folder_id)).one_or_none()
 
                 if not fld_to_move:
-                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder id '{it.folder_id}' not found")
+                    raise GRPCError(GrpcStatus.NOT_FOUND, _("Folder id '{id}' not found").format(id=it.folder_id))
                 if fld_to_move.id == dst_folder.id:
-                    raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "Cannot move a folder into itself")
+                    raise GRPCError(GrpcStatus.INVALID_ARGUMENT, _("Cannot move a folder into itself"))
                 if fld_to_move.user_id != req.ses.user.id and not req.ses.is_admin:
-                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot move another user's folder")
+                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, _("Cannot move another user's folder"))
 
 
                 with dbs.begin_nested():
                     cnt = dbs.query(DbFolderItems).filter(DbFolderItems.subfolder_id == fld_to_move.id).update({"folder_id": dst_folder.id, "sort_order": item_sort_order})
                     if cnt == 0:
-                        raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder with ID '{fld_to_move.id}' is a root folder? Cannot move.")
+                        raise GRPCError(GrpcStatus.NOT_FOUND, _("Folder with ID '{id}' is a root folder? Cannot move.").format(id=fld_to_move.id))
                     assert dst_folder.user_id, "Destination folder has no user ID, cannot transfer ownership"
 
                     await _recursive_set_folder_owner(dbs, fld_to_move.id, dst_folder.user_id, set(), oi.log)
@@ -84,9 +86,9 @@ async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFol
                 vid_to_move = dbs.query(DbMediaFile).filter(DbMediaFile.id == it.media_file_id).one_or_none()
 
                 if not vid_to_move:
-                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Media file '{it.media_file_id}' not found")
+                    raise GRPCError(GrpcStatus.NOT_FOUND, _("Media file '{id}' not found").format(id=it.media_file_id))
                 if vid_to_move.user_id != req.ses.user.id and not req.ses.is_admin:
-                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot move another user's media file")
+                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, _("Cannot move another user's media file"))
 
 
                 with dbs.begin_nested():
@@ -324,9 +326,9 @@ async def reorder_items_impl(oi: organizer.OrganizerInbound, req: org.ReorderIte
                 # Check destination folder
                 parent_folder = dbs.query(DbFolder).filter(DbFolder.id == int(parent_folder_id)).one_or_none()
                 if not parent_folder:
-                    raise GRPCError(GrpcStatus.NOT_FOUND, f"Parent folder {parent_folder_id} not found")
+                    raise GRPCError(GrpcStatus.NOT_FOUND, _("Parent folder {id} not found").format(id=parent_folder_id))
                 if parent_folder.user_id != req.ses.user.id and not req.ses.is_admin:
-                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot reorder items in another user's folder")
+                    raise GRPCError(GrpcStatus.PERMISSION_DENIED, _("Cannot reorder items in another user's folder"))
                 reorder_is_vset = parent_folder.is_version_set
 
                 # Reorder items
@@ -346,5 +348,5 @@ async def reorder_items_impl(oi: organizer.OrganizerInbound, req: org.ReorderIte
         await oi.notify_folder_viewers(int(parent_folder_id), exclude_sid=None if reorder_is_vset else req.ses.sid)
         return clap.Empty()
     else:
-        raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "No folder ID in UI listing, cannot reorder")
+        raise GRPCError(GrpcStatus.INVALID_ARGUMENT, _("No folder ID in UI listing, cannot reorder"))
 

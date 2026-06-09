@@ -1,0 +1,982 @@
+msgid ""
+msgstr ""
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-09 17:39+0300\n"
+"Language: zh\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:176
+msgid "Internal error in authz: {desc}"
+msgstr "授权内部错误：{desc}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:183
+msgid "Permission denied"
+msgstr "没有权限"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:217
+msgid "Permission denied: {desc}"
+msgstr "没有权限：{desc}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:52
+msgid "No such media file."
+msgstr "没有此媒体文件。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:111
+msgid "You have no media yet."
+msgstr "你还没有任何媒体文件。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:113
+msgid "All your media files"
+msgstr "你的所有媒体文件"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:120
+msgid "Your Media"
+msgstr "我的媒体"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:244
+msgid "{kind} deleted."
+msgstr "已删除{kind}。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:246
+msgid "{kind} deleted, but cleanup had errors."
+msgstr "已删除{kind}，但清理过程中出现错误。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:268
+msgid "Invalid file name (must contain a letter or number)"
+msgstr "文件名无效（必须包含字母或数字）"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:272
+msgid "Name too long (max 160)"
+msgstr "名称过长（最多 160 个字符）"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:278
+msgid "{kind} renamed."
+msgstr "已重命名{kind}。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:279
+msgid "New name: '{name}'"
+msgstr "新名称：“{name}”"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:401
+msgid "Failed to edit comment."
+msgstr "编辑评论失败。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:401
+msgid "No such comment. Cannot edit."
+msgstr "没有此评论，无法编辑。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:420
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:425
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:435
+msgid "Failed to delete comment."
+msgstr "删除评论失败。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:420
+msgid "You can only delete your own comments"
+msgstr "你只能删除自己的评论"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:425
+msgid "Comment has replies. Cannot delete."
+msgstr "评论已有回复，无法删除。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:435
+msgid "No such comment. Cannot delete."
+msgstr "没有此评论，无法删除。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:478
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:495
+msgid "Failed to add subtitle."
+msgstr "添加字幕失败。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:478
+msgid "Subtitle file already exists: '{filename}'"
+msgstr "字幕文件已存在：“{filename}”"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:495
+msgid "WebVTT file already exists: '{filename}'"
+msgstr "WebVTT 文件已存在：“{filename}”"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:652
+msgid "Failed to join collab session: {error}"
+msgstr "加入协同会话失败：{error}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:691
+msgid "Report rejected: no active collab session."
+msgstr "报告被拒绝：没有活动的协同会话。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:715
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:736
+msgid "No organizer session."
+msgstr "没有 organizer 会话。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:777
+msgid "Missing command from client: {request}"
+msgstr "客户端缺少命令：{request}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:817
+msgid "Cmd '{cmd}' failed: {error}"
+msgstr "命令“{cmd}”执行失败：{error}"
+
+#: client/src/App.svelte:319
+msgid "Are you sure you want to delete this subtitle?"
+msgstr "确定要删除此字幕吗？"
+
+#: client/src/App.svelte:342
+msgid "Invalid time offset: {offset}"
+msgstr "时间偏移无效：{offset}"
+
+#: client/src/App.svelte:734
+msgid "Server version too old (v{version}). Please update server."
+msgstr "服务器版本过旧（v{version}），请更新服务器。"
+
+#: client/src/App.svelte:741
+msgid ""
+"Client version too old (client v{clientVersion} for server "
+"v{serverVersion}). Please update client."
+msgstr ""
+"客户端版本过旧（客户端 v{clientVersion} 对应服务器 v{serverVersion}），请更新"
+"客户端。"
+
+#: client/src/App.svelte:892
+msgid "Bad video open request. See log."
+msgstr "视频打开请求无效，请查看日志。"
+
+#: client/src/App.svelte:1060
+msgid "Connecting server..."
+msgstr "正在连接服务器..."
+
+#: client/src/App.svelte:1068
+msgid "View connection errors"
+msgstr "查看连接错误"
+
+#: client/src/App.svelte:1074
+msgid "See browser JS console for more details."
+msgstr "更多详情请查看浏览器 JS 控制台。"
+
+#: client/src/App.svelte:1106
+msgid "Sort: date posted"
+msgstr "排序：发布日期"
+
+#: client/src/App.svelte:1106
+msgid "Sort: timecode"
+msgstr "排序：时间码"
+
+#: client/src/App.svelte:1126
+msgid "Subtitles"
+msgstr "字幕"
+
+#: client/src/App.svelte:1148
+msgctxt "collab"
+msgid "Collaborative viewing session active."
+msgstr "协同观看会话已启用。"
+
+#: client/src/App.svelte:1149
+msgctxt "collab"
+msgid "Session ID is {id}"
+msgstr "会话 ID：{id}"
+
+#: client/src/App.svelte:1150
+msgctxt "collab"
+msgid "Actions like seek, play and draw are mirrored to all participants."
+msgstr "寻址、播放、绘图等操作会同步给所有参与者。"
+
+#: client/src/App.svelte:1151
+msgctxt "collab"
+msgid "To invite people, copy browser URL and send it to them."
+msgstr "邀请他人时，复制浏览器链接并发送给他们。"
+
+#: client/src/App.svelte:1152
+msgctxt "collab"
+msgid "Exit by clicking the green icon in header."
+msgstr "点击标题栏中的绿色图标退出。"
+
+#. button to acknowledge
+#: client/src/App.svelte:1153
+msgctxt "collab"
+msgid "Understood"
+msgstr "知道了"
+
+#: client/src/App.svelte:1182
+msgid "Drop video, audio and image files here to upload"
+msgstr "将视频、音频或图片文件拖到此处上传"
+
+#: client/src/App.svelte:1213
+msgid "Latest messages"
+msgstr "最新消息"
+
+#: client/src/lib/NavBar.svelte:70
+msgid ""
+"Basic auth logout failed.\n"
+"Status code from {url}: {status} (not 401)"
+msgstr ""
+"Basic 认证退出失败。\n"
+"来自 {url} 的状态码：{status}（非 401）"
+
+#: client/src/lib/NavBar.svelte:79
+msgid ""
+"Clapshot Client version {version}\n"
+"\n"
+"Visit the project page at:\n"
+"https://github.com/elonen/clapshot\n"
+msgstr ""
+"Clapshot 客户端版本 {version}\n"
+"\n"
+"请访问项目主页：\n"
+"https://github.com/elonen/clapshot\n"
+
+#: client/src/lib/NavBar.svelte:88
+msgid ""
+"Link copied to clipboard.\n"
+"Send it to reviewers who have user accounts here."
+msgstr ""
+"链接已复制到剪贴板。\n"
+"请将其发送给在本系统拥有用户账户的观看者。"
+
+#: client/src/lib/NavBar.svelte:140
+msgid "Share to logged in users"
+msgstr "分享给已登录用户"
+
+#: client/src/lib/NavBar.svelte:142
+msgid "Download original"
+msgstr "下载原文件"
+
+#: client/src/lib/NavBar.svelte:145
+msgctxt "collab"
+msgid "Leave collaborative Session"
+msgstr "离开协同会话"
+
+#: client/src/lib/NavBar.svelte:147
+msgctxt "collab"
+msgid "Collaboration is disabled here"
+msgstr "此处无法使用协同会话"
+
+#: client/src/lib/NavBar.svelte:147 client/src/lib/NavBar.svelte:149
+msgctxt "collab"
+msgid "Start Collaborative Session"
+msgstr "开始协同会话"
+
+#: client/src/lib/NavBar.svelte:153
+msgid "Experimental tools"
+msgstr "实验工具"
+
+#: client/src/lib/NavBar.svelte:157 client/src/lib/tools/EDLImport.svelte:107
+msgid "Import EDL as Comments"
+msgstr "导入 EDL 为评论"
+
+#: client/src/lib/NavBar.svelte:158
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:72
+msgid "Export Comments"
+msgstr "导出评论"
+
+#: client/src/lib/NavBar.svelte:190 client/src/lib/NavBar.svelte:191
+msgctxt "menu"
+msgid "Language"
+msgstr "语言"
+
+#: client/src/lib/NavBar.svelte:200 client/src/lib/NavBar.svelte:217
+msgid "Logout"
+msgstr "退出"
+
+#. menu item that opens the 'About this app' dialog
+#: client/src/lib/NavBar.svelte:202
+msgctxt "menu"
+msgid "About"
+msgstr "关于"
+
+#: client/src/lib/NavBar.svelte:218
+msgid "Reload page to log in again."
+msgstr "请重新加载页面以再次登录。"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:51
+msgid "{percent}% uploaded... please wait"
+msgstr "已上传 {percent}% ... 请稍候"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:61
+msgid "Upload Failed"
+msgstr "上传失败"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:66
+msgid "Upload Aborted"
+msgstr "上传已中止"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:76
+msgid "Uploading: {filename}..."
+msgstr "正在上传：{filename}..."
+
+#: client/src/lib/asset_browser/FileUpload.svelte:101
+msgid "Drop rejected. Only video, audio and image files are allowed."
+msgstr "不支持此文件类型。仅支持视频、音频和图片。"
+
+#: client/src/lib/asset_browser/FolderTile.svelte:61
+msgid "This target accepts media — folders can’t be dropped here."
+msgstr "此目标只接受媒体文件——不能将文件夹拖放到此处。"
+
+#: client/src/lib/player_view/CommentCard.svelte:44
+msgid "Delete comment?"
+msgstr "删除评论？"
+
+#: client/src/lib/player_view/CommentCard.svelte:106
+msgid "Link copied to clipboard"
+msgstr "链接已复制"
+
+#: client/src/lib/player_view/CommentCard.svelte:107
+#: client/src/lib/player_view/CommentCard.svelte:108
+#: client/src/lib/player_view/CommentCard.svelte:167
+#: client/src/lib/player_view/CommentCard.svelte:168
+msgid "Copy link"
+msgstr "复制链接"
+
+#: client/src/lib/player_view/CommentCard.svelte:155
+msgid "(edited)"
+msgstr "（已编辑）"
+
+#. button to reply to a comment (verb, not the noun 'a reply')
+#: client/src/lib/player_view/CommentCard.svelte:175
+msgctxt "comment"
+msgid "Reply"
+msgstr "回复"
+
+#: client/src/lib/player_view/CommentCard.svelte:177
+msgctxt "comment"
+msgid "Edit"
+msgstr "编辑"
+
+#. short label for the Delete button (abbreviation of 'Delete')
+#: client/src/lib/player_view/CommentCard.svelte:179
+msgctxt "comment"
+msgid "Del"
+msgstr "删除"
+
+#: client/src/lib/player_view/CommentCard.svelte:190
+msgid "Your reply..."
+msgstr "请输入回复..."
+
+#: client/src/lib/player_view/CommentInput.svelte:66
+msgctxt "comment"
+msgid "Undo"
+msgstr "撤销"
+
+#: client/src/lib/player_view/CommentInput.svelte:67
+msgctxt "comment"
+msgid "Redo"
+msgstr "重做"
+
+#: client/src/lib/player_view/CommentInput.svelte:80
+msgid "Add a comment - at current time..."
+msgstr "添加评论 —— 使用当前时间点..."
+
+#: client/src/lib/player_view/CommentInput.svelte:80
+msgid "Add a comment..."
+msgstr "添加评论..."
+
+#: client/src/lib/player_view/CommentInput.svelte:85
+msgid "Comment is time specific?"
+msgstr "这条评论包含时间码？"
+
+#: client/src/lib/player_view/CommentInput.svelte:100
+msgid "Draw on video"
+msgstr "在视频上绘制"
+
+#: client/src/lib/player_view/CommentInput.svelte:108
+msgctxt "comment"
+msgid "Send"
+msgstr "发送"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:64
+msgid "Edit subtitle"
+msgstr "编辑字幕"
+
+#. label for the subtitle's display-name field (a noun, not a page heading)
+#: client/src/lib/player_view/SubtitleCard.svelte:73
+msgctxt "subtitle"
+msgid "Title"
+msgstr "标题"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:79
+msgid "Language code"
+msgstr "语言代码"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:85
+msgid "Time offset (sec)"
+msgstr "时间偏移（秒）"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:91
+msgid "Default Subtitle"
+msgstr "默认字幕"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:94
+msgctxt "subtitle"
+msgid "Save"
+msgstr "保存"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:95
+msgctxt "subtitle"
+msgid "Download"
+msgstr "下载"
+
+#. short label for the Delete button (abbreviation of 'Delete')
+#: client/src/lib/player_view/SubtitleCard.svelte:96
+msgctxt "subtitle"
+msgid "Del"
+msgstr "删除"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:460
+#: client/src/lib/player_view/VideoPlayer.svelte:469
+msgid "Seek failed to: {target}"
+msgstr "跳转失败：{target}"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:489
+msgid "Video loading not done? Cannot enable drawing."
+msgstr "视频尚未加载完成？无法启用绘制。"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:568
+msgid "Failed to show image."
+msgstr "显示图像失败。"
+
+#: client/src/lib/tools/EDLImport.svelte:86
+msgid "No time spans found when parsing EDL."
+msgstr "解析 EDL 时未找到任何时间区间。"
+
+#: client/src/lib/tools/EDLImport.svelte:124
+msgid "Parsed spans"
+msgstr "已解析的时间区间"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:76
+msgid "Export format"
+msgstr "导出格式"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:82
+msgid "Frame rate"
+msgstr "帧率（FPS）"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:89
+msgid "Format options"
+msgstr "格式选项"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:155
+msgid "No comments to export."
+msgstr "没有可导出的评论。"
+
+#: organizer/basic_folders/organizer/database/operations.py:194
+msgid "Multiple root folders in DB. Please report to support."
+msgstr "数据库中存在多个根文件夹，请联系技术支持。"
+
+#: organizer/basic_folders/organizer/database/operations.py:195
+msgid ""
+"Users should have one root folder. This inconsistency was fixed, but your "
+"home view might contain unexpected folders."
+msgstr ""
+"每个用户应只有一个根文件夹。此不一致问题已修复，但你的主页视图中可能会出现意"
+"外的文件夹。"
+
+#: organizer/basic_folders/organizer/database/operations.py:202
+#, python-brace-format
+msgid "Home of '{name}'"
+msgstr "“{name}”的主页"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:38
+msgid "Destination folder not found"
+msgstr "未找到目标文件夹"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:50
+msgid "A version set can only contain media files"
+msgstr "版本集只能包含媒体文件"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:67
+#, python-brace-format
+msgid "Folder id '{id}' not found"
+msgstr "未找到文件夹 ID“{id}”"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:69
+msgid "Cannot move a folder into itself"
+msgstr "无法将文件夹移动到其自身内部"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:71
+msgid "Cannot move another user's folder"
+msgstr "无法移动其他用户的文件夹"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:77
+#, python-brace-format
+msgid "Folder with ID '{id}' is a root folder? Cannot move."
+msgstr "ID 为“{id}”的文件夹是根文件夹？无法移动。"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:89
+#, python-brace-format
+msgid "Media file '{id}' not found"
+msgstr "未找到媒体文件“{id}”"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:91
+msgid "Cannot move another user's media file"
+msgstr "无法移动其他用户的媒体文件"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:329
+#, python-brace-format
+msgid "Parent folder {id} not found"
+msgstr "未找到父文件夹 {id}"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:331
+msgid "Cannot reorder items in another user's folder"
+msgstr "无法对其他用户文件夹中的项目重新排序"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:351
+msgid "No folder ID in UI listing, cannot reorder"
+msgstr "UI 列表中没有文件夹 ID，无法重新排序"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:36
+msgid "New folder"
+msgstr "新建文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:39
+msgid "Create a new folder"
+msgstr "新建文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:43
+msgid "Name for the new folder"
+msgstr "新文件夹的名称"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:51
+msgid "Move to parent"
+msgstr "移到上级文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:54
+msgid "Move item to parent folder"
+msgstr "将项目移动到上级文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:93
+msgid "Share folder"
+msgstr "分享文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:96
+msgid "Create a shareable link to this folder"
+msgstr "为此文件夹创建可分享链接"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:103
+msgid "No folder selected to share"
+msgstr "未选择要分享的文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:113
+msgid "Stop sharing"
+msgstr "停止分享"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:116
+msgid "Revoke the shared link for this folder"
+msgstr "撤销此文件夹的分享链接"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:123
+msgid "No folder selected to unshare"
+msgstr "未选择要取消分享的文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:126
+msgid "Are you sure you want to revoke the shared link for this folder?"
+msgstr "确定要撤销此文件夹的分享链接吗？"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:135
+msgid "Copy URL"
+msgstr "复制链接"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:138
+msgid "Copy the shared link to clipboard"
+msgstr "将分享链接复制到剪贴板"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:148
+msgid "No shared link available for this folder"
+msgstr "此文件夹没有可用的分享链接"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:157
+msgid ""
+"Shared link copied to clipboard!\n"
+"\n"
+"NOTE: Sharing a folder reveals direct links to all files currently in it, "
+"effectively giving recipient PERMANENT access to them, even if remove the "
+"folder share later."
+msgstr ""
+"分享链接已复制到剪贴板！\n"
+"\n"
+"注意：分享文件夹会公开其中当前所有文件的直接链接，实际上等于授予接收者对这些"
+"文件的永久访问权限，即使之后取消文件夹分享也是如此。"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:159
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:162
+msgid "Copy this shared link:"
+msgstr "复制此分享链接："
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:170
+msgid "Into Version Set"
+msgstr "转为版本集"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:173
+msgid "Turn this folder into a version set (revisions of one media file)"
+msgstr "将此文件夹转换为版本集（同一媒体文件的多个修订版本）"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:179
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:196
+msgid "No folder selected"
+msgstr "未选择文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:187
+msgid "Into Normal Folder"
+msgstr "转为普通文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:190
+msgid "Turn this version set back into a normal folder"
+msgstr "将此版本集转换回普通文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:204
+msgid "Make Versioned"
+msgstr "合并为版本集"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:207
+msgid "Group the selected media files into a new version set"
+msgstr "将所选媒体文件归入一个新的版本集"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:213
+msgid "No media files selected"
+msgstr "未选择媒体文件"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:221
+msgid "Manage Versions"
+msgstr "管理版本"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:224
+msgid "Open the version set to manage its versions"
+msgstr "打开版本集以管理其版本"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:230
+msgid "No version set selected"
+msgstr "未选择版本集"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:239
+msgid "Set Active Version"
+msgstr "设为当前版本"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:242
+msgid "Make this version the active one for the set"
+msgstr "将此版本设为该版本集的活动版本"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:250
+msgid "Cannot set active version (missing ids)"
+msgstr "无法设置活动版本（缺少 ID）"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:259
+msgid "Delete user"
+msgstr "删除用户"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:262
+msgid "Delete user if they have no content (only empty root folder)"
+msgstr "如果用户没有任何内容（仅有空的根文件夹）则删除该用户"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:269
+msgid "No user folder selected for cleanup"
+msgstr "未选择用于清理的用户文件夹"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:272
+msgid ""
+"This will delete the user if they have no media files and only an empty root "
+"folder.\n"
+"\n"
+"Comments from this user will be preserved but marked as from a deleted "
+"user.\n"
+"\n"
+"Are you sure?"
+msgstr ""
+"如果用户没有媒体文件且仅有一个空的根文件夹，此操作将删除该用户。\n"
+"\n"
+"该用户的评论会被保留，但会标记为来自已删除用户。\n"
+"\n"
+"确定要继续吗？"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:212
+msgid "Cannot fetch contents of another user's folder"
+msgstr "无法获取其他用户文件夹的内容"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:256
+#: organizer/basic_folders/organizer/helpers/folders.py:568
+#: organizer/basic_folders/organizer/helpers/folders.py:601
+#, python-brace-format
+msgid "Folder ID '{folder_id}' not found"
+msgstr "未找到文件夹 ID“{folder_id}”"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:260
+msgid "Cannot trash another user's folder"
+msgstr "无法删除其他用户的文件夹"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:373
+#: organizer/basic_folders/organizer/helpers/folders.py:519
+#: organizer/basic_folders/organizer/helpers/folders.py:656
+#: organizer/basic_folders/organizer/helpers/pages.py:246
+msgctxt "folder"
+msgid "UNNAMED"
+msgstr "未命名"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:477
+#, python-brace-format
+msgid "v{num} — {title}"
+msgstr "v{num} — {title}"
+
+#. TRANSLATORS: dropdown label for selecting a media version (a noun)
+#: organizer/basic_folders/organizer/helpers/folders.py:480
+msgctxt "folder"
+msgid "Version"
+msgstr "版本"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:481
+msgid "Switch version"
+msgstr "切换版本"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:530
+msgid "Cannot create folder in another user's folder"
+msgstr "无法在其他用户的文件夹中创建文件夹"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:532
+msgid "Folder name too long"
+msgstr "文件夹名称过长"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:534
+msgid "Folder name cannot be empty"
+msgstr "文件夹名称不能为空"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:537
+msgid "Item with this name already exists in the this folder"
+msgstr "此文件夹中已存在同名项目"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:572
+msgid "Only the folder owner can create shares"
+msgstr "只有文件夹所有者才能创建分享"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:605
+msgid "Only the folder owner can revoke sharing"
+msgstr "只有文件夹所有者才能撤销分享"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:62
+msgid "<h3><strong>ADMIN</strong> – User Folders</h3>"
+msgstr "<h3><strong>管理员</strong> – 用户文件夹</h3>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:64
+msgid ""
+"<p>The following users currently have a home folder and/or media files.<br/"
+">Uploading files or moving items to these folders will transfer ownership to "
+"that user.<br/>Trashing a user's home folder will delete everything they "
+"have.</p>"
+msgstr ""
+"<p>以下用户当前拥有主页文件夹和/或媒体文件。<br/>上传文件或将项目移动到这些文"
+"件夹会将所有权转移给该用户。<br/>删除某用户的主页文件夹会删除他们的所有内容。"
+"</p>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:107
+msgid ""
+"This will delete ALL users who have no media files and only empty root "
+"folders.\n"
+"\n"
+"Comments from deleted users will be preserved but marked as from deleted "
+"users.\n"
+"\n"
+"Are you sure?"
+msgstr ""
+"此操作将删除所有没有媒体文件且仅有空根文件夹的用户。\n"
+"\n"
+"已删除用户的评论会被保留，但会标记为来自已删除用户。\n"
+"\n"
+"确定要继续吗？"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:112
+msgid "Delete all users without media"
+msgstr "删除所有没有媒体文件的用户"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:212
+msgid ""
+"<p style='margin-top: 1em;'><i class='far fa-circle-question text-"
+"blue-400'></i> Use the drop zone to <strong>upload media files</strong>, or "
+"right-click on the empty space above to <strong>create a folder</strong>.</p>"
+msgstr ""
+"<p style='margin-top: 1em;'><i class='far fa-circle-question text-"
+"blue-400'></i> 使用拖放区<strong>上传媒体文件</strong>，或右键点击上方空白处"
+"<strong>新建文件夹</strong>。</p>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:213
+msgid ""
+"<p>After that, drag items to <strong>reorder</strong>, or drop them "
+"<strong>into folders</strong>. Hold shift to multi-select.</p>"
+msgstr ""
+"<p>之后，拖动项目可<strong>重新排序</strong>，或将其<strong>拖入文件夹</"
+"strong>。按住 Shift 可多选。</p>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:234
+msgid "Root folder"
+msgstr "根文件夹"
+
+#. TRANSLATORS: breadcrumb label for the user's own home folder (not "house")
+#: organizer/basic_folders/organizer/helpers/pages.py:244
+msgctxt "folder"
+msgid "Home"
+msgstr "主页"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:32
+#, python-brace-format
+msgid "Command argument '{key}' must be an integer"
+msgstr "命令参数“{key}”必须是整数"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:94
+msgid "This shared folder link is invalid or has been revoked"
+msgstr "此共享文件夹链接无效或已被撤销"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:150
+msgid "new_folder command missing 'name' argument"
+msgstr "new_folder 命令缺少 'name' 参数"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:157
+msgid "set_folder_kind requires 'id' and 'kind'"
+msgstr "set_folder_kind 需要 'id' 和 'kind'"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:161
+#, python-brace-format
+msgid "Invalid folder kind: {kind}"
+msgstr "文件夹类型无效：{kind}"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:166
+#: organizer/basic_folders/organizer/user_session_methods.py:260
+#: organizer/basic_folders/organizer/user_session_methods.py:287
+#: organizer/basic_folders/organizer/user_session_methods.py:331
+#: organizer/basic_folders/organizer/user_session_methods.py:356
+#: organizer/basic_folders/organizer/user_session_methods.py:487
+#, python-brace-format
+msgid "Folder ID '{id}' not found"
+msgstr "未找到文件夹 ID“{id}”"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:168
+msgid "Cannot change another user's folder"
+msgstr "无法更改其他用户的文件夹"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:176
+msgid "Cannot turn the root folder into a version set"
+msgstr "无法将根文件夹转换为版本集"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:180
+msgid "Cannot make a version set from a folder that contains subfolders"
+msgstr "无法将包含子文件夹的文件夹转换为版本集"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:184
+msgid "A version set needs at least one media file"
+msgstr "版本集至少需要一个媒体文件"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:206
+msgid "Make Versioned works on media files only; deselect folders"
+msgstr "“转为版本”仅适用于媒体文件，请取消选择文件夹"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:210
+msgid "Select at least one media file to make versioned"
+msgstr "请至少选择一个要转为版本的媒体文件"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:215
+msgid "Selected media file is not in any folder"
+msgstr "所选媒体文件不在任何文件夹中"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:219
+msgid "Cannot modify another user's folder"
+msgstr "无法修改其他用户的文件夹"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:229
+msgid ""
+"All selected media files must be in the same folder to group them into a "
+"version set"
+msgstr "所有所选媒体文件必须位于同一文件夹中才能归入一个版本集"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:231
+msgid "Version Set"
+msgstr "版本集"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:252
+msgid "set_active_version requires 'folder_id' and 'media_file_id'"
+msgstr "set_active_version 需要 'folder_id' 和 'media_file_id'"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:262
+msgid "Cannot change another user's version set"
+msgstr "无法更改其他用户的版本集"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:267
+msgid "That media file is not in this version set"
+msgstr "该媒体文件不在此版本集中"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:326
+msgid "rename_folder command missing 'id' or 'new_name' argument"
+msgstr "rename_folder 命令缺少 'id' 或 'new_name' 参数"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:348
+msgid "trash_folder command missing 'id' argument"
+msgstr "trash_folder 命令缺少 'id' 参数"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:381
+msgid "share_folder command missing 'id' argument"
+msgstr "share_folder 命令缺少 'id' 参数"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:392
+msgid "Server URL base not configured - cannot generate shareable URLs"
+msgstr "未配置服务器 URL 基址 - 无法生成可分享的 URL"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:403
+msgid "Folder shared. Use popup/'Copy URL' to get a link."
+msgstr "文件夹已分享。请使用弹窗或“复制 URL”获取链接。"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:404
+#, python-brace-format
+msgid "Folder sharing token created for '{title}'."
+msgstr "已为“{title}”创建文件夹分享令牌。"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:411
+msgid "revoke_share command missing 'id' argument"
+msgstr "revoke_share 命令缺少 'id' 参数"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:430
+msgid "Folder sharing has been revoked"
+msgstr "文件夹分享已被撤销"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:436
+msgid "This folder is not currently shared"
+msgstr "此文件夹当前未被分享"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:443
+msgid "cleanup_empty_user command missing 'folder_id' argument"
+msgstr "cleanup_empty_user 命令缺少 'folder_id' 参数"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:446
+msgid "Only admin can clean up users"
+msgstr "只有管理员才能清理用户"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:470
+#, python-brace-format
+msgid "Cleaned up {count} empty user"
+msgid_plural "Cleaned up {count} empty users"
+msgstr[0] "已清理 {count} 个空用户"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:471
+msgid ""
+"Comments from deleted users are preserved but marked as from deleted users."
+msgstr "已删除用户的评论会被保留，但会标记为来自已删除用户。"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:477
+msgid "No empty users found to clean up"
+msgstr "未找到可清理的空用户"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:504
+#, python-brace-format
+msgid "User '{id}' has been cleaned up (deleted)"
+msgstr "用户“{id}”已被清理（删除）"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:505
+msgid ""
+"Comments from this user are preserved but marked as from a deleted user."
+msgstr "此用户的评论会被保留，但会标记为来自已删除用户。"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:511
+#, python-brace-format
+msgid "User '{id}' was not deleted"
+msgstr "用户“{id}”未被删除"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:512
+msgid "User still has media files or non-empty folders."
+msgstr "该用户仍有媒体文件或非空文件夹。"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:516
+#, python-brace-format
+msgid "Unknown organizer command: {cmd}"
+msgstr "未知的 organizer 命令：{cmd}"

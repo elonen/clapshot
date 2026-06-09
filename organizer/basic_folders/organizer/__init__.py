@@ -18,6 +18,7 @@ from .user_session_methods import on_start_user_session_impl, navigate_page_impl
 from .folder_op_methods import move_to_folder_impl, reorder_items_impl
 from .testing_methods import list_tests_impl, run_test_impl
 from .authz_methods import authz_user_action_impl
+from .helpers.l10n import localized
 
 from .helpers.folders import FoldersHelper
 from .helpers.pages import PagesHelper
@@ -109,21 +110,25 @@ class OrganizerInbound(org.OrganizerInboundBase):
 
     @override
     @organizer_grpc_handler
+    @localized
     async def on_start_user_session(self, on_start_user_session_request: org.OnStartUserSessionRequest) -> org.OnStartUserSessionResponse:
         return await on_start_user_session_impl(self, on_start_user_session_request)
 
     @override
     @organizer_grpc_handler
+    @localized
     async def navigate_page(self, navigate_page_request: org.NavigatePageRequest) -> org.ClientShowPageRequest:
         return await navigate_page_impl(self, navigate_page_request)
 
     @override
     @organizer_grpc_handler
+    @localized
     async def cmd_from_client(self, cmd_from_client_request: org.CmdFromClientRequest) -> clap.Empty:
         return await cmd_from_client_impl(self, cmd_from_client_request)
 
     @override
     @organizer_grpc_handler
+    @localized
     async def authz_user_action(self, authz_user_action_request: org.AuthzUserActionRequest) -> org.AuthzResponse:
         return await authz_user_action_impl(self, authz_user_action_request)
 
@@ -163,6 +168,7 @@ class OrganizerInbound(org.OrganizerInboundBase):
 
     @override
     @organizer_grpc_handler
+    @localized
     async def move_to_folder(self, move_to_folder_request: org.MoveToFolderRequest) -> clap.Empty:
         try:
             return await move_to_folder_impl(self, move_to_folder_request)
@@ -179,6 +185,7 @@ class OrganizerInbound(org.OrganizerInboundBase):
 
     @override
     @organizer_grpc_handler
+    @localized
     async def reorder_items(self, reorder_items_request: org.ReorderItemsRequest) -> clap.Empty:
         return await reorder_items_impl(self, reorder_items_request)
 

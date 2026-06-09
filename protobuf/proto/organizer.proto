@@ -186,6 +186,7 @@ message UserSessionData {
     bool is_admin = 3;
     map<string, string> cookies = 4;
     map<string, string> http_headers = 5;
+    optional string language = 6;   // User's UI locale (e.g. "fi", "zh"); used to localize Organizer-originated text. Unset = source language (English).
 }
 
 // ---------------------------------------------------------

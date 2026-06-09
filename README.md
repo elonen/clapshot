@@ -188,13 +188,15 @@ This approach is **easier to develop** and **more robust against upgrades** than
 
 The [development setup guide](doc/development-setup.md) covers setting up the server and client development environments, and running local builds and tests.
 
+**Translating the UI?** Clapshot uses a single gettext-based catalog shared by the server, organizer and client. See [i18n/README.md](i18n/README.md) for how to mark strings and add or update translations.
+
 ## Contributions
 
 Contributions are welcome, especially for features and improvements that benefit the wider user base. Please add your copyright notice for significant contributions.
 
 ### Contributors
 
-  - **Client i18n, Chinese (Simplified) translations** – Mike-Solar
+  - **Original Chinese (Simplified) translations** – Mike-Solar
 
 ## Licensing
 

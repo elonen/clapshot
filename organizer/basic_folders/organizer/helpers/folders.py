@@ -18,6 +18,7 @@ from organizer.config import PATH_COOKIE_NAME
 from organizer.database.models import DbFolder, DbFolderItems, DbMediaFile, DbSharedFolder, DbUser, FolderKind
 from organizer.database.operations import db_get_or_create_user_root_folder
 from organizer.helpers import media_type_to_vis_icon
+from .l10n import _, pgettext
 
 # Cookie name for tracking the shared folder entry point
 SHARED_FOLDER_TOKEN_COOKIE_NAME = "shared_folder_token"
@@ -208,7 +209,7 @@ class FoldersHelper:
         # If no natural access, check for shared access
         if not has_natural_access:
             if not await self.check_shared_folder_access(folder.id, ses):
-                raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot fetch contents of another user's folder")
+                raise GRPCError(GrpcStatus.PERMISSION_DENIED, _("Cannot fetch contents of another user's folder"))
 
         with self.db_new_session() as dbs:
             folder_items = dbs.query(DbFolderItems).filter(DbFolderItems.folder_id == folder.id).all()
@@ -252,11 +253,11 @@ class FoldersHelper:
         """
         fld = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
         if not fld:
-            raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{folder_id}' not found")
+            raise GRPCError(GrpcStatus.NOT_FOUND, _("Folder ID '{folder_id}' not found").format(folder_id=folder_id))
 
         # Only allow trashing by the owner or an admin
         if fld.user_id != ses.user.id and not ses.is_admin:
-            raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot trash another user's folder")
+            raise GRPCError(GrpcStatus.PERMISSION_DENIED, _("Cannot trash another user's folder"))
 
         # Check if the folder is currently being shared
         shared = dbs.query(DbSharedFolder).filter(DbSharedFolder.folder_id == folder_id).first()
@@ -369,7 +370,7 @@ class FoldersHelper:
         is_owner = (fld.user_id == ses.user.id) or ses.is_admin
 
         # Add visual indicator for shared folders
-        title = fld.title or "<UNNAMED>"
+        title = fld.title or pgettext("folder", "UNNAMED")
         if is_shared:
             title = f"🔗 {title}"  # Add link icon before title to indicate shared folder
 
@@ -473,10 +474,13 @@ class FoldersHelper:
             num = version_number(i, total)
             mf_title = mf_by_id[m.id].title if (m.id in mf_by_id and mf_by_id[m.id].title) else m.id
             selected = " selected" if m.id == active_id else ""
-            options.append(f'<option value="{html_escape(m.id)}"{selected}>{html_escape(f"v{num} — {mf_title}")}</option>')
+            options.append(f'<option value="{html_escape(m.id)}"{selected}>{html_escape(_("v{num} — {title}").format(num=num, title=mf_title))}</option>')
         style = "background-color:#1f2937;color:#9ca3af;border-radius:0.375rem;padding:0.1rem 0.5rem;font-size:0.875rem;"
+        # TRANSLATORS: dropdown label for selecting a media version (a noun)
+        version_label = pgettext("folder", "Version")
+        switch_label = _("Switch version")
         return (f'<select onchange="{html_escape(onchange, quote=True)}" style="{style}" '
-                f'aria-label="Version" title="Switch version">{"".join(options)}</select>')
+                f'aria-label="{html_escape(version_label, quote=True)}" title="{html_escape(switch_label, quote=True)}">{"".join(options)}</select>')
 
     async def _preview_items_from_contents(self, contained_items: List[DbMediaFile | DbFolder]) -> List[clap.PageItemFolderListingItem]:
         media_files = [item for item in contained_items if isinstance(item, DbMediaFile)][:4]
@@ -512,7 +516,7 @@ class FoldersHelper:
                 result.append(_media_item(media_by_id[active_id]))
             else:
                 result.append(clap.PageItemFolderListingItem(
-                    folder=clap.PageItemFolderListingFolder(id=str(f.id), title=f.title or "???")))
+                    folder=clap.PageItemFolderListingFolder(id=str(f.id), title=f.title or pgettext("folder", "UNNAMED"))))
         return result
 
     async def create_folder(self, dbs: Session, ses: org.UserSessionData, parent_folder: DbFolder, new_folder_name: str) -> DbFolder:
@@ -523,14 +527,14 @@ class FoldersHelper:
 
         # Only allow folder creation by owner or admin
         if parent_folder.user_id != ses.user.id and not ses.is_admin:
-            raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Cannot create folder in another user's folder")
+            raise GRPCError(GrpcStatus.PERMISSION_DENIED, _("Cannot create folder in another user's folder"))
         if len(new_folder_name) > 255:
-            raise GRPCError(GrpcStatus.INVALID_ARGUMENT, "Folder name too long")
+            raise GRPCError(GrpcStatus.INVALID_ARGUMENT, _("Folder name too long"))
         if not new_folder_name:
-            GRPCError(GrpcStatus.INVALID_ARGUMENT, "Folder name cannot be empty")
+            GRPCError(GrpcStatus.INVALID_ARGUMENT, _("Folder name cannot be empty"))
 
         if new_folder_name in [f.title for f in await self.fetch_folder_contents(parent_folder, ses)]:
-            raise GRPCError(GrpcStatus.ALREADY_EXISTS, "Item with this name already exists in the this folder")
+            raise GRPCError(GrpcStatus.ALREADY_EXISTS, _("Item with this name already exists in the this folder"))
 
         with dbs.begin_nested():
             # Create the new folder
@@ -561,11 +565,11 @@ class FoldersHelper:
         # Check if folder exists
         folder = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
         if not folder:
-            raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{folder_id}' not found")
+            raise GRPCError(GrpcStatus.NOT_FOUND, _("Folder ID '{folder_id}' not found").format(folder_id=folder_id))
 
         # Only folder owner or admin can create a share
         if folder.user_id != ses.user.id and not ses.is_admin:
-            raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Only the folder owner can create shares")
+            raise GRPCError(GrpcStatus.PERMISSION_DENIED, _("Only the folder owner can create shares"))
 
         # Check if sharing already exists
         existing_share = dbs.query(DbSharedFolder).filter(DbSharedFolder.folder_id == folder_id).one_or_none()
@@ -594,11 +598,11 @@ class FoldersHelper:
         # Check if folder exists
         folder = dbs.query(DbFolder).filter(DbFolder.id == folder_id).one_or_none()
         if not folder:
-            raise GRPCError(GrpcStatus.NOT_FOUND, f"Folder ID '{folder_id}' not found")
+            raise GRPCError(GrpcStatus.NOT_FOUND, _("Folder ID '{folder_id}' not found").format(folder_id=folder_id))
 
         # Only folder owner or admin can revoke sharing
         if folder.user_id != ses.user.id and not ses.is_admin:
-            raise GRPCError(GrpcStatus.PERMISSION_DENIED, "Only the folder owner can revoke sharing")
+            raise GRPCError(GrpcStatus.PERMISSION_DENIED, _("Only the folder owner can revoke sharing"))
 
         # Delete the share
         deleted = dbs.query(DbSharedFolder).filter(DbSharedFolder.folder_id == folder_id).delete()
@@ -649,7 +653,7 @@ class FoldersHelper:
             if not owner:
                 return None # Owner not found, cannot provide breadcrumb info
 
-            folder_title = current_folder.title or "UNNAMED"
+            folder_title = current_folder.title or pgettext("folder", "UNNAMED")
             owner_name = owner.name or owner.id
             return (folder_title, owner_name)
 

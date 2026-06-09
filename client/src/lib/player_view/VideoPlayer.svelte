@@ -11,6 +11,7 @@ import * as Proto3 from '@clapshot_protobuf/typescript';
 import {HybridVideoDecoder} from './video-decoder/HybridVideoDecoder';
 import {TimecodeUtils} from './video-decoder/timecode';
 import {allComments, curSubtitle, videoIsReady, collabId, curVideo, clientConfig} from '@/stores';
+import { t } from '@/i18n';
 import LocalStorageCookies from '@/cookies';
 import CommentTimelinePin from './CommentTimelinePin.svelte';
 
@@ -456,7 +457,7 @@ export async function seekToSMPTE(smpte: string) {
         const time = TimecodeUtils.smpteToTime(smpte, videoDecoder!.frameRate);
         await videoDecoder!.seekToTime(time);
     } catch(err) {
-        acts.add({mode: 'warning', message: `Seek failed to: ${smpte}`, lifetime: 3});
+        acts.add({mode: 'warning', message: $t("Seek failed to: {target}", { target: smpte }), lifetime: 3});
     }
 }
 
@@ -465,7 +466,7 @@ export async function seekToFrame(frame: number) {
     try {
         await videoDecoder!.seekToFrame(frame);
     } catch(err) {
-        acts.add({mode: 'warning', message: `Seek failed to: ${frame}`, lifetime: 3});
+        acts.add({mode: 'warning', message: $t("Seek failed to: {target}", { target: frame }), lifetime: 3});
     }
 }
 
@@ -485,7 +486,7 @@ export function onToggleDraw(mode_on: boolean) {
             draw_canvas.style.visibility = "hidden";
         }
     } catch(err) {
-        acts.add({mode: 'error', message: `Video loading not done? Cannot enable drawing.`, lifetime: 3});
+        acts.add({mode: 'error', message: $t("Video loading not done? Cannot enable drawing."), lifetime: 3});
     }
 }
 
@@ -564,7 +565,7 @@ export async function setDrawing(drawing: string) {
         draw_canvas.style.pointerEvents = "none";
     }
     catch(err) {
-        acts.add({mode: 'error', message: `Failed to show image.`, lifetime: 3});
+        acts.add({mode: 'error', message: $t("Failed to show image."), lifetime: 3});
     }
 }
 

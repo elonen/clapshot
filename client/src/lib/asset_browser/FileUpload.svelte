@@ -48,7 +48,7 @@ function progressHandler(event: ProgressEvent<XMLHttpRequestEventTarget>)
     // loaded_total = "Uploaded " + event.loaded + " bytes of " + event.total;
     var percent = (event.loaded / event.total) * 100;
     if (progressBar) progressBar.value = Math.round(percent);
-    statusTxt = $t('upload.progress', { percent: Math.round(percent) });
+    statusTxt = $t("{percent}% uploaded... please wait", { percent: Math.round(percent) });
 }
 
 function completeHandler(event: ProgressEvent<XMLHttpRequestEventTarget>) {
@@ -58,12 +58,12 @@ function completeHandler(event: ProgressEvent<XMLHttpRequestEventTarget>) {
 }
 
 function errorHandler(_event: ProgressEvent<XMLHttpRequestEventTarget>) {
-    statusTxt = $t('upload.failed');
+    statusTxt = $t("Upload Failed");
     afterUpload();
 }
 
 function abortHandler(_event: ProgressEvent<XMLHttpRequestEventTarget>) {
-    statusTxt = $t('upload.aborted');
+    statusTxt = $t("Upload Aborted");
     afterUpload();
 }
 
@@ -73,7 +73,7 @@ function upload() {
         var formdata = new FormData();
         formdata.append("fileupload", file);
         var ajax = new XMLHttpRequest();
-        statusTxt = $t('upload.uploading', { filename: file.name });
+        statusTxt = $t("Uploading: {filename}...", { filename: file.name });
         ajax.upload.addEventListener("progress", progressHandler, false);
         ajax.addEventListener("load", completeHandler, false);
         ajax.addEventListener("error", errorHandler, false) ;
@@ -98,7 +98,7 @@ function onDropFiles(e: any) {
     files.accepted = e.detail.acceptedFiles || [];
     files.rejected = e.detail.fileRejections || [];
     if (files.rejected.length > 0 && files.accepted.length == 0) {
-        alert($t('upload.rejected'));
+        alert($t("Drop rejected. Only video, audio and image files are allowed."));
     }
     upload();
 }
