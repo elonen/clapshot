@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-09 17:39+0300\n"
+"POT-Creation-Date: 2026-06-09 20:48+0300\n"
 "Language: fi\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
@@ -35,6 +35,7 @@ msgid "Your Media"
 msgstr "Oma media"
 
 #: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:244
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:45
 msgid "{kind} deleted."
 msgstr "{kind} poistettu."
 
@@ -114,9 +115,55 @@ msgstr "Ei organizer-istuntoa."
 msgid "Missing command from client: {request}"
 msgstr "Asiakkaalta puuttuu komento: {request}"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:817
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:822
 msgid "Cmd '{cmd}' failed: {error}"
 msgstr "Komento '{cmd}' epäonnistui: {error}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:59
+msgid "Rename item"
+msgstr "Nimeä kohde uudelleen"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:60
+msgid "Unknown item type in rename action. Please report this bug."
+msgstr "Tuntematon kohdetyyppi nimeämistoiminnossa. Ilmoita tästä virheestä."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:77
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:39
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:40
+msgid "Rename"
+msgstr "Nimeä uudelleen"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:84
+msgid "Rename selected items"
+msgstr "Nimeä valitut kohteet uudelleen"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:99
+msgid "Are you sure you want to trash this item?"
+msgstr "Haluatko varmasti siirtää tämän kohteen roskakoriin?"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:100
+msgid "Are you sure you want to trash '{title}'?"
+msgstr "Haluatko varmasti siirtää kohteen '{title}' roskakoriin?"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:101
+msgid "Are you sure you want to trash folder '{title}' and ALL CONTENTS?"
+msgstr "Haluatko varmasti siirtää kansion '{title}' ja KAIKEN SEN SISÄLLÖN roskakoriin?"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:102
+msgid "Are you sure you want to trash ALL selected items?"
+msgstr "Haluatko varmasti siirtää KAIKKI valitut kohteet roskakoriin?"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:103
+msgid "Unknown item type in trash action. Please report this bug."
+msgstr "Tuntematon kohdetyyppi roskakoritoiminnossa. Ilmoita tästä virheestä."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:134
+msgid "Trash"
+msgstr "Roskakoriin"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:141
+msgid "Trash selected items"
+msgstr "Siirrä valitut kohteet roskakoriin"
 
 #: client/src/App.svelte:319
 msgid "Are you sure you want to delete this subtitle?"
@@ -126,11 +173,11 @@ msgstr "Haluatko varmasti poistaa tämän tekstityksen?"
 msgid "Invalid time offset: {offset}"
 msgstr "Virheellinen aikasiirtymä: {offset}"
 
-#: client/src/App.svelte:734
+#: client/src/App.svelte:739
 msgid "Server version too old (v{version}). Please update server."
 msgstr "Palvelimen versio on liian vanha (v{version}). Päivitä palvelin."
 
-#: client/src/App.svelte:741
+#: client/src/App.svelte:746
 msgid ""
 "Client version too old (client v{clientVersion} for server "
 "v{serverVersion}). Please update client."
@@ -138,72 +185,72 @@ msgstr ""
 "Client-versio on liian vanha (v{clientVersion} vs. palvelimen "
 "v{serverVersion}). Päivitä versio."
 
-#: client/src/App.svelte:892
+#: client/src/App.svelte:896
 msgid "Bad video open request. See log."
 msgstr "Virheellinen videon avauspyyntö. Katso loki."
 
-#: client/src/App.svelte:1060
+#: client/src/App.svelte:1064
 msgid "Connecting server..."
 msgstr "Yhdistetään palvelimeen..."
 
-#: client/src/App.svelte:1068
+#: client/src/App.svelte:1072
 msgid "View connection errors"
 msgstr "Näytä yhteysvirheet"
 
-#: client/src/App.svelte:1074
+#: client/src/App.svelte:1078
 msgid "See browser JS console for more details."
 msgstr "Lisätietoja selaimen JS-konsolissa."
 
-#: client/src/App.svelte:1106
+#: client/src/App.svelte:1110
 msgid "Sort: date posted"
 msgstr "Järjestys: lisäyspäivä"
 
-#: client/src/App.svelte:1106
+#: client/src/App.svelte:1110
 msgid "Sort: timecode"
 msgstr "Järjestys: aikakoodi"
 
-#: client/src/App.svelte:1126
+#: client/src/App.svelte:1130
 msgid "Subtitles"
 msgstr "Tekstitykset"
 
-#: client/src/App.svelte:1148
+#: client/src/App.svelte:1152
 msgctxt "collab"
 msgid "Collaborative viewing session active."
 msgstr "Yhteiskatseluistunto aktiivinen."
 
-#: client/src/App.svelte:1149
+#: client/src/App.svelte:1153
 msgctxt "collab"
 msgid "Session ID is {id}"
 msgstr "Istunnon tunnus on {id}"
 
-#: client/src/App.svelte:1150
+#: client/src/App.svelte:1154
 msgctxt "collab"
 msgid "Actions like seek, play and draw are mirrored to all participants."
 msgstr ""
 "Toiminnot kuten kelaus, toisto ja piirtäminen peilataan kaikille "
 "osallistujille."
 
-#: client/src/App.svelte:1151
+#: client/src/App.svelte:1155
 msgctxt "collab"
 msgid "To invite people, copy browser URL and send it to them."
 msgstr "Kutsuaksesi muita, kopioi selaimen osoite ja lähetä se osallistujille."
 
-#: client/src/App.svelte:1152
+#: client/src/App.svelte:1156
 msgctxt "collab"
 msgid "Exit by clicking the green icon in header."
 msgstr "Poistu napsauttamalla vihreää kuvaketta ylärivillä."
 
 #. button to acknowledge
-#: client/src/App.svelte:1153
+#: client/src/App.svelte:1157
 msgctxt "collab"
 msgid "Understood"
 msgstr "Selvä"
 
-#: client/src/App.svelte:1182
+#: client/src/App.svelte:1186
 msgid "Drop video, audio and image files here to upload"
 msgstr "Pudota video-, ääni- ja kuvatiedostoja tähän ladataksesi"
 
-#: client/src/App.svelte:1213
+#: client/src/App.svelte:1217
 msgid "Latest messages"
 msgstr "Viimeisimmät viestit"
 

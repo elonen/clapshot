@@ -799,6 +799,11 @@ pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server
                 // Remember the client's UI locale on the session; it's forwarded to the Organizer
                 // (UserSessionData.language) and used to localize server-originated messages.
                 ses.org_session.language = if data.language.is_empty() { None } else { Some(data.language.clone()) };
+                // Re-send the builtin popup actions (Rename/Trash) localized to the new locale. They
+                // are first defined at session start, before the client has reported its language.
+                server.emit_cmd(
+                    client_cmd!(DefineActions, {actions: crate::grpc::make_media_file_popup_actions(ses.org_session.language.as_deref())}),
+                    super::SendTo::UserSession(&ses.sid))?;
                 Ok(())
             },
             Cmd::Logout(_) => {

@@ -36,8 +36,8 @@ mod tests {
 
     #[test]
     fn falls_back_to_source_when_untranslated() {
-        assert_eq!(tr(Some("xx"), "Media added."), "Media added.");
-        assert_eq!(tr(None, "Media added."), "Media added.");
+        assert_eq!(tr(Some("xx"), "Rename"), "Rename");
+        assert_eq!(tr(None, "Rename"), "Rename");
     }
 
     #[test]

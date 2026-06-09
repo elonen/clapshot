@@ -52,7 +52,7 @@ $(TPL)/organizer.pot: FORCE
 $(TPL)/server.pot: FORCE
 	@mkdir -p $(TPL)
 	xtr --omit-header -o $(TPL)/server.pot \
-		-k "tr_user:2" -k "tr_user_fmt:2" \
+		-k "tr_user:2" -k "tr_user_fmt:2" -k "tr:2" -k "tr_fmt:2" \
 		$(SERVER_MAIN)
 
 $(TPL)/messages.pot: $(TPL)/client.pot $(TPL)/organizer.pot $(TPL)/server.pot

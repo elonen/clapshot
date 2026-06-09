@@ -561,7 +561,7 @@ setTimeout(sendQueueLoop, 500); // Start the loop
 
 // When the user switches UI language (after initial load), tell the server and re-render the
 // current navigation page so Organizer-rendered text re-localizes. The initial send happens in
-// the welcome handler; this only fires on subsequent changes.
+// the websocket "open" handler; this only fires on subsequent changes.
 let localeSyncReady = false;
 locale.subscribe((loc) => {
     if (!localeSyncReady) { localeSyncReady = true; return; }  // skip the initial subscribe fire
@@ -671,6 +671,9 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
         uiConnectedState = true;
         connectionErrors.set([]);
 
+        // Tell the server our UI locale before requesting any page or media
+        wsEmit({ setLanguage: { language: currentLocale() } });
+
         if ($mediaFileId) {
             console.debug(`Socket connected, mediaFileId=${mediaFileId}. Requesting openMediaFile`);
             wsEmit({openMediaFile: { mediaFileId: $mediaFileId }});
@@ -752,8 +755,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 $curUsername = cmd.welcome.user.name ?? cmd.welcome.user.id;
                 $curUserId = cmd.welcome.user.id;
                 $curUserIsAdmin = cmd.welcome.isAdmin;
-                // Tell the server our UI locale so Organizer/server-originated text is localized.
-                wsEmit({ setLanguage: { language: currentLocale() } });
+                // (UI locale is sent in the websocket "open" handler, before the first page request.)
             }
             // error
             else if (cmd.error) {

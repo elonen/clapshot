@@ -44,73 +44,77 @@ pub fn proto3_to_datetime(ts: &pbjson_types::Timestamp) -> Option<chrono::NaiveD
     chrono::DateTime::from_timestamp(ts.seconds, ts.nanos as u32).map(|dt| dt.naive_utc())
 }
 
-pub (crate) fn make_media_file_popup_actions() -> HashMap<String, proto::ActionDef> {
+pub (crate) fn make_media_file_popup_actions(locale: Option<&str>) -> HashMap<String, proto::ActionDef> {
     HashMap::from([
-        ("popup_builtin_rename".into(), make_builtin_rename_action()),
-        ("popup_builtin_trash".into(), make_builting_trash_action()),
+        ("popup_builtin_rename".into(), make_builtin_rename_action(locale)),
+        ("popup_builtin_trash".into(), make_builting_trash_action(locale)),
     ])
 }
 
-fn make_builtin_rename_action() -> proto::ActionDef {
-    proto::ActionDef  {
-        ui_props: Some(proto::ActionUiProps {
-            label: Some(format!("Rename")),
-            icon: Some(proto::Icon {
-                src: Some(proto::icon::Src::FaClass(proto::icon::FaClass {
-                    classes: "fa fa-edit".into(), color: None, })),
-                ..Default::default()
-            }),
-            key_shortcut: Some("F2".into()),
-            natural_desc: Some(format!("Rename selected items")),
-            ..Default::default()
-        }),
-        action: Some(proto::ScriptCall {
-            lang: proto::script_call::Lang::Javascript.into(),
-            code: r#"
+fn make_builtin_rename_action(locale: Option<&str>) -> proto::ActionDef {
+    // Localized strings used by the client-side dialog are injected as a `_L` object so the script
+    // body below stays a plain template. `{:?}` emits each as a safely-escaped JS string literal.
+    let code = format!(
+        "var _L = {{ prompt: {prompt:?}, err: {err:?} }};\n{body}",
+        prompt = crate::i18n::tr(locale, "Rename item"),
+        err = crate::i18n::tr(locale, "Unknown item type in rename action. Please report this bug."),
+        body = r#"
 var it = _action_args.selected_items[0];
 var old_name = it.mediaFile?.title || it.folder?.title;
-var new_name = (prompt("Rename item", old_name))?.trim();
+var new_name = (prompt(_L.prompt, old_name))?.trim();
 if (new_name && new_name != old_name) {
     if (it.mediaFile) {
         clapshot.renameMediaFile(it.mediaFile.id, new_name);
     } else if (it.folder) {
         clapshot.callOrganizer("rename_folder", {id: it.folder.id, new_name: new_name});
     } else {
-        alert("Unknown item type in rename action. Please report this bug.");
+        alert(_L.err);
     }
 }
-                "#.trim().into()
+"#.trim());
+    proto::ActionDef  {
+        ui_props: Some(proto::ActionUiProps {
+            label: Some(crate::i18n::tr(locale, "Rename")),
+            icon: Some(proto::Icon {
+                src: Some(proto::icon::Src::FaClass(proto::icon::FaClass {
+                    classes: "fa fa-edit".into(), color: None, })),
+                ..Default::default()
+            }),
+            key_shortcut: Some("F2".into()),
+            natural_desc: Some(crate::i18n::tr(locale, "Rename selected items")),
+            ..Default::default()
+        }),
+        action: Some(proto::ScriptCall {
+            lang: proto::script_call::Lang::Javascript.into(),
+            code,
         })
     }
 }
 
-fn make_builting_trash_action() -> proto::ActionDef {
-    proto::ActionDef  {
-            ui_props: Some(proto::ActionUiProps {
-                label: Some(format!("Trash")),
-                icon: Some(proto::Icon {
-                    src: Some(proto::icon::Src::FaClass(proto::icon::FaClass {
-                        classes: "fa fa-trash".into(), color: None, })),
-                    ..Default::default()
-                }),
-                key_shortcut: Some("Del".into()),
-                natural_desc: Some(format!("Trash selected items")),
-                ..Default::default()
-            }),
-            action: Some(proto::ScriptCall {
-                lang: proto::script_call::Lang::Javascript.into(),
-                code: r#"
+fn make_builting_trash_action(locale: Option<&str>) -> proto::ActionDef {
+    // Localized confirmation/error strings are injected as a `_L` object; `{title}` placeholders are
+    // substituted client-side via a function replacer (safe from `$` sequences in titles).
+    let code = format!(
+        "var _L = {{ q_item: {q_item:?}, q_media: {q_media:?}, q_folder: {q_folder:?}, q_all: {q_all:?}, err: {err:?} }};\n{body}",
+        q_item = crate::i18n::tr(locale, "Are you sure you want to trash this item?"),
+        q_media = crate::i18n::tr(locale, "Are you sure you want to trash '{title}'?"),
+        q_folder = crate::i18n::tr(locale, "Are you sure you want to trash folder '{title}' and ALL CONTENTS?"),
+        q_all = crate::i18n::tr(locale, "Are you sure you want to trash ALL selected items?"),
+        err = crate::i18n::tr(locale, "Unknown item type in trash action. Please report this bug."),
+        body = r#"
 var items = _action_args.selected_items;
 
-var msg = "Are you sure you want to trash this item?";
+function _fill(tpl, title) { return tpl.replace("{title}", function() { return title; }); }
+
+var msg = _L.q_item;
 if (items.length == 1) {
     if (items[0].mediaFile) {
-        msg = "Are you sure you want to trash '" + items[0].mediaFile?.title + "'?";
+        msg = _fill(_L.q_media, items[0].mediaFile?.title);
     } else if (items[0].folder) {
-        msg = "Are you sure you want to trash folder '" + items[0].folder?.title + "' and ALL CONTENTS?";
+        msg = _fill(_L.q_folder, items[0].folder?.title);
     }
 } else {
-    msg = "Are you sure you want to trash ALL selected items?";
+    msg = _L.q_all;
 }
 if (confirm(msg)) {
     for (var i = 0; i < items.length; i++) {
@@ -120,11 +124,26 @@ if (confirm(msg)) {
         } else if (it.folder) {
             clapshot.callOrganizer("trash_folder", {id: it.folder.id});
         } else {
-            alert("Unknown item type in trash action. Please report this bug.");
+            alert(_L.err);
         }
     }
 }
-                    "#.trim().into()
+"#.trim());
+    proto::ActionDef  {
+            ui_props: Some(proto::ActionUiProps {
+                label: Some(crate::i18n::tr(locale, "Trash")),
+                icon: Some(proto::Icon {
+                    src: Some(proto::icon::Src::FaClass(proto::icon::FaClass {
+                        classes: "fa fa-trash".into(), color: None, })),
+                    ..Default::default()
+                }),
+                key_shortcut: Some("Del".into()),
+                natural_desc: Some(crate::i18n::tr(locale, "Trash selected items")),
+                ..Default::default()
+            }),
+            action: Some(proto::ScriptCall {
+                lang: proto::script_call::Lang::Javascript.into(),
+                code,
             })
     }
 }

@@ -179,7 +179,7 @@ async fn handle_ws_session(
 
     // Define default actions. Organizer may call DefineActions later to override these.
     if let Err(e) = server.emit_cmd(
-            client_cmd!(DefineActions, {actions: make_media_file_popup_actions()}),
+            client_cmd!(DefineActions, {actions: make_media_file_popup_actions(ses.org_session.language.as_deref())}),
             SendTo::MsgSender(&ses.sender)) {
         tracing::error!(details=%e, "Error sending define_actions to client. Closing session.");
         return;

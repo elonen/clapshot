@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-09 17:39+0300\n"
+"POT-Creation-Date: 2026-06-09 20:48+0300\n"
 "Language: zh\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -35,6 +35,7 @@ msgid "Your Media"
 msgstr "我的媒体"
 
 #: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:244
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:45
 msgid "{kind} deleted."
 msgstr "已删除{kind}。"
 
@@ -114,9 +115,55 @@ msgstr "没有 organizer 会话。"
 msgid "Missing command from client: {request}"
 msgstr "客户端缺少命令：{request}"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:817
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:822
 msgid "Cmd '{cmd}' failed: {error}"
 msgstr "命令“{cmd}”执行失败：{error}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:59
+msgid "Rename item"
+msgstr "重命名项目"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:60
+msgid "Unknown item type in rename action. Please report this bug."
+msgstr "重命名操作中存在未知的项目类型。请报告此错误。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:77
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:39
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:40
+msgid "Rename"
+msgstr "重命名"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:84
+msgid "Rename selected items"
+msgstr "重命名所选项目"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:99
+msgid "Are you sure you want to trash this item?"
+msgstr "确定要将此项目移至回收站吗？"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:100
+msgid "Are you sure you want to trash '{title}'?"
+msgstr "确定要将 '{title}' 移至回收站吗？"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:101
+msgid "Are you sure you want to trash folder '{title}' and ALL CONTENTS?"
+msgstr "确定要将文件夹 '{title}' 及其全部内容移至回收站吗？"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:102
+msgid "Are you sure you want to trash ALL selected items?"
+msgstr "确定要将所有选定项目移至回收站吗？"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:103
+msgid "Unknown item type in trash action. Please report this bug."
+msgstr "回收站操作中存在未知的项目类型。请报告此错误。"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:134
+msgid "Trash"
+msgstr "移至回收站"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:141
+msgid "Trash selected items"
+msgstr "将所选项目移至回收站"
 
 #: client/src/App.svelte:319
 msgid "Are you sure you want to delete this subtitle?"
@@ -126,11 +173,11 @@ msgstr "确定要删除此字幕吗？"
 msgid "Invalid time offset: {offset}"
 msgstr "时间偏移无效：{offset}"
 
-#: client/src/App.svelte:734
+#: client/src/App.svelte:739
 msgid "Server version too old (v{version}). Please update server."
 msgstr "服务器版本过旧（v{version}），请更新服务器。"
 
-#: client/src/App.svelte:741
+#: client/src/App.svelte:746
 msgid ""
 "Client version too old (client v{clientVersion} for server "
 "v{serverVersion}). Please update client."
@@ -138,70 +185,70 @@ msgstr ""
 "客户端版本过旧（客户端 v{clientVersion} 对应服务器 v{serverVersion}），请更新"
 "客户端。"
 
-#: client/src/App.svelte:892
+#: client/src/App.svelte:896
 msgid "Bad video open request. See log."
 msgstr "视频打开请求无效，请查看日志。"
 
-#: client/src/App.svelte:1060
+#: client/src/App.svelte:1064
 msgid "Connecting server..."
 msgstr "正在连接服务器..."
 
-#: client/src/App.svelte:1068
+#: client/src/App.svelte:1072
 msgid "View connection errors"
 msgstr "查看连接错误"
 
-#: client/src/App.svelte:1074
+#: client/src/App.svelte:1078
 msgid "See browser JS console for more details."
 msgstr "更多详情请查看浏览器 JS 控制台。"
 
-#: client/src/App.svelte:1106
+#: client/src/App.svelte:1110
 msgid "Sort: date posted"
 msgstr "排序：发布日期"
 
-#: client/src/App.svelte:1106
+#: client/src/App.svelte:1110
 msgid "Sort: timecode"
 msgstr "排序：时间码"
 
-#: client/src/App.svelte:1126
+#: client/src/App.svelte:1130
 msgid "Subtitles"
 msgstr "字幕"
 
-#: client/src/App.svelte:1148
+#: client/src/App.svelte:1152
 msgctxt "collab"
 msgid "Collaborative viewing session active."
 msgstr "协同观看会话已启用。"
 
-#: client/src/App.svelte:1149
+#: client/src/App.svelte:1153
 msgctxt "collab"
 msgid "Session ID is {id}"
 msgstr "会话 ID：{id}"
 
-#: client/src/App.svelte:1150
+#: client/src/App.svelte:1154
 msgctxt "collab"
 msgid "Actions like seek, play and draw are mirrored to all participants."
 msgstr "寻址、播放、绘图等操作会同步给所有参与者。"
 
-#: client/src/App.svelte:1151
+#: client/src/App.svelte:1155
 msgctxt "collab"
 msgid "To invite people, copy browser URL and send it to them."
 msgstr "邀请他人时，复制浏览器链接并发送给他们。"
 
-#: client/src/App.svelte:1152
+#: client/src/App.svelte:1156
 msgctxt "collab"
 msgid "Exit by clicking the green icon in header."
 msgstr "点击标题栏中的绿色图标退出。"
 
 #. button to acknowledge
-#: client/src/App.svelte:1153
+#: client/src/App.svelte:1157
 msgctxt "collab"
 msgid "Understood"
 msgstr "知道了"
 
-#: client/src/App.svelte:1182
+#: client/src/App.svelte:1186
 msgid "Drop video, audio and image files here to upload"
 msgstr "将视频、音频或图片文件拖到此处上传"
 
-#: client/src/App.svelte:1213
+#: client/src/App.svelte:1217
 msgid "Latest messages"
 msgstr "最新消息"
 
