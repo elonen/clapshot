@@ -1,0 +1,971 @@
+msgid ""
+msgstr ""
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-09 20:33+0300\n"
+"Language: fr\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:176
+msgid "Internal error in authz: {desc}"
+msgstr "Erreur interne d'autorisation : {desc}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:183
+msgid "Permission denied"
+msgstr "Permission refusée"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:217
+msgid "Permission denied: {desc}"
+msgstr "Permission refusée : {desc}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:52
+msgid "No such media file."
+msgstr "Fichier multimédia introuvable."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:111
+msgid "You have no media yet."
+msgstr "Vous n'avez pas encore de média."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:113
+msgid "All your media files"
+msgstr "Tous vos fichiers multimédias"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:120
+msgid "Your Media"
+msgstr "Vos médias"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:244
+msgid "{kind} deleted."
+msgstr "{kind} supprimé."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:246
+msgid "{kind} deleted, but cleanup had errors."
+msgstr "{kind} supprimé, mais le nettoyage a rencontré des erreurs."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:268
+msgid "Invalid file name (must contain a letter or number)"
+msgstr "Nom de fichier invalide (doit contenir une lettre ou un chiffre)"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:272
+msgid "Name too long (max 160)"
+msgstr "Nom trop long (160 maximum)"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:278
+msgid "{kind} renamed."
+msgstr "{kind} renommé."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:279
+msgid "New name: '{name}'"
+msgstr "Nouveau nom : '{name}'"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:401
+msgid "Failed to edit comment."
+msgstr "Échec de la modification du commentaire."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:401
+msgid "No such comment. Cannot edit."
+msgstr "Commentaire introuvable. Modification impossible."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:420
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:425
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:435
+msgid "Failed to delete comment."
+msgstr "Échec de la suppression du commentaire."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:420
+msgid "You can only delete your own comments"
+msgstr "Vous ne pouvez supprimer que vos propres commentaires"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:425
+msgid "Comment has replies. Cannot delete."
+msgstr "Le commentaire a des réponses. Suppression impossible."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:435
+msgid "No such comment. Cannot delete."
+msgstr "Commentaire introuvable. Suppression impossible."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:478
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:495
+msgid "Failed to add subtitle."
+msgstr "Échec de l'ajout du sous-titre."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:478
+msgid "Subtitle file already exists: '{filename}'"
+msgstr "Le fichier de sous-titres existe déjà : '{filename}'"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:495
+msgid "WebVTT file already exists: '{filename}'"
+msgstr "Le fichier WebVTT existe déjà : '{filename}'"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:652
+msgid "Failed to join collab session: {error}"
+msgstr "Échec de la connexion à la session collaborative : {error}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:691
+msgid "Report rejected: no active collab session."
+msgstr "Rapport rejeté : aucune session collaborative active."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:715
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:736
+msgid "No organizer session."
+msgstr "Aucune session d'organiseur."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:777
+msgid "Missing command from client: {request}"
+msgstr "Commande manquante du client : {request}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:817
+msgid "Cmd '{cmd}' failed: {error}"
+msgstr "Échec de la commande '{cmd}' : {error}"
+
+#: client/src/App.svelte:319
+msgid "Are you sure you want to delete this subtitle?"
+msgstr "Voulez-vous vraiment supprimer ce sous-titre ?"
+
+#: client/src/App.svelte:342
+msgid "Invalid time offset: {offset}"
+msgstr "Décalage temporel invalide : {offset}"
+
+#: client/src/App.svelte:734
+msgid "Server version too old (v{version}). Please update server."
+msgstr "Version du serveur trop ancienne (v{version}). Veuillez mettre à jour le serveur."
+
+#: client/src/App.svelte:741
+msgid ""
+"Client version too old (client v{clientVersion} for server "
+"v{serverVersion}). Please update client."
+msgstr "Version du client trop ancienne (client v{clientVersion} pour le serveur v{serverVersion}). Veuillez mettre à jour le client."
+
+#: client/src/App.svelte:892
+msgid "Bad video open request. See log."
+msgstr "Requête d'ouverture vidéo incorrecte. Consultez le journal."
+
+#: client/src/App.svelte:1060
+msgid "Connecting server..."
+msgstr "Connexion au serveur..."
+
+#: client/src/App.svelte:1068
+msgid "View connection errors"
+msgstr "Voir les erreurs de connexion"
+
+#: client/src/App.svelte:1074
+msgid "See browser JS console for more details."
+msgstr "Consultez la console JS du navigateur pour plus de détails."
+
+#: client/src/App.svelte:1106
+msgid "Sort: date posted"
+msgstr "Tri : date de publication"
+
+#: client/src/App.svelte:1106
+msgid "Sort: timecode"
+msgstr "Tri : timecode"
+
+#: client/src/App.svelte:1126
+msgid "Subtitles"
+msgstr "Sous-titres"
+
+#: client/src/App.svelte:1148
+msgctxt "collab"
+msgid "Collaborative viewing session active."
+msgstr "Session de visionnage collaboratif active."
+
+#: client/src/App.svelte:1149
+msgctxt "collab"
+msgid "Session ID is {id}"
+msgstr "Identifiant de session : {id}"
+
+#: client/src/App.svelte:1150
+msgctxt "collab"
+msgid "Actions like seek, play and draw are mirrored to all participants."
+msgstr "Les actions comme le déplacement, la lecture et le dessin sont synchronisées avec tous les participants."
+
+#: client/src/App.svelte:1151
+msgctxt "collab"
+msgid "To invite people, copy browser URL and send it to them."
+msgstr "Pour inviter des personnes, copiez l'URL du navigateur et envoyez-la leur."
+
+#: client/src/App.svelte:1152
+msgctxt "collab"
+msgid "Exit by clicking the green icon in header."
+msgstr "Quittez en cliquant sur l'icône verte dans l'en-tête."
+
+#. button to acknowledge
+#: client/src/App.svelte:1153
+msgctxt "collab"
+msgid "Understood"
+msgstr "Compris"
+
+#: client/src/App.svelte:1182
+msgid "Drop video, audio and image files here to upload"
+msgstr "Déposez ici des fichiers vidéo, audio et image pour les téléverser"
+
+#: client/src/App.svelte:1213
+msgid "Latest messages"
+msgstr "Derniers messages"
+
+#: client/src/lib/NavBar.svelte:70
+msgid ""
+"Basic auth logout failed.\n"
+"Status code from {url}: {status} (not 401)"
+msgstr ""
+"Échec de la déconnexion (authentification de base).\n"
+"Code de statut de {url} : {status} (pas 401)"
+
+#: client/src/lib/NavBar.svelte:79
+msgid ""
+"Clapshot Client version {version}\n"
+"\n"
+"Visit the project page at:\n"
+"https://github.com/elonen/clapshot\n"
+msgstr ""
+"Client Clapshot version {version}\n"
+"\n"
+"Visitez la page du projet à :\n"
+"https://github.com/elonen/clapshot\n"
+""
+
+#: client/src/lib/NavBar.svelte:88
+msgid ""
+"Link copied to clipboard.\n"
+"Send it to reviewers who have user accounts here."
+msgstr ""
+"Lien copié dans le presse-papiers.\n"
+"Envoyez-le aux relecteurs qui possèdent un compte ici."
+
+#: client/src/lib/NavBar.svelte:140
+msgid "Share to logged in users"
+msgstr "Partager avec les utilisateurs connectés"
+
+#: client/src/lib/NavBar.svelte:142
+msgid "Download original"
+msgstr "Télécharger l'original"
+
+#: client/src/lib/NavBar.svelte:145
+msgctxt "collab"
+msgid "Leave collaborative Session"
+msgstr "Quitter la session collaborative"
+
+#: client/src/lib/NavBar.svelte:147
+msgctxt "collab"
+msgid "Collaboration is disabled here"
+msgstr "La collaboration est désactivée ici"
+
+#: client/src/lib/NavBar.svelte:147 client/src/lib/NavBar.svelte:149
+msgctxt "collab"
+msgid "Start Collaborative Session"
+msgstr "Démarrer une session collaborative"
+
+#: client/src/lib/NavBar.svelte:153
+msgid "Experimental tools"
+msgstr "Outils expérimentaux"
+
+#: client/src/lib/NavBar.svelte:157 client/src/lib/tools/EDLImport.svelte:107
+msgid "Import EDL as Comments"
+msgstr "Importer EDL comme commentaires"
+
+#: client/src/lib/NavBar.svelte:158
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:72
+msgid "Export Comments"
+msgstr "Exporter les commentaires"
+
+#: client/src/lib/NavBar.svelte:190 client/src/lib/NavBar.svelte:191
+msgctxt "menu"
+msgid "Language"
+msgstr "Langue"
+
+#: client/src/lib/NavBar.svelte:200 client/src/lib/NavBar.svelte:217
+msgid "Logout"
+msgstr "Déconnexion"
+
+#. menu item that opens the 'About this app' dialog
+#: client/src/lib/NavBar.svelte:202
+msgctxt "menu"
+msgid "About"
+msgstr "À propos"
+
+#: client/src/lib/NavBar.svelte:218
+msgid "Reload page to log in again."
+msgstr "Rechargez la page pour vous reconnecter."
+
+#: client/src/lib/asset_browser/FileUpload.svelte:51
+msgid "{percent}% uploaded... please wait"
+msgstr "{percent}% téléversé... veuillez patienter"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:61
+msgid "Upload Failed"
+msgstr "Échec du téléversement"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:66
+msgid "Upload Aborted"
+msgstr "Téléversement annulé"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:76
+msgid "Uploading: {filename}..."
+msgstr "Téléversement : {filename}..."
+
+#: client/src/lib/asset_browser/FileUpload.svelte:101
+msgid "Drop rejected. Only video, audio and image files are allowed."
+msgstr "Dépôt refusé. Seuls les fichiers vidéo, audio et image sont acceptés."
+
+#: client/src/lib/asset_browser/FolderTile.svelte:61
+msgid "This target accepts media — folders can’t be dropped here."
+msgstr "Cette cible accepte des médias — les dossiers ne peuvent pas y être déposés."
+
+#: client/src/lib/player_view/CommentCard.svelte:44
+msgid "Delete comment?"
+msgstr "Supprimer le commentaire ?"
+
+#: client/src/lib/player_view/CommentCard.svelte:106
+msgid "Link copied to clipboard"
+msgstr "Lien copié dans le presse-papiers"
+
+#: client/src/lib/player_view/CommentCard.svelte:107
+#: client/src/lib/player_view/CommentCard.svelte:108
+#: client/src/lib/player_view/CommentCard.svelte:167
+#: client/src/lib/player_view/CommentCard.svelte:168
+msgid "Copy link"
+msgstr "Copier le lien"
+
+#: client/src/lib/player_view/CommentCard.svelte:155
+msgid "(edited)"
+msgstr "(modifié)"
+
+#. button to reply to a comment (verb, not the noun 'a reply')
+#: client/src/lib/player_view/CommentCard.svelte:175
+msgctxt "comment"
+msgid "Reply"
+msgstr "Répondre"
+
+#: client/src/lib/player_view/CommentCard.svelte:177
+msgctxt "comment"
+msgid "Edit"
+msgstr "Modifier"
+
+#. short label for the Delete button (abbreviation of 'Delete')
+#: client/src/lib/player_view/CommentCard.svelte:179
+msgctxt "comment"
+msgid "Del"
+msgstr "Suppr."
+
+#: client/src/lib/player_view/CommentCard.svelte:190
+msgid "Your reply..."
+msgstr "Votre réponse..."
+
+#: client/src/lib/player_view/CommentInput.svelte:66
+msgctxt "comment"
+msgid "Undo"
+msgstr "Annuler"
+
+#: client/src/lib/player_view/CommentInput.svelte:67
+msgctxt "comment"
+msgid "Redo"
+msgstr "Rétablir"
+
+#: client/src/lib/player_view/CommentInput.svelte:80
+msgid "Add a comment - at current time..."
+msgstr "Ajouter un commentaire — à l'instant actuel..."
+
+#: client/src/lib/player_view/CommentInput.svelte:80
+msgid "Add a comment..."
+msgstr "Ajouter un commentaire..."
+
+#: client/src/lib/player_view/CommentInput.svelte:85
+msgid "Comment is time specific?"
+msgstr "Commentaire lié à un instant précis ?"
+
+#: client/src/lib/player_view/CommentInput.svelte:100
+msgid "Draw on video"
+msgstr "Dessiner sur la vidéo"
+
+#: client/src/lib/player_view/CommentInput.svelte:108
+msgctxt "comment"
+msgid "Send"
+msgstr "Envoyer"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:64
+msgid "Edit subtitle"
+msgstr "Modifier le sous-titre"
+
+#. label for the subtitle's display-name field (a noun, not a page heading)
+#: client/src/lib/player_view/SubtitleCard.svelte:73
+msgctxt "subtitle"
+msgid "Title"
+msgstr "Titre"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:79
+msgid "Language code"
+msgstr "Code de langue"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:85
+msgid "Time offset (sec)"
+msgstr "Décalage temporel (sec)"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:91
+msgid "Default Subtitle"
+msgstr "Sous-titre par défaut"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:94
+msgctxt "subtitle"
+msgid "Save"
+msgstr "Enregistrer"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:95
+msgctxt "subtitle"
+msgid "Download"
+msgstr "Télécharger"
+
+#. short label for the Delete button (abbreviation of 'Delete')
+#: client/src/lib/player_view/SubtitleCard.svelte:96
+msgctxt "subtitle"
+msgid "Del"
+msgstr "Suppr."
+
+#: client/src/lib/player_view/VideoPlayer.svelte:460
+#: client/src/lib/player_view/VideoPlayer.svelte:469
+msgid "Seek failed to: {target}"
+msgstr "Échec du déplacement vers : {target}"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:489
+msgid "Video loading not done? Cannot enable drawing."
+msgstr "Chargement de la vidéo non terminé ? Impossible d'activer le dessin."
+
+#: client/src/lib/player_view/VideoPlayer.svelte:568
+msgid "Failed to show image."
+msgstr "Échec de l'affichage de l'image."
+
+#: client/src/lib/tools/EDLImport.svelte:86
+msgid "No time spans found when parsing EDL."
+msgstr "Aucune plage temporelle trouvée lors de l'analyse de l'EDL."
+
+#: client/src/lib/tools/EDLImport.svelte:124
+msgid "Parsed spans"
+msgstr "Plages analysées"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:76
+msgid "Export format"
+msgstr "Format d'exportation"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:82
+msgid "Frame rate"
+msgstr "Fréquence d'images"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:89
+msgid "Format options"
+msgstr "Options de format"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:155
+msgid "No comments to export."
+msgstr "Aucun commentaire à exporter."
+
+#: organizer/basic_folders/organizer/database/operations.py:194
+msgid "Multiple root folders in DB. Please report to support."
+msgstr "Plusieurs dossiers racine dans la base de données. Veuillez le signaler au support."
+
+#: organizer/basic_folders/organizer/database/operations.py:195
+msgid ""
+"Users should have one root folder. This inconsistency was fixed, but your "
+"home view might contain unexpected folders."
+msgstr "Les utilisateurs ne devraient avoir qu'un seul dossier racine. Cette incohérence a été corrigée, mais votre vue d'accueil peut contenir des dossiers inattendus."
+
+#: organizer/basic_folders/organizer/database/operations.py:202
+#, python-brace-format
+msgid "Home of '{name}'"
+msgstr "Accueil de '{name}'"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:38
+msgid "Destination folder not found"
+msgstr "Dossier de destination introuvable"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:50
+msgid "A version set can only contain media files"
+msgstr "Un ensemble de versions ne peut contenir que des fichiers multimédias"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:67
+#, python-brace-format
+msgid "Folder id '{id}' not found"
+msgstr "Dossier d'identifiant '{id}' introuvable"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:69
+msgid "Cannot move a folder into itself"
+msgstr "Impossible de déplacer un dossier dans lui-même"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:71
+msgid "Cannot move another user's folder"
+msgstr "Impossible de déplacer le dossier d'un autre utilisateur"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:77
+#, python-brace-format
+msgid "Folder with ID '{id}' is a root folder? Cannot move."
+msgstr "Le dossier d'identifiant '{id}' est un dossier racine ? Déplacement impossible."
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:89
+#, python-brace-format
+msgid "Media file '{id}' not found"
+msgstr "Fichier multimédia '{id}' introuvable"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:91
+msgid "Cannot move another user's media file"
+msgstr "Impossible de déplacer le fichier multimédia d'un autre utilisateur"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:329
+#, python-brace-format
+msgid "Parent folder {id} not found"
+msgstr "Dossier parent {id} introuvable"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:331
+msgid "Cannot reorder items in another user's folder"
+msgstr "Impossible de réorganiser les éléments dans le dossier d'un autre utilisateur"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:351
+msgid "No folder ID in UI listing, cannot reorder"
+msgstr "Aucun identifiant de dossier dans la liste de l'interface, réorganisation impossible"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:36
+msgid "New folder"
+msgstr "Nouveau dossier"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:39
+msgid "Create a new folder"
+msgstr "Créer un nouveau dossier"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:43
+msgid "Name for the new folder"
+msgstr "Nom du nouveau dossier"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:51
+msgid "Move to parent"
+msgstr "Déplacer vers le parent"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:54
+msgid "Move item to parent folder"
+msgstr "Déplacer l'élément vers le dossier parent"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:93
+msgid "Share folder"
+msgstr "Partager le dossier"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:96
+msgid "Create a shareable link to this folder"
+msgstr "Créer un lien de partage vers ce dossier"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:103
+msgid "No folder selected to share"
+msgstr "Aucun dossier sélectionné à partager"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:113
+msgid "Stop sharing"
+msgstr "Arrêter le partage"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:116
+msgid "Revoke the shared link for this folder"
+msgstr "Révoquer le lien partagé de ce dossier"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:123
+msgid "No folder selected to unshare"
+msgstr "Aucun dossier sélectionné pour arrêter le partage"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:126
+msgid "Are you sure you want to revoke the shared link for this folder?"
+msgstr "Voulez-vous vraiment révoquer le lien partagé de ce dossier ?"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:135
+msgid "Copy URL"
+msgstr "Copier l'URL"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:138
+msgid "Copy the shared link to clipboard"
+msgstr "Copier le lien partagé dans le presse-papiers"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:148
+msgid "No shared link available for this folder"
+msgstr "Aucun lien partagé disponible pour ce dossier"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:157
+msgid ""
+"Shared link copied to clipboard!\n"
+"\n"
+"NOTE: Sharing a folder reveals direct links to all files currently in it, "
+"effectively giving recipient PERMANENT access to them, even if remove the "
+"folder share later."
+msgstr ""
+"Lien partagé copié dans le presse-papiers !\n"
+"\n"
+"REMARQUE : partager un dossier expose des liens directs vers tous les fichiers qu'il contient actuellement, donnant ainsi au destinataire un accès PERMANENT à ceux-ci, même si vous arrêtez le partage du dossier plus tard."
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:159
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:162
+msgid "Copy this shared link:"
+msgstr "Copiez ce lien partagé :"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:170
+msgid "Into Version Set"
+msgstr "En ensemble de versions"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:173
+msgid "Turn this folder into a version set (revisions of one media file)"
+msgstr "Transformer ce dossier en ensemble de versions (révisions d'un même fichier multimédia)"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:179
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:196
+msgid "No folder selected"
+msgstr "Aucun dossier sélectionné"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:187
+msgid "Into Normal Folder"
+msgstr "En dossier normal"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:190
+msgid "Turn this version set back into a normal folder"
+msgstr "Retransformer cet ensemble de versions en dossier normal"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:204
+msgid "Make Versioned"
+msgstr "Rendre versionné"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:207
+msgid "Group the selected media files into a new version set"
+msgstr "Regrouper les fichiers multimédias sélectionnés en un nouvel ensemble de versions"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:213
+msgid "No media files selected"
+msgstr "Aucun fichier multimédia sélectionné"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:221
+msgid "Manage Versions"
+msgstr "Gérer les versions"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:224
+msgid "Open the version set to manage its versions"
+msgstr "Ouvrir l'ensemble de versions pour gérer ses versions"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:230
+msgid "No version set selected"
+msgstr "Aucun ensemble de versions sélectionné"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:239
+msgid "Set Active Version"
+msgstr "Définir la version active"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:242
+msgid "Make this version the active one for the set"
+msgstr "Faire de cette version la version active de l'ensemble"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:250
+msgid "Cannot set active version (missing ids)"
+msgstr "Impossible de définir la version active (identifiants manquants)"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:259
+msgid "Delete user"
+msgstr "Supprimer l'utilisateur"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:262
+msgid "Delete user if they have no content (only empty root folder)"
+msgstr "Supprimer l'utilisateur s'il n'a aucun contenu (uniquement un dossier racine vide)"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:269
+msgid "No user folder selected for cleanup"
+msgstr "Aucun dossier utilisateur sélectionné pour le nettoyage"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:272
+msgid ""
+"This will delete the user if they have no media files and only an empty root "
+"folder.\n"
+"\n"
+"Comments from this user will be preserved but marked as from a deleted "
+"user.\n"
+"\n"
+"Are you sure?"
+msgstr ""
+"Cela supprimera l'utilisateur s'il n'a aucun fichier multimédia et uniquement un dossier racine vide.\n"
+"\n"
+"Les commentaires de cet utilisateur seront conservés mais marqués comme provenant d'un utilisateur supprimé.\n"
+"\n"
+"Êtes-vous sûr ?"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:212
+msgid "Cannot fetch contents of another user's folder"
+msgstr "Impossible de récupérer le contenu du dossier d'un autre utilisateur"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:256
+#: organizer/basic_folders/organizer/helpers/folders.py:568
+#: organizer/basic_folders/organizer/helpers/folders.py:601
+#, python-brace-format
+msgid "Folder ID '{folder_id}' not found"
+msgstr "Dossier d'identifiant '{folder_id}' introuvable"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:260
+msgid "Cannot trash another user's folder"
+msgstr "Impossible de mettre à la corbeille le dossier d'un autre utilisateur"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:373
+#: organizer/basic_folders/organizer/helpers/folders.py:519
+#: organizer/basic_folders/organizer/helpers/folders.py:656
+#: organizer/basic_folders/organizer/helpers/pages.py:246
+msgctxt "folder"
+msgid "UNNAMED"
+msgstr "SANS NOM"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:477
+#, python-brace-format
+msgid "v{num} — {title}"
+msgstr "v{num} — {title}"
+
+#. TRANSLATORS: dropdown label for selecting a media version (a noun)
+#: organizer/basic_folders/organizer/helpers/folders.py:480
+msgctxt "folder"
+msgid "Version"
+msgstr "Version"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:481
+msgid "Switch version"
+msgstr "Changer de version"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:530
+msgid "Cannot create folder in another user's folder"
+msgstr "Impossible de créer un dossier dans le dossier d'un autre utilisateur"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:532
+msgid "Folder name too long"
+msgstr "Nom de dossier trop long"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:534
+msgid "Folder name cannot be empty"
+msgstr "Le nom de dossier ne peut pas être vide"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:537
+msgid "Item with this name already exists in the this folder"
+msgstr "Un élément portant ce nom existe déjà dans ce dossier"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:572
+msgid "Only the folder owner can create shares"
+msgstr "Seul le propriétaire du dossier peut créer des partages"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:605
+msgid "Only the folder owner can revoke sharing"
+msgstr "Seul le propriétaire du dossier peut révoquer le partage"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:62
+msgid "<h3><strong>ADMIN</strong> – User Folders</h3>"
+msgstr "<h3><strong>ADMIN</strong> – Dossiers des utilisateurs</h3>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:64
+msgid ""
+"<p>The following users currently have a home folder and/or media files.<br/"
+">Uploading files or moving items to these folders will transfer ownership to "
+"that user.<br/>Trashing a user's home folder will delete everything they "
+"have.</p>"
+msgstr "<p>Les utilisateurs suivants possèdent actuellement un dossier d'accueil et/ou des fichiers multimédias.<br/>Téléverser des fichiers ou déplacer des éléments vers ces dossiers transférera la propriété à cet utilisateur.<br/>Mettre à la corbeille le dossier d'accueil d'un utilisateur supprimera tout ce qu'il possède.</p>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:107
+msgid ""
+"This will delete ALL users who have no media files and only empty root "
+"folders.\n"
+"\n"
+"Comments from deleted users will be preserved but marked as from deleted "
+"users.\n"
+"\n"
+"Are you sure?"
+msgstr ""
+"Cela supprimera TOUS les utilisateurs n'ayant aucun fichier multimédia et uniquement des dossiers racine vides.\n"
+"\n"
+"Les commentaires des utilisateurs supprimés seront conservés mais marqués comme provenant d'utilisateurs supprimés.\n"
+"\n"
+"Êtes-vous sûr ?"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:112
+msgid "Delete all users without media"
+msgstr "Supprimer tous les utilisateurs sans média"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:212
+msgid ""
+"<p style='margin-top: 1em;'><i class='far fa-circle-question text-"
+"blue-400'></i> Use the drop zone to <strong>upload media files</strong>, or "
+"right-click on the empty space above to <strong>create a folder</strong>.</p>"
+msgstr "<p style='margin-top: 1em;'><i class='far fa-circle-question text-blue-400'></i> Utilisez la zone de dépôt pour <strong>téléverser des fichiers multimédias</strong>, ou faites un clic droit sur l'espace vide ci-dessus pour <strong>créer un dossier</strong>.</p>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:213
+msgid ""
+"<p>After that, drag items to <strong>reorder</strong>, or drop them "
+"<strong>into folders</strong>. Hold shift to multi-select.</p>"
+msgstr "<p>Ensuite, faites glisser les éléments pour les <strong>réorganiser</strong>, ou déposez-les <strong>dans des dossiers</strong>. Maintenez Maj pour sélectionner plusieurs éléments.</p>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:234
+msgid "Root folder"
+msgstr "Dossier racine"
+
+#. TRANSLATORS: breadcrumb label for the user's own home folder (not "house")
+#: organizer/basic_folders/organizer/helpers/pages.py:244
+msgctxt "folder"
+msgid "Home"
+msgstr "Accueil"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:32
+#, python-brace-format
+msgid "Command argument '{key}' must be an integer"
+msgstr "L'argument de commande '{key}' doit être un entier"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:94
+msgid "This shared folder link is invalid or has been revoked"
+msgstr "Ce lien de dossier partagé est invalide ou a été révoqué"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:150
+msgid "new_folder command missing 'name' argument"
+msgstr "La commande new_folder manque de l'argument 'name'"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:157
+msgid "set_folder_kind requires 'id' and 'kind'"
+msgstr "set_folder_kind nécessite 'id' et 'kind'"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:161
+#, python-brace-format
+msgid "Invalid folder kind: {kind}"
+msgstr "Type de dossier invalide : {kind}"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:166
+#: organizer/basic_folders/organizer/user_session_methods.py:260
+#: organizer/basic_folders/organizer/user_session_methods.py:287
+#: organizer/basic_folders/organizer/user_session_methods.py:331
+#: organizer/basic_folders/organizer/user_session_methods.py:356
+#: organizer/basic_folders/organizer/user_session_methods.py:487
+#, python-brace-format
+msgid "Folder ID '{id}' not found"
+msgstr "Dossier d'identifiant '{id}' introuvable"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:168
+msgid "Cannot change another user's folder"
+msgstr "Impossible de modifier le dossier d'un autre utilisateur"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:176
+msgid "Cannot turn the root folder into a version set"
+msgstr "Impossible de transformer le dossier racine en ensemble de versions"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:180
+msgid "Cannot make a version set from a folder that contains subfolders"
+msgstr "Impossible de créer un ensemble de versions à partir d'un dossier contenant des sous-dossiers"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:184
+msgid "A version set needs at least one media file"
+msgstr "Un ensemble de versions nécessite au moins un fichier multimédia"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:206
+msgid "Make Versioned works on media files only; deselect folders"
+msgstr "Rendre versionné ne fonctionne que sur les fichiers multimédias ; désélectionnez les dossiers"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:210
+msgid "Select at least one media file to make versioned"
+msgstr "Sélectionnez au moins un fichier multimédia à rendre versionné"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:215
+msgid "Selected media file is not in any folder"
+msgstr "Le fichier multimédia sélectionné n'est dans aucun dossier"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:219
+msgid "Cannot modify another user's folder"
+msgstr "Impossible de modifier le dossier d'un autre utilisateur"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:229
+msgid ""
+"All selected media files must be in the same folder to group them into a "
+"version set"
+msgstr "Tous les fichiers multimédias sélectionnés doivent être dans le même dossier pour les regrouper en un ensemble de versions"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:231
+msgid "Version Set"
+msgstr "Ensemble de versions"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:252
+msgid "set_active_version requires 'folder_id' and 'media_file_id'"
+msgstr "set_active_version nécessite 'folder_id' et 'media_file_id'"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:262
+msgid "Cannot change another user's version set"
+msgstr "Impossible de modifier l'ensemble de versions d'un autre utilisateur"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:267
+msgid "That media file is not in this version set"
+msgstr "Ce fichier multimédia ne fait pas partie de cet ensemble de versions"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:326
+msgid "rename_folder command missing 'id' or 'new_name' argument"
+msgstr "La commande rename_folder manque de l'argument 'id' ou 'new_name'"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:348
+msgid "trash_folder command missing 'id' argument"
+msgstr "La commande trash_folder manque de l'argument 'id'"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:381
+msgid "share_folder command missing 'id' argument"
+msgstr "La commande share_folder manque de l'argument 'id'"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:392
+msgid "Server URL base not configured - cannot generate shareable URLs"
+msgstr "Base d'URL du serveur non configurée — impossible de générer des URL de partage"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:403
+msgid "Folder shared. Use popup/'Copy URL' to get a link."
+msgstr "Dossier partagé. Utilisez la fenêtre contextuelle / 'Copier l'URL' pour obtenir un lien."
+
+#: organizer/basic_folders/organizer/user_session_methods.py:404
+#, python-brace-format
+msgid "Folder sharing token created for '{title}'."
+msgstr "Jeton de partage de dossier créé pour '{title}'."
+
+#: organizer/basic_folders/organizer/user_session_methods.py:411
+msgid "revoke_share command missing 'id' argument"
+msgstr "La commande revoke_share manque de l'argument 'id'"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:430
+msgid "Folder sharing has been revoked"
+msgstr "Le partage du dossier a été révoqué"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:436
+msgid "This folder is not currently shared"
+msgstr "Ce dossier n'est pas actuellement partagé"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:443
+msgid "cleanup_empty_user command missing 'folder_id' argument"
+msgstr "La commande cleanup_empty_user manque de l'argument 'folder_id'"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:446
+msgid "Only admin can clean up users"
+msgstr "Seul un administrateur peut nettoyer les utilisateurs"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:470
+#, python-brace-format
+msgid "Cleaned up {count} empty user"
+msgid_plural "Cleaned up {count} empty users"
+msgstr[0] "{count} utilisateur vide nettoyé"
+msgstr[1] "{count} utilisateurs vides nettoyés"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:471
+msgid ""
+"Comments from deleted users are preserved but marked as from deleted users."
+msgstr "Les commentaires des utilisateurs supprimés sont conservés mais marqués comme provenant d'utilisateurs supprimés."
+
+#: organizer/basic_folders/organizer/user_session_methods.py:477
+msgid "No empty users found to clean up"
+msgstr "Aucun utilisateur vide à nettoyer"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:504
+#, python-brace-format
+msgid "User '{id}' has been cleaned up (deleted)"
+msgstr "L'utilisateur '{id}' a été nettoyé (supprimé)"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:505
+msgid ""
+"Comments from this user are preserved but marked as from a deleted user."
+msgstr "Les commentaires de cet utilisateur sont conservés mais marqués comme provenant d'un utilisateur supprimé."
+
+#: organizer/basic_folders/organizer/user_session_methods.py:511
+#, python-brace-format
+msgid "User '{id}' was not deleted"
+msgstr "L'utilisateur '{id}' n'a pas été supprimé"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:512
+msgid "User still has media files or non-empty folders."
+msgstr "L'utilisateur possède encore des fichiers multimédias ou des dossiers non vides."
+
+#: organizer/basic_folders/organizer/user_session_methods.py:516
+#, python-brace-format
+msgid "Unknown organizer command: {cmd}"
+msgstr "Commande d'organiseur inconnue : {cmd}"

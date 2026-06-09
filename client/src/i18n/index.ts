@@ -28,6 +28,7 @@
  */
 import { derived, writable, get } from 'svelte/store';
 import fi from './locales/fi.json';
+import fr from './locales/fr.json';
 import zh from './locales/zh.json';
 
 const STORAGE_KEY = 'clapshot_locale';
@@ -35,12 +36,13 @@ const CTX_GLUE = '\u0004';  // gettext's msgctxt<->msgid separator
 
 // Compiled catalogs: { "<msgid>" | "<ctx><msgid>": "translation" }.
 // English is the source language (msgid === text), so it has no catalog.
-const CATALOGS: Record<string, Record<string, string>> = { fi, zh };
+const CATALOGS: Record<string, Record<string, string>> = { fi, fr, zh };
 
 export type Locale = string;
 
 export const availableLocales: { id: string; label: string }[] = [
     { id: 'en', label: 'English' },
+    { id: 'fr', label: 'Français' },
     { id: 'fi', label: 'Suomi' },
     { id: 'zh', label: '中文' },
 ];

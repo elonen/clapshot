@@ -10,7 +10,7 @@
 #   make all       # extract + update + compile
 #
 # Translatable locales (en is the source, so it is NOT listed here):
-LOCALES := fi zh
+LOCALES := fi fr zh
 DOMAIN  := clapshot
 
 ROOT    := $(abspath ..)
