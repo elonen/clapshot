@@ -44,6 +44,7 @@ const translations = {
         'nav.about': 'About',
         'nav.logout': 'Logout',
         'nav.language': 'Language',
+        'nav.collabDisabledHere': 'Collaboration is disabled here',
 
         'upload.uploading': 'Uploading: {filename}...',
         'upload.progress': '{percent}% uploaded... please wait',
@@ -79,6 +80,8 @@ const translations = {
         'subtitles.download': 'Download',
         'subtitles.delete': 'Del',
 
+        'folders.dropRejectedMediaOnly': 'This target accepts media — folders can’t be dropped here.',
+
         'general.ok': 'OK',
     },
     zh: {
@@ -105,6 +108,7 @@ const translations = {
         'nav.about': '关于',
         'nav.logout': '退出',
         'nav.language': '语言',
+        'nav.collabDisabledHere': '此处无法使用协同会话',
 
         'upload.uploading': '正在上传：{filename}...',
         'upload.progress': '已上传 {percent}% ... 请稍候',
@@ -140,6 +144,8 @@ const translations = {
         'subtitles.download': '下载',
         'subtitles.delete': '删除',
 
+        'folders.dropRejectedMediaOnly': '此目标只接受媒体文件——不能将文件夹拖放到此处。',
+
         'general.ok': '确定',
     },
     fi: {
@@ -166,6 +172,7 @@ const translations = {
         'nav.about': 'Tietoja',
         'nav.logout': 'Kirjaudu ulos',
         'nav.language': 'Kieli',
+        'nav.collabDisabledHere': 'Yhteisistunto ei ole käytettävissä tässä',
 
         'upload.uploading': 'Ladataan: {filename}...',
         'upload.progress': '{percent}% ladattu... odota hetki',
@@ -200,6 +207,8 @@ const translations = {
         'subtitles.save': 'Tallenna',
         'subtitles.download': 'Lataa',
         'subtitles.delete': 'Poista',
+
+        'folders.dropRejectedMediaOnly': 'Tämä kohde hyväksyy vain mediaa — kansioita ei voi pudottaa tähän.',
 
         'general.ok': 'OK',
     },

@@ -147,7 +147,7 @@ function addEDLComments(comments: Proto3.Comment[]) {
 							{#if $collabId}
 								<DropdownItem href="?vid={$mediaFileId}" class="text-green-400"><i class="fas fa-users"></i> {$t('nav.leaveCollab')}</DropdownItem>
 							{:else if $playerHeaderHtml}
-								<DropdownItem class="text-gray-600 cursor-not-allowed" data-testid="start-collab-disabled" title="Collaboration is disabled here"><i class="fas fa-user-plus"></i> {$t('nav.startCollab')}</DropdownItem>
+								<DropdownItem class="text-gray-600 cursor-not-allowed" data-testid="start-collab-disabled" title={$t('nav.collabDisabledHere')}><i class="fas fa-user-plus"></i> {$t('nav.startCollab')}</DropdownItem>
 							{:else}
 								<DropdownItem href="?vid={$mediaFileId}&collab={randomSessionId}" title="Start collaborative session"><i class="fas fa-user-plus"></i> {$t('nav.startCollab')}</DropdownItem>
 							{/if}
