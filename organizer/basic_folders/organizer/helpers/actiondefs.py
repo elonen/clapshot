@@ -130,6 +130,12 @@ class ActiondefsHelper:
 
     def make_copy_shared_link_action(self) -> clap.ActionDef:
         # Per-folder popup (owner, shared): copies the folder's share URL to the clipboard.
+        # Pre-computed outside the f-string below: its backslash escapes (\n\n) are not
+        # allowed inside an f-string expression part on Python < 3.12 (PEP 701).
+        copied_msg = json.dumps(_(
+            "Shared link copied to clipboard!\n\nNOTE: Sharing a folder reveals direct "
+            "links to all files currently in it, effectively giving recipient PERMANENT "
+            "access to them, even if remove the folder share later."))
         return clap.ActionDef(
             ui_props=clap.ActionUiProps(
                 label=_("Copy URL"),
@@ -154,7 +160,7 @@ class ActiondefsHelper:
 
                     if (navigator.clipboard && navigator.clipboard.writeText) {{
                         navigator.clipboard.writeText(shareUrl).then(function() {{
-                            alert({json.dumps(_("Shared link copied to clipboard!\n\nNOTE: Sharing a folder reveals direct links to all files currently in it, effectively giving recipient PERMANENT access to them, even if remove the folder share later."))});
+                            alert({copied_msg});
                         }}).catch(function() {{
                             prompt({json.dumps(_("Copy this shared link:"))}, shareUrl);
                         }});
@@ -254,6 +260,12 @@ class ActiondefsHelper:
     def make_cleanup_empty_user_action(self) -> clap.ActionDef:
         # Admin per-user-folder popup (+ the "delete all empty users" button): deletes a user that has
         # no media files and only an empty root folder.
+        # Pre-computed outside the f-string below: its backslash escapes (\n\n) are not
+        # allowed inside an f-string expression part on Python < 3.12 (PEP 701).
+        confirm_msg = json.dumps(_(
+            "This will delete the user if they have no media files and only an empty root "
+            "folder.\n\nComments from this user will be preserved but marked as from a "
+            "deleted user.\n\nAre you sure?"))
         return clap.ActionDef(
             ui_props=clap.ActionUiProps(
                 label=_("Delete user"),
@@ -269,7 +281,7 @@ class ActiondefsHelper:
                         alert({json.dumps(_("No user folder selected for cleanup"))});
                         return;
                     }}
-                    if (confirm({json.dumps(_("This will delete the user if they have no media files and only an empty root folder.\n\nComments from this user will be preserved but marked as from a deleted user.\n\nAre you sure?"))})) {{
+                    if (confirm({confirm_msg})) {{
                         clapshot.callOrganizer("cleanup_empty_user", {{folder_id: folderId}});
                     }}
                 """).strip()))
