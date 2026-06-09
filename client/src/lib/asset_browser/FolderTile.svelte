@@ -58,7 +58,7 @@ function onSink(e: any) {
 
     // Media-tile folders (e.g. version sets) accept media files only -- reject folder drops.
     if (showAsMediaTile && dropContainsFolder(newItems)) {
-        acts.add({mode: 'warning', message: $t('folders.dropRejectedMediaOnly'), lifetime: 5});
+        acts.add({mode: 'warning', message: $t("This target accepts media — folders can’t be dropped here."), lifetime: 5});
         dndItems = [];
         // dnd already pulled the dragged item out of the source listing; request a re-render so it reappears.
         onrejectdrop?.();

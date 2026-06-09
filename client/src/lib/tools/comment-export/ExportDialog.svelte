@@ -3,6 +3,7 @@ import { curVideo, allComments } from "@/stores";
 import { Modal, Button, Input, Label, Select } from 'flowbite-svelte';
 import { onMount } from "svelte";
 import { exporters, groupComments, downloadFile, type ExportContext } from './index';
+import { t } from '@/i18n';
 
 interface Props {
     isOpen?: boolean;
@@ -68,24 +69,24 @@ function setOptionValue(id: string, value: string | number | boolean) {
 let formatItems = $derived(exporters.map(e => ({ value: e.id, name: e.name })));
 </script>
 
-<Modal title="Export Comments" bind:open={isOpen} class="w-96">
+<Modal title={$t("Export Comments")} bind:open={isOpen} class="w-96">
     <div class="flex flex-col space-y-4">
         <!-- Format selection -->
         <div>
-            <Label for="format_select">Export format</Label>
+            <Label for="format_select">{$t("Export format")}</Label>
             <Select id="format_select" items={formatItems} bind:value={selectedExporterId} class="mt-1" />
         </div>
 
         <!-- Frame rate (common to most formats) -->
         <div>
-            <Label for="fps_export">Frame rate</Label>
+            <Label for="fps_export">{$t("Frame rate")}</Label>
             <Input id="fps_export" type="number" bind:value={frameRate} class="mt-1" />
         </div>
 
         <!-- Dynamic options based on selected exporter -->
         {#if selectedExporter && selectedExporter.options.length > 0}
             <div class="border-t border-gray-600 pt-4">
-                <h3 class="text-sm font-medium text-gray-400 mb-2">Format options</h3>
+                <h3 class="text-sm font-medium text-gray-400 mb-2">{$t("Format options")}</h3>
                 {#each selectedExporter.options as opt}
                     <div class="mb-3">
                         {#if opt.type === 'number'}
@@ -151,6 +152,6 @@ let formatItems = $derived(exporters.map(e => ({ value: e.id, name: e.name })));
             {groupedComments.length} comment{groupedComments.length !== 1 ? 's' : ''} will be exported.
         </p>
     {:else}
-        <p class="mt-4 text-gray-400">No comments to export.</p>
+        <p class="mt-4 text-gray-400">{$t("No comments to export.")}</p>
     {/if}
 </Modal>

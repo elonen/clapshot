@@ -3,6 +3,7 @@ import { curVideo } from "@/stores";
 import { Modal, Button, Input, Fileupload, Label, Helper } from 'flowbite-svelte';
 import { onMount } from "svelte";
 import * as Proto3 from '@clapshot_protobuf/typescript';
+import { t } from '@/i18n';
 
 
     interface Props {
@@ -82,7 +83,7 @@ function handleFileUpload(event: Event) {
         reader.onload = function() {
             const text = reader.result as string;
             edlEvents = parseEDL(text);
-            if (!edlEvents || edlEvents.length === 0) { errorMsg = "No time spans found when parsing EDL."; }
+            if (!edlEvents || edlEvents.length === 0) { errorMsg = $t("No time spans found when parsing EDL."); }
         };
         reader.readAsText(files[0]);
     }
@@ -103,7 +104,7 @@ const handleAccept = () => {
 };
 </script>
 
-<Modal title="Import EDL as Comments" bind:open={isOpen} class="w-96">
+<Modal title={$t("Import EDL as Comments")} bind:open={isOpen} class="w-96">
     <form bind:this={edlForm} class="flex flex-col space-y-1" action="#">
         <Label for="file_up">Upload EDL</Label>
         <Fileupload id="file_up" accept=".edl" onchange={handleFileUpload} />
@@ -120,7 +121,7 @@ const handleAccept = () => {
 
     <!-- scrollable list of time spans for review -->
     {#if edlEvents.length > 0}
-        <h2>Parsed spans</h2>
+        <h2>{$t("Parsed spans")}</h2>
         <ul class="space-y-2 max-h-32 overflow-scroll bg-gray-700 p-1">
             {#each edlEvents as edle}
                 <li>{edle.recordIn}: {edle.fromClipName || edle.eventNumber}</li>

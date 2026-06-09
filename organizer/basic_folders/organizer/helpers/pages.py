@@ -13,6 +13,7 @@ from organizer.utils import folder_path_to_uri_arg
 import organizer.metaplugin as mp
 
 from .folders import FoldersHelper, version_number, VERSION_BADGE_COLOR, VERSION_ACTIVE_COLOR
+from .l10n import _, pgettext
 from organizer.database.models import DbMediaFile, DbFolder, DbUser
 
 
@@ -58,9 +59,9 @@ class PagesHelper:
         For each user in the database, show a virtual folder that opens their home folder.
         Admin can also trash all user's content from here.
         """
-        pg_items.append(clap.PageItem(html="<h3><strong>ADMIN</strong> – User Folders</h3>"))
+        pg_items.append(clap.PageItem(html=_("<h3><strong>ADMIN</strong> – User Folders</h3>")))
 
-        pg_items.append(clap.PageItem(html="<p>The following users currently have a home folder and/or media files.<br/>Uploading files or moving items to these folders will transfer ownership to that user.<br/>Trashing a user's home folder will delete everything they have.</p>"))
+        pg_items.append(clap.PageItem(html=_("<p>The following users currently have a home folder and/or media files.<br/>Uploading files or moving items to these folders will transfer ownership to that user.<br/>Trashing a user's home folder will delete everything they have.</p>")))
 
         with self.db_new_session() as dbs:
             all_users: list[DbUser] = dbs.query(DbUser).order_by(DbUser.id).distinct().all()
@@ -103,11 +104,12 @@ class PagesHelper:
             pg_items.append(clap.PageItem(folder_listing=user_folder_listing))
 
             # Add batch cleanup button
-            pg_items.append(clap.PageItem(html="""
+            confirm_msg = _("This will delete ALL users who have no media files and only empty root folders.\n\nComments from deleted users will be preserved but marked as from deleted users.\n\nAre you sure?")
+            pg_items.append(clap.PageItem(html=f"""
                 <div style="margin-top: 2em;">
-                    <button onclick="if(confirm('This will delete ALL users who have no media files and only empty root folders.\\n\\nComments from deleted users will be preserved but marked as from deleted users.\\n\\nAre you sure?')) { clapshot.callOrganizer('cleanup_empty_user', {folder_id: '*'}); }"
+                    <button onclick="if(confirm({json.dumps(confirm_msg)})) {{ clapshot.callOrganizer('cleanup_empty_user', {{folder_id: '*'}}); }}"
                             style="background-color: #7f4f26; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
-                        🗑️ Delete all users without media
+                        🗑️ {_("Delete all users without media")}
                     </button>
                 </div>
             """))
@@ -207,8 +209,8 @@ class PagesHelper:
         pg_items.append(clap.PageItem(folder_listing=folder_listing))
         if len(folder_listing.items) == 0:
             if can_upload:
-                pg_items.append(clap.PageItem(html="<p style='margin-top: 1em;'><i class='far fa-circle-question text-blue-400'></i> Use the drop zone to <strong>upload media files</strong>, or right-click on the empty space above to <strong>create a folder</strong>.</p>"))
-                pg_items.append(clap.PageItem(html="<p>After that, drag items to <strong>reorder</strong>, or drop them <strong>into folders</strong>. Hold shift to multi-select.</p>"))
+                pg_items.append(clap.PageItem(html=_("<p style='margin-top: 1em;'><i class='far fa-circle-question text-blue-400'></i> Use the drop zone to <strong>upload media files</strong>, or right-click on the empty space above to <strong>create a folder</strong>.</p>")))
+                pg_items.append(clap.PageItem(html=_("<p>After that, drag items to <strong>reorder</strong>, or drop them <strong>into folders</strong>. Hold shift to multi-select.</p>")))
 
         return pg_items
 
@@ -229,7 +231,7 @@ def _make_breadcrumbs_html(folder_path: list[DbFolder], cur_user_id: str, user_r
         HTML string with breadcrumb navigation in <h3> tags
     """
     if not folder_path:
-        return "<h3>Root folder</h3>"   # Fallback, should not happen in normal operation
+        return f"<h3>{_('Root folder')}</h3>"   # Fallback, should not happen in normal operation
 
     def _get_folder_display_title(folder: DbFolder, cur_user_id: str) -> str:
         # Indicate shared folders with user ID in brackets
@@ -238,9 +240,10 @@ def _make_breadcrumbs_html(folder_path: list[DbFolder], cur_user_id: str, user_r
 
         # If it's the user's root folder, show "Home"
         if folder.id == user_root_folder_id:
-            return "Home"
+            # TRANSLATORS: breadcrumb label for the user's own home folder (not "house")
+            return pgettext("folder", "Home")
 
-        return folder.title or "UNNAMED"
+        return folder.title or pgettext("folder", "UNNAMED")
 
 
     def _create_folder_link(folder_id: int, title: str) -> str:
@@ -267,7 +270,7 @@ def _make_breadcrumbs_html(folder_path: list[DbFolder], cur_user_id: str, user_r
 
     # Last item in bold and non-clickable (current folder)
     if breadcrumb_items:
-        _, current_title = breadcrumb_items[-1]
+        _unused, current_title = breadcrumb_items[-1]
         breadcrumb_links.append(f"<strong>{html_escape(current_title)}</strong>")
 
     return f"<h3>{' ▶ '.join(breadcrumb_links)}</h3>"

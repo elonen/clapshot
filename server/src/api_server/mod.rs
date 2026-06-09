@@ -139,6 +139,7 @@ async fn handle_ws_session(
             is_admin,
             cookies,
             http_headers: filtered_headers,
+            language: None,   // set later when the client sends SetLanguage
         }
     };
 

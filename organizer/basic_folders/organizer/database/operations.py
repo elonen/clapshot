@@ -18,6 +18,8 @@ from clapshot_grpc.utilities import try_send_user_message
 from .models import Base, DbFolder, DbFolderItems, DbSchemaMigrations, DbUser, DbMediaFile
 from .migrations import ALL_MIGRATIONS
 
+from ..helpers.l10n import _
+
 def db_check_pending_migrations(db: Engine) -> tuple[str, list[org.Migration]]:
     """
     Check the database for current schema version and return a list of migrations that have a higher version string.
@@ -189,15 +191,15 @@ async def db_get_or_create_user_root_folder(dbs: Session, user: clap.UserInfo, s
                     dbs.flush()
             ret = oldest_fld
             user_msg = clap.UserMessage(
-                message="Multiple root folders in DB. Please report to support.",
-                details="Users should have one root folder. This inconsistency was fixed, but your home view might contain unexpected folders.",
+                message=_("Multiple root folders in DB. Please report to support."),
+                details=_("Users should have one root folder. This inconsistency was fixed, but your home view might contain unexpected folders."),
                 type=clap.UserMessageType.ERROR)
 
         elif cnt == 0:
             # Create a root folder & move all orphan media files to it
             assert ret is None
             log.info(f"No root folder for user '{user.id}', creating one now.")
-            ret = DbFolder(user_id=user.id, title=f"Home of '{user.name}'")
+            ret = DbFolder(user_id=user.id, title=_("Home of '{name}'").format(name=user.name))
             dbs.add(ret)
             dbs.flush() # make sure the ret.id is set
 

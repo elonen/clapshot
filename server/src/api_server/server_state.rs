@@ -98,6 +98,23 @@ impl ServerState {
             None
         }
     }
+    /// The UI locale of a user (from any current session), for localizing messages sent to them.
+    pub fn locale_for_user(&self, user_id: &str) -> Option<String> {
+        self.sid_to_session.read().values()
+            .find(|s| s.user_id == user_id)
+            .and_then(|s| s.org_session.language.clone())
+    }
+
+    /// Translate a user-facing message into the recipient's UI locale (falls back to the English source).
+    pub fn tr_user(&self, user_id: &str, msgid: &str) -> String {
+        crate::i18n::tr(self.locale_for_user(user_id).as_deref(), msgid)
+    }
+
+    /// Like `tr_user`, but substitutes named `{placeholder}`s after translation.
+    pub fn tr_user_fmt(&self, user_id: &str, msgid: &str, params: &[(&str, &str)]) -> String {
+        crate::i18n::tr_fmt(self.locale_for_user(user_id).as_deref(), msgid, params)
+    }
+
     /// Register a new sender (API connection) for a user_id. One user can have multiple connections.
     /// Returns a guard that will remove the sender when dropped.
     pub fn register_user_session(&self, sid: &str, user_id: &str, ses: UserSession) -> OpaqueGuard {

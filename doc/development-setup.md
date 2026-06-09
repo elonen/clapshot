@@ -35,6 +35,12 @@ For developing metaplugins (custom Python extensions for the Basic Folders organ
  * Configuring mypy and IDE support for full autocomplete
  * Running and testing metaplugins locally
 
+**Translations (i18n)**:
+
+UI strings in all three codebases (server, organizer, client) are translated through a single gettext-based
+catalog under [i18n/](../i18n/). See [i18n/README.md](../i18n/README.md) for how to mark translatable strings
+and the `make extract` / `update` / `compile` workflow for adding or updating a locale.
+
 When done, at top level, run one of the following:
 
  * `make test` to build both client and server, and to run all tests in a pristine Docker container

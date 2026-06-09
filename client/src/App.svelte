@@ -8,7 +8,7 @@ import * as Proto3 from '@clapshot_protobuf/typescript';
 
 import {allComments, curUsername, curUserId, videoIsReady, mediaFileId, curVideo, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle, clientConfig, playerHeaderHtml} from './stores';
 import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "./types";
-import { t, initLocale } from './i18n';
+import { t, initLocale, locale, currentLocale } from './i18n';
 
 import CommentCard from './lib/player_view/CommentCard.svelte'
 import SubtitleCard from './lib/player_view/SubtitleCard.svelte';
@@ -316,7 +316,7 @@ async function onUploadSubtitles() {
 
 function onSubtitleDelete(e: any) {
     const sub_id = e.id;
-    if (window.confirm("Are you sure you want to delete this subtitle?")) {
+    if (window.confirm($t("Are you sure you want to delete this subtitle?"))) {
         if ($curSubtitle?.id == sub_id) { $curSubtitle = null; }
         wsEmit({ delSubtitle: { id: sub_id } });
     }
@@ -339,7 +339,7 @@ async function onSubtitleUpdate(e: any) {
     const isDefault = e.isDefault;
     if (isNaN(sub.timeOffset)) {
         console.error("Invalid time offset: ", sub.timeOffset);
-        acts.add({mode: 'error', message: "Invalid time offset: " + sub.timeOffset, lifetime: 5});
+        acts.add({mode: 'error', message: $t("Invalid time offset: {offset}", { offset: sub.timeOffset }), lifetime: 5});
         return;
     }
     wsEmit({ editSubtitleInfo: {
@@ -559,6 +559,18 @@ function sendQueueLoop()
 setTimeout(sendQueueLoop, 500); // Start the loop
 
 
+// When the user switches UI language (after initial load), tell the server and re-render the
+// current navigation page so Organizer-rendered text re-localizes. The initial send happens in
+// the welcome handler; this only fires on subsequent changes.
+let localeSyncReady = false;
+locale.subscribe((loc) => {
+    if (!localeSyncReady) { localeSyncReady = true; return; }  // skip the initial subscribe fire
+    if (!isConnected()) return;
+    wsEmit({ setLanguage: { language: loc } });
+    if (!$mediaFileId) { wsEmit({ openNavigationPage: { pageId: $curPageId ?? undefined } }); }
+});
+
+
 let reconnectDelay = 100;  // for exponential backoff
 
 
@@ -719,14 +731,14 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             // welcome
             if (cmd.welcome) {
                 if (!cmd.welcome.hasOwnProperty("serverVersion") || (process.env.CLAPSHOT_MIN_SERVER_VERSION && cmd.welcome.serverVersion < process.env.CLAPSHOT_MIN_SERVER_VERSION)) {
-                    const msg = "Server version too old (v" + cmd.welcome.serverVersion + "). Please update server.";
+                    const msg = $t("Server version too old (v{version}). Please update server.", { version: cmd.welcome.serverVersion });
                     console.error(msg);
                     window.alert(msg);
                     return;
                 }
                 console.log("Connected to server v" + cmd.welcome.serverVersion);
                 if (process.env.CLAPSHOT_MAX_SERVER_VERSION && cmd.welcome.serverVersion > process.env.CLAPSHOT_MAX_SERVER_VERSION) {
-                    const msg = "Client version too old (client v" + process.env.CLAPSHOT_CLIENT_VERSION + " for server v" + cmd.welcome.serverVersion + "). Please update client.";
+                    const msg = $t("Client version too old (client v{clientVersion} for server v{serverVersion}). Please update client.", { clientVersion: process.env.CLAPSHOT_CLIENT_VERSION ?? "", serverVersion: cmd.welcome.serverVersion });
                     console.error(msg);
                     window.alert(msg);
                     return;
@@ -740,6 +752,8 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 $curUsername = cmd.welcome.user.name ?? cmd.welcome.user.id;
                 $curUserId = cmd.welcome.user.id;
                 $curUserIsAdmin = cmd.welcome.isAdmin;
+                // Tell the server our UI locale so Organizer/server-originated text is localized.
+                wsEmit({ setLanguage: { language: currentLocale() } });
             }
             // error
             else if (cmd.error) {
@@ -875,7 +889,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                         wsEmit({joinCollab: { collabId: $collabId, mediaFileId: $mediaFileId! }});
 
                 } catch(error) {
-                    acts.add({mode: 'danger', message: 'Bad video open request. See log.', lifetime: 5});
+                    acts.add({mode: 'danger', message: $t('Bad video open request. See log.'), lifetime: 5});
                     console.error("Invalid video open request. Error: ", error);
                 }
             }
@@ -1043,7 +1057,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
         <!-- ========== "connecting" spinner ============= -->
         <div transition:fade class="w-full h-full text-5xl text-slate-600 align-middle text-center">
             <h1 class="m-16" style="font-family: 'Yanone Kaffeesatz', sans-serif;">
-                {$t('status.connecting')}
+                {$t("Connecting server...")}
             </h1>
             <div class="fa-2x block">
                 <i class="fas fa-spinner connecting-spinner"></i>
@@ -1051,13 +1065,13 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
             <div class="m-16 text-xs">
                 {#if $connectionErrors.length > 0}
                     <details class="connection-errors">
-                        <summary class="connection-errors cursor-pointer text-slate-600">{$t('status.viewConnectionErrors')}</summary>
+                        <summary class="connection-errors cursor-pointer text-slate-600">{$t("View connection errors")}</summary>
                         <ul>
                             {#each $connectionErrors as ce}
                             <li><code>{ce}</code></li>
                             {/each}
                         </ul>
-                        <p class="m-4 text-sm"><em>See browser JS console for more details.</em></p>
+                        <p class="m-4 text-sm"><em>{$t("See browser JS console for more details.")}</em></p>
                     </details>
                 {/if}
             </div>
@@ -1089,7 +1103,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                 {#if countTimedRootComments($allComments) >= 2}
                 <div class="flex-none flex items-center text-xs text-gray-500 pb-1">
                     <button class="hover:text-gray-300 transition-colors" onclick={toggleCommentSort}>
-                        <i class="fa fa-sort mr-1"></i>{commentSortMode === 'timecode' ? $t('comments.sortByTimecode') : $t('comments.sortByDate')}
+                        <i class="fa fa-sort mr-1"></i>{commentSortMode === 'timecode' ? $t("Sort: timecode") : $t("Sort: date posted")}
                     </button>
                 </div>
                 {/if}
@@ -1109,7 +1123,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                     {#if $curVideo.subtitles}
                         <!-- Subtitles -->
                         <div class="flex justify-between text-gray-500 items-center py-2 border-t border-gray-500">
-                            <h6>{$t('status.subtitles')}</h6>
+                            <h6>{$t("Subtitles")}</h6>
                             <button class="fa fa-plus-circle" title="Upload subtitles" aria-label="Upload subtitles" onclick={onUploadSubtitles}></button>
                         </div>
                         {#each $curVideo.subtitles as sub}
@@ -1131,12 +1145,12 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
         {#if $collabId && !collabDialogAck}
         <div class="fixed top-0 left-0 w-full h-full flex justify-center items-center">
             <div class="bg-gray-900 text-white p-4 rounded-md shadow-lg text-center leading-loose">
-                <p class="text-xl text-green-500">{$t('status.collabActiveTitle')}</p>
-                <p class="">{$t('status.collabSessionId', {id: $collabId})}</p>
-                <p class="">{$t('status.collabActionsMirrored')}</p>
-                <p class="">{$t('status.collabInvite')}</p>
-                <p class="">{$t('status.collabExit')}</p>
-                <button class="bg-gray-800 hover:bg-gray-700 text-green m-2 p-2 rounded-md shadow-lg" onclick={preventDefault(()=>collabDialogAck=true)}>{$t('status.collabUnderstood')}</button>
+                <p class="text-xl text-green-500">{$t("Collaborative viewing session active.", { context: "collab" })}</p>
+                <p class="">{$t("Session ID is {id}", { context: "collab", id: $collabId })}</p>
+                <p class="">{$t("Actions like seek, play and draw are mirrored to all participants.", { context: "collab" })}</p>
+                <p class="">{$t("To invite people, copy browser URL and send it to them.", { context: "collab" })}</p>
+                <p class="">{$t("Exit by clicking the green icon in header.", { context: "collab" })}</p>
+                <button class="bg-gray-800 hover:bg-gray-700 text-green m-2 p-2 rounded-md shadow-lg" onclick={preventDefault(()=>collabDialogAck=true)}>{$t("Understood", { context: "collab", "comment": "button to acknowledge" })}</button>
             </div>
         </div>
         {/if}
@@ -1165,7 +1179,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                                                 <i class="fas fa-upload"></i>
                                             </div>
                                             <div class="text-xl text-gray-700">
-                                                {$t('status.dropInstruction')}
+                                                {$t("Drop video, audio and image files here to upload")}
                                             </div>
                                         </div>
                                     </FileUpload>
@@ -1196,7 +1210,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
             <div>
                 {#if $userMessages.length>0}
                 <h1 class="text-2xl m-6 mt-12 text-slate-500">
-                    {$t('status.latestMessages')}
+                    {$t("Latest messages")}
                 </h1>
                 <div class="gap-4 max-h-56 overflow-y-auto border-l px-2 border-gray-900" role="log">
                     {#each $userMessages as msg}

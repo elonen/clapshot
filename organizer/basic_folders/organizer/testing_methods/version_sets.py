@@ -556,7 +556,7 @@ async def org_test__version_set__set_active_version_sends_refresh_hint(oi: organ
 
 
 async def org_test__version_set__set_active_version_action_uses_camelcase(oi: organizer.OrganizerInbound):
-    """The 'Set Active Ver' popup action reads the camelCase proto field (it.mediaFile), not snake_case. (#2)"""
+    """The 'Set Active Version' popup action reads the camelCase proto field (it.mediaFile), not snake_case. (#2)"""
     action = oi.actions_helper.make_set_active_version_action().action
     assert action is not None, "set_active_version action must carry a ScriptCall"
     code = action.code

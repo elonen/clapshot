@@ -173,14 +173,14 @@ pub async fn org_authz<'a>(
                 Some(false)
             } else {
                 error!(desc, user=&user_id, err=?e, "Error while authorizing user action");
-                try_send_error(&user_id, &server, format!("Internal error in authz: {}", desc), None, &op).ok();
+                try_send_error(&user_id, &server, server.tr_user_fmt(&user_id, "Internal error in authz: {desc}", &[("desc", desc)]), None, &op).ok();
                 Some(false)
             }
         },
         Ok(res) => {
             match res.get_ref().is_authorized {
                 Some(false) => {
-                    let msg = res.get_ref().message.clone().map(|s| s).unwrap_or_else(|| "Permission denied".to_string());
+                    let msg = res.get_ref().message.clone().map(|s| s).unwrap_or_else(|| server.tr_user(&user_id, "Permission denied"));
                     let details = res.get_ref().details.clone();
                     if msg_on_deny { try_send_error(&user_id, &server, msg, details, &op).ok(); }
                     debug!(desc, user=user_id, "Organizer: Permission denied");
@@ -214,7 +214,7 @@ pub async fn org_authz_with_default<'a>(
         if default { Ok(()) } else {
             if msg_on_deny {
                 if let Some(ui) = &session.user {
-                    try_send_error(&ui.id, &server, format!("Permission denied: {}", desc), Some(format!("{:?}", &op)), &op).ok();
+                    try_send_error(&ui.id, &server, server.tr_user_fmt(&ui.id, "Permission denied: {desc}", &[("desc", desc)]), Some(format!("{:?}", &op)), &op).ok();
                 } else {
                     tracing::error!(desc, "No user ID in session. Couldn't send deny message from org_authz_with_default");
                 }

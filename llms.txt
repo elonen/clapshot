@@ -217,6 +217,8 @@ Clapshot uses a hierarchical Make-based build system with Docker containerizatio
 
 [doc/TESTING_GUIDE.md](doc/TESTING_GUIDE.md): Test suite documentation for client, server, and organizer components
 
+[i18n/README.md](i18n/README.md): Translation (i18n) guide - single gettext-based message catalog shared by server (Rust), organizer (Python), and client (Svelte); how to mark strings, the `make extract/update/compile` workflow, and where runtime catalogs are built. Read this when users ask about adding a UI language or translating strings
+
 ### Example Configurations
 
 [Dockerfile.demo](Dockerfile.demo): Docker demo image build configuration with htadmin authentication
