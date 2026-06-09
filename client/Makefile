@@ -20,7 +20,6 @@ clean:
 	cd ../protobuf/libs/typescript && make clean
 
 npm-deps:
-	npm install vite
 	npm install
 	cd ../protobuf/libs/typescript && make
 

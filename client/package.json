@@ -26,7 +26,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@tsconfig/svelte": "^5.0.4",
     "@types/node": "^24.10.1",
-    "@vitest/ui": "^4.0.8",
+    "@vitest/ui": "^4.1.8",
     "autoprefixer": "^10.4.20",
     "happy-dom": "^20.8.9",
     "postcss": "^8.5.12",
@@ -41,7 +41,7 @@
     "typescript": "^5.7.2",
     "vite": "^7.3.5",
     "vite-plugin-checker": "^0.8.0",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.8"
   },
   "dependencies": {
     "flowbite": "^4.0.0",
