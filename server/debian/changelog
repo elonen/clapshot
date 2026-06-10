@@ -1,3 +1,14 @@
+clapshot-server (0.12.0) unstable; urgency=low
+
+  * New feature: "Version sets" (versioned media) — protocol and server
+    support for special folders that present as single media items
+  * New feature: gettext-based translation framework (Finnish, Chinese,
+    French)
+  * Add example Mattermost (incoming webhook) notification script
+  * Server test fixes
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 10 Jun 2026 12:00:00 +0300
+
 clapshot-server (0.11.1) unstable; urgency=low
 
   * New feature: Optional external notification hook for comment, message,

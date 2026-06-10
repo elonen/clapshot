@@ -579,7 +579,7 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
 name = "clapshot-server"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "Inflector",
  "anyhow",
@@ -1675,7 +1675,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lib-clapshot-grpc"
-version = "0.11.1"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "axum",

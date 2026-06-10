@@ -1,3 +1,13 @@
+clapshot-client (0.12.0) unstable; urgency=low
+
+  * New feature: "Version sets" (versioned media) UI
+  * New feature: gettext-based localized UI (Finnish, Chinese, French)
+  * Fix: localize builtin popup actions/dialogs and apply locale before
+    first render
+  * Upgrade Vite and npm dependencies
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 10 Jun 2026 12:00:00 +0300
+
 clapshot-client (0.11.1) unstable; urgency=low
 
   * (Follow server versioning)

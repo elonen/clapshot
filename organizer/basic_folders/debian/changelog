@@ -1,3 +1,13 @@
+clapshot-organizer-basic-folders (0.12.0) unstable; urgency=low
+
+  * New feature: "Version sets" (versioned media) — special folders that
+    look like media items in the Organizer
+  * Database migration
+  * New feature: gettext-based translations (Finnish, Chinese, French)
+  * Fix: Python 3.11 f-string compatibility
+
+ -- Jarno Elonen <elonen@iki.fi>  Wed, 10 Jun 2026 12:00:00 +0300
+
 clapshot-organizer-basic-folders (0.11.1) unstable; urgency=low
 
   * (Follow client and server versioning)
