@@ -32,6 +32,8 @@ debian-docker:
 	@# Only the collection dir is wiped; component dist_deb dirs (and their
 	@# built.*.docker stamps) are kept so unchanged components are skipped.
 	rm -rf dist_deb && mkdir -p dist_deb
+	set -e; \
+	trap 'echo "" >&2; echo "######## debian-docker FAILED while building: $$CURRENT ########" >&2' ERR; \
 	for debver in bookworm trixie; do \
 		echo ""; \
 		echo "=== Checking availability for Debian $$debver ==="; \
@@ -39,12 +41,15 @@ debian-docker:
 			echo "=== Building packages for Debian $$debver ==="; \
 			for plat in arm64 amd64; do \
 				echo "--- Building server for $$debver/$$plat ---"; \
-				(cd server && DEBIAN_VER=$$debver TARGET_ARCH=$$plat make debian-docker); \
+				CURRENT="server $$debver/$$plat"; \
+				DEBIAN_VER=$$debver TARGET_ARCH=$$plat make --no-print-directory -C server debian-docker; \
 				echo "--- Building organizer for $$debver/$$plat ---"; \
-				(cd organizer && DEBIAN_VER=$$debver TARGET_ARCH=$$plat make debian-docker); \
+				CURRENT="organizer $$debver/$$plat"; \
+				DEBIAN_VER=$$debver TARGET_ARCH=$$plat make --no-print-directory -C organizer debian-docker; \
 			done; \
 			echo "--- Building client for $$debver ---"; \
-			(cd client && DEBIAN_VER=$$debver make debian-docker); \
+			CURRENT="client $$debver"; \
+			DEBIAN_VER=$$debver make --no-print-directory -C client debian-docker; \
 			echo "--- Collecting $$debver packages ---"; \
 			cp client/dist_deb/*$(PVER)*.deb dist_deb/ 2>/dev/null || true; \
 			cp server/dist_deb/*$(PVER)*.deb dist_deb/ 2>/dev/null || true; \
