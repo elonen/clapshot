@@ -198,7 +198,7 @@ deduplicate by `media_file.id` if you only want one notification.
 
 ## Deploying with the demo Docker image
 
-The demo image (`elonen/clapshot:latest-demo`, and the `…-demo-htadmin` variant)
+The demo image (`elonen/clapshot:latest-demo`, and the `…-demo-htwicket` variant)
 already bundles everything the example hook needs — `jq`, `curl`, and `msmtp`
 (which provides `/usr/sbin/sendmail`) — so there are only two things to do:
 

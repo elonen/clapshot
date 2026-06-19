@@ -102,10 +102,10 @@ build-docker-demo: debian-docker
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo .
 
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
-		-t clapshot:${PVER}-demo-htadmin \
-		-t elonen/clapshot:${PVER}-demo-htadmin \
-		-t elonen/clapshot:latest-demo-htadmin \
-		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htadmin
+		-t clapshot:${PVER}-demo-htwicket \
+		-t elonen/clapshot:${PVER}-demo-htwicket \
+		-t elonen/clapshot:latest-demo-htwicket \
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htwicket
 
 
 build-docker-demo-and-push-hub: debian-docker
@@ -119,9 +119,9 @@ build-docker-demo-and-push-hub: debian-docker
 		--push .
 
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
-		-t elonen/clapshot:${PVER}-demo-htadmin \
-		-t elonen/clapshot:latest-demo-htadmin \
-		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htadmin \
+		-t elonen/clapshot:${PVER}-demo-htwicket \
+		-t elonen/clapshot:latest-demo-htwicket \
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htwicket \
 		--push .
 
 build-docker-dev: debian-docker
@@ -130,7 +130,7 @@ build-docker-dev: debian-docker
 	
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t elonen/clapshot:git-${GIT_COMMIT}-demo \
-		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htadmin
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htwicket
 
 build-docker-dev-and-push-hub: debian-docker
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
@@ -138,5 +138,5 @@ build-docker-dev-and-push-hub: debian-docker
 	
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t elonen/clapshot:git-${GIT_COMMIT}-demo \
-		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htadmin \
+		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htwicket \
 		--push .

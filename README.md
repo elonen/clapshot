@@ -42,7 +42,7 @@ docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data 
 Local **multi-user demo** with HTTP basic auth
 
 ```bash
-docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo-htadmin:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htadmin
+docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo-htwicket:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htwicket
 ```
 
 After the Docker image starts, browse the web UI at `http://127.0.0.1:8080`.
@@ -52,7 +52,7 @@ After the Docker image starts, browse the web UI at `http://127.0.0.1:8080`.
 - Upload video/audio/image files via the web interface, or drop files into the container's `/mnt/clapshot-data/data/incoming/` directory for automatic processing
 - Try the keyboard shortcuts: spacebar (play/pause), `i`/`o` (set loop points), `l` (toggle loop), arrow keys (frame stepping), `f` for fullscreen.
 
-The multi-user demo uses [PHP htadmin](https://github.com/soster/htadmin) for user management. Default credentials are shown in the terminal.
+The multi-user demo uses [htwicket](https://github.com/elonen/htwicket) for login and user management. Default credentials (including the randomly generated `admin` password) are shown in the terminal.
 
 </details>
 
@@ -62,13 +62,13 @@ The multi-user demo uses [PHP htadmin](https://github.com/soster/htadmin) for us
 ### Known Limitations and Workarounds
 
 - **Mobile Browsers:** Mobile/iOS/iPad support is limited. Chrome/Chromium (desktop) recommended.
-- **Authentication:** The bundled PHP htadmin is demo-only — simplistic for user management and security. For production, integrate a modern identity provider (OAuth, LDAP, Kerberos, SAML, etc.) via reverse proxy. See [Advanced Authentication](doc/sysadmin-guide.md#advanced-authentication).
+- **Authentication:** The bundled htwicket is a simple example — fine for small deployments, but for larger production use you may prefer to integrate a modern identity provider (OAuth, LDAP, Kerberos, SAML, etc.) via reverse proxy. See [Advanced Authentication](doc/sysadmin-guide.md#advanced-authentication).
 - **IIS and Cloudflare:** IIS has a hard 2GB upload limit; Cloudflare's free tier times out uploads at ~100 seconds. For large files, you can use [monitored folder ingestion](doc/sysadmin-guide.md#monitored-folder-ingestion) (SFTP/SMB) instead of HTTP uploads. Self-hosted Nginx (also in the Docker images) has no such limitations.
 
 
 ## Simple Small-business Production Deployments
 
-Here are two alternative ways to deploy Clapshot + PHP Htadmin into a light production use:
+Here are two alternative ways to deploy Clapshot + htwicket into a light production use:
 
 ### 1. Local Linux VM
 
@@ -79,7 +79,7 @@ One-shot install via [install-clapshot-deb.sh](extras/install-clapshot-deb.sh) o
 1. Prepare a Debian host with a mounted block device (or just directory) at `/mnt/clapshot-data`.
 2. Download [Clapshot Debian Bookworm Deployment Script](extras/install-clapshot-deb.sh)
 3. Run the script as root to install and auto-configure Clapshot.
-4. **!! Change the default `admin` and `htadmin` passwords, and delete example users in Htadmin !!**
+4. **!! Change/verify the `admin` password (the installer prints a generated one), and delete the example users in `/htwicket/admin` !!**
 
 If you want to expose this to the Internet, you'll probably want to get HTTPS certificates with Let's Encrypt and use some reverse proxy to encrypt Clapshot traffic.
 
@@ -89,18 +89,18 @@ If you want to expose this to the Internet, you'll probably want to get HTTPS ce
 
 ### 2. Docker + Cloudflare, on public Web
 
-Run Clapshot + Htadmin in a Docker container and expose it to the Internet over an HTTPS tunnel via Cloudflared, using [test/run-cloudflare.sh](test/run-cloudflare.sh). (Cloudflare's free plan limits upload size/time.)
+Run Clapshot + htwicket in a Docker container and expose it to the Internet over an HTTPS tunnel via Cloudflared, using [test/run-cloudflare.sh](test/run-cloudflare.sh). (Cloudflare's free plan limits upload size/time.)
 
 <details><summary>Step-by-step: Docker + Cloudflare tunnel</summary>
 
-In this option, you'll run Clapshot + Htadmin in a Docker container (binding a local directory for Clapshot data),
+In this option, you'll run Clapshot + htwicket in a Docker container (binding a local directory for Clapshot data),
 and then start Cloudflared in another container to expose Clapshot to the Internet over an HTTPS tunnel.
 
 > WARNING: Cloudflare – at least in the free plan – apparently limits HTTP upload times and/or sizes, so double check their offerings if you are planning to use this option for a production deployment.
 
 1. Download and read [test/run-cloudflare.sh](test/run-cloudflare.sh), then run it
 2. Once satisfied about operation, get a static domain on Cloudflare and modify the above script accordingly - or perhaps make a custom Docker Compose file
-3. **!! Change the default `admin` and `htadmin` passwords, and delete example users in Htadmin !!**
+3. **!! Change the default passwords (the `admin` password is generated and shown in the container log), and delete example users in `/htwicket/admin` !!**
 
 The same process can be adapted to any other *HTTPS-Proxy-as-a-Service* besides Cloudflare. You'll probably need to pay them something.
 
@@ -148,7 +148,7 @@ Production deployments also depend on:
 
 - **Web Browser** – Chrome/Chromium recommended for best compatibility. Loads and shows the Client.
 - **Nginx Web Server** – SSL reverse proxy between Client and Server + static asset delivery for browser. Also routes session auth to Authentication Proxy.
-- **Authentication Proxy** – Any auxiliary HTTP daemon that authenticates users and returns a **user id** and **username** in HTTP headers. In the demo, this is `/var/www/.htpasswd` + [PHP htadmin](https://github.com/soster/htadmin), but you can also use combinations like [Okta](https://www.okta.com/) + [Vouch](https://github.com/vouch/vouch-proxy) + [LDAP Authz Proxy](https://github.com/elonen/ldap_authz_proxy) or something equally advanced.
+- **Authentication Proxy** – Any auxiliary HTTP daemon that authenticates users and returns a **user id** and **username** in HTTP headers. In the demo, this is [htwicket](https://github.com/elonen/htwicket) managing `/var/www/.htpasswd`, but you can also use combinations like [Okta](https://www.okta.com/) + [Vouch](https://github.com/vouch/vouch-proxy) + [LDAP Authz Proxy](https://github.com/elonen/ldap_authz_proxy) or something equally advanced.
 
 - **Sqlite DB** – Stores metadata, comments, user messages etc. Both Clapshot Server and Organizer(s) access this. This is just a file, not a daemon.
 - **ffmpeg** and **mediainfo** – Clapshot Server processes media files with these commands.

@@ -44,32 +44,28 @@ RUN cp /usr/share/doc/clapshot-client/examples/clapshot.nginx.conf  /etc/nginx/s
 COPY test/docker-entry_no-auth.sh /root/docker-entry.sh
 
 
-# ------------- basic auth (with PHP htadmin for management) -------------
+# ------------- htwicket (login form + user management) -------------
 
-FROM base AS base-git-php
-RUN apt-get -qy install git php8.2-fpm >/dev/null
-RUN mkdir -p /run/php
+FROM base AS auth-htwicket
+RUN echo "### auth-htwicket"
+RUN cp /usr/share/doc/clapshot-client/examples/clapshot+htwicket.nginx.conf /etc/nginx/sites-enabled/clapshot
 
+# htwicket is a single musl-static binary (no runtime deps); pull the matching
+# arch straight from the GitHub release. TARGETARCH is set by buildx per --platform.
+ARG TARGETARCH
+ARG HTWICKET_VERSION=v0.1.0
+ADD --chmod=755 https://github.com/elonen/htwicket/releases/download/${HTWICKET_VERSION}/htwicket-${HTWICKET_VERSION}-linux-${TARGETARCH} /usr/bin/htwicket
 
-FROM base-git-php AS auth-htadmin
-RUN echo "### auth-htadmin"
-RUN cp /usr/share/doc/clapshot-client/examples/clapshot+htadmin.nginx.conf /etc/nginx/sites-enabled/clapshot
+COPY test/htwicket.toml /etc/htwicket.toml
 
-RUN git clone https://github.com/soster/htadmin.git
-RUN cp -r htadmin/app/htadmin /var/www/htadmin
-RUN chown -R www-data:www-data /var/www/htadmin
+# Seed the fixed demo users. NOTE: 'admin' is intentionally NOT baked here (no
+# shipped admin:admin) - docker-entry_htwicket.sh generates a random admin password
+# on startup. 'admin' is still known to htwicket because the sidecar declares it.
+RUN echo "alice:J/JsbnRtaHBlc\nbob:BJIDAhhNc4bsE\ndemo:N7HpG2DddhtME" > /var/www/.htpasswd   # alice:alice123, bob:bob123, demo:demo
+RUN printf '[users."admin"]\nis_admin = true\n\n[users."bob"]\ncan_upload = false\n' > /var/www/.htwicket.toml
+RUN chown www-data:www-data /var/www /var/www/.htpasswd /var/www/.htwicket.toml
 
-RUN echo "alice:J/JsbnRtaHBlc\nbob:BJIDAhhNc4bsE\ndemo:N7HpG2DddhtME\nadmin:KURMbfRvhQPWs" > /var/www/.htpasswd   # alice:alice123, bob:bob123, demo:demo, admin:admin
-RUN chown www-data:www-data /var/www/.htpasswd
-RUN mv /var/www/htadmin/config/config.ini.example /var/www/htadmin/config/config.ini
-
-RUN sed -i 's@secure_path *=.*@secure_path = /var/www/@' /var/www/htadmin/config/config.ini
-RUN sed -i 's@app_title *= .*@app_title = Clapshot users@' /var/www/htadmin/config/config.ini
-RUN sed -i 's@mail_server *= .*@mail_server = localhost@' /var/www/htadmin/config/config.ini
-RUN sed -i 's@admin_user *= .*@admin_user = htadmin@' /var/www/htadmin/config/config.ini
-RUN sed -i 's@admin_pwd_hash *= .*@admin_pwd_hash = Askg15BrpF11g@' /var/www/htadmin/config/config.ini
-
-COPY test/docker-entry_htadmin.sh /root/docker-entry.sh
+COPY test/docker-entry_htwicket.sh /root/docker-entry.sh
 
 
 # -------------

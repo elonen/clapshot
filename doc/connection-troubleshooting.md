@@ -120,35 +120,45 @@ error: the following required arguments were not provided:
 - See [Sysadmin Guide](sysadmin-guide.md) for manual installation and configuration details
 - Check existing Docker commands in this guide for required argument patterns
 
-### 3. Cannot Access HTAdmin Interface (`/htadmin`)
+### 3. Cannot Access User Management Interface (`/htwicket/admin`)
 
-(This only applies if you are using the example authentication method, HTAdmin + Basic Auth)
+(This only applies if you are using the example authentication method, htwicket)
 
 **Symptoms:**
 
-- Cannot access `http://YOUR_HOST:YOUR_PORT/htadmin`
+- Cannot access `http://YOUR_HOST:YOUR_PORT/htwicket/admin`
 - 404 or connection refused errors on admin endpoints
 - Admin interface works locally but not remotely
+- Login form accepts the password but immediately bounces you back to login
 
 **Causes & Solutions:**
 
 #### A. Docker Image Variants
 
-Some Docker images include a simple HTTP basic auth admin interface at `/htadmin`:
+Only the htwicket image bundles a login + user-management UI at `/htwicket/admin`:
 
-- `elonen/clapshot:latest-demo-htadmin` - includes basic auth admin
+- `elonen/clapshot:latest-demo-htwicket` - includes htwicket login + admin
 - `elonen/clapshot:latest-demo` - no auth
 
-#### B. Network Access Issues
+You must log in as a **superadmin** to open `/htwicket/admin`. By default that is the
+user named `admin` (whose demo password is printed in the container log on startup).
 
-The admin interface may be configured to only accept local connections:
+#### B. Login succeeds but bounces back (cookie scheme mismatch)
+
+htwicket issues a `Secure` session cookie over HTTPS and a non-secure one over plain
+HTTP. If this doesn't match your public URL scheme, the browser silently drops the
+cookie and you can never stay logged in. The demo derives this automatically from
+`CLAPSHOT_SERVER__URL_BASE`; if you front it with your own proxy, make sure the scheme
+matches (https public URL ⇒ `insecure_cookies = false`; plain http ⇒ `true`).
+
+#### C. Network Access Issues
 
 ```bash
 # Test local access first
-curl http://localhost:8080/htadmin
+curl http://localhost:8080/htwicket/login
 
 # If that works but remote doesn't, check network config
-curl http://YOUR_IP:8080/htadmin
+curl http://YOUR_IP:8080/htwicket/login
 ```
 
 ### 4. CORS and Cross-Origin Issues
@@ -350,7 +360,7 @@ version: '3.8'
 
 services:
   clapshot:
-    image: elonen/clapshot:latest-demo-htadmin
+    image: elonen/clapshot:latest-demo-htwicket
     container_name: clapshot_demo
     environment:
       - CLAPSHOT_URL_BASE=http://YOUR_IP:8080/
@@ -393,7 +403,7 @@ version: '3.8'
 
 services:
   clapshot:
-    image: elonen/clapshot:latest-demo-htadmin
+    image: elonen/clapshot:latest-demo-htwicket
     container_name: clapshot_demo
     environment:
       # Use the external domain users will access

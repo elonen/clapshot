@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# This script install Clapshot with Htadmin Basic auth
+# This script installs Clapshot with htwicket (login form + user management)
 # on Debian 12 Bookworm or Debian 13 Trixie
 #
 # It doesn't set up HTTPS, you are encouraged to
@@ -72,6 +72,11 @@ CLIENT_LINK="${BASE}/clapshot-client_${RELEASE}_${DEBIAN_VER}_all.deb"
 SERVER_LINK="${BASE}/clapshot-server_${RELEASE}-1_${DEBIAN_VER}_${DEB_ARCH}.deb"
 ORG_LINK="${BASE}/clapshot-organizer-basic-folders_${RELEASE}_${DEBIAN_VER}_${DEB_ARCH}.deb"
 
+# htwicket (https://github.com/elonen/htwicket): nginx auth_request gateway + .htpasswd
+# user manager. Replaces the old PHP 'htadmin' for login and user management.
+HTWICKET_RELEASE="0.1.0"
+HTWICKET_LINK="https://github.com/elonen/htwicket/releases/download/v${HTWICKET_RELEASE}/htwicket_${HTWICKET_RELEASE}-1_${DEBIAN_VER}_${DEB_ARCH}.deb"
+
 # -------------------------------------------------------
 # Some helpers
 
@@ -128,7 +133,6 @@ fi
 # release-matching interpreter explicitly. ffmpeg/mediainfo are pulled in as
 # dependencies of the server .deb below.
 apt-get install -y nginx sqlite3 python3 jq "python${PYTHON_VER}"   # For Clapshot
-apt-get install -y php-fpm                                       # For installation and Htadmin
 
 # Make sure data directory is mounted and useable
 test -e "$DATA_DIR" || { echo "Data directory '$DATA_DIR' missing. Please mount/create it and run again."; exit 1; }
@@ -157,44 +161,118 @@ restart_and_check_service clapshot-server.service
 WS_ADDR=$(echo "$PUBLIC_ADDRESS" | sed 's/^http/ws/')
 replace_cfg /etc/clapshot_client.conf   "^ *\"ws_url.*"                            "    \"ws_url\": \"${WS_ADDR}/api/ws\","
 replace_cfg /etc/clapshot_client.conf   "^ *\"upload_url.*"                        "    \"upload_url\": \"${PUBLIC_ADDRESS}/api/upload\","
-replace_cfg /etc/clapshot_client.conf   "^ *\"user_menu_show_basic_auth_logout.*"  "    \"user_menu_show_basic_auth_logout\": true,"
+# Disable the old HTTP-Basic-Auth logout hack and add a real Logout link to htwicket.
+# (idempotent: drop any existing /htwicket/logout item before re-adding it)
+TMP_CLIENT_CONF=$(mktemp)
+jq '.user_menu_show_basic_auth_logout = false
+    | .user_menu_extra_items = ([ (.user_menu_extra_items // [])[] | select(.data != "/htwicket/logout") ]
+                                + [ {"label":"Logout","type":"url","data":"/htwicket/logout"} ])' \
+    /etc/clapshot_client.conf > "$TMP_CLIENT_CONF" && mv "$TMP_CLIENT_CONF" /etc/clapshot_client.conf
 display_config /etc/clapshot_client.conf
+
+# Install htwicket (login + user management). Ships /usr/bin/htwicket, a default
+# /etc/htwicket.toml, and a (disabled) systemd unit running as www-data.
+wget --no-clobber "$HTWICKET_LINK"   # Download if necessary
+apt-get install -y ./htwicket_*.deb
+
+# Remove any leftovers from a previous PHP-htadmin install, so we don't end up with
+# two 'default_server' nginx blocks (which would prevent nginx from starting).
+rm -f /etc/nginx/sites-enabled/clapshot+htadmin.nginx.conf
+rm -rf /var/www/htadmin
 
 # Configure and restart Nginx
 # - serve /videos from the data dir
 # - set 'server_name' based on your access URL
-# - setup PHP for Htadmin (not required by Clapshot itself)
 rm -f /etc/nginx/sites-enabled/default
-cp /usr/share/doc/clapshot-client/examples/clapshot+htadmin.nginx.conf /etc/nginx/sites-enabled/
-NGINX_CONF="/etc/nginx/sites-enabled/clapshot+htadmin.nginx.conf"
+cp /usr/share/doc/clapshot-client/examples/clapshot+htwicket.nginx.conf /etc/nginx/sites-enabled/
+NGINX_CONF="/etc/nginx/sites-enabled/clapshot+htwicket.nginx.conf"
 HOSTNAME=$(echo "$PUBLIC_ADDRESS" | sed -E "s|^[^/]*//([^:/]*).*|\\1|")
 replace_cfg "$NGINX_CONF"   "^([ \t]*alias).*"         "\\1 ${DATA_DIR}/data/videos;"
 replace_cfg "$NGINX_CONF"   "^([ \t]*server_name).*"   "\\1 ${HOSTNAME};"
-# Debian's php-fpm provides a version-agnostic /run/php/php-fpm.sock on both Bookworm and Trixie.
-replace_cfg "$NGINX_CONF"  "^([ \t]*fastcgi_pass).*"  "\\1 unix:/var/run/php/php-fpm.sock;"
 display_config $NGINX_CONF
 restart_and_check_service nginx.service
 
-# Install Htadmin, a simple password manager
-if [ ! -e "htadmin" ]; then git clone https://github.com/soster/htadmin.git; fi
-rm -rf /var/www/htadmin
-cp -a htadmin/app/htadmin /var/www/htadmin
-chown -R www-data:www-data /var/www/htadmin
-echo -e "alice:J/JsbnRtaHBlc\ndemo:N7HpG2DddhtME\nadmin:KURMbfRvhQPWs" > /var/www/.htpasswd   # alice:alice123, demo:demo, admin:admin
-chown www-data:www-data /var/www/.htpasswd
-mv /var/www/htadmin/config/config.ini.example /var/www/htadmin/config/config.ini
+# Configure htwicket. Secure cookies require HTTPS, so derive the setting from the
+# public URL scheme (a mismatch makes login silently fail as the browser drops the cookie).
+case "$PUBLIC_ADDRESS" in
+    https://*) HTWICKET_INSECURE_COOKIES="false" ;;
+    *)         HTWICKET_INSECURE_COOKIES="true" ;;
+esac
+cat > /etc/htwicket.toml <<EOF
+base_path        = "/htwicket"
+htpasswd_file    = "/var/www/.htpasswd"
+sidecar_file     = "/var/www/.htwicket.toml"
+state_dir        = "/var/lib/htwicket"
+listen           = "127.0.0.1:52155"
+insecure_cookies = ${HTWICKET_INSECURE_COOKIES}
+app_title_html   = "Clapshot"
 
-# Configure htadmin
-replace_cfg /var/www/htadmin/config/config.ini  "secure_path *=.*"       "secure_path = /var/www/"
-replace_cfg /var/www/htadmin/config/config.ini  "app_title *= .*"        "app_title = Clapshot users"
-replace_cfg /var/www/htadmin/config/config.ini  "mail_server *= .*"      "mail_server = localhost"
-replace_cfg /var/www/htadmin/config/config.ini  "admin_user *= .*"       "admin_user = htadmin"
-replace_cfg /var/www/htadmin/config/config.ini  "admin_pwd_hash *= .*"   "admin_pwd_hash = Askg15BrpF11g"
+[superadmins]
+expr = "username == 'admin' || fields.is_admin"
+
+[fields.display_name]
+type = "string"
+default = ""
+user_editable_expr = "true"
+
+[fields.is_admin]
+type = "bool"
+default = false
+
+[fields.can_upload]
+type = "bool"
+default = true
+user_visible = true
+
+[headers.X-Remote-User-Name]
+type = "string"
+expr = "fields.display_name != '' ? fields.display_name : username"
+
+[headers.X-Remote-User-Is-Admin]
+type = "bool"
+expr = "username == 'admin' || fields.is_admin"
+
+[headers.X-Remote-User-Can-Upload]
+type = "bool"
+expr = "fields.can_upload"
+EOF
+display_config /etc/htwicket.toml
+
+# Per-user fields sidecar (admin is a superadmin). Always (re)written; htwicket needs
+# write access to /var/www to manage users from the web UI.
+echo -e "[users.\"admin\"]\nis_admin = true" > /var/www/.htwicket.toml
+chown www-data:www-data /var/www /var/www/.htwicket.toml
+
+# Seed users only on a FRESH install (no existing .htpasswd), so upgrades keep the
+# admin (and everyone else) you already have - htwicket reads the same file as before.
+ADMIN_PW=""
+if [ ! -e /var/www/.htpasswd ]; then
+    # Fixed demo users (alice:alice123, demo:demo); 'bob' omitted on bare metal.
+    echo -e "alice:J/JsbnRtaHBlc\ndemo:N7HpG2DddhtME" > /var/www/.htpasswd
+    chown www-data:www-data /var/www/.htpasswd
+    # 'admin' password: no more hardcoded admin:admin. Use CLAPSHOT_ADMIN_PASSWORD if
+    # given, else let htwicket generate a random bcrypt one and capture it for the banner.
+    if [ -n "${CLAPSHOT_ADMIN_PASSWORD}" ] && \
+       printf '%s\n' "${CLAPSHOT_ADMIN_PASSWORD}" | sudo -u www-data htwicket user passwd admin 2>/dev/null; then
+        ADMIN_PW="${CLAPSHOT_ADMIN_PASSWORD}"
+    else
+        ADMIN_PW=$(sudo -u www-data htwicket user passwd admin --random | sed -n 's/^generated password: *//p')
+    fi
+fi
+restart_and_check_service htwicket.service
 
 # Show some results
 THIS_IP="$(ip addr show | grep 'inet ' | grep -v '127.0.0.1' | awk '{print $2}' | cut -d/ -f1)"     # Get local IPv4 address
 set +x
 echo "-------------------------------------------------------------"
 echo "All done!"
-echo "Clapshot should now be accessible at: '${PUBLIC_ADDRESS}', and Htadmin at '${PUBLIC_ADDRESS}/htadmin'"
-echo "If not, make sure you have configured '${PUBLIC_ADDRESS}' to load data from 'http://${THIS_IP}:80', perhaps by a reverse proxy."
+echo "Clapshot should now be accessible at: '${PUBLIC_ADDRESS}', and user management at '${PUBLIC_ADDRESS}/htwicket/admin'"
+if [ -n "$ADMIN_PW" ]; then
+    echo ""
+    echo "  >>> Generated 'admin' password: ${ADMIN_PW}"
+    echo "  >>> (write it down now; it is not stored anywhere else)"
+else
+    echo "Existing /var/www/.htpasswd kept as-is. Log in as your existing 'admin' user to manage users."
+    echo "Forgot the admin password? Reset it: sudo -u www-data htwicket user passwd admin --random"
+fi
+echo "If not reachable, make sure you have configured '${PUBLIC_ADDRESS}' to load data from 'http://${THIS_IP}:80', perhaps by a reverse proxy."

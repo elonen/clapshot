@@ -13,7 +13,7 @@ LOCAL_DATA_DIR="$(pwd)/CLAPSHOT_CLOUDFLARE_VOLUME"
 # (These you probably don't need to change)
 
 # Docker images
-CLAPSHOT_DOCKER_IMAGE="elonen/clapshot:latest-demo-htadmin"
+CLAPSHOT_DOCKER_IMAGE="elonen/clapshot:latest-demo-htwicket"
 CLOUDFLARED_DOCKER_IMAGE="cloudflare/cloudflared:latest"
 
 # Network and container names

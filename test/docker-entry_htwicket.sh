@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# This a Docker-side support script to run a demo of Clapshot (API server + Nginx)
-# in a single Docker container for demo and testing purposes.
+# This a Docker-side support script to run a demo of Clapshot (API server + Nginx
+# + htwicket login/user-management) in a single Docker container for demo and
+# testing purposes.
 
 DIR="/mnt/clapshot-data/data"
 
@@ -107,13 +108,50 @@ cat > /etc/clapshot_client.conf << EOF
   "ws_url": "${CLAPSHOT_SERVER__URL_BASE}api/ws",
   "upload_url": "${CLAPSHOT_SERVER__URL_BASE}api/upload",
     "user_menu_extra_items": [
-        { "label": "My Videos", "type": "url", "data": "/" }
+        { "label": "My Videos", "type": "url", "data": "/" },
+        { "label": "Logout", "type": "url", "data": "/htwicket/logout" }
     ],
-  "user_menu_show_basic_auth_logout": true,
+  "user_menu_show_basic_auth_logout": false,
   "logo_url": "${LOGO_URL}",
   "app_title": "${APP_TITLE}"
 }
 EOF
+
+
+# ----------------------------------------------------------------------------
+# htwicket setup
+# ----------------------------------------------------------------------------
+
+# Secure cookies require HTTPS. Derive the setting from the public URL scheme:
+# behind an https reverse proxy -> secure cookies; plain http demo -> insecure.
+case "${CLAPSHOT_SERVER__URL_BASE}" in
+    https://*) export HTWICKET_INSECURE_COOKIES=false ;;
+    *)         export HTWICKET_INSECURE_COOKIES=true ;;
+esac
+
+# Persist htwicket's jwt_secret on the data volume so logins survive restarts.
+mkdir -p /mnt/clapshot-data/.htwicket
+chown www-data:www-data /mnt/clapshot-data/.htwicket
+# htwicket (running as www-data) needs to read/write the password file and its dir.
+chown www-data:www-data /var/www /var/www/.htpasswd /var/www/.htwicket.toml
+
+# Set the 'admin' password. It is NOT baked into the image (no shipped admin:admin):
+# generate a fresh random one on every start, or honor CLAPSHOT_ADMIN_PASSWORD if given.
+# 'admin' is declared in the sidecar (.htwicket.toml), so htwicket knows the user even
+# before it has a password entry in .htpasswd.
+ADMIN_PW=""
+if [ -n "${CLAPSHOT_ADMIN_PASSWORD}" ] && \
+   printf '%s\n' "${CLAPSHOT_ADMIN_PASSWORD}" | sudo -u www-data htwicket user passwd admin 2>/dev/null; then
+    ADMIN_PW="${CLAPSHOT_ADMIN_PASSWORD}"
+else
+    [ -n "${CLAPSHOT_ADMIN_PASSWORD}" ] && \
+        echo "WARNING: couldn't set CLAPSHOT_ADMIN_PASSWORD non-interactively; using a random one instead. See 'htwicket user passwd --help'."
+    ADMIN_PW=$(sudo -u www-data htwicket user passwd admin --random | sed -n 's/^generated password: *//p')
+fi
+
+# Start htwicket (login + auth_request gateway) in the background, as www-data.
+# Pass the cookie setting via 'env' since sudo resets the environment.
+sudo -u www-data env HTWICKET_INSECURE_COOKIES="${HTWICKET_INSECURE_COOKIES}" htwicket serve &
 
 
 # Make server data dir and log accessible to docker user
@@ -124,7 +162,6 @@ ln -s "$DIR/clapshot.log" /var/log/
 
 # Start nginx (in the background)
 nginx
-php-fpm8.2
 
 # Disable log buffering for better docker experience
 export ENV PYTHONDONTWRITEBYTECODE=1
@@ -145,16 +182,13 @@ EOF
 
 cat <<-EOF
 ---  Browse ${CLAPSHOT_SERVER__URL_BASE}          for Clapshot
----  or     ${CLAPSHOT_SERVER__URL_BASE}htadmin/  for user management
+---  or     ${CLAPSHOT_SERVER__URL_BASE}htwicket/admin  for user management (log in as 'admin')
 ---
 ---  Default users:
----   - admin:admin     (can edit other people's videos)
+---   - admin / ${ADMIN_PW}     <-- random, regenerated each start unless CLAPSHOT_ADMIN_PASSWORD is set
 ---   - demo:demo
 ---   - alice:alice123
 ---   - bob:bob123      (cannot upload files)
----
----  User management admin:
----   - htadmin:admin   (only for /htadmin)
 ---
 ---  ⚠️ !!!CHANGE PASSWORDS IF SHARING WITH ANYONE !!! ⚠️
 ==============================================================

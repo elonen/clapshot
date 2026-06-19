@@ -6,8 +6,11 @@ clapshot-server (0.12.0) unstable; urgency=low
     French)
   * Add example Mattermost (incoming webhook) notification script
   * Server test fixes
+  * Demo & installer: replaced PHP 'htadmin' + HTTP Basic Auth with htwicket:
+    same .htpasswd but modern crypto, proper login/logout/manage pages.
+    See doc/upgrading.md for migration notes.
 
- -- Jarno Elonen <elonen@iki.fi>  Wed, 10 Jun 2026 12:00:00 +0300
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 12 Jun 2026 12:00:00 +0300
 
 clapshot-server (0.11.1) unstable; urgency=low
 

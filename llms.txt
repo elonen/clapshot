@@ -54,12 +54,12 @@ Clapshot provides professional video review capabilities similar to cloud servic
 
 ### Default Demo Credentials
 
-**For htadmin-based demo images** (`latest-demo-htadmin`):
-- `admin:admin` - Admin user (can edit all videos, manage users)
+**For htwicket-based demo images** (`latest-demo-htwicket`):
+- `admin` - Admin user (can edit all videos, manage users). Password is **randomly generated on each container start** and printed to the log (override with `CLAPSHOT_ADMIN_PASSWORD`).
 - `demo:demo` - Standard user with full permissions
 - `alice:alice123` - Standard user with full permissions
 - `bob:bob123` - User with **no upload permissions** (demonstrates upload restrictions)
-- `htadmin:admin` - User management interface at `/htadmin/`
+- User management UI at `/htwicket/admin` (log in as `admin`; the privileged `.htpasswd` admin user doubles as the htwicket superadmin)
 
 ⚠️ **Security Warning:** Change all default passwords before production use!
 
@@ -200,7 +200,7 @@ Clapshot uses a hierarchical Make-based build system with Docker containerizatio
 - [organizer/basic_folders/Makefile](organizer/basic_folders/Makefile): Python organizer packaging with setuptools
 
 **Docker Build Files:**
-- [Dockerfile.demo](Dockerfile.demo): Multi-stage demo image with two authentication variants (none/htadmin) - installs all Debian packages and configures nginx/systemd
+- [Dockerfile.demo](Dockerfile.demo): Multi-stage demo image with two authentication variants (none/htwicket) - installs all Debian packages and configures nginx/systemd
 - [Dockerfile.server](Dockerfile.server): Server build container for cross-platform compilation
 - [Dockerfile.client](Dockerfile.client): Client build container with Node.js environment
 - [Dockerfile.org-python](Dockerfile.org-python): Python organizer build container
@@ -221,11 +221,11 @@ Clapshot uses a hierarchical Make-based build system with Docker containerizatio
 
 ### Example Configurations
 
-[Dockerfile.demo](Dockerfile.demo): Docker demo image build configuration with htadmin authentication
+[Dockerfile.demo](Dockerfile.demo): Docker demo image build configuration with htwicket authentication
 
 [test/run-cloudflare.sh](test/run-cloudflare.sh): Example Cloudflare Tunnel deployment script for internet access
 
-[client/debian/additional_files/clapshot+htadmin.nginx.conf](client/debian/additional_files/clapshot+htadmin.nginx.conf): Reference Nginx configuration with authentication integration and reverse proxy setup
+[client/debian/additional_files/clapshot+htwicket.nginx.conf](client/debian/additional_files/clapshot+htwicket.nginx.conf): Reference Nginx configuration with htwicket auth_request integration and reverse proxy setup
 
 [server/debian/additional_files/clapshot-server.conf](server/debian/additional_files/clapshot-server.conf): Server configuration file template with all available options
 

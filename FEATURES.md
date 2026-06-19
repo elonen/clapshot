@@ -163,7 +163,7 @@ Sharing system with security controls and access management.
 
 ### **Authentication-Agnostic Design**
 Works with authentication systems through reverse proxy integration (requires proxy configuration for OAuth, LDAP, Kerberos, SAML, etc.).
-- *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [clapshot+htadmin.nginx.conf](client/debian/additional_files/clapshot+htadmin.nginx.conf)*
+- *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [clapshot+htwicket.nginx.conf](client/debian/additional_files/clapshot+htwicket.nginx.conf)*
 
 ### **Automatic User Create**
 Clapshot creates a user and a folder for them every time a new username is encountered in reverse proxy HTTP headers.

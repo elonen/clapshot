@@ -1,0 +1,50 @@
+# htwicket configuration for the Clapshot demo image.
+#
+# htwicket (https://github.com/elonen/htwicket) is an nginx auth_request gateway
+# that manages /var/www/.htpasswd and emits the X-Remote-User-* headers that
+# Clapshot consumes. See clapshot+htwicket.nginx.conf for the matching nginx setup.
+
+base_path     = "/htwicket"
+htpasswd_file = "/var/www/.htpasswd"           # same path the old htadmin demo used
+sidecar_file  = "/var/www/.htwicket.toml"      # per-user fields (is_admin, can_upload, ...)
+state_dir     = "/mnt/clapshot-data/.htwicket" # persist jwt_secret on the data volume so sessions survive restarts
+listen        = "127.0.0.1:52155"
+
+# 'insecure_cookies' is set at runtime by docker-entry_htwicket.sh, derived from
+# the public URL scheme (https -> false, http -> true), via HTWICKET_INSECURE_COOKIES.
+
+app_title_html = "Clapshot"
+
+# Who may open /htwicket/admin (user management). Any user named 'admin' (matching
+# the legacy nginx 'map' convention) or anyone with the is_admin field set.
+[superadmins]
+expr = "username == 'admin' || fields.is_admin"
+
+# Per-user fields, overridable in the sidecar file.
+[fields.display_name]
+type = "string"
+default = ""
+user_editable_expr = "true"
+
+[fields.is_admin]
+type = "bool"
+default = false
+
+[fields.can_upload]
+type = "bool"
+default = true
+user_visible = true
+
+# Headers forwarded to nginx/clapshot-server. X-Remote-User-Id is emitted
+# automatically by htwicket, so it is NOT declared here.
+[headers.X-Remote-User-Name]
+type = "string"
+expr = "fields.display_name != '' ? fields.display_name : username"
+
+[headers.X-Remote-User-Is-Admin]
+type = "bool"
+expr = "username == 'admin' || fields.is_admin"
+
+[headers.X-Remote-User-Can-Upload]
+type = "bool"
+expr = "fields.can_upload"

@@ -18,8 +18,8 @@ Quick reference for common Clapshot deployment scenarios. For detailed troublesh
 # Basic demo - no authentication
 docker run --rm -it -p 8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/clapshot:latest-demo
 
-# Multi-user demo with basic auth
-docker run --rm -it -p 8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htadmin
+# Multi-user demo with login (htwicket)
+docker run --rm -it -p 8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htwicket
 ```
 **Access:** `http://127.0.0.1:8080`
 
@@ -30,7 +30,7 @@ docker run --rm -it -p 8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/c
 docker run --rm -it -p 8080:80 -p 8095:8095 \
   -e CLAPSHOT_SERVER__URL_BASE="http://YOUR_IP:8080/" \
   -v clapshot-demo:/mnt/clapshot-data/data \
-  elonen/clapshot:latest-demo-htadmin
+  elonen/clapshot:latest-demo-htwicket
 
 # If behind a firewall, allow both ports:
 # ufw allow 8080/tcp
@@ -44,7 +44,7 @@ docker run --rm -it -p 8080:80 -p 8095:8095 \
 docker run --rm -it -p 8025:80 \
   -e CLAPSHOT_SERVER__URL_BASE="http://YOUR_IP:8025/" \
   -v clapshot-demo:/mnt/clapshot-data/data \
-  elonen/clapshot:latest-demo-htadmin
+  elonen/clapshot:latest-demo-htwicket
 ```
 **Access:** `http://YOUR_IP:8025`
 
@@ -55,7 +55,7 @@ docker run --rm -it -p 8025:80 \
 version: '3.8'
 services:
   clapshot:
-    image: elonen/clapshot:latest-demo-htadmin
+    image: elonen/clapshot:latest-demo-htwicket
     container_name: clapshot_prod
     environment:
       - CLAPSHOT_SERVER__URL_BASE=https://clapshot.yourdomain.com/
@@ -86,7 +86,7 @@ docker run -d \
   -e CLAPSHOT_SERVER__CORS="https://clapshot.company.com" \
   -p 127.0.0.1:8080:80 -p 127.0.0.1:8095:8095 \
   -v clapshot-data:/mnt/clapshot-data/data \
-  elonen/clapshot:latest-demo-htadmin
+  elonen/clapshot:latest-demo-htwicket
 ```
 
 ## Linux VM Installation
@@ -177,13 +177,13 @@ curl http://YOUR_IP:8080/api/health
 ## Default Credentials (Change These!)
 
 **Clapshot Users:**
-- `admin:admin` (can edit all videos)
+- `admin` / *random password printed in the container log* (can edit all videos; override with `CLAPSHOT_ADMIN_PASSWORD`)
 - `demo:demo`
 - `alice:alice123`
 - `bob:bob123` (cannot upload files)
 
 **User Management:**
-- `htadmin:admin` (access `/htadmin/` for user management)
+- Log in as `admin` and open `/htwicket/admin` to manage users
 
 > ⚠️ **Security Warning:** Change all default passwords before sharing with others!
 
