@@ -1,0 +1,34 @@
+# Test overlay: adds a Playwright runner to a recipe's stack. Applied on top of a recipe's
+# compose.yml (see run.sh). The runner joins the recipe's network and drives the SPA by
+# service name (BASE_URL=http://caddy/), so NOTHING Playwright-related is installed on the
+# host — the official image ships the browsers and @playwright/test.
+#
+# It's behind the "runner" profile, so `docker compose up` does NOT start it; run.sh starts
+# it explicitly with `docker compose run --rm playwright` to get its exit code back.
+
+services:
+  playwright:
+    image: "${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.61.0-noble}"
+    profiles: ["runner"]
+    depends_on:
+      clapshot-web: { condition: service_started }
+    environment:
+      BASE_URL: "${CLAPSHOT_URL_BASE:-http://caddy/}"
+      CLAPSHOT_INITIAL_ADMIN_PASSWORD: "${CLAPSHOT_INITIAL_ADMIN_PASSWORD:-}"
+      CI: "1"
+      HOME: "/tmp"
+    working_dir: /tests
+    volumes:
+      - "${TESTS_DIR}:/tests:ro"            # specs + config + lockfile (read-only: container can't mutate the repo)
+      - "${ASSET_FILE}:/assets/sample.mp4:ro"
+    # The PW image ships the browsers but NOT the @playwright/test runner, so install it
+    # pinned + integrity-checked from the committed lockfile (npm ci) into a writable /tmp
+    # dir. --ignore-scripts: browsers are already in the image, nothing else is fetched.
+    command:
+      - bash
+      - -lc
+      - 'set -e;
+         mkdir -p /tmp/pw && cp /tests/package.json /tests/package-lock.json /tmp/pw/;
+         cd /tmp/pw && npm ci --ignore-scripts;
+         export NODE_PATH=/tmp/pw/node_modules;
+         cd /tests && exec /tmp/pw/node_modules/.bin/playwright test --reporter=list'

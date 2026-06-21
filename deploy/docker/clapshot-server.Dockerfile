@@ -10,15 +10,24 @@ RUN apt-get -qy update && \
 # Trixie ships a recent ffmpeg, so no deb-multimedia repo is needed.
 
 COPY dist_deb/*.deb /tmp/deb/
-RUN A=$(dpkg --print-architecture); \
-    dpkg -i /tmp/deb/clapshot-server_*_trixie_$A.deb \
-            /tmp/deb/clapshot-organizer-basic-folders_*_trixie_$A.deb && \
-    rm -rf /tmp/deb
+# Install via apt (not dpkg -i) so the debs' own deps (jq, logrotate, psmisc, python3, ...)
+# resolve automatically, same as the bare-metal installer.
+RUN apt-get -qy update && \
+    A=$(dpkg --print-architecture); \
+    apt-get -qy install --no-install-recommends \
+        /tmp/deb/clapshot-server_*_trixie_$A.deb \
+        /tmp/deb/clapshot-organizer-basic-folders_*_trixie_$A.deb && \
+    rm -rf /tmp/deb /var/lib/apt/lists/*
 
 # Data dir lives on a mounted volume; make the mountpoint www-data-owned so a fresh
 # named volume initializes with the right ownership (bind mounts: chown to uid 33 yourself).
+# Bake two container defaults into the conf:
+#  - host 0.0.0.0: bind all interfaces so the clapshot-web container can reach :8095
+#    (the port is never published to the host — only Caddy is — so this is internal-only).
+#  - log "-": log to stdout (container-idiomatic); www-data can't create a file in /var/log.
 RUN mkdir -p /mnt/clapshot-data/data && chown -R www-data /mnt/clapshot-data && \
-    chown www-data /etc/clapshot-server.conf
+    chown www-data /etc/clapshot-server.conf && \
+    sed -i 's|^log = .*|log = -|; s|^host = .*|host = 0.0.0.0|' /etc/clapshot-server.conf
 
 COPY deploy/docker/server-entrypoint.sh /usr/local/bin/server-entrypoint
 COPY deploy/docker/config-check.sh      /usr/local/bin/clapshot-config-check

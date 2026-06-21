@@ -1,6 +1,7 @@
-#!/bin/bash -e
+#!/bin/sh -e
 # Render the runtime client config served as /clapshot_client.conf.json
 # (symlink -> /etc/clapshot_client.conf, shipped by the client .deb).
+# Runs in nginx:stable-alpine, which has /bin/sh (busybox) but no bash.
 : "${CLAPSHOT_URL_BASE:=http://127.0.0.1:8080/}"
 
 # The logout link is auth-specific -> injected by the recipe (htwicket sets CLAPSHOT_LOGOUT_URL).

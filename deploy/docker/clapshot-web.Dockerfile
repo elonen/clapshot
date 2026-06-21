@@ -11,7 +11,8 @@ RUN dpkg-deb -x /tmp/client.deb /spa
 FROM nginx:stable-alpine
 COPY --from=spa /spa/usr/share/clapshot-client /usr/share/clapshot-client
 # Recreate the deb's symlinks (the /var/www one lives outside the path we copied):
-RUN ln -s /usr/share/clapshot-client/www /var/www/clapshot-client && \
+RUN mkdir -p /var/www && \
+    ln -s /usr/share/clapshot-client/www /var/www/clapshot-client && \
     ln -sf /etc/clapshot_client.conf /var/www/clapshot-client/clapshot_client.conf.json && \
     rm -f /etc/nginx/conf.d/default.conf
 # Reusable, auth-agnostic config included by every recipe's site.conf
