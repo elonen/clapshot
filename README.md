@@ -72,12 +72,12 @@ Here are two alternative ways to deploy Clapshot + htwicket into a light product
 
 ### 1. Local Linux VM
 
-One-shot install via [install-clapshot-deb.sh](extras/install-clapshot-deb.sh) on a Debian 12/13 host (VM) with `/mnt/clapshot-data` mounted.
+One-shot install via [install-clapshot-deb.sh](deploy/debian/install-clapshot-deb.sh) on a Debian 12/13 host (VM) with `/mnt/clapshot-data` mounted.
 
 <details><summary>Step-by-step: Debian 12/13 install</summary>
 
 1. Prepare a Debian host with a mounted block device (or just directory) at `/mnt/clapshot-data`.
-2. Download [Clapshot Debian Bookworm Deployment Script](extras/install-clapshot-deb.sh)
+2. Download [Clapshot Debian Bookworm Deployment Script](deploy/debian/install-clapshot-deb.sh)
 3. Run the script as root to install and auto-configure Clapshot.
 4. **!! Change/verify the `admin` password (the installer prints a generated one), and delete the example users in `/htwicket/admin` !!**
 

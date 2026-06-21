@@ -21,7 +21,7 @@ If you find this migration guide lacking, please contribute corrections and addi
 ## Migrating the demo/installer auth from htadmin to htwicket
 
 Starting with the htwicket-based demo image (`elonen/clapshot:latest-demo-htwicket`) and
-the updated `extras/install-clapshot-deb.sh`, the PHP `htadmin` + HTTP Basic Auth example
+the updated `deploy/debian/install-clapshot-deb.sh`, the PHP `htadmin` + HTTP Basic Auth example
 has been replaced by [htwicket](https://github.com/elonen/htwicket): a small nginx
 `auth_request` gateway that manages the same `/var/www/.htpasswd`, but adds a real login
 form, working cookie logout, and a web user-management UI. If you used a custom
@@ -52,7 +52,7 @@ For deployments based on the old htadmin example:
 3. **Switch the nginx site** from `clapshot+htadmin.nginx.conf` to
    `clapshot+htwicket.nginx.conf` and remove the old one (two `default_server` blocks
    prevent nginx from starting). Install the `htwicket` package and
-   `systemctl enable --now htwicket`. The `extras/install-clapshot-deb.sh` script does all
+   `systemctl enable --now htwicket`. The `deploy/debian/install-clapshot-deb.sh` script does all
    of this for you (and removes the stale htadmin config + `/var/www/htadmin` on re-run).
    You no longer need `php-fpm`.
 
