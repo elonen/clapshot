@@ -115,14 +115,19 @@ mod integration_test
                 std::fs::create_dir_all($incoming_dir.as_path()).unwrap();
 
                 // Run server
-                let port = portpicker::pick_unused_port().expect("No TCP ports free");
-                let url_base = format!("http://127.0.0.1:{}", port);
-                let ws_url = format!("{}/api/ws", &url_base.replace("http", "ws"));
                 let target_bitrate = $bitrate;
                 let regex = validate_org_http_headers_regex("^X[-_]REMOTE[-_]").unwrap();
 
                 let grpc_server_bind = crate::grpc::grpc_server::make_grpc_server_bind(&None, &$data_dir)?;
                 let (org_uri, _org_hdl) = prepare_organizer(&None, &$org_cmd, tracing::Level::DEBUG, false, &$data_dir.path())?;
+
+                // Pick the HTTP port as late as possible — right before binding — to keep the
+                // TOCTOU window between portpicker probing the port and warp actually binding it
+                // as small as possible. These tests start ~80 servers sequentially, so a wide
+                // window (e.g. spanning the organizer subprocess spawn above) flakes with EADDRINUSE.
+                let port = portpicker::pick_unused_port().expect("No TCP ports free");
+                let url_base = format!("http://127.0.0.1:{}", port);
+                let ws_url = format!("{}/api/ws", &url_base.replace("http", "ws"));
 
                 let terminate_flag = Arc::new(AtomicBool::new(false));
 
