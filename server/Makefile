@@ -106,7 +106,7 @@ test-local:
 		echo "!! Running tests matching filter: '${FILTER}'"; \
 	fi
 
-	@if [ "${CI}" ]; then \
+	@set -o pipefail; if [ "${CI}" ]; then \
 		echo "!! Running in CI: No-default-features = skip expensive tests"; \
 		cargo test --no-default-features ${FILTER} | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"; \
 	else \

@@ -15,6 +15,7 @@
 //! See `doc/notification-hook.md` for the user-facing payload reference.
 
 use std::io::Write;
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
@@ -220,6 +221,12 @@ fn run_one(script: &Path, ev: &NotificationEvent, timeout: Duration) {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        // Own process group (pgid == child pid) so a timeout can kill the whole
+        // tree, not just the shell. Otherwise a script whose grandchild outlives
+        // it (e.g. dash forks `sleep` instead of exec'ing it) keeps the stdout/
+        // stderr pipes open, and draining them below blocks until that orphan
+        // exits — defeating the timeout.
+        .process_group(0)
         .spawn()
     {
         Ok(c) => c,
@@ -246,7 +253,10 @@ fn run_one(script: &Path, ev: &NotificationEvent, timeout: Duration) {
             Ok(Some(s)) => break Some(s),
             Ok(None) => {
                 if start.elapsed() >= timeout {
-                    let _ = child.kill();
+                    // Kill the whole process group (negative pid), not just the
+                    // direct child, so any forked grandchildren die too and release
+                    // the stdout/stderr pipes we drain below.
+                    unsafe { libc::kill(-(child.id() as i32), libc::SIGKILL); }
                     let _ = child.wait();
                     tracing::warn!(
                         event = ev.kind.as_str(),

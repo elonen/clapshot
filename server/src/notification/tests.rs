@@ -139,7 +139,12 @@ fn executor_survives_nonzero_exit_and_missing_script() {
 #[test]
 fn executor_kills_on_timeout() {
     let dir = tempfile::tempdir().unwrap();
-    let slow = write_script(dir.path(), "slow.sh", "#!/bin/sh\nsleep 10\n");
+    // Background the sleep and `wait` for it, so a grandchild outlives the shell
+    // regardless of which `/bin/sh` we get: dash forks it anyway, but even a shell
+    // that would exec a lone command (bash) must fork for `&`. That orphan keeps
+    // our stdout/stderr pipes open, so this exercises the process-group kill on
+    // every platform — not just dash/Docker.
+    let slow = write_script(dir.path(), "slow.sh", "#!/bin/sh\nsleep 10 &\nwait\n");
     let start = Instant::now();
     run_one(&slow, &ev(1), Duration::from_millis(200));
     assert!(start.elapsed() < Duration::from_secs(3), "timed-out script should be killed promptly");
