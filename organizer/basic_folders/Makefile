@@ -1,4 +1,4 @@
-.PHONY: setup install clean distclean package
+.PHONY: setup install clean distclean package get-cur-ver verify-ver
 
 UID := $(shell id -u)
 GID := $(shell id -g)
@@ -45,6 +45,15 @@ $(VENV)/bin/mypy: $(VENV)
 	@touch $@
 
 install: $(TARGET_BIN)
+
+get-cur-ver:
+	@grep -m1 'version=' setup.py | sed -E "s/.*version='([^']+)'.*/\1/"
+
+verify-ver:
+	@man=$$($(MAKE) -s get-cur-ver); \
+	chg=$$(sed -nE '1s/.*\(([^)]+)\).*/\1/p' debian/changelog | sed -E 's/^[0-9]+://; s/-[^-]*$$//'); \
+	test "$$man" = "$$chg" || { echo "ERROR: organizer version mismatch: setup.py=$$man changelog=$$chg"; exit 1; }; \
+	echo "organizer version OK: $$man"
 
 package: $(TARGET_BIN)
 	@echo "Packaging the application..."

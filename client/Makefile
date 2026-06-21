@@ -1,4 +1,4 @@
-.PHONY: dev docker build clean dist docker npm-deps npm-check-local npm-test-local docker-deb debian-docker debian-local test-docker build-local dev-local dev-docker default
+.PHONY: dev docker build clean dist docker npm-deps npm-check-local npm-test-local docker-deb debian-docker debian-local test-docker build-local dev-local dev-docker default get-cur-ver verify-ver
 
 PACKAGE_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
 PACKAGE=clapshot_client
@@ -15,6 +15,16 @@ DEB_DEPS=$(shell find debian/ -type f)
 
 default: build-local
 
+
+get-cur-ver:
+	@jq -r '.version' package.json
+
+verify-ver:
+	@man=$$($(MAKE) -s get-cur-ver); \
+	chg=$$(sed -nE '1s/.*\(([^)]+)\).*/\1/p' debian/changelog | sed -E 's/^[0-9]+://; s/-[^-]*$$//'); \
+	test "$$man" = "$$chg" || { echo "ERROR: client version mismatch: package.json=$$man changelog=$$chg"; exit 1; }; \
+	echo "client version OK: $$man"
+
 clean:
 	rm -rf node_modules dist dist_deb
 	cd ../protobuf/libs/typescript && make clean
@@ -26,7 +36,6 @@ npm-deps:
 docker: clean
 	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg DEBIAN_VER=${DEBIAN_VER} -f Dockerfile.client .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
-
 
 
 npm-check-local: npm-deps

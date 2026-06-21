@@ -1,4 +1,4 @@
-.PHONY: deps clean test docker test run run-local run-docker default debian-local
+.PHONY: deps clean test docker test run run-local run-docker default debian-local get-cur-ver verify-ver
 SHELL := /bin/bash
 
 PLUGIN_BIN=../organizer/basic_folders/run-py-org.sh
@@ -42,6 +42,15 @@ DEFAULT_USER ?= admin
 
 
 default: ${SERVER_CMD}
+
+get-cur-ver:
+	@grep -m1 '^version' Cargo.toml | sed -E 's/^version *= *"([^"]+)".*/\1/'
+
+verify-ver:
+	@man=$$($(MAKE) -s get-cur-ver); \
+	chg=$$(sed -nE '1s/.*\(([^)]+)\).*/\1/p' debian/changelog | sed -E 's/^[0-9]+://; s/-[^-]*$$//'); \
+	test "$$man" = "$$chg" || { echo "ERROR: server version mismatch: Cargo.toml=$$man changelog=$$chg"; exit 1; }; \
+	echo "server version OK: $$man"
 
 ${DEV_DATADIR}:
 	mkdir -p "$@"
