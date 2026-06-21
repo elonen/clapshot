@@ -1,0 +1,100 @@
+name: clapshot-htwicket
+
+# Clapshot with htwicket login + user manager. Edit only .env (see .env.example).
+
+services:
+  config-check:
+    image: ghcr.io/elonen/clapshot-server:${CLAPSHOT_VERSION:-latest}
+    entrypoint: ["/usr/local/bin/clapshot-config-check"]
+    environment:
+      CLAPSHOT_URL_BASE: "${CLAPSHOT_URL_BASE:-http://127.0.0.1:8080/}"
+      HTWICKET_INSECURE_COOKIES: "${HTWICKET_INSECURE_COOKIES:-true}"
+      CADDY_CERT_DOMAIN: "${CADDY_CERT_DOMAIN:-}"
+      CADDY_TLS_CERT: "${CADDY_TLS_CERT:-}"
+    restart: "no"
+
+  # One-shot: seed the 'admin' user on first run. CLAPSHOT_INITIAL_ADMIN_PASSWORD set ->
+  # use it; unset/empty -> --random generates one (printed in this service's logs).
+  # Idempotent (--if-missing). Other users are created in /htwicket/admin.
+  htwicket-init:
+    image: ghcr.io/elonen/htwicket:${HTWICKET_VERSION:-latest}
+    depends_on:
+      config-check: { condition: service_completed_successfully }
+    command: ["user", "add", "admin", "--if-missing", "--password-env", "CLAPSHOT_INITIAL_ADMIN_PASSWORD", "--random"]
+    environment:
+      CLAPSHOT_INITIAL_ADMIN_PASSWORD: "${CLAPSHOT_INITIAL_ADMIN_PASSWORD:-}"
+    volumes:
+      - "${HTWICKET_DATA_DIR:-htwicket-data}:/data"
+      - "./htwicket.toml:/etc/htwicket.toml:ro"
+    restart: "no"
+
+  htwicket:
+    image: ghcr.io/elonen/htwicket:${HTWICKET_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      htwicket-init: { condition: service_completed_successfully }
+    command: ["serve"]
+    environment:
+      HTWICKET_LISTEN: "0.0.0.0:52155"
+      HTWICKET_INSECURE_COOKIES: "${HTWICKET_INSECURE_COOKIES:-true}"
+      HTWICKET_APP_TITLE_HTML: "${CLAPSHOT_APP_TITLE:-Clapshot}"
+      HTWICKET_PASSWORD_HASH: "${HTWICKET_PASSWORD_HASH:-bcrypt}"
+      HTWICKET_MIN_PASSWORD_LEN: "${HTWICKET_MIN_PASSWORD_LEN:-8}"
+      HTWICKET_BASIC_AUTH_PASSTHROUGH: "${HTWICKET_BASIC_AUTH_PASSTHROUGH:-false}"
+    volumes:
+      - "${HTWICKET_DATA_DIR:-htwicket-data}:/data"
+      - "./htwicket.toml:/etc/htwicket.toml:ro"
+    healthcheck:
+      test: ["CMD", "/usr/bin/htwicket", "healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  clapshot-server:
+    image: ghcr.io/elonen/clapshot-server:${CLAPSHOT_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      config-check: { condition: service_completed_successfully }
+    environment:
+      CLAPSHOT_SERVER__URL_BASE: "${CLAPSHOT_URL_BASE:-http://127.0.0.1:8080/}"
+      CLAPSHOT_SERVER__CORS: "${CLAPSHOT_CORS:-$CLAPSHOT_URL_BASE}"
+    volumes:
+      - "${CLAPSHOT_DATA_DIR:-clapshot-data}:/mnt/clapshot-data/data"
+
+  clapshot-web:
+    image: ghcr.io/elonen/clapshot-web:${CLAPSHOT_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      clapshot-server: { condition: service_started }
+      htwicket: { condition: service_healthy }
+    environment:
+      CLAPSHOT_URL_BASE: "${CLAPSHOT_URL_BASE:-http://127.0.0.1:8080/}"
+      CLAPSHOT_APP_TITLE: "${CLAPSHOT_APP_TITLE:-Clapshot}"
+      CLAPSHOT_LOGO_URL: "${CLAPSHOT_LOGO_URL:-clapshot-logo.svg}"
+      CLAPSHOT_LOGOUT_URL: "/htwicket/logout"
+    volumes:
+      - "./site.conf:/etc/nginx/conf.d/default.conf:ro"
+      - "${CLAPSHOT_DATA_DIR:-clapshot-data}:/mnt/clapshot-data/data:ro"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      clapshot-web: { condition: service_started }
+    environment:
+      CADDY_SITE_ADDRESS: "${CADDY_CERT_DOMAIN:-:80}"
+      CADDY_GLOBAL: "${CADDY_ACME_EMAIL:+email }${CADDY_ACME_EMAIL:-}"
+      CADDY_TLS: "${CADDY_TLS_CERT:+tls }${CADDY_TLS_CERT:-}${CADDY_TLS_KEY:+ }${CADDY_TLS_KEY:-}"
+    ports:
+      - "${CADDY_BIND:-127.0.0.1}:${CADDY_HTTP_PORT:-8080}:80"
+      - "${CADDY_BIND:-127.0.0.1}:${CADDY_HTTPS_PORT:-8443}:443"
+    volumes:
+      - "./Caddyfile:/etc/caddy/Caddyfile:ro"
+      - "${CADDY_DATA_DIR:-caddy-data}:/data"
+      - caddy-config:/config
+
+volumes:
+  clapshot-data:
+  htwicket-data:
+  caddy-data:
+  caddy-config:

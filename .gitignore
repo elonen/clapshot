@@ -4,3 +4,4 @@ dist_deb/
 .idea/
 .local-temp
 .local-tmp/
+.env

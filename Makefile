@@ -140,3 +140,31 @@ build-docker-dev-and-push-hub: debian-docker
 		-t elonen/clapshot:git-${GIT_COMMIT}-demo \
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htwicket \
 		--push .
+
+
+# ---- Per-service runtime images for the deploy/compose recipes (ghcr.io) ----
+# clapshot-server (server + organizer) and clapshot-web (nginx + client SPA), built from
+# the same dist_deb/ packages. Caddy and htwicket are pulled as stock/external images.
+GHCR_NS ?= ghcr.io/elonen
+
+.PHONY: build-docker-services build-docker-services-and-push-ghcr
+
+build-docker-services: debian-docker
+	@which jq || (echo "ERROR: Please install jq first." && exit 1)
+	$(eval PVER=$(shell jq -r '.version' client/package.json))
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+		-t $(GHCR_NS)/clapshot-server:${PVER} -t $(GHCR_NS)/clapshot-server:latest \
+		-f deploy/docker/clapshot-server.Dockerfile .
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+		-t $(GHCR_NS)/clapshot-web:${PVER} -t $(GHCR_NS)/clapshot-web:latest \
+		-f deploy/docker/clapshot-web.Dockerfile .
+
+build-docker-services-and-push-ghcr: debian-docker
+	@which jq || (echo "ERROR: Please install jq first." && exit 1)
+	$(eval PVER=$(shell jq -r '.version' client/package.json))
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+		-t $(GHCR_NS)/clapshot-server:${PVER} -t $(GHCR_NS)/clapshot-server:latest \
+		-f deploy/docker/clapshot-server.Dockerfile --push .
+	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+		-t $(GHCR_NS)/clapshot-web:${PVER} -t $(GHCR_NS)/clapshot-web:latest \
+		-f deploy/docker/clapshot-web.Dockerfile --push .
