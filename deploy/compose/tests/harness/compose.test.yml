@@ -15,11 +15,13 @@ services:
     environment:
       BASE_URL: "${CLAPSHOT_URL_BASE:-http://caddy/}"
       CLAPSHOT_INITIAL_ADMIN_PASSWORD: "${CLAPSHOT_INITIAL_ADMIN_PASSWORD:-}"
+      RECIPE: "${RECIPE:?run.sh must set RECIPE}"   # selects /tests/<recipe>/ as the spec dir
+      READY_PROBES: "${READY_PROBES:-api/health}"   # recipe's test.env declares what to wait for
       CI: "1"
       HOME: "/tmp"
     working_dir: /tests
     volumes:
-      - "${TESTS_DIR}:/tests:ro"            # specs + config + lockfile (read-only: container can't mutate the repo)
+      - "${TESTS_DIR}:/tests:ro"            # harness/ + per-recipe specs (read-only: container can't mutate the repo)
       - "${ASSET_FILE}:/assets/sample.mp4:ro"
     # The PW image ships the browsers but NOT the @playwright/test runner, so install it
     # pinned + integrity-checked from the committed lockfile (npm ci) into a writable /tmp
@@ -28,7 +30,7 @@ services:
       - bash
       - -lc
       - 'set -e;
-         mkdir -p /tmp/pw && cp /tests/package.json /tests/package-lock.json /tmp/pw/;
+         mkdir -p /tmp/pw && cp /tests/harness/package.json /tests/harness/package-lock.json /tmp/pw/;
          cd /tmp/pw && npm ci --ignore-scripts;
          export NODE_PATH=/tmp/pw/node_modules;
-         cd /tests && exec /tmp/pw/node_modules/.bin/playwright test --reporter=list'
+         exec /tmp/pw/node_modules/.bin/playwright test --config /tests/harness/playwright.config.ts --reporter=list'

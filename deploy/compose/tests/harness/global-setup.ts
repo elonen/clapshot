@@ -2,11 +2,12 @@ import { request } from '@playwright/test';
 
 // The stack is brought up with `docker compose up -d`, but one-shots (config-check,
 // htwicket-init) and healthchecks may still be settling. Poll the unauthenticated
-// endpoints until they answer, so tests don't race startup.
+// endpoints until they answer, so tests don't race startup. Which endpoints depends on
+// the recipe (no-auth has no htwicket), so READY_PROBES comes from the recipe's test.env.
 export default async function globalSetup() {
   const base = process.env.BASE_URL || 'http://caddy/';
   const ctx = await request.newContext({ baseURL: base, ignoreHTTPSErrors: true });
-  const probes = ['api/health', 'htwicket/login'];   // server reachable, htwicket reachable
+  const probes = (process.env.READY_PROBES || 'api/health').split(',').map((p) => p.trim()).filter(Boolean);
   const deadlineMs = Date.now() + 120_000;
 
   for (const path of probes) {

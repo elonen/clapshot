@@ -140,3 +140,9 @@ service's uid** (a fresh named volume is chowned automatically; a host bind is n
 | `CLAPSHOT_DATA_DIR` | videos + SQLite database | uid `33` (`www-data`) | **yes — the important one** |
 | `HTWICKET_DATA_DIR` | users (`.htpasswd`), per-user flags, session key | uid `65532` (`nonroot`) | yes |
 | `CADDY_DATA_DIR` | TLS certs + ACME account | uid `0` (`root`) | optional (re-fetchable, but avoids rate limits) |
+
+## Tests
+
+[`tests/`](tests/) holds end-to-end smoke tests for these recipes: each brings a recipe's
+stack up and drives the real web client in a headless browser (`tests/run.sh <recipe>`). See
+[`tests/README.md`](tests/README.md).

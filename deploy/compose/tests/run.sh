@@ -12,13 +12,13 @@ RECIPE="${1:-htwicket}"
 TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$TESTS_DIR/../../.." && pwd)"
 RECIPE_DIR="$REPO/deploy/compose/$RECIPE"
-ENV_FILE="$TESTS_DIR/$RECIPE.env"
+ENV_FILE="$TESTS_DIR/$RECIPE/test.env"
 GHCR_BASE="ghcr.io/elonen"
 
 [ -f "$RECIPE_DIR/compose.yml" ] || { echo "No such recipe: $RECIPE_DIR" >&2; exit 2; }
-[ -f "$ENV_FILE" ] || { echo "No test env: $ENV_FILE (only 'htwicket' exists so far)" >&2; exit 2; }
+[ -f "$ENV_FILE" ] || { echo "No test env: $ENV_FILE (only 'htwicket' has a test so far)" >&2; exit 2; }
 
-export TESTS_DIR
+export TESTS_DIR RECIPE
 export ASSET_FILE="$REPO/server/src/tests/assets/60fps-example.mp4"
 export PLAYWRIGHT_IMAGE="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.61.0-noble}"
 [ -f "$ASSET_FILE" ] || { echo "Missing test asset: $ASSET_FILE" >&2; exit 2; }
@@ -33,11 +33,15 @@ if [ "${SKIP_BUILD:-}" != "1" ]; then
   docker build -t $GHCR_BASE/clapshot-web:latest    -f "$REPO/deploy/docker/clapshot-web.Dockerfile"    "$REPO"
 fi
 
+# Optional per-recipe overlay, applied last (e.g. an injecting auth proxy for the
+# custom-proxy / no-auth header tests — browser headers can't reach the WS upgrade, so
+# the injection has to live in the network path).
 COMPOSE=(docker compose
   --project-name "clapshot-test-$RECIPE"
   --env-file "$ENV_FILE"
   -f "$RECIPE_DIR/compose.yml"
-  -f "$TESTS_DIR/compose.test.yml")
+  -f "$TESTS_DIR/harness/compose.test.yml")
+[ -f "$TESTS_DIR/$RECIPE/overlay.yml" ] && COMPOSE+=(-f "$TESTS_DIR/$RECIPE/overlay.yml")
 
 cleanup() { "${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true; }
 trap cleanup EXIT
@@ -53,6 +57,7 @@ set -e
 
 if [ "$rc" -ne 0 ]; then
   echo "=== FAILED (exit $rc) — recent stack logs ===" >&2
-  "${COMPOSE[@]}" logs --no-color --tail=40 clapshot-server clapshot-web htwicket htwicket-init config-check 2>&1 | tail -80 >&2 || true
+  # Dump all services (recipes differ: no-auth has no htwicket/htwicket-init/config-check).
+  "${COMPOSE[@]}" logs --no-color --tail=40 2>&1 | tail -120 >&2 || true
 fi
 exit "$rc"
