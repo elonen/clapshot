@@ -169,6 +169,37 @@ pub async fn expect_user_msg(ws: &mut crate::api_server::test_utils::WsClient, e
     cmd.msgs[0].clone()
 }
 
+/// Like `expect_user_msg`, but tolerant of slow background processing.
+///
+/// Ingest/transcode notifications are emitted only after external tools (mediainfo,
+/// ffmpeg) finish, so their timing is racy under load. Instead of assuming the message
+/// has already arrived, poll the websocket for up to `timeout_secs`, skipping unrelated
+/// messages, until a user message of `evt_type` shows up. Each underlying read has a
+/// 0.25s timeout that doubles as the poll interval.
+pub async fn wait_for_user_msg(ws: &mut crate::api_server::test_utils::WsClient, evt_type: proto::user_message::Type, timeout_secs: u32) -> proto::UserMessage
+{
+    use lib_clapshot_grpc::proto::client::{ServerToClientCmd, server_to_client_cmd as s2c};
+    println!(" --wait_for_user_msg of type {:?} (timeout {}s) ....", evt_type, timeout_secs);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs as u64);
+    loop {
+        if let Some(s2c::Cmd::ShowMessages(m)) =
+            crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(ws).await.and_then(|c| c.cmd)
+        {
+            if let Some(msg) = m.msgs.iter().find(|msg| msg.r#type == evt_type as i32) {
+                return msg.clone();
+            }
+            // Fail fast (don't burn the whole timeout) if ingest errored out unexpectedly.
+            if evt_type != proto::user_message::Type::Error {
+                assert!(!m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Error as i32),
+                    "Got ERROR type message while waiting for {:?}: {:?}", evt_type, m.msgs);
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            panic!("Timed out after {}s waiting for user message of type {:?}", timeout_secs, evt_type);
+        }
+    }
+}
+
 #[tokio::test]
 #[traced_test]
 async fn test_api_rename_media_file()

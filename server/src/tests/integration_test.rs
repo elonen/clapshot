@@ -22,7 +22,7 @@ mod integration_test
     use crossbeam_channel;
     use crossbeam_channel::{Receiver, RecvTimeoutError, unbounded, select};
 
-    use crate::api_server::tests::expect_user_msg;
+    use crate::api_server::tests::wait_for_user_msg;
     use crate::api_server::validate_org_http_headers_regex;
 
     use crate::database::schema::media_files::{thumb_sheet_cols, thumb_sheet_rows};
@@ -179,13 +179,11 @@ mod integration_test
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
             std::fs::rename(data_dir.join(mp4_file), incoming_dir.join(mp4_file)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
+            // Wait for the file to be ingested (timing depends on mediainfo, so poll).
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded, 30).await;    // notification to client (with upload folder info etc)
             let vid = msg.refs.unwrap().media_file_id.unwrap();
 
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Ok, 30).await;    // notification to user (in text)
             let vid2 = msg.refs.unwrap().media_file_id.unwrap();
             assert_eq!(vid, vid2);
 
@@ -248,11 +246,8 @@ mod integration_test
             let f = incoming_dir.join("garbage.mp4");
             std::fs::File::create(&f).unwrap().set_len(123000).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-
-            // Expect error
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
+            // Expect error (timing depends on mediainfo, so poll).
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Error, 30).await;
             assert!(msg.details.unwrap().contains("garbage.mp4"));
 
             // Make sure video was moved to rejected dir
@@ -292,13 +287,11 @@ mod integration_test
 
         const WAIT_AFTER_REPORTS_TIMEOUT_SECS: u32 = 5;
 
-        // Wait for file to be processed
-        thread::sleep(Duration::from_secs_f32(0.5));
-        let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
+        // Wait for the file to be ingested (timing depends on mediainfo, so poll).
+        let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded, 30).await;    // notification to client (with upload folder info etc)
         let vid = msg.refs.unwrap().media_file_id.unwrap();
 
-        thread::sleep(Duration::from_secs_f32(0.5));
-        let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
+        let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Ok, 30).await;    // notification to user (in text)
         let vid2 = msg.refs.unwrap().media_file_id.unwrap();
         assert_eq!(vid, vid2);
 
@@ -970,13 +963,11 @@ mod integration_test
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
             std::fs::rename(data_dir.join(mp4_file), incoming_dir.join(mp4_file)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;
+            // Wait for the file to be ingested (timing depends on mediainfo, so poll).
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded, 30).await;
             let vid = msg.refs.unwrap().media_file_id.unwrap();
 
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Ok, 30).await;
             let vid2 = msg.refs.unwrap().media_file_id.unwrap();
             assert_eq!(vid, vid2);
 
@@ -1008,13 +999,11 @@ mod integration_test
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
             std::fs::rename(data_dir.join(mp4_file), user_dir.join(mp4_file)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;
+            // Wait for the file to be ingested (timing depends on mediainfo, so poll).
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded, 30).await;
             let vid = msg.refs.unwrap().media_file_id.unwrap();
 
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Ok, 30).await;
             let vid2 = msg.refs.unwrap().media_file_id.unwrap();
             assert_eq!(vid, vid2);
 
@@ -1045,13 +1034,11 @@ mod integration_test
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
             std::fs::rename(data_dir.join(mp4_file), user_dir.join(mp4_file)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;
+            // Wait for the file to be ingested (timing depends on mediainfo, so poll).
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded, 30).await;
             let vid = msg.refs.unwrap().media_file_id.unwrap();
 
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Ok, 30).await;
             let vid2 = msg.refs.unwrap().media_file_id.unwrap();
             assert_eq!(vid, vid2);
 
