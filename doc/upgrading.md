@@ -1,5 +1,12 @@
 # Upgrading Clapshot to a new release
 
+> **Docker Compose deployments** ([`deploy/compose/`](../deploy/compose/)) upgrade differently:
+> pull the repo and redeploy (`docker compose pull && docker compose up -d`, or via
+> Portainer/Komodo). Config and migrations are handled by the images; your data and users persist in
+> volumes. Pin `CLAPSHOT_VERSION` for deliberate upgrades. See
+> [deploy/compose/README.md](../deploy/compose/README.md). The steps below are for **`.deb`-based**
+> deployments.
+
 These instructions are for basic .deb-based deployments, adapt as necessary for custom ones.
 
 1. Stop the server, `systemctl stop clapshot-server`

@@ -1,29 +1,43 @@
 # Clapshot with Docker Compose
 
-Self-contained recipes. Each recipe is **one directory you deploy as-is** — the only
-file you edit is `.env`. Upgrades are `git pull` + redeploy.
+Each compose recipe is **one directory you deploy as-is** — the only
+file you edit is `.env`.
 
-## Topology
+Upgrades are `git pull` + redeploy.
 
+This guide starts with a local test deployment and works up to a public, TLS-terminated
+production deployment.
+
+## Quick start — htwicket auth on 127.0.0.1, no HTTPS
+
+The following runs full stack with a built-in login form, on your machine, over plain HTTP. No DNS, no certs yet — the shipped defaults already point at `http://127.0.0.1:8080/`.
+
+```sh
+cd deploy/compose/htwicket
+cp .env.example .env        # defaults = local HTTP eval; no edits needed for the demo
+docker compose up -d
 ```
-        ┌─ Caddy ────────────────┐    TLS termination: Let's Encrypt / your certs (/ plain HTTP)
-        │  (the only container   │    — the single public entry point
-        │   that publishes ports)│
-        └───────────┬────────────┘
-                    │ http/ws to Docker network
-        ┌─ clapshot-web ─────────┐    nginx: serves the web client, proxies /api,
-        │                        │    auth_request → the auth layer
-        └───────────┬────────────┘
-          ┌─────────┴──────────┐
-   clapshot-server          [ auth ]  ← htwicket, or nothing, or your own IdP
-   + organizer
-```
 
-Only **Caddy** publishes host ports; the rest talk over the internal Compose network on
-fixed ports. (Exception: the **`custom-proxy`** recipe ships **no Caddy** — your own proxy
-is the front and TLS terminator, so there `clapshot-web` publishes the port instead.)
+Then:
 
-## Recipes (= your auth choice)
+1. Get the auto-generated admin password (printed once, on first run):
+
+   ```sh
+   docker compose logs htwicket-init
+   ```
+2. **OPTIONAL**: Log into <http://127.0.0.1:8080/htwicket/admin> as `admin` and create a regular user. Alternatively, you can use `docker compose exec htwicket /usr/bin/htwicket user add <name>`.
+
+3. Browse <http://127.0.0.1:8080/> → you're sent to the login page.
+4. Log in.
+
+To stop: `docker compose down` (add `-v` to also wipe the demo data volumes).
+
+Everything below takes you from this demo toward a real deployment.
+
+## Pick a recipe (= your auth choice)
+
+The quick start used **htwicket**. There are three recipes, differing only in how users
+authenticate:
 
 | Recipe | Auth | Use for |
 |--------|------|---------|
@@ -35,10 +49,40 @@ For **Authentik, Okta, Keycloak, Kerberos/AD**, etc.: run that in front and use 
 [`custom-proxy/`](custom-proxy/) recipe. See
 [Advanced Authentication](../../doc/sysadmin-guide.md#advanced-authentication).
 
-## Deploy
+## Suggested Production Topology
 
-The recipes mount files by **relative path** (`./site.conf`, `./htwicket.toml`), so deploy
-them **from the git repo** — not by pasting a single file into a web editor.
+```
+        ┌──────── Caddy ─────────┐    ← TLS termination: Let's Encrypt or your certs
+        │  the only container    │      (public entry point)
+        │  that publishes ports  │
+        └───────────┬────────────┘
+                    │ ← http/ws to Docker network
+                    |
+              [clapshot-web]       ← nginx: serves the web client, proxies /api,
+                    |                auth_request → the auth layer
+          ┌─────────┴──────────┐
+          |                    |
+  [clapshot-server]         [ auth ]  ← htwicket, or nothing, or your own IdP
+   + organizer
+```
+
+Only **Caddy** publishes host ports; the rest talk over the internal Compose network on
+fixed ports. (Exception: the **`custom-proxy`** recipe ships **no Caddy** — your own proxy
+is the front and TLS terminator, so there `clapshot-web` publishes the port instead.)
+
+## Deploy from the repo
+
+The quick start ran `docker compose` by hand from a checkout. For an unattended server,
+deploy the same directory through your stack manager — still **from the git repo**, because
+the recipes mount files by **relative path** (`./site.conf`, `./htwicket.toml`), so a
+single file pasted into a web editor won't work.
+
+### Plain Docker Compose
+```sh
+cd deploy/compose/htwicket   # or another recipe
+cp .env.example .env         # then edit it
+docker compose up -d
+```
 
 ### Portainer
 **Stacks** → **Add stack** → **Repository**:
@@ -51,13 +95,6 @@ them **from the git repo** — not by pasting a single file into a web editor.
 ### Komodo
 Create a **Stack** from this git repo with compose path
 `deploy/compose/<recipe>/compose.yml`; set the variables in the UI.
-
-### Plain `docker compose`
-```sh
-cd deploy/compose/htwicket
-cp .env.example .env        # then edit it
-docker compose up -d
-```
 
 **Upgrading** (any method): pull the repo and redeploy. The nginx config and
 `htwicket.toml` are versioned in the repo and mounted read-only, so they update with the
@@ -83,9 +120,10 @@ A **`config-check`** step runs on every `up` and stops startup if the settings a
 
 ## HTTPS
 
-In the **no-auth** and **htwicket** recipes, Caddy terminates TLS — three modes, selected
-by `.env`. (The **`custom-proxy`** recipe has no Caddy; TLS is handled by your own front
-proxy, so this section doesn't apply to it.)
+The demo ran plain HTTP. For secure authentication and operation, you need TLS. In the
+**htwicket** and **no-auth** recipes, Caddy terminates it — three modes, selected by `.env`.
+(The **`custom-proxy`** recipe has no Caddy; TLS is handled by your own front proxy, so this
+section doesn't apply to it.)
 
 1. **Automatic Let's Encrypt (most common).** Set `CADDY_CERT_DOMAIN=clapshot.example.com`,
    point that name's DNS at the host, and open ports **80 and 443**. Caddy obtains and
@@ -93,13 +131,15 @@ proxy, so this section doesn't apply to it.)
 2. **Your own certificates.** Set `CADDY_TLS_CERT` / `CADDY_TLS_KEY` to mounted PEM files;
    ACME is skipped.
 3. **Plain HTTP** (local testing, or behind your own TLS proxy). Leave `CADDY_CERT_DOMAIN`
-   unset.
+   unset — this is what the quick start uses.
 
 How LE validation works: Caddy uses the HTTP-01 (:80) or TLS-ALPN-01 (:443) challenge,
 so **both ports must be publicly reachable**. **Keep the `CADDY_DATA_DIR` volume** — it stores 
 the certs and the ACME account; losing it on every restart will hit Let's Encrypt rate limits. 
 
 ## Going to production
+
+Take the quick-start `.env` and replace the local-eval values with public, HTTPS ones:
 
 ```sh
 CLAPSHOT_URL_BASE=https://clapshot.example.com/
@@ -121,7 +161,7 @@ There is no default admin password. You can either:
 
 - set the admin password with `CLAPSHOT_INITIAL_ADMIN_PASSWORD` (or `…_FILE` for a
 Docker/Swarm secret); or
-- leave it unset to get a random one printed in the logs. It's applied
+- leave it unset to get a random one printed in the logs (as in the quick start). It's applied
 **only on first run** (or, when missing) — change it later in the GUI, or by running (this prompts for new password):
 
 ```

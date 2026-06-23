@@ -355,6 +355,9 @@ The main difference is how these components are packaged and configured. See [Ar
 
 ### Working Docker Compose Example
 
+> This is a **minimal demo-image stack for troubleshooting/repro only** — for real deployments use
+> the maintained [Compose recipes](../deploy/compose/) instead.
+
 ```yaml
 version: '3.8'
 
@@ -438,6 +441,10 @@ volumes:
 - Don't expose Clapshot ports directly if using a reverse proxy
 
 ## Production Deployment Considerations
+
+> Production deployments should use the [Docker Compose recipes](../deploy/compose/) (Docker) or the
+> [`.deb` packages](../deploy/debian/) (VM/bare-metal), **not** the single-image demo containers. The
+> points below apply regardless of how you deploy.
 
 ### 1. Use Proper Domains, Not IP Addresses
 

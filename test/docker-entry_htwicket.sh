@@ -191,6 +191,9 @@ cat <<-EOF
 ---   - bob:bob123      (cannot upload files)
 ---
 ---  ⚠️ !!!CHANGE PASSWORDS IF SHARING WITH ANYONE !!! ⚠️
+---
+---  ⚠ DEMO / EVALUATION build — single container, NOT for production.
+---    See Docker Compose deployment recipes in the repo docs.
 ==============================================================
 EOF
 

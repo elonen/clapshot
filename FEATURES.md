@@ -181,9 +181,9 @@ Administrator users (specified by HTTP headers, again) can edit users and their 
 Native Debian packages for production deployment with systemd integration.
 - *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [Makefile](Makefile), [server/debian/](server/debian/)*
 
-### **Docker Deployment Examples**
-Pre-configured Docker images for easy deployment with multiple authentication options.
-- *References: [README.md](README.md), [Dockerfile.demo](Dockerfile.demo), [test/run-cloudflare.sh](test/run-cloudflare.sh)*
+### **Docker Compose Deployment Recipes**
+Ready-to-deploy Compose stacks with automatic HTTPS via Caddy — the recommended way to run Clapshot on Docker. Use `htwicket` (built-in login) or `custom-proxy` (your own IdP) when you need authentication; a `no-auth` recipe is also available. The single-container demo image is for quick evaluation only.
+- *References: [deploy/compose/](deploy/compose/), [deploy/README.md](deploy/README.md), [Dockerfile.demo](Dockerfile.demo) (demo image), [test/run-cloudflare.sh](test/run-cloudflare.sh) (demo tunnel)*
 
 ### **Nginx Reverse Proxy Examples**
 Complete Nginx configuration examples for HTTPS, authentication, and static file serving.

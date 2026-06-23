@@ -1,3 +1,8 @@
+# All-in-one DEMO / EVALUATION image: server + organizer + nginx (+ optional htwicket)
+# in a single container. For quick local demos and CI tests only — NOT for production.
+# Real deployments use the Compose recipes (deploy/compose/) or the .deb packages
+# (deploy/debian/). See deploy/README.md.
+
 ARG auth_variation=none
 
 FROM debian:bookworm-slim AS base

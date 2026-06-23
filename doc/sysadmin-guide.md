@@ -251,6 +251,10 @@ For the complete list, see the [server configuration file](../server/debian/addi
 
 #### Docker Compose Example
 
+> This snippet only **illustrates env-var configuration** on the single-container demo image — it
+> is *not* a production deployment. For real Docker deployments, use the maintained
+> [Compose recipes](../deploy/compose/) (the same `CLAPSHOT_SERVER__*` variables apply, set in `.env`).
+
 ```yaml
 version: '3.8'
 services:

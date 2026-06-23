@@ -113,6 +113,7 @@ run-docker: debian-docker
 
 
 # The demo image bundles all components; tag it with the client (product) version.
+.PHONY: build-docker-demo-and-push-hub build-docker-dev build-docker-dev-and-push-hub
 build-docker-demo: debian-docker
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t clapshot:${CLIENT_VER}-demo \
@@ -182,3 +183,14 @@ build-docker-services-and-push-ghcr: debian-docker
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t $(GHCR_NS)/clapshot-web:${CLIENT_VER} -t $(GHCR_NS)/clapshot-web:latest \
 		-f deploy/docker/clapshot-web.Dockerfile --push .
+
+
+# ---- Publish everything (release convenience) ----
+# Image registry policy:
+#   - Compose per-service images (clapshot-server, clapshot-web) -> GitHub Container Registry
+#   - All-in-one demo/eval images (clapshot:*-demo[-htwicket])   -> Docker Hub
+# (htwicket and Caddy are external images, published by their own projects.)
+# debian-docker is a shared prerequisite, so the .debs are built once for both pushes.
+.PHONY: publish-images
+publish-images: build-docker-services-and-push-ghcr build-docker-demo-and-push-hub
+	@echo "Published per-service images to $(GHCR_NS) and demo images to Docker Hub (elonen/clapshot)."

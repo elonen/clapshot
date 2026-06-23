@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# DEMO SCRIPT — exposes the single-container Clapshot *demo* image over a temporary
+# Cloudflare tunnel. Handy for showing Clapshot to someone without DNS/certs, but it is
+# NOT a production deployment: the container is the all-in-one demo build and Cloudflare's
+# free plan limits upload size/time. For real internet-facing use, deploy a Compose recipe
+# (deploy/compose/) with CADDY_CERT_DOMAIN set, or a .deb install behind your own HTTPS proxy.
+
 # Docker named volume for Clapshot's data (DB, videos, gRPC sockets). Modify if needed.
 # A named volume (not a host bind mount) keeps everything on the Linux VM's
 # filesystem, so it works the same on Windows/macOS/Linux. Host bind mounts on
@@ -46,6 +52,9 @@ case "$(uname -sr)" in
          ;;
 esac
 
+echo "--- DEMO ONLY: not a production deployment. For real internet use, deploy a"
+echo "    Compose recipe (deploy/compose/) with CADDY_CERT_DOMAIN set instead. ---"
+echo " "
 echo "--- SECURITY WARNING ---"
 echo "This will expose Clapshot (data stored in Docker volume '$DATA_VOLUME') to the Internet via "
 echo -n "Clapshot server and Cloudflare tunnel "

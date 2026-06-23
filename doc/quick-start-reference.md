@@ -48,60 +48,73 @@ docker run --rm -it -p 8025:80 \
 ```
 **Access:** `http://YOUR_IP:8025`
 
-## Production Deployments
+### Cloudflare Tunnel
 
-### Docker Compose (Recommended)
-```yaml
-version: '3.8'
-services:
-  clapshot:
-    image: elonen/clapshot:latest-demo-htwicket
-    container_name: clapshot_prod
-    environment:
-      - CLAPSHOT_SERVER__URL_BASE=https://clapshot.yourdomain.com/
-      - CLAPSHOT_SERVER__CORS=https://clapshot.yourdomain.com
-    ports:
-      - "8080:80"
-    volumes:
-      - clapshot-data:/mnt/clapshot-data/data
-    restart: unless-stopped
+To expose a *demo* over a temporary public URL, [`test/run-cloudflare.sh`](../test/run-cloudflare.sh)
+runs the single-container demo image behind a Cloudflare tunnel (free plan limits upload size/time).
+For real internet use, deploy a Compose recipe with `CADDY_CERT_DOMAIN` set instead.
 
-volumes:
-  clapshot-data:
-```
-
-### Cloudflare Tunnel (Internet Access)
 ```bash
-# Download and run the Cloudflare script
+# Download and run the Cloudflare demo script
 wget https://raw.githubusercontent.com/elonen/clapshot/master/test/run-cloudflare.sh
 chmod +x run-cloudflare.sh
 ./run-cloudflare.sh
 ```
 
-### Behind Reverse Proxy (nginx, Traefik, etc.)
-```bash
-# Clapshot runs on internal port, proxy handles HTTPS
-docker run -d \
-  -e CLAPSHOT_SERVER__URL_BASE="https://clapshot.company.com/" \
-  -e CLAPSHOT_SERVER__CORS="https://clapshot.company.com" \
-  -p 127.0.0.1:8080:80 -p 127.0.0.1:8095:8095 \
-  -v clapshot-data:/mnt/clapshot-data/data \
-  elonen/clapshot:latest-demo-htwicket
+## Production Deployments
+
+> **Don't use the single-image `latest-demo*` containers for production** — they're for local
+> evaluation only. Real deployments use the **[Docker Compose recipes](../deploy/compose/)** (Docker)
+> or the **[`.deb` packages](../deploy/debian/)** (VM/bare-metal). The snippets below show the
+> URL/auth settings you'd put in those recipes' `.env` files.
+
+### Docker Compose
+
+Deploy a ready-made recipe from [`deploy/compose/`](../deploy/compose/) — `htwicket` (simple
+password login) or `custom-proxy` (your own IdP),. Caddy fetches Let's Encrypt certificates
+automatically; the only file you edit is `.env`:
+
+```ini
+# deploy/compose/htwicket/.env
+CLAPSHOT_URL_BASE=https://clapshot.yourdomain.com/
+CADDY_CERT_DOMAIN=clapshot.yourdomain.com     # automatic Let's Encrypt
 ```
+
+```sh
+cd deploy/compose/htwicket
+cp .env.example .env        # then edit it
+docker compose up -d
+```
+
+See [deploy/compose/README.md](../deploy/compose/README.md) for Portainer/Komodo, HTTPS modes, and upgrades.
+
+### Behind your own reverse proxy / IdP
+
+Already running nginx, Traefik, Authentik, oauth2-proxy, Kerberos, etc.? Use the
+[`custom-proxy`](../deploy/compose/custom-proxy/) recipe — it trusts the `X-Remote-User-*`
+headers your proxy sets, and your proxy terminates TLS. See
+[Advanced Authentication](sysadmin-guide.md#advanced-authentication).
+
 
 ## Linux VM Installation
 
 ### Debian/Ubuntu Automated Setup
-```bash
-# Download the installation script
-wget https://gist.githubusercontent.com/elonen/80a721f13bb4ec1378765270094ed5d5/raw/d333729c6a8df88edc3825b69bd571ba89879eee/install-clapshot-deb12.sh
 
-# Run with your public address (required)
-sudo bash install-clapshot-deb12.sh -a http://YOUR_IP:8080
-# Or for HTTPS: sudo bash install-clapshot-deb12.sh -a https://clapshot.yourdomain.com
+Install the `.deb` packages on a Debian 12/13 host with the
+[install script](../deploy/debian/install-clapshot-deb.sh). Read it first, then run as root:
+
+```bash
+# Download the installation script (read it before running)
+wget https://raw.githubusercontent.com/elonen/clapshot/master/deploy/debian/install-clapshot-deb.sh
+
+sudo bash install-clapshot-deb.sh
 ```
 
+Then set your public URL in `/etc/clapshot-server.conf` (see below). For details and
+authentication/HTTPS setup, see [deploy/debian/README.md](../deploy/debian/README.md).
+
 **Manual configuration (if needed later):**
+
 ```ini
 # Edit /etc/clapshot-server.conf
 [general]
@@ -123,7 +136,7 @@ sudo systemctl restart clapshot-server
 | `CLAPSHOT_APP_TITLE` | Custom application title | `"Video Review System"` |
 | `CLAPSHOT_LOGO_URL` | Custom logo URL | `"/custom-logo.svg"` |
 
-**Note:** Legacy variable names like `CLAPSHOT_URL_BASE`, `CLAPSHOT_CORS`, etc. still work for backward compatibility, but the `CLAPSHOT_SERVER__` format is recommended.
+**Note:** Legacy variable names like `CLAPSHOT_URL_BASE`, `CLAPSHOT_CORS`, etc. still work for backward compatibility, but the `CLAPSHOT_SERVER__` format is recommended as it works for all parameters.
 
 **For comprehensive Docker configuration options using environment variables, see the [Docker Environment Configuration](sysadmin-guide.md#docker-environment-configuration) section in the Sysadmin Guide.**
 
@@ -174,9 +187,10 @@ curl http://YOUR_IP:8080/api/health
 
 **Browser troubleshooting:** Open DevTools Console (F12) to check for CORS/WebSocket errors like `ERR_CONNECTION_REFUSED` or 403 responses. These usually indicate network or configuration issues. See [Connection Troubleshooting Guide](connection-troubleshooting.md) for detailed help.
 
-## Default Credentials (Change These!)
+## Default Credentials (only in demo image)
 
 **Clapshot Users:**
+
 - `admin` / *random password printed in the container log* (can edit all videos; override with `CLAPSHOT_ADMIN_PASSWORD`)
 - `demo:demo`
 - `alice:alice123`
@@ -184,8 +198,6 @@ curl http://YOUR_IP:8080/api/health
 
 **User Management:**
 - Log in as `admin` and open `/htwicket/admin` to manage users
-
-> ⚠️ **Security Warning:** Change all default passwords before sharing with others!
 
 ## Need More Help?
 

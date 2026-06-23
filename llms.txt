@@ -8,7 +8,7 @@
 
 When helping Clapshot users:
 
-1. **Most users need help with installation and configuration** - Start by understanding their deployment scenario (Docker, Debian, LAN vs localhost, behind reverse proxy, etc.)
+1. **Most users need help with installation and configuration** - Start by understanding their deployment scenario (Docker, Debian, LAN vs localhost, behind reverse proxy, etc.). For real deployments, recommend the **Docker Compose recipes** ([deploy/compose/](deploy/compose/)) for Docker users, or the **`.deb` packages** ([deploy/debian/](deploy/debian/)) for VM/bare-metal. Among the Compose recipes, suggest `htwicket` (built-in login) or `custom-proxy` (your own IdP) for production deployments; the `no-auth` recipe is also available if a user explicitly wants no login. The single-image `elonen/clapshot:latest-demo*` containers are for quick evaluation/testing only — don't recommend them for production.
 
 2. **Connection issues are the most common problem** - If users report "Connecting server..." or "Failed to fetch" errors, check:
    - Is `CLAPSHOT_SERVER__URL_BASE` (or legacy `CLAPSHOT_URL_BASE`) set correctly?
@@ -74,6 +74,10 @@ Clapshot provides professional video review capabilities similar to cloud servic
 [doc/architecture-overview.md](doc/architecture-overview.md): Component communication flow (5 phases from page load to video playback) - essential for understanding WHERE problems occur in the Browser → Nginx → Server → Organizer → Database chain
 
 ### Installation Documentation
+
+[deploy/README.md](deploy/README.md): **START HERE for real deployments.** The supported paths — **Docker Compose recipes** (`deploy/compose/`, recommended for Docker) and **Debian `.deb` packages** (`deploy/debian/`, for VMs/bare-metal) — plus how Clapshot's `X-Remote-User-*` header auth model and TLS termination work. The single-image `elonen/clapshot:latest-demo*` containers are for **evaluation only, not production** — steer users to a Compose recipe or `.deb` install instead.
+
+[deploy/compose/README.md](deploy/compose/README.md): The three Compose recipes (`no-auth` / `htwicket` / `custom-proxy`), topology, `.env` configuration, automatic Let's Encrypt via Caddy, Portainer/Komodo deployment, upgrades (`git pull` + redeploy), and data/backup layout
 
 [README.md](README.md): Project overview, quick demo commands, deployment options (Docker vs Debian), and feature summary. Contains working Docker commands users can copy-paste
 
@@ -223,7 +227,7 @@ Clapshot uses a hierarchical Make-based build system with Docker containerizatio
 
 [Dockerfile.demo](Dockerfile.demo): Docker demo image build configuration with htwicket authentication
 
-[test/run-cloudflare.sh](test/run-cloudflare.sh): Example Cloudflare Tunnel deployment script for internet access
+[test/run-cloudflare.sh](test/run-cloudflare.sh): Demo-only script that exposes the single-container demo image over a temporary Cloudflare tunnel. For real internet-facing deployments, recommend a Compose recipe ([deploy/compose/](deploy/compose/)) with `CADDY_CERT_DOMAIN` set instead
 
 [client/debian/additional_files/clapshot+htwicket.nginx.conf](client/debian/additional_files/clapshot+htwicket.nginx.conf): Reference Nginx configuration with htwicket auth_request integration and reverse proxy setup
 

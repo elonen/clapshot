@@ -247,11 +247,10 @@ chown www-data:www-data /var/www /var/www/.htwicket.toml
 # admin (and everyone else) you already have - htwicket reads the same file as before.
 ADMIN_PW=""
 if [ ! -e /var/www/.htpasswd ]; then
-    # Fixed demo users (alice:alice123, demo:demo); 'bob' omitted on bare metal.
-    echo -e "alice:J/JsbnRtaHBlc\ndemo:N7HpG2DddhtME" > /var/www/.htpasswd
+    touch /var/www/.htpasswd
     chown www-data:www-data /var/www/.htpasswd
-    # 'admin' password: no more hardcoded admin:admin. Use CLAPSHOT_ADMIN_PASSWORD if
-    # given, else let htwicket generate a random bcrypt one and capture it for the banner.
+    # Set up 'admin' user. Use CLAPSHOT_ADMIN_PASSWORD if given, else
+    # let htwicket generate a random bcrypt one and capture it for the banner.
     if [ -n "${CLAPSHOT_ADMIN_PASSWORD}" ] && \
        printf '%s\n' "${CLAPSHOT_ADMIN_PASSWORD}" | sudo -u www-data htwicket user passwd admin 2>/dev/null; then
         ADMIN_PW="${CLAPSHOT_ADMIN_PASSWORD}"

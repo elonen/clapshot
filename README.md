@@ -31,7 +31,7 @@ If you don't require local hosting, or are not adept in networking and Linux, co
 
 ## Demo
 
-**Quick Start with Docker:**
+**Quick Demo with Docker**.
 
 Local **single-user demo** without authentication
 
@@ -39,13 +39,18 @@ Local **single-user demo** without authentication
 docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/clapshot:latest-demo
 ```
 
-Local **multi-user demo** with HTTP basic auth
+After the Docker image starts, browse the web UI at `http://127.0.0.1:8080`.
+
+Local **multi-user demo** with a login form
 
 ```bash
 docker run --rm -it -p 0.0.0.0:8080:80 -v clapshot-demo-htwicket:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htwicket
 ```
 
-After the Docker image starts, browse the web UI at `http://127.0.0.1:8080`.
+Passwords are printed on console.
+
+> **⚠ Demo images are for evaluation only — don't run them for anything serious.**
+> See **[Deploying Clapshot](deploy/README.md)** for more info.
 
 <details><summary>Tips for testing it</summary>
 
@@ -66,18 +71,37 @@ The multi-user demo uses [htwicket](https://github.com/elonen/htwicket) for logi
 - **IIS and Cloudflare:** IIS has a hard 2GB upload limit; Cloudflare's free tier times out uploads at ~100 seconds. For large files, you can use [monitored folder ingestion](doc/sysadmin-guide.md#monitored-folder-ingestion) (SFTP/SMB) instead of HTTP uploads. Self-hosted Nginx (also in the Docker images) has no such limitations.
 
 
-## Simple Small-business Production Deployments
+## Deploying for Real Use
 
-Here are two alternative ways to deploy Clapshot + htwicket into a light production use:
+Two supported, maintainable paths — pick by your platform. (For the full overview, see
+**[Deploying Clapshot](deploy/README.md)**.)
 
-### 1. Local Linux VM
+> **AUTH NEWS**: [Htwicket](https://github.com/elonen/htwicket) has replaced **htadmin** as the example auth provider for Clapshot. It's compatible with htadmin's `.htpasswd` files, doesn't need PHP, provides better logout, and is able to transparently upgrade password hashes to use more secure algorithms.
 
-One-shot install via [install-clapshot-deb.sh](deploy/debian/install-clapshot-deb.sh) on a Debian 12/13 host (VM) with `/mnt/clapshot-data` mounted.
+### 1. Docker Compose
+
+Deploy a [Compose recipe](deploy/compose/) straight from this repo. Each recipe is **one
+directory you deploy as-is**; [Caddy](https://caddyserver.com/) terminates TLS and fetches
+**Let's Encrypt** certificates automatically. Pick by how you authenticate users:
+
+- **[`htwicket/`](deploy/compose/htwicket/)** — Basic login form + user manager. Fine for simple deployments.
+- **[`custom-proxy/`](deploy/compose/custom-proxy/)** — Clapshot behind *your* SSO identity provider (Authentik, Okta, Keycloak, Kerberos/AD, …)
+
+(A [`no-auth/`](deploy/compose/no-auth/) recipe is also available for no-login setups.)
+
+Should works with plain `docker compose`, Portainer, Komodo etc. Upgrades are `git pull` + redeploy.
+See [deploy/compose/README.md](deploy/compose/README.md) for more info.
+
+### 2. Linux VM / bare-metal → Debian package + systemd
+
+The right choice when you already manage a VM and prefer packages to containers.
+
+There's a one-shot install script [install-clapshot-deb.sh](deploy/debian/install-clapshot-deb.sh), that sets up Clapshot + Htwicket auth on a pristine Debian 12/13 host. You can either run it or follow it manually.
 
 <details><summary>Step-by-step: Debian 12/13 install</summary>
 
 1. Prepare a Debian host with a mounted block device (or just directory) at `/mnt/clapshot-data`.
-2. Download [Clapshot Debian Bookworm Deployment Script](deploy/debian/install-clapshot-deb.sh)
+2. Download [Clapshot Debian Deployment Script](deploy/debian/install-clapshot-deb.sh)
 3. Run the script as root to install and auto-configure Clapshot.
 4. **!! Change/verify the `admin` password (the installer prints a generated one), and delete the example users in `/htwicket/admin` !!**
 
@@ -87,22 +111,23 @@ If you want to expose this to the Internet, you'll probably want to get HTTPS ce
 
 </details>
 
-### 2. Docker + Cloudflare, on public Web
+### Exposing a quick demo to the Internet (not production)
 
-Run Clapshot + htwicket in a Docker container and expose it to the Internet over an HTTPS tunnel via Cloudflared, using [test/run-cloudflare.sh](test/run-cloudflare.sh). (Cloudflare's free plan limits upload size/time.)
+To show Clapshot to someone over a temporary public URL — without DNS or certificates — the
+[test/run-cloudflare.sh](test/run-cloudflare.sh) script starts the **single-container demo image**
+behind a Cloudflare tunnel. This is a demo convenience, **not** a deployment: the container is the
+all-in-one demo build and Cloudflare's free plan limits upload size/time. For real internet-facing
+use, deploy a [Compose recipe](deploy/compose/) with `CADDY_CERT_DOMAIN` set (automatic Let's
+Encrypt), or put the `.deb` install behind your own HTTPS proxy.
 
-<details><summary>Step-by-step: Docker + Cloudflare tunnel</summary>
+<details><summary>Step-by-step: Docker + Cloudflare tunnel (demo)</summary>
 
-In this option, you'll run Clapshot + htwicket in a Docker container (binding a local directory for Clapshot data),
-and then start Cloudflared in another container to expose Clapshot to the Internet over an HTTPS tunnel.
-
-> WARNING: Cloudflare – at least in the free plan – apparently limits HTTP upload times and/or sizes, so double check their offerings if you are planning to use this option for a production deployment.
+You'll run the demo container (binding a local directory for Clapshot data), then start Cloudflared
+in another container to expose it over an HTTPS tunnel.
 
 1. Download and read [test/run-cloudflare.sh](test/run-cloudflare.sh), then run it
-2. Once satisfied about operation, get a static domain on Cloudflare and modify the above script accordingly - or perhaps make a custom Docker Compose file
+2. Once satisfied about operation, move to a [Compose recipe](deploy/compose/) for a real, upgradeable deployment
 3. **!! Change the default passwords (the `admin` password is generated and shown in the container log), and delete example users in `/htwicket/admin` !!**
-
-The same process can be adapted to any other *HTTPS-Proxy-as-a-Service* besides Cloudflare. You'll probably need to pay them something.
 
 </details>
 
