@@ -150,8 +150,13 @@ struct Args {
     notification_events: String,
 
     /// Regular expression to filter HTTP headers passed to Organizer.
-    /// Only headers matching this pattern will be included in UserSessionData.
-    /// Case-insensitive matching. Default is disabled for security.
+    /// Only headers matching this pattern are included in UserSessionData. Case-insensitive.
+    /// Default '^$' = disabled (none forwarded).
+    ///
+    /// SECURITY: the Organizer can't tell a header your auth layer set from one the client sent.
+    /// Every name matched here MUST also be overridden (set or cleared) in the reverse proxy's
+    /// /api location, or a client can spoof it. Prefer anchored exact names over loose prefixes,
+    /// e.g. '^X[-_]REMOTE[-_]USER[-_]CAN[-_]UPLOAD$' rather than '^X[-_]REMOTE[-_]'.
     #[arg(long, value_name="REGEX", default_value="^$")]
     org_http_headers: String,
 }
