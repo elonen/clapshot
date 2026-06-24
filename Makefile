@@ -129,13 +129,13 @@ build-docker-demo: debian-docker
 
 
 push-demo-hub:
-	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+	DOCKER_PUSH_UNLOCK=1 DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t elonen/clapshot:${CLIENT_VER}-demo \
 		-t elonen/clapshot:latest-demo \
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo \
 		--push .
 
-	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+	DOCKER_PUSH_UNLOCK=1 DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t elonen/clapshot:${CLIENT_VER}-demo-htwicket \
 		-t elonen/clapshot:latest-demo-htwicket \
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htwicket \
@@ -155,7 +155,7 @@ build-docker-dev-and-push-hub: debian-docker
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
 	$(eval GIT_COMMIT=$(shell git rev-parse --short HEAD))
 
-	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+	DOCKER_PUSH_UNLOCK=1 DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t elonen/clapshot:git-${GIT_COMMIT}-demo \
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htwicket \
 		--push .
@@ -179,10 +179,10 @@ build-docker-services: debian-docker
 		-f deploy/docker/clapshot-web.Dockerfile .
 
 push-services-ghcr:
-	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+	DOCKER_PUSH_UNLOCK=1 DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t $(GHCR_NS)/clapshot-server:${SERVER_VER} -t $(GHCR_NS)/clapshot-server:latest \
 		-f deploy/docker/clapshot-server.Dockerfile --push .
-	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
+	DOCKER_PUSH_UNLOCK=1 DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t $(GHCR_NS)/clapshot-web:${CLIENT_VER} -t $(GHCR_NS)/clapshot-web:latest \
 		-f deploy/docker/clapshot-web.Dockerfile --push .
 
