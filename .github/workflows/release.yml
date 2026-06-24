@@ -21,6 +21,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Set up QEMU (arm64 emulation for cross-build)
+      uses: docker/setup-qemu-action@v3
+
     - name: Build .deb files
       run: make debian-docker
 
