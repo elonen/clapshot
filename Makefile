@@ -113,7 +113,7 @@ run-docker: debian-docker
 
 
 # The demo image bundles all components; tag it with the client (product) version.
-.PHONY: build-docker-demo-and-push-hub build-docker-dev build-docker-dev-and-push-hub
+.PHONY: build-docker-demo-and-push-hub push-demo-hub build-docker-dev build-docker-dev-and-push-hub
 build-docker-demo: debian-docker
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t clapshot:${CLIENT_VER}-demo \
@@ -128,7 +128,7 @@ build-docker-demo: debian-docker
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo . --build-arg auth_variation=htwicket
 
 
-build-docker-demo-and-push-hub: debian-docker
+push-demo-hub:
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t elonen/clapshot:${CLIENT_VER}-demo \
 		-t elonen/clapshot:latest-demo \
@@ -140,6 +140,8 @@ build-docker-demo-and-push-hub: debian-docker
 		-t elonen/clapshot:latest-demo-htwicket \
 		--build-arg UID=1002 --build-arg GID=1002 -f Dockerfile.demo --build-arg auth_variation=htwicket \
 		--push .
+
+build-docker-demo-and-push-hub: debian-docker push-demo-hub
 
 build-docker-dev: debian-docker
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
@@ -164,7 +166,7 @@ build-docker-dev-and-push-hub: debian-docker
 # the same dist_deb/ packages. Caddy and htwicket are pulled as stock/external images.
 GHCR_NS ?= ghcr.io/elonen
 
-.PHONY: build-docker-services build-docker-services-and-push-ghcr
+.PHONY: build-docker-services build-docker-services-and-push-ghcr push-services-ghcr
 
 # Per-service images are tagged with their primary component's version:
 # clapshot-server (server + bundled organizer) -> SERVER_VER, clapshot-web (client SPA) -> CLIENT_VER.
@@ -176,13 +178,15 @@ build-docker-services: debian-docker
 		-t $(GHCR_NS)/clapshot-web:${CLIENT_VER} -t $(GHCR_NS)/clapshot-web:latest \
 		-f deploy/docker/clapshot-web.Dockerfile .
 
-build-docker-services-and-push-ghcr: debian-docker
+push-services-ghcr:
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t $(GHCR_NS)/clapshot-server:${SERVER_VER} -t $(GHCR_NS)/clapshot-server:latest \
 		-f deploy/docker/clapshot-server.Dockerfile --push .
 	DOCKER_BUILDKIT=1 docker build --platform linux/amd64,linux/arm64 --pull \
 		-t $(GHCR_NS)/clapshot-web:${CLIENT_VER} -t $(GHCR_NS)/clapshot-web:latest \
 		-f deploy/docker/clapshot-web.Dockerfile --push .
+
+build-docker-services-and-push-ghcr: debian-docker push-services-ghcr
 
 
 # ---- Publish everything (release convenience) ----

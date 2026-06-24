@@ -1,4 +1,4 @@
-name: Release version with Debian packages
+name: Release (.debs + container images)
 
 on:
   push:
@@ -33,6 +33,49 @@ jobs:
         name: debian-packages
         path: ./dist_deb/*.deb
         retention-days: 90
+
+  # Assemble + push the container images from the .debs built above (no recompile):
+  #   - per-service images (clapshot-server, clapshot-web)        -> ghcr.io  (GITHUB_TOKEN)
+  #   - all-in-one demo images (clapshot:*-demo[-htwicket])       -> Docker Hub (DOCKERHUB_* secrets)
+  publish-images:
+    needs: build-debian-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download .debs built above
+        uses: actions/download-artifact@v4
+        with:
+          name: debian-packages
+          path: dist_deb
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push per-service images to ghcr.io
+        run: make push-services-ghcr
+
+      - name: Push demo images to Docker Hub
+        run: make push-demo-hub
 
   create-release:
     needs: build-debian-package
