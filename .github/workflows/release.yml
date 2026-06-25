@@ -16,16 +16,25 @@ jobs:
 
   build-debian-package:
     needs: test  # Only build if tests pass
-    runs-on: ubuntu-latest
+    # One native runner per arch; each leg builds both Debian releases.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up QEMU (arm64 emulation for cross-build)
-      uses: docker/setup-qemu-action@v3
-
-    - name: Build .deb files
-      run: make debian-docker
+    - name: Build .deb files (${{ matrix.arch }}, native, both distros)
+      run: |
+        for debver in bookworm trixie; do
+          make debian-docker-one DEBIAN_VER=$debver TARGET_ARCH=${{ matrix.arch }}
+        done
 
     - name: List built packages
       run: ls -la dist_deb/
@@ -33,7 +42,7 @@ jobs:
     - name: Upload Debian Package
       uses: actions/upload-artifact@v4
       with:
-        name: debian-packages
+        name: debian-packages-${{ matrix.arch }}
         path: ./dist_deb/*.deb
         retention-days: 90
 
@@ -49,10 +58,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download .debs built above
+      - name: Download .debs built above (both arches)
         uses: actions/download-artifact@v4
         with:
-          name: debian-packages
+          pattern: debian-packages-*
+          merge-multiple: true
           path: dist_deb
 
       - name: Set up QEMU
@@ -86,10 +96,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download Artifacts
+      - name: Download Artifacts (both arches)
         uses: actions/download-artifact@v4
         with:
-          name: debian-packages
+          pattern: debian-packages-*
+          merge-multiple: true
           path: dist_deb
 
       - name: Generate release notes
