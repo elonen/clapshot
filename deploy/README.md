@@ -22,13 +22,13 @@ gateway, company SSO, an identity-aware proxy, Kerberos, …
 
 The [Docker Compose recipes](compose/) ship three ready options:
 
-- **htwicket** — a small built-in login form + user manager. Fine for simple deployments.
+- **HTWicket** — a small built-in login form + user manager. Fine for simple deployments.
 - **no-auth** — no login; every request is the `anonymous` user. nginx **strips** any
   inbound `X-Remote-User-*` so they can't be spoofed. Dev / demo only.
 - **custom-proxy** — Clapshot behind **your own** authenticating reverse proxy: nginx
   trusts the headers your proxy sets. The path for real SSO identity providers.
 
-> **htwicket is the _floor_, not a recommendation.** This is a modernized replacement for the old
+> **HTWicket is the _floor_, not a recommendation.** This is a modernized replacement for the old
 > *htadmin* demo. Consider a proper identity provider — Authentik, Okta, Keycloak (via
 > oauth2-proxy / Vouch), or Kerberos/AD — in front, with the **custom-proxy** recipe.
 > Clapshot only ever sees the `X-Remote-User-*` headers, so swapping the auth layer
@@ -50,7 +50,7 @@ The per-service images used by the Compose recipes are on **GitHub Container Reg
 
 - `ghcr.io/elonen/clapshot-server` — API server + organizer
 - `ghcr.io/elonen/clapshot-web` — nginx + the web client
-- `ghcr.io/elonen/htwicket` — the htwicket login gateway (its own project)
+- `ghcr.io/elonen/htwicket` — the HTWicket login gateway (its own project)
 
 The all-in-one **demo** image is on **Docker Hub** (demo/eval only, not used by the recipes):
 

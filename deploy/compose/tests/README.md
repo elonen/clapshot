@@ -75,9 +75,9 @@ harness/                # shared, recipe-agnostic Playwright-in-container plumbi
   package-lock.json
 htwicket/               # one folder per recipe under test (mirrors deploy/compose/<recipe>/)
   test.env              #   in-network URL, seeded admin pw, READY_PROBES
-  smoke.spec.ts         #   the htwicket end-to-end checks
+  smoke.spec.ts         #   the HTWicket end-to-end checks
 no-auth/
-  test.env              #   in-network URL, READY_PROBES (no htwicket)
+  test.env              #   in-network URL, READY_PROBES (no HTWicket)
   smoke.spec.ts         #   anonymous loads + uploads
   spoof.spec.ts         #   spoofed X-Remote-User-* are stripped -> still anonymous
   overlay.yml           #   stub authproxy injecting spoofed headers (optional per-recipe overlay)
@@ -101,10 +101,10 @@ proxy (see above), add an optional `<recipe>/overlay.yml`; `run.sh` applies it l
 
 ## Likely-fragile bits (adjust if a run fails on them)
 
-- **Selectors**: htwicket login uses `#username`/`#password`; the SPA upload uses the
+- **Selectors**: HTWicket login uses `#username`/`#password`; the SPA upload uses the
   dropzone's `input[type=file][accept*="video"]`; the uploaded tile is matched by its
   filename title; the current user is the NavBar `<h6>` next to `#user-button`. UI changes
   may need a selector tweak.
-- **htwicket default locale is English** (the recipe sets none), so the `User management`
+- **HTWicket default locale is English** (the recipe sets none), so the `User management`
   text assertion holds; login/submit are matched structurally (locale-agnostic).
 - **Transcode time**: the test waits for the *tile* (ingest), not full ffmpeg transcode.

@@ -1,6 +1,6 @@
-# htwicket configuration for the Clapshot demo image.
+# HTWicket configuration for the Clapshot demo image.
 #
-# htwicket (https://github.com/elonen/htwicket) is an nginx auth_request gateway
+# HTWicket (https://github.com/elonen/htwicket) is an nginx auth_request gateway
 # that manages /var/www/.htpasswd and emits the X-Remote-User-* headers that
 # Clapshot consumes. See clapshot+htwicket.nginx.conf for the matching nginx setup.
 
@@ -36,7 +36,7 @@ default = true
 user_visible = true
 
 # Headers forwarded to nginx/clapshot-server. X-Remote-User-Id is emitted
-# automatically by htwicket, so it is NOT declared here.
+# automatically by HTWicket, so it is NOT declared here.
 [headers.X-Remote-User-Name]
 type = "string"
 expr = "fields.display_name != '' ? fields.display_name : username"

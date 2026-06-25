@@ -4,7 +4,7 @@
 # Runs in nginx:stable-alpine, which has /bin/sh (busybox) but no bash.
 : "${CLAPSHOT_URL_BASE:=http://127.0.0.1:8080/}"
 
-# The logout link is auth-specific -> injected by the recipe (htwicket sets CLAPSHOT_LOGOUT_URL).
+# The logout link is auth-specific -> injected by the recipe (HTWicket sets CLAPSHOT_LOGOUT_URL).
 logout='[]'
 if [ -n "${CLAPSHOT_LOGOUT_URL:-}" ]; then
     logout="[{\"label\":\"Logout\",\"type\":\"url\",\"data\":\"${CLAPSHOT_LOGOUT_URL}\"}]"

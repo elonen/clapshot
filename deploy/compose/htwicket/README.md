@@ -1,12 +1,12 @@
-# Clapshot + htwicket (built-in login)
+# Clapshot + HTWicket (built-in login)
 
 This compose recipes provides Clapshot with a small built-in login form and user manager, 
-[htwicket](https://github.com/elonen/htwicket) — a more secure replacement for the old `htadmin` demo. Fine for small and simple deployments.
+[HTWicket](https://github.com/elonen/htwicket) — a more secure replacement for the old `htadmin` demo. Fine for small and simple deployments.
 
 > If you have an external identity provider (Authentik, Okta, Keycloak,
 > Kerberos, ...), use the [`custom-proxy`](../custom-proxy/) recipe instead, and see
 > [Advanced Authentication](../../../doc/sysadmin-guide.md#advanced-authentication).
-> Htwicket is the minimum, not the recommendation.
+> HTWicket is the minimum, not the recommendation.
 
 ## Quick start (local)
 
@@ -35,4 +35,4 @@ In short: Deploy this directory from the git repo, copy the production block of 
 | `.env` (from `.env.example`) | **yes** | configuration options |
 | `compose.yml` | no | the stack (Caddy, clapshot-web, clapshot-server, htwicket) |
 | `site.conf` | no | nginx configs: client SPA + `/api` proxy + `auth_request` (→ htwicket) |
-| `htwicket.toml` | no | htwicket configs |
+| `htwicket.toml` | no | HTWicket configs |

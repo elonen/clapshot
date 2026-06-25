@@ -1,6 +1,6 @@
 name: clapshot-htwicket
 
-# Clapshot with htwicket login + user manager. Edit only .env (see .env.example).
+# Clapshot with HTWicket login + user manager. Edit only .env (see .env.example).
 
 services:
   config-check:

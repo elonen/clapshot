@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # This a Docker-side support script to run a demo of Clapshot (API server + Nginx
-# + htwicket login/user-management) in a single Docker container for demo and
+# + HTWicket login/user-management) in a single Docker container for demo and
 # testing purposes.
 
 DIR="/mnt/clapshot-data/data"
@@ -119,7 +119,7 @@ EOF
 
 
 # ----------------------------------------------------------------------------
-# htwicket setup
+# HTWicket setup
 # ----------------------------------------------------------------------------
 
 # Secure cookies require HTTPS. Derive the setting from the public URL scheme:
@@ -129,15 +129,15 @@ case "${CLAPSHOT_SERVER__URL_BASE}" in
     *)         export HTWICKET_INSECURE_COOKIES=true ;;
 esac
 
-# Persist htwicket's jwt_secret on the data volume so logins survive restarts.
+# Persist HTWicket's jwt_secret on the data volume so logins survive restarts.
 mkdir -p /mnt/clapshot-data/.htwicket
 chown www-data:www-data /mnt/clapshot-data/.htwicket
-# htwicket (running as www-data) needs to read/write the password file and its dir.
+# HTWicket (running as www-data) needs to read/write the password file and its dir.
 chown www-data:www-data /var/www /var/www/.htpasswd /var/www/.htwicket.toml
 
 # Set the 'admin' password. It is NOT baked into the image (no shipped admin:admin):
 # generate a fresh random one on every start, or honor CLAPSHOT_ADMIN_PASSWORD if given.
-# 'admin' is declared in the sidecar (.htwicket.toml), so htwicket knows the user even
+# 'admin' is declared in the sidecar (.htwicket.toml), so HTWicket knows the user even
 # before it has a password entry in .htpasswd.
 ADMIN_PW=""
 if [ -n "${CLAPSHOT_ADMIN_PASSWORD}" ] && \
@@ -149,7 +149,7 @@ else
     ADMIN_PW=$(sudo -u www-data htwicket user passwd admin --random | sed -n 's/^generated password: *//p')
 fi
 
-# Start htwicket (login + auth_request gateway) in the background, as www-data.
+# Start HTWicket (login + auth_request gateway) in the background, as www-data.
 # Pass the cookie setting via 'env' since sudo resets the environment.
 sudo -u www-data env HTWICKET_INSECURE_COOKIES="${HTWICKET_INSECURE_COOKIES}" htwicket serve &
 

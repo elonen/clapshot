@@ -54,12 +54,12 @@ Clapshot provides professional video review capabilities similar to cloud servic
 
 ### Default Demo Credentials
 
-**For htwicket-based demo images** (`latest-demo-htwicket`):
+**For HTWicket-based demo images** (`latest-demo-htwicket`):
 - `admin` - Admin user (can edit all videos, manage users). Password is **randomly generated on each container start** and printed to the log (override with `CLAPSHOT_ADMIN_PASSWORD`).
 - `demo:demo` - Standard user with full permissions
 - `alice:alice123` - Standard user with full permissions
 - `bob:bob123` - User with **no upload permissions** (demonstrates upload restrictions)
-- User management UI at `/htwicket/admin` (log in as `admin`; the privileged `.htpasswd` admin user doubles as the htwicket superadmin)
+- User management UI at `/htwicket/admin` (log in as `admin`; the privileged `.htpasswd` admin user doubles as the HTWicket superadmin)
 
 ⚠️ **Security Warning:** Change all default passwords before production use!
 
@@ -225,11 +225,11 @@ Clapshot uses a hierarchical Make-based build system with Docker containerizatio
 
 ### Example Configurations
 
-[Dockerfile.demo](Dockerfile.demo): Docker demo image build configuration with htwicket authentication
+[Dockerfile.demo](Dockerfile.demo): Docker demo image build configuration with HTWicket authentication
 
 [test/run-cloudflare.sh](test/run-cloudflare.sh): Demo-only script that exposes the single-container demo image over a temporary Cloudflare tunnel. For real internet-facing deployments, recommend a Compose recipe ([deploy/compose/](deploy/compose/)) with `CADDY_CERT_DOMAIN` set instead
 
-[client/debian/additional_files/clapshot+htwicket.nginx.conf](client/debian/additional_files/clapshot+htwicket.nginx.conf): Reference Nginx configuration with htwicket auth_request integration and reverse proxy setup
+[client/debian/additional_files/clapshot+htwicket.nginx.conf](client/debian/additional_files/clapshot+htwicket.nginx.conf): Reference Nginx configuration with HTWicket auth_request integration and reverse proxy setup
 
 [server/debian/additional_files/clapshot-server.conf](server/debian/additional_files/clapshot-server.conf): Server configuration file template with all available options
 

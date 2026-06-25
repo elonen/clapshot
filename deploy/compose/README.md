@@ -8,7 +8,7 @@ Upgrades are `git pull` + redeploy.
 This guide starts with a local test deployment and works up to a public, TLS-terminated
 production deployment.
 
-## Quick start — htwicket auth on 127.0.0.1, no HTTPS
+## Quick start — HTWicket auth on 127.0.0.1, no HTTPS
 
 The following runs full stack with a built-in login form, on your machine, over plain HTTP. No DNS, no certs yet — the shipped defaults already point at `http://127.0.0.1:8080/`.
 
@@ -36,7 +36,7 @@ Everything below takes you from this demo toward a real deployment.
 
 ## Pick a recipe (= your auth choice)
 
-The quick start used **htwicket**. There are three recipes, differing only in how users
+The quick start used **HTWicket**. There are three recipes, differing only in how users
 authenticate:
 
 | Recipe | Auth | Use for |
@@ -62,7 +62,7 @@ For **Authentik, Okta, Keycloak, Kerberos/AD**, etc.: run that in front and use 
                     |                auth_request → the auth layer
           ┌─────────┴──────────┐
           |                    |
-  [clapshot-server]         [ auth ]  ← htwicket, or nothing, or your own IdP
+  [clapshot-server]         [ auth ]  ← HTWicket, or nothing, or your own IdP
    + organizer
 ```
 
@@ -113,7 +113,7 @@ commented set. The essentials:
 | `CADDY_BIND` / `CADDY_HTTP_PORT` / `CADDY_HTTPS_PORT` | where Caddy publishes on the Docker host |
 | `CLAPSHOT_DATA_DIR` (and `HTWICKET_DATA_DIR`, `CADDY_DATA_DIR`) | unset → managed volume; set → bind to a host path |
 
-The `CADDY_*` rows apply to **no-auth** and **htwicket**. **`custom-proxy`** has no Caddy:
+The `CADDY_*` rows apply to **no-auth** and **HTWicket**. **`custom-proxy`** has no Caddy:
 it uses `WEB_BIND` / `WEB_PORT` for the published port, and TLS is your front proxy's job.
 
 A **`config-check`** step runs on every `up` and stops startup if the settings are inconsistent.
@@ -121,7 +121,7 @@ A **`config-check`** step runs on every `up` and stops startup if the settings a
 ## HTTPS
 
 The demo ran plain HTTP. For secure authentication and operation, you need TLS. In the
-**htwicket** and **no-auth** recipes, Caddy terminates it — three modes, selected by `.env`.
+**HTWicket** and **no-auth** recipes, Caddy terminates it — three modes, selected by `.env`.
 (The **`custom-proxy`** recipe has no Caddy; TLS is handled by your own front proxy, so this
 section doesn't apply to it.)
 
@@ -147,14 +147,14 @@ CADDY_CERT_DOMAIN=clapshot.example.com      # LE cert; host must equal the URL's
 CADDY_BIND=0.0.0.0
 CADDY_HTTP_PORT=80
 CADDY_HTTPS_PORT=443
-HTWICKET_INSECURE_COOKIES=false             # htwicket on https (omit if not using htwicket)
+HTWICKET_INSECURE_COOKIES=false             # HTWicket on https (omit if not using HTWicket)
 CLAPSHOT_VERSION=<pin a released version>
 ```
 
-## Users (htwicket recipe)
+## Users (HTWicket recipe)
 
 First start seeds a single `admin` user — create everyone else yourself in the admin UI at
-`/htwicket/admin` (htwicket's whole job), or with
+`/htwicket/admin` (HTWicket's whole job), or with
 `docker compose exec htwicket /usr/bin/htwicket user add <name>`.
 
 There is no default admin password. You can either:

@@ -1,4 +1,4 @@
-# htwicket configuration for the Clapshot htwicket recipe.
+# HTWicket configuration for the Clapshot HTWicket recipe.
 # Versioned config — mounted read-only, edited via the repo (git pull to upgrade), NOT by
 # hand. Per-deployment knobs (listen, cookies, title, hash) come from HTWICKET_* env.
 # State (.htpasswd, sidecar, jwt_secret) lives on the /data volume.

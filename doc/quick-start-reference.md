@@ -18,7 +18,7 @@ Quick reference for common Clapshot deployment scenarios. For detailed troublesh
 # Basic demo - no authentication
 docker run --rm -it -p 8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/clapshot:latest-demo
 
-# Multi-user demo with login (htwicket)
+# Multi-user demo with login (HTWicket)
 docker run --rm -it -p 8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htwicket
 ```
 **Access:** `http://127.0.0.1:8080`

@@ -122,7 +122,7 @@ error: the following required arguments were not provided:
 
 ### 3. Cannot Access User Management Interface (`/htwicket/admin`)
 
-(This only applies if you are using the example authentication method, htwicket)
+(This only applies if you are using the example authentication method, HTWicket)
 
 **Symptoms:**
 
@@ -135,9 +135,9 @@ error: the following required arguments were not provided:
 
 #### A. Docker Image Variants
 
-Only the htwicket image bundles a login + user-management UI at `/htwicket/admin`:
+Only the HTWicket image bundles a login + user-management UI at `/htwicket/admin`:
 
-- `elonen/clapshot:latest-demo-htwicket` - includes htwicket login + admin
+- `elonen/clapshot:latest-demo-htwicket` - includes HTWicket login + admin
 - `elonen/clapshot:latest-demo` - no auth
 
 You must log in as a **superadmin** to open `/htwicket/admin`. By default that is the
@@ -145,7 +145,7 @@ user named `admin` (whose demo password is printed in the container log on start
 
 #### B. Login succeeds but bounces back (cookie scheme mismatch)
 
-htwicket issues a `Secure` session cookie over HTTPS and a non-secure one over plain
+HTWicket issues a `Secure` session cookie over HTTPS and a non-secure one over plain
 HTTP. If this doesn't match your public URL scheme, the browser silently drops the
 cookie and you can never stay logged in. The demo derives this automatically from
 `CLAPSHOT_SERVER__URL_BASE`; if you front it with your own proxy, make sure the scheme

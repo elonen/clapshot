@@ -25,11 +25,11 @@ These instructions are for basic .deb-based deployments, adapt as necessary for 
 
 If you find this migration guide lacking, please contribute corrections and additions on the [Clapshot's GitHub page](https://github.com/elonen/clapshot).
 
-## Migrating the demo/installer auth from htadmin to htwicket
+## Migrating the demo/installer auth from htadmin to HTWicket
 
-Starting with the htwicket-based demo image (`elonen/clapshot:latest-demo-htwicket`) and
+Starting with the HTWicket-based demo image (`elonen/clapshot:latest-demo-htwicket`) and
 the updated `deploy/debian/install-clapshot-deb.sh`, the PHP `htadmin` + HTTP Basic Auth example
-has been replaced by [htwicket](https://github.com/elonen/htwicket): a small nginx
+has been replaced by [HTWicket](https://github.com/elonen/htwicket): a small nginx
 `auth_request` gateway that manages the same `/var/www/.htpasswd`, but adds a real login
 form, working cookie logout, and a web user-management UI. If you used a custom
 authentication setup (OAuth, LDAP, Kerberos, ...) none of this affects you — the
@@ -37,7 +37,7 @@ authentication setup (OAuth, LDAP, Kerberos, ...) none of this affects you — t
 
 For deployments based on the old htadmin example:
 
-1. **Passwords carry over automatically.** htwicket reads the same `/var/www/.htpasswd`
+1. **Passwords carry over automatically.** HTWicket reads the same `/var/www/.htpasswd`
    and verifies all the legacy hash formats (DES crypt, `$apr1$`, `$1$`, `$5$`/`$6$`,
    bcrypt). No reset, no import, no user re-creation. The new *random admin password*
    behavior only applies to **fresh** installs (no existing `.htpasswd`); your existing
@@ -45,10 +45,10 @@ For deployments based on the old htadmin example:
 
 2. **The separate `htadmin` management login is gone — and it does not migrate.** htadmin
    kept its own admin account (`admin_user` / `admin_pwd_hash`) in `config.ini`, *outside*
-   `.htpasswd`, so there is nothing to import. htwicket has no separate management account:
+   `.htpasswd`, so there is nothing to import. HTWicket has no separate management account:
    the user-management UI at **`/htwicket/admin`** is gated by a `[superadmins]` rule over
    your *real* `.htpasswd` users. By default, **the user named `admin` doubles as the
-   htwicket superadmin** (plus anyone with `is_admin = true` in the sidecar). So just log in
+   HTWicket superadmin** (plus anyone with `is_admin = true` in the sidecar). So just log in
    as your existing `admin`.
    - No `admin` user, or forgot the password? Reset it on the CLI:
      `sudo -u www-data htwicket user passwd admin --random` (prints a new password), or
@@ -65,11 +65,11 @@ For deployments based on the old htadmin example:
 
 4. **Client logout.** Set `"user_menu_show_basic_auth_logout": false` and add a
    `{"label":"Logout","type":"url","data":"/htwicket/logout"}` item to
-   `user_menu_extra_items` in `/etc/clapshot_client.conf`, so the menu offers htwicket's
+   `user_menu_extra_items` in `/etc/clapshot_client.conf`, so the menu offers HTWicket's
    real logout instead of the old (now removed) Basic-Auth `/logout` hack. The installer
    does this automatically.
 
-5. **Cookie scheme gotcha (important).** htwicket marks its session cookie `Secure` over
+5. **Cookie scheme gotcha (important).** HTWicket marks its session cookie `Secure` over
    HTTPS. If your public URL is `https://`, keep `insecure_cookies = false`; if it is plain
    `http://`, set `insecure_cookies = true`. A mismatch makes login *silently* fail (the
    browser drops the cookie). The installer and demo entrypoint derive this from the URL

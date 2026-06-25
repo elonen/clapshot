@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# This script installs Clapshot with htwicket (login form + user management)
+# This script installs Clapshot with HTWicket (login form + user management)
 # on Debian 12 Bookworm or Debian 13 Trixie
 #
 # It doesn't set up HTTPS, you are encouraged to
@@ -72,7 +72,7 @@ CLIENT_LINK="${BASE}/clapshot-client_${RELEASE}_${DEBIAN_VER}_all.deb"
 SERVER_LINK="${BASE}/clapshot-server_${RELEASE}-1_${DEBIAN_VER}_${DEB_ARCH}.deb"
 ORG_LINK="${BASE}/clapshot-organizer-basic-folders_${RELEASE}_${DEBIAN_VER}_${DEB_ARCH}.deb"
 
-# htwicket (https://github.com/elonen/htwicket): nginx auth_request gateway + .htpasswd
+# HTWicket (https://github.com/elonen/htwicket): nginx auth_request gateway + .htpasswd
 # user manager. Replaces the old PHP 'htadmin' for login and user management.
 HTWICKET_RELEASE="0.1.0"
 HTWICKET_LINK="https://github.com/elonen/htwicket/releases/download/v${HTWICKET_RELEASE}/htwicket_${HTWICKET_RELEASE}-1_${DEBIAN_VER}_${DEB_ARCH}.deb"
@@ -161,7 +161,7 @@ restart_and_check_service clapshot-server.service
 WS_ADDR=$(echo "$PUBLIC_ADDRESS" | sed 's/^http/ws/')
 replace_cfg /etc/clapshot_client.conf   "^ *\"ws_url.*"                            "    \"ws_url\": \"${WS_ADDR}/api/ws\","
 replace_cfg /etc/clapshot_client.conf   "^ *\"upload_url.*"                        "    \"upload_url\": \"${PUBLIC_ADDRESS}/api/upload\","
-# Disable the old HTTP-Basic-Auth logout hack and add a real Logout link to htwicket.
+# Disable the old HTTP-Basic-Auth logout hack and add a real Logout link to HTWicket.
 # (idempotent: drop any existing /htwicket/logout item before re-adding it)
 TMP_CLIENT_CONF=$(mktemp)
 jq '.user_menu_show_basic_auth_logout = false
@@ -170,7 +170,7 @@ jq '.user_menu_show_basic_auth_logout = false
     /etc/clapshot_client.conf > "$TMP_CLIENT_CONF" && mv "$TMP_CLIENT_CONF" /etc/clapshot_client.conf
 display_config /etc/clapshot_client.conf
 
-# Install htwicket (login + user management). Ships /usr/bin/htwicket, a default
+# Install HTWicket (login + user management). Ships /usr/bin/htwicket, a default
 # /etc/htwicket.toml, and a (disabled) systemd unit running as www-data.
 wget --no-clobber "$HTWICKET_LINK"   # Download if necessary
 apt-get install -y ./htwicket_*.deb
@@ -192,7 +192,7 @@ replace_cfg "$NGINX_CONF"   "^([ \t]*server_name).*"   "\\1 ${HOSTNAME};"
 display_config $NGINX_CONF
 restart_and_check_service nginx.service
 
-# Configure htwicket. Secure cookies require HTTPS, so derive the setting from the
+# Configure HTWicket. Secure cookies require HTTPS, so derive the setting from the
 # public URL scheme (a mismatch makes login silently fail as the browser drops the cookie).
 case "$PUBLIC_ADDRESS" in
     https://*) HTWICKET_INSECURE_COOKIES="false" ;;
@@ -238,19 +238,19 @@ expr = "fields.can_upload"
 EOF
 display_config /etc/htwicket.toml
 
-# Per-user fields sidecar (admin is a superadmin). Always (re)written; htwicket needs
+# Per-user fields sidecar (admin is a superadmin). Always (re)written; HTWicket needs
 # write access to /var/www to manage users from the web UI.
 echo -e "[users.\"admin\"]\nis_admin = true" > /var/www/.htwicket.toml
 chown www-data:www-data /var/www /var/www/.htwicket.toml
 
 # Seed users only on a FRESH install (no existing .htpasswd), so upgrades keep the
-# admin (and everyone else) you already have - htwicket reads the same file as before.
+# admin (and everyone else) you already have - HTWicket reads the same file as before.
 ADMIN_PW=""
 if [ ! -e /var/www/.htpasswd ]; then
     touch /var/www/.htpasswd
     chown www-data:www-data /var/www/.htpasswd
     # Set up 'admin' user. Use CLAPSHOT_ADMIN_PASSWORD if given, else
-    # let htwicket generate a random bcrypt one and capture it for the banner.
+    # let HTWicket generate a random bcrypt one and capture it for the banner.
     if [ -n "${CLAPSHOT_ADMIN_PASSWORD}" ] && \
        printf '%s\n' "${CLAPSHOT_ADMIN_PASSWORD}" | sudo -u www-data htwicket user passwd admin 2>/dev/null; then
         ADMIN_PW="${CLAPSHOT_ADMIN_PASSWORD}"

@@ -1,4 +1,4 @@
-# All-in-one DEMO / EVALUATION image: server + organizer + nginx (+ optional htwicket)
+# All-in-one DEMO / EVALUATION image: server + organizer + nginx (+ optional HTWicket)
 # in a single container. For quick local demos and CI tests only — NOT for production.
 # Real deployments use the Compose recipes (deploy/compose/) or the .deb packages
 # (deploy/debian/). See deploy/README.md.
@@ -49,13 +49,13 @@ RUN cp /usr/share/doc/clapshot-client/examples/clapshot.nginx.conf  /etc/nginx/s
 COPY test/docker-entry_no-auth.sh /root/docker-entry.sh
 
 
-# ------------- htwicket (login form + user management) -------------
+# ------------- HTWicket (login form + user management) -------------
 
 FROM base AS auth-htwicket
 RUN echo "### auth-htwicket"
 RUN cp /usr/share/doc/clapshot-client/examples/clapshot+htwicket.nginx.conf /etc/nginx/sites-enabled/clapshot
 
-# htwicket is a single musl-static binary (no runtime deps); pull the matching
+# HTWicket is a single musl-static binary (no runtime deps); pull the matching
 # arch straight from the GitHub release. TARGETARCH is set by buildx per --platform.
 ARG TARGETARCH
 ARG HTWICKET_VERSION=v0.1.0
@@ -65,7 +65,7 @@ COPY test/htwicket.toml /etc/htwicket.toml
 
 # Seed the fixed demo users. NOTE: 'admin' is intentionally NOT baked here (no
 # shipped admin:admin) - docker-entry_htwicket.sh generates a random admin password
-# on startup. 'admin' is still known to htwicket because the sidecar declares it.
+# on startup. 'admin' is still known to HTWicket because the sidecar declares it.
 RUN echo "alice:J/JsbnRtaHBlc\nbob:BJIDAhhNc4bsE\ndemo:N7HpG2DddhtME" > /var/www/.htpasswd   # alice:alice123, bob:bob123, demo:demo
 RUN printf '[users."admin"]\nis_admin = true\n\n[users."bob"]\ncan_upload = false\n' > /var/www/.htwicket.toml
 RUN chown www-data:www-data /var/www /var/www/.htpasswd /var/www/.htwicket.toml

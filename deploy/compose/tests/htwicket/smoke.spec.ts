@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-// End-to-end smoke for the htwicket recipe: a real browser drives the client SPA.
+// End-to-end smoke for the HTWicket recipe: a real browser drives the client SPA.
 // Admin password is seeded by htwicket-init from CLAPSHOT_INITIAL_ADMIN_PASSWORD.
 // Steps below print individually (list reporter), so a failure names the phase that broke.
 const ADMIN_PW = process.env.CLAPSHOT_INITIAL_ADMIN_PASSWORD || '';
@@ -14,7 +14,7 @@ test('htwicket: login -> admin UI -> upload -> client renders', async ({ page })
     if (m.type() === 'error' && !/favicon/i.test(m.text())) errors.push(m.text());
   });
 
-  await test.step('unauthenticated visit shows the htwicket login page', async () => {
+  await test.step('unauthenticated visit shows the HTWicket login page', async () => {
     await page.goto('/');
     await expect(page.locator('#username')).toBeVisible();
     await expect(page.locator('#password')).toBeVisible();
@@ -32,7 +32,7 @@ test('htwicket: login -> admin UI -> upload -> client renders', async ({ page })
     await expect(page.locator('#username')).toHaveCount(0);
   });
 
-  await test.step('htwicket admin UI is reachable for the superadmin', async () => {
+  await test.step('HTWicket admin UI is reachable for the superadmin', async () => {
     await page.goto('/htwicket/admin');
     await expect(page.getByText('User management')).toBeVisible();
   });

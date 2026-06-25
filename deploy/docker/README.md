@@ -39,6 +39,6 @@ make build-docker-services-and-push-ghcr   # build + push to repo
 ## What's deliberately NOT here
 
 **Authentication and TLS.** These images are intentionally auth- and TLS-agnostic so the same
-`clapshot-web` works behind no-auth, htwicket, or your own IdP. Those concerns live in the recipes
+`clapshot-web` works behind no-auth, HTWicket, or your own IdP. Those concerns live in the recipes
 ([`../compose/`](../compose/)): each mounts its own `site.conf` (which sets/strips the
 `X-Remote-User-*` headers) over the baked default, and Caddy terminates TLS in front.

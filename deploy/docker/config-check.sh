@@ -11,7 +11,7 @@ rest=${URL#*://}; hostport=${rest%%/*}; host=${hostport%%:*}
 
 fail() { echo "CONFIG ERROR: $1" >&2; exit 1; }
 
-# Cookies must match the public scheme (htwicket recipe only; var is set there).
+# Cookies must match the public scheme (HTWicket recipe only; var is set there).
 if [ -n "${HTWICKET_INSECURE_COOKIES:-}" ]; then
     if [ "$scheme" = https ] && [ "$HTWICKET_INSECURE_COOKIES" = true ]; then
         echo "WARNING: https URL with HTWICKET_INSECURE_COOKIES=true — cookies will lack the Secure flag." >&2

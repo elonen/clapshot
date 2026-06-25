@@ -43,7 +43,7 @@ See [upgrading.md](upgrading.md) for details about upgrading.
 
 Clapshot server itself contains no authentication code. Instead, it trusts
 HTTP server (reverse proxy) to take care of that and to pass authenticated user ID
-and username in request headers. This is exactly what the htwicket demo
+and username in request headers. This is exactly what the HTWicket demo
 above does, too:
 
  - `X-Remote-User-Id` / `X_Remote_User_Id` / `HTTP_X_REMOTE_USER_ID` – Authenticated user's ID (e.g. "alice.brown")
@@ -52,7 +52,7 @@ above does, too:
  - `X-Remote-User-Can-Upload` / `X_Remote_User_Can_Upload` / `HTTP_X_REMOTE_USER_CAN_UPLOAD` – If set to "1" or "true", user is allowed to upload media files
  - `X-Remote-Error` / `X_Remote_Error` / `HTTP_X_REMOTE_ERROR` – If set, displays authentication error message instead of normal UI
 
-Most modern real-world deployments will likely use some more advanced authentication mechanism, such as OAuth, Kerberos etc, but [htwicket](https://github.com/elonen/htwicket) is a good starting point. It's a small nginx `auth_request` gateway that manages an `.htpasswd` file, offers a login form with real cookie logout, and a web UI for user management. Per-user attributes (admin rights, upload permission, display name) are kept in a sidecar `.htwicket.toml` and exposed to Clapshot via `[headers.*]` CEL expressions.
+Most modern real-world deployments will likely use some more advanced authentication mechanism, such as OAuth, Kerberos etc, but [HTWicket](https://github.com/elonen/htwicket) is a good starting point. It's a small nginx `auth_request` gateway that manages an `.htpasswd` file, offers a login form with real cookie logout, and a web UI for user management. Per-user attributes (admin rights, upload permission, display name) are kept in a sidecar `.htwicket.toml` and exposed to Clapshot via `[headers.*]` CEL expressions.
 
 See [clapshot+htwicket.nginx.conf](client/debian/additional_files/clapshot+htwicket.nginx.conf) (Nginx config example) and [Dockerfile.demo](Dockerfile.demo) +
 [docker-entry_htwicket.sh](test/docker-entry_htwicket.sh) for details on how the integration works.
@@ -72,9 +72,9 @@ Clapshot's `basic_folders` Organizer supports restricting file upload permission
 
 Upload permission is controlled via the `X-Remote-User-Can-Upload` header set by your reverse proxy. Set it "true" to allow uploads; "false" to deny.
 
-#### htwicket Example
+#### HTWicket Example
 
-In the htwicket demo, upload permission is a per-user `can_upload` field (default `true`)
+In the HTWicket demo, upload permission is a per-user `can_upload` field (default `true`)
 stored in the sidecar `.htwicket.toml` and turned into the `X-Remote-User-Can-Upload`
 header by a CEL expression in `/etc/htwicket.toml`:
 

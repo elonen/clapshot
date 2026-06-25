@@ -57,7 +57,7 @@ Passwords are printed on console.
 - Upload video/audio/image files via the web interface, or drop files into the container's `/mnt/clapshot-data/data/incoming/` directory for automatic processing
 - Try the keyboard shortcuts: spacebar (play/pause), `i`/`o` (set loop points), `l` (toggle loop), arrow keys (frame stepping), `f` for fullscreen.
 
-The multi-user demo uses [htwicket](https://github.com/elonen/htwicket) for login and user management. Default credentials (including the randomly generated `admin` password) are shown in the terminal.
+The multi-user demo uses [HTWicket](https://github.com/elonen/htwicket) for login and user management. Default credentials (including the randomly generated `admin` password) are shown in the terminal.
 
 </details>
 
@@ -67,7 +67,7 @@ The multi-user demo uses [htwicket](https://github.com/elonen/htwicket) for logi
 ### Known Limitations and Workarounds
 
 - **Mobile Browsers:** Mobile/iOS/iPad support is limited. Chrome/Chromium (desktop) recommended.
-- **Authentication:** The bundled htwicket is a simple example — fine for small deployments, but for larger production use you may prefer to integrate a modern identity provider (OAuth, LDAP, Kerberos, SAML, etc.) via reverse proxy. See [Advanced Authentication](doc/sysadmin-guide.md#advanced-authentication).
+- **Authentication:** The bundled HTWicket is a simple example — fine for small deployments, but for larger production use you may prefer to integrate a modern identity provider (OAuth, LDAP, Kerberos, SAML, etc.) via reverse proxy. See [Advanced Authentication](doc/sysadmin-guide.md#advanced-authentication).
 - **IIS and Cloudflare:** IIS has a hard 2GB upload limit; Cloudflare's free tier times out uploads at ~100 seconds. For large files, you can use [monitored folder ingestion](doc/sysadmin-guide.md#monitored-folder-ingestion) (SFTP/SMB) instead of HTTP uploads. Self-hosted Nginx (also in the Docker images) has no such limitations.
 
 
@@ -76,7 +76,7 @@ The multi-user demo uses [htwicket](https://github.com/elonen/htwicket) for logi
 Two supported, maintainable paths — pick by your platform. (For the full overview, see
 **[Deploying Clapshot](deploy/README.md)**.)
 
-> **AUTH NEWS**: [Htwicket](https://github.com/elonen/htwicket) has replaced **htadmin** as the example auth provider for Clapshot. It's compatible with htadmin's `.htpasswd` files, doesn't need PHP, provides better logout, and is able to transparently upgrade password hashes to use more secure algorithms.
+> **AUTH NEWS**: [HTWicket](https://github.com/elonen/htwicket) has replaced **htadmin** as the example auth provider for Clapshot. It's compatible with htadmin's `.htpasswd` files, doesn't need PHP, provides better logout, and is able to transparently upgrade password hashes to use more secure algorithms.
 
 ### 1. Docker Compose
 
@@ -96,7 +96,7 @@ See [deploy/compose/README.md](deploy/compose/README.md) for more info.
 
 The right choice when you already manage a VM and prefer packages to containers.
 
-There's a one-shot install script [install-clapshot-deb.sh](deploy/debian/install-clapshot-deb.sh), that sets up Clapshot + Htwicket auth on a pristine Debian 12/13 host. You can either run it or follow it manually.
+There's a one-shot install script [install-clapshot-deb.sh](deploy/debian/install-clapshot-deb.sh), that sets up Clapshot + HTWicket auth on a pristine Debian 12/13 host. You can either run it or follow it manually.
 
 <details><summary>Step-by-step: Debian 12/13 install</summary>
 
@@ -173,7 +173,7 @@ Production deployments also depend on:
 
 - **Web Browser** – Chrome/Chromium recommended for best compatibility. Loads and shows the Client.
 - **Nginx Web Server** – SSL reverse proxy between Client and Server + static asset delivery for browser. Also routes session auth to Authentication Proxy.
-- **Authentication Proxy** – Any auxiliary HTTP daemon that authenticates users and returns a **user id** and **username** in HTTP headers. In the demo, this is [htwicket](https://github.com/elonen/htwicket) managing `/var/www/.htpasswd`, but you can also use combinations like [Okta](https://www.okta.com/) + [Vouch](https://github.com/vouch/vouch-proxy) + [LDAP Authz Proxy](https://github.com/elonen/ldap_authz_proxy) or something equally advanced.
+- **Authentication Proxy** – Any auxiliary HTTP daemon that authenticates users and returns a **user id** and **username** in HTTP headers. In the demo, this is [HTWicket](https://github.com/elonen/htwicket) managing `/var/www/.htpasswd`, but you can also use combinations like [Okta](https://www.okta.com/) + [Vouch](https://github.com/vouch/vouch-proxy) + [LDAP Authz Proxy](https://github.com/elonen/ldap_authz_proxy) or something equally advanced.
 
 - **Sqlite DB** – Stores metadata, comments, user messages etc. Both Clapshot Server and Organizer(s) access this. This is just a file, not a daemon.
 - **ffmpeg** and **mediainfo** – Clapshot Server processes media files with these commands.

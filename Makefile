@@ -163,7 +163,7 @@ build-docker-dev-and-push-hub: debian-docker
 
 # ---- Per-service runtime images for the deploy/compose recipes (ghcr.io) ----
 # clapshot-server (server + organizer) and clapshot-web (nginx + client SPA), built from
-# the same dist_deb/ packages. Caddy and htwicket are pulled as stock/external images.
+# the same dist_deb/ packages. Caddy and HTWicket are pulled as stock/external images.
 GHCR_NS ?= ghcr.io/elonen
 
 .PHONY: build-docker-services build-docker-services-and-push-ghcr push-services-ghcr
@@ -193,7 +193,7 @@ build-docker-services-and-push-ghcr: debian-docker push-services-ghcr
 # Image registry policy:
 #   - Compose per-service images (clapshot-server, clapshot-web) -> GitHub Container Registry
 #   - All-in-one demo/eval images (clapshot:*-demo[-htwicket])   -> Docker Hub
-# (htwicket and Caddy are external images, published by their own projects.)
+# (HTWicket and Caddy are external images, published by their own projects.)
 # debian-docker is a shared prerequisite, so the .debs are built once for both pushes.
 .PHONY: publish-images
 publish-images: build-docker-services-and-push-ghcr build-docker-demo-and-push-hub
