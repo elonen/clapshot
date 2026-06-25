@@ -159,6 +159,10 @@ Sharing system with security controls and access management.
   - **Cleanup**: Share tokens cleaned up when folders are deleted
 - *References: [src1](organizer/basic_folders/organizer/folder_op_methods.py), [src2](organizer/basic_folders/organizer/helpers/folders.py)*
 
+### **Version Sets**
+Group revisions of the same media file into one item with a version badge; pick the active version from a player dropdown and manage versions in a dedicated folder view.
+- *References: [doc/version-sets.md](doc/version-sets.md), [src1](organizer/basic_folders/organizer/helpers/folders.py), [src2](organizer/basic_folders/organizer/user_session_methods.py)*
+
 ## Administration and security
 
 ### **Authentication-Agnostic Design**

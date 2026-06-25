@@ -192,6 +192,7 @@ Clapshot includes an extensible [Organizer Plugin system](doc/organizer-plugins.
 The included "[basic_folders](organizer/basic_folders/README.md)" organizer (Python) provides:
 - **Hierarchical Folders**: Personal folder structures for organizing media files
 - **Folder Sharing**: Token-based sharing of folder contents (still requires authentication to access)
+- **[Version Sets](doc/version-sets.md)**: Group revisions of a media file into one item and switch versions in the player
 - **Admin Interface**: User management with batch operations and ownership transfer
 - **Metaplugin extensions**: Easier extension in Python:
 
