@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'  # Trigger the workflow on push tags like v1.0, v1.1, etc.
+  workflow_dispatch:  # Manual run: rebuild + re-push images at the current version (no GitHub release)
 
 jobs:
   # Run tests first to ensure quality
@@ -69,6 +70,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GitHub Container Registry
@@ -85,13 +87,18 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Push per-service images to ghcr.io
+        env:
+          BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}   # route `docker build` to the container builder
         run: make push-services-ghcr
 
       - name: Push demo images to Docker Hub
+        env:
+          BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
         run: make push-demo-hub
 
   create-release:
     needs: build-debian-package
+    if: startsWith(github.ref, 'refs/tags/')  # only on a real v* tag, not manual dispatch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
