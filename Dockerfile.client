@@ -1,4 +1,4 @@
-ARG DEBIAN_VER=bookworm
+ARG DEBIAN_VER=trixie
 FROM node:24-${DEBIAN_VER}-slim
 
 # Install system packages

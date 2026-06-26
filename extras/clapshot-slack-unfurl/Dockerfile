@@ -1,5 +1,5 @@
-ARG DEBIAN_VER=bookworm
-ARG PYTHON_VER=python3.11
+ARG DEBIAN_VER=trixie
+ARG PYTHON_VER=python3.13
 FROM debian:${DEBIAN_VER}-slim AS base
 
 RUN set -eux; \
@@ -19,7 +19,7 @@ RUN set -eux; \
         ; \
     rm -rf /var/lib/apt/lists/*;
 
-ARG PYTHON_VER=python3.11
+ARG PYTHON_VER=python3.13
 RUN apt-get update && apt-get install -y --no-install-recommends ${PYTHON_VER} ${PYTHON_VER}-venv && rm -rf /var/lib/apt/lists/*
 
 FROM base AS build

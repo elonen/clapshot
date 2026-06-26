@@ -15,7 +15,7 @@ else
 endif
 
 # Debian version and Python version (can be overridden via environment)
-DEBIAN_VER ?= bookworm
+DEBIAN_VER ?= trixie
 ifeq ($(DEBIAN_VER),trixie)
   PYTHON_VER ?= python3.13
 else

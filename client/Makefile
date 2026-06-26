@@ -7,7 +7,7 @@ UID=$(shell id -u)
 GID=$(shell id -g)
 
 # Debian version (can be overridden via environment)
-DEBIAN_VER ?= bookworm
+DEBIAN_VER ?= trixie
 
 CLIENT_DEPS=$(shell find src/ public/ package*.json tsconfig.json vite.config.ts -type f 2>/dev/null) $(shell find ../protobuf/proto -type f)
 DEB_DEPS=$(shell find debian/ -type f)

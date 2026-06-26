@@ -11,7 +11,7 @@ else
   PLATFORM_STR := --platform linux/$(TARGET_ARCH)
 endif
 
-DEBIAN_VER ?= bookworm
+DEBIAN_VER ?= trixie
 ifeq ($(DEBIAN_VER),trixie)
   DEB_PYTHON_VER ?= python3.13
 else

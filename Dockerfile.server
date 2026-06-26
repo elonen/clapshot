@@ -1,4 +1,4 @@
-ARG DEBIAN_VER=bookworm
+ARG DEBIAN_VER=trixie
 FROM rust:1-slim-${DEBIAN_VER} AS rust-slim
 
 # ----------------------------------
@@ -22,7 +22,7 @@ RUN cargo install cargo-deb
 USER root
 
 # Add deb-multimedia repository (for a more recent ffmpeg) - only needed for bookworm
-ARG DEBIAN_VER=bookworm
+ARG DEBIAN_VER=trixie
 RUN apt-get -qy update && apt-get -qy install gnupg2 wget
 RUN if [ "$DEBIAN_VER" = "bookworm" ]; then \
         wget -q https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2024.9.1_all.deb && \
@@ -48,7 +48,7 @@ RUN apt-get -qy install sqlite3 >/dev/null
 RUN apt-get -qy install libssl-dev >/dev/null
 RUN apt-get -qy install libsqlite3-dev >/dev/null
 RUN apt-get -qy install protobuf-compiler >/dev/null
-ARG PYTHON_VER=python3.11
+ARG PYTHON_VER=python3.13
 RUN apt-get -qy install python3 ${PYTHON_VER} ${PYTHON_VER}-venv >/dev/null
 
 # Switch to regular user
