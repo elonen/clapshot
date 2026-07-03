@@ -228,6 +228,7 @@ pub(super) fn read_fps_and_frame_count(file: &PathBuf) -> Result<(Decimal, u32),
         file_path: file.clone(),
         user_id: String::new(),
         cookies: Default::default(),
+        transcode_preference: super::TranscodePreference::Auto,
     };
     let md = extract_variables(json, &args, || file.metadata().map(|m| m.len()).map_err(|e| e.to_string()))?;
     Ok((md.fps, md.total_frames))

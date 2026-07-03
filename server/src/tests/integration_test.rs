@@ -151,8 +151,9 @@ mod integration_test
                     let media_root = data_dir.join("videos");
                     let storage = { let f = $storage_factory; f(media_root, &url_base_for_storage) };
                     let tf = terminate_flag.clone();
+                    let url_base_for_server = $url_base.clone();
                     thread::spawn(move || {
-                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), "scripts/clapshot-transcode-decision".to_string(), None, "*".to_string(), regex, tf)?;
+                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base_for_server, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), "scripts/clapshot-transcode-decision".to_string(), None, "*".to_string(), regex, storage, tf)?;
                         clapshot.wait_for_termination()
                 })};
 
@@ -187,7 +188,7 @@ mod integration_test
         let metrics_snapshotter = metrics_recorder.snapshotter();
         metrics_recorder.install().expect("Failed to install metrics recorder");
 
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 2500_000, None, None, IngestUsernameFrom::FileOwner]
             // Copy test file to incoming dir
             let mp4_file = "60fps-example.mp4";
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
@@ -557,7 +558,7 @@ mod integration_test
         // Also verifies that browser-compatible audio (AAC) is copied rather than re-encoded,
         // and that channel count is not forced to stereo.
         // Use a low target bitrate to force the transcode-decision script to transcode.
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 50_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 50_000, None, None, IngestUsernameFrom::FileOwner]
             let mp4_file = "extra-tracks.mp4";
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
             std::fs::rename(data_dir.join(mp4_file), incoming_dir.join(mp4_file)).unwrap();
@@ -647,7 +648,7 @@ mod integration_test
     #[cfg(feature = "include_slow_tests")]
     fn test_audio_transcode_updates_fps_from_output() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, None, None, IngestUsernameFrom::FileOwner]
             let audio_file_name = "sweep-tone.flac";   // shortest audio fixture (5s)
             data_dir.copy_from("src/tests/assets/", &[audio_file_name]).unwrap();
             std::fs::rename(data_dir.join(audio_file_name), incoming_dir.join(audio_file_name)).unwrap();
@@ -655,7 +656,7 @@ mod integration_test
             let wait_res = wait_for_reports(&mut ws, true, false, false, Some((data_dir.path().into(), audio_file_name.into()))).await;    // No thumbnail for audio
 
             // Open the file through the public API and inspect the metadata the client receives.
-            let media_file = open_media_file(&mut ws, &wait_res.media_file_id).await.media_file.unwrap();
+            let media_file = open_media_file(&mut ws, &wait_res.media_id).await.media_file.unwrap();
             let dur = media_file.duration.expect("media file has no duration metadata");
 
             let fps: f64 = dur.fps.parse().unwrap_or_else(|_| panic!("fps is not a number: {:?}", dur.fps));

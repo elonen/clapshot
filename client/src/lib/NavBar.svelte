@@ -72,7 +72,6 @@ function logoutBasicAuth() {
 				loggedOut = true;	// Show modal
             } else {
                 alert($t("Basic auth logout failed.\nStatus code from {url}: {status} (not 401)", { url: logoutUrl, status: res.status }));
-                alert($t('status.logoutFailed', { url: logoutUrl, status: res.status }));
             }
         })
         .catch(error => {
@@ -81,10 +80,6 @@ function logoutBasicAuth() {
 }
 
 function showAbout() {
-	alert($t('status.aboutVersion', { version: process.env.CLAPSHOT_CLIENT_VERSION }) + "\n" +
-		"\n" +
-		"Visit the project page at:\n" +
-		"https://github.com/elonen/clapshot\n");
 	alert($t("Clapshot Client version {version}\n\nVisit the project page at:\nhttps://github.com/elonen/clapshot\n", { version: process.env.CLAPSHOT_CLIENT_VERSION ?? "" }));
 }
 
@@ -94,7 +89,6 @@ async function copyToClipboard() {
 	const fullUrl = currentUrl + urlParams;
 	try {
 		await navigator.clipboard.writeText(fullUrl);
-		alert($t('status.linkCopied'));
 		alert($t('Link copied to clipboard.\nSend it to reviewers who have user accounts here.'));
 	} catch (err) {
 		console.error('Failed to copy link: ', err);
@@ -141,7 +135,7 @@ function addEDLComments(comments: Proto3.Comment[]) {
 						<div class="relative inline-block text-left">
 							<button type="button"
 							  	class="inline-flex justify-center w-full rounded-md shadow-sm px-2 py-0.5 {$collabId ? 'bg-green-500' : 'bg-gray-800'} text-sm font-medium text-gray-500 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-								aria-haspopup="true" aria-expanded="true" aria-label={$t('nav.openMenu')}
+								aria-haspopup="true" aria-expanded="true" aria-label={$t("Open menu")}
 							>
 								<i class="fas fa-bars"></i>
 							</button>
@@ -187,7 +181,6 @@ function addEDLComments(comments: Proto3.Comment[]) {
 							</div>
 						</div>
 					{/if}
-				<span class="mx-4 text-xs text-center">{$curVideo?.title}</span>
 				{#if videoProgressMsg}
 					<span class="text-cyan-800 mx-4 text-xs text-center">{videoProgressMsg}</span>
 				{/if}

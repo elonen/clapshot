@@ -469,6 +469,7 @@ async fn handle_media_request(
         is_admin,
         cookies: HashMap::new(),
         http_headers: filtered_headers,
+        language: None,
     };
 
     let organizer: Option<std::sync::Arc<tokio::sync::Mutex<OrganizerConnection>>> = None;
