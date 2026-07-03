@@ -9,7 +9,7 @@ mod integration_test
     use std::sync::atomic::AtomicBool;
     use std::sync::{Mutex, Arc};
     use std::{error, any};
-    use std::{path::PathBuf, str::FromStr};
+    use std::{path::{Path, PathBuf}, str::FromStr};
     use std::{thread, time::Duration};
 
     use assert_fs::prelude::PathCopy;
@@ -34,6 +34,7 @@ mod integration_test
     use lib_clapshot_grpc::{GrpcBindAddr, proto};
     use lib_clapshot_grpc::proto::client::ServerToClientCmd;
     use lib_clapshot_grpc::proto::client::server_to_client_cmd as s2c;
+    use pbjson_types;
 
     use tracing;
     use tracing::{error, info, warn, instrument};
@@ -108,22 +109,22 @@ mod integration_test
 
     macro_rules! cs_main_test {
         // 8-param variant: default storage, no ws_user_override
-        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr] $($body:tt)*) => {
-            cs_main_test!(@impl [$ws, $data_dir, $incoming_dir, $org_conn, $bitrate, $org_cmd, $custom_assertfs, $ingest_username_from, None,
+        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $url_base:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr] $($body:tt)*) => {
+            cs_main_test!(@impl [$ws, $data_dir, $incoming_dir, $org_conn, $url_base, $bitrate, $org_cmd, $custom_assertfs, $ingest_username_from, None,
                 |media_root: std::path::PathBuf, url_base: &str| crate::storage::StorageBackend::local(media_root, url_base)] $($body)*)
         };
         // 9-param variant: default storage, with ws_user_override
-        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr, $ws_user_override:expr] $($body:tt)*) => {
-            cs_main_test!(@impl [$ws, $data_dir, $incoming_dir, $org_conn, $bitrate, $org_cmd, $custom_assertfs, $ingest_username_from, $ws_user_override,
+        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $url_base:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr, $ws_user_override:expr] $($body:tt)*) => {
+            cs_main_test!(@impl [$ws, $data_dir, $incoming_dir, $org_conn, $url_base, $bitrate, $org_cmd, $custom_assertfs, $ingest_username_from, $ws_user_override,
                 |media_root: std::path::PathBuf, url_base: &str| crate::storage::StorageBackend::local(media_root, url_base)] $($body)*)
         };
-        // 10-param variant: custom storage factory (receives media_root only, url_base captured by caller)
-        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr, $ws_user_override:expr, $storage_factory:expr] $($body:tt)*) => {
-            cs_main_test!(@impl [$ws, $data_dir, $incoming_dir, $org_conn, $bitrate, $org_cmd, $custom_assertfs, $ingest_username_from, $ws_user_override,
-                |media_root: std::path::PathBuf, _url_base: &str| { let f = $storage_factory; f(media_root) }] $($body)*)
+        // 10-param variant: custom storage factory (receives media_root and url_base)
+        ([$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $url_base:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr, $ws_user_override:expr, $storage_factory:expr] $($body:tt)*) => {
+            cs_main_test!(@impl [$ws, $data_dir, $incoming_dir, $org_conn, $url_base, $bitrate, $org_cmd, $custom_assertfs, $ingest_username_from, $ws_user_override,
+                |media_root: std::path::PathBuf, url_base: &str| { let f = $storage_factory; f(media_root, url_base) }] $($body)*)
         };
         // Single implementation - storage_factory takes (media_root, url_base)
-        (@impl [$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr, $ws_user_override:expr, $storage_factory:expr] $($body:tt)*) => {
+        (@impl [$ws:ident, $data_dir:ident, $incoming_dir:ident, $org_conn:ident, $url_base:ident, $bitrate:expr, $org_cmd:expr, $custom_assertfs:expr, $ingest_username_from:expr, $ws_user_override:expr, $storage_factory:expr] $($body:tt)*) => {
             {
                 let $data_dir = $custom_assertfs.unwrap_or(assert_fs::TempDir::new().unwrap());
                 let $incoming_dir = $data_dir.join("incoming");
@@ -131,8 +132,8 @@ mod integration_test
 
                 // Run server
                 let port = portpicker::pick_unused_port().expect("No TCP ports free");
-                let url_base = format!("http://127.0.0.1:{}", port);
-                let ws_url = format!("{}/api/ws", &url_base.replace("http", "ws"));
+                let $url_base = format!("http://127.0.0.1:{}", port);
+                let ws_url = format!("{}/api/ws", &$url_base.replace("http", "ws"));
                 let target_bitrate = $bitrate;
                 let regex = validate_org_http_headers_regex("^X[-_]REMOTE[-_]").unwrap();
 
@@ -144,17 +145,17 @@ mod integration_test
                 let th = {
                     let poll_interval = 0.1;
                     let data_dir = $data_dir.path().to_path_buf();
-                    let url_base = url_base.clone();
+                    let url_base_for_storage = $url_base.clone();
                     let org_uri = org_uri.clone();
                     let media_root = data_dir.join("videos");
-                    let storage = { let f = $storage_factory; f(media_root, &url_base) };
+                    let storage = { let f = $storage_factory; f(media_root, &url_base_for_storage) };
                     let tf = terminate_flag.clone();
                     thread::spawn(move || {
-                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), "scripts/clapshot-transcode-decision".to_string(), regex, storage, tf)?;
+                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base_for_storage, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), "scripts/clapshot-transcode-decision".to_string(), regex, storage, tf)?;
                         clapshot.wait_for_termination()
                 })};
 
-                assert!(wait_for_healthy(&url_base), "Server API never became healthy");
+                assert!(wait_for_healthy(&$url_base), "Server API never became healthy");
 
                 tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async move {
                     // Connect client
@@ -180,7 +181,7 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_no_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 2500_000, None, None, IngestUsernameFrom::FileOwner]
             // Copy test file to incoming dir
             let mp4_file = "60fps-example.mp4";
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
@@ -237,7 +238,7 @@ mod integration_test
     #[traced_test]
     fn test_video_try_ingest_corrupted_video() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, None, None, IngestUsernameFrom::FileOwner]
             tracing::info!("WRITING CORRUPTED VIDEO");
 
             // Copy test file to incoming dir
@@ -313,8 +314,12 @@ mod integration_test
             if still_waiting {
                 match crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(&mut ws).await.map(|c| c.cmd).flatten() {
                     Some(s2c::Cmd::ShowMessages(m)) => {
-                        // Got progress report?
-                        res.got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
+                        // Got progress report? Count explicit Progress topics as well as any
+                        // message carrying a non-zero progress value (e.g. the final "Media transcoded." update).
+                        res.got_progress_report |= m.msgs.iter().any(|msg| {
+                            msg.r#type == proto::user_message::Type::Progress as i32
+                                || msg.progress.map(|p| p > 0.0).unwrap_or(false)
+                        });
 
                         assert!(!m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Error as i32), "Got ERROR type message while waiting for transcode/thumbnail completion");
 
@@ -346,6 +351,8 @@ mod integration_test
                     thread::sleep(Duration::from_millis(100));
                 } else {
                     println!("...waiting done, expected reports received. Doing OpenNavigationPage ...");
+                    // Give any in-flight progress messages a moment to arrive before we request the page.
+                    thread::sleep(Duration::from_millis(200));
                     send_server_cmd!(ws, OpenNavigationPage, OpenNavigationPage {..Default::default()});
                     break;
                 }
@@ -365,7 +372,10 @@ mod integration_test
 
                 Some(s2c::Cmd::ShowMessages(m)) => {
                     tracing::info!("Got ShowMessages (while waiting for ShowPage. Ignoring.");
-                    res.got_progress_report |= m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Progress as i32);
+                    res.got_progress_report |= m.msgs.iter().any(|msg| {
+                        msg.r#type == proto::user_message::Type::Progress as i32
+                            || msg.progress.map(|p| p > 0.0).unwrap_or(false)
+                    });
                     assert!(!m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Error as i32), "Got ERROR type message while waiting for ShowPage");
                 },
 
@@ -489,7 +499,7 @@ mod integration_test
     #[cfg(feature = "include_slow_tests")]
     fn test_video_mov_ingest_and_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, None, None, IngestUsernameFrom::FileOwner]
             // Copy test file to incoming dir
             let mov_file = "NASA_Red_Lettuce_excerpt.mov";
 
@@ -512,7 +522,7 @@ mod integration_test
     #[cfg(feature = "include_slow_tests")]
     fn test_video_12bit_dnxhr_alpha_ingest_and_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, None, None, IngestUsernameFrom::FileOwner]
             // Copy test file to incoming dir
             let mov_file = "alpha-test_dnxhr-444-12bit-dnxhr.mov";
 
@@ -534,7 +544,7 @@ mod integration_test
     #[cfg(feature = "include_slow_tests")]
     fn test_audio_ingest_and_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, None, None, IngestUsernameFrom::FileOwner]
             // Copy test file to incoming dir
             let audio_file_name = "drunkards-special-short-mono.wav";
             data_dir.copy_from("src/tests/assets/", &[audio_file_name]).unwrap();
@@ -565,7 +575,7 @@ mod integration_test
     #[cfg(feature = "include_slow_tests")]
     fn test_mp3_full_integration() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, None, None, IngestUsernameFrom::FileOwner]
             // Copy the MP3 file to incoming dir and test full integration
             let audio_file_name = "Apollo11_countdown.mp3";
             data_dir.copy_from("src/tests/assets/", &[audio_file_name]).unwrap();
@@ -655,7 +665,7 @@ mod integration_test
     #[traced_test]
     fn test_image_ingest_and_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, None, None, IngestUsernameFrom::FileOwner]
             let image_file_name = "NASA-48410_PIA25967_-_MAV_Test.jpeg";
             data_dir.copy_from("src/tests/assets/", &[image_file_name]).unwrap();
             std::fs::rename(data_dir.join(image_file_name), incoming_dir.join(image_file_name)).unwrap();
@@ -679,7 +689,7 @@ mod integration_test
         std::fs::copy("src/tests/assets/databases/clapshot-migration-test-1_v056.sqlite", &db_file)
             .expect("Failed to copy test DB for migration test");
 
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, Some(temp_dir), IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, None, Some(temp_dir), IngestUsernameFrom::FileOwner]
             let image_file_name = "NASA-48410_PIA25967_-_MAV_Test.jpeg";
             data_dir.copy_from("src/tests/assets/", &[image_file_name]).unwrap();
             std::fs::rename(data_dir.join(image_file_name), incoming_dir.join(image_file_name)).unwrap();
@@ -701,7 +711,7 @@ mod integration_test
                 // Overwrite the test DB with one from assets dir, for migration testing on existing DB
                 let db_file = temp_dir.path().join("clapshot.sqlite");
                 std::fs::copy("src/tests/assets/databases/clapshot-migration-test-1_v056.sqlite", &db_file).expect("Failed to copy test DB for migration test");
-                cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, Some(org_cmd), Some(temp_dir), IngestUsernameFrom::FileOwner]
+                cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, Some(org_cmd), Some(temp_dir), IngestUsernameFrom::FileOwner]
                     // If we get any client messages, Organizer migration was successful and API server was started
                     wait_for_any_client_msg(&mut ws).await;
                 }
@@ -725,7 +735,7 @@ mod integration_test
                 // Overwrite the test DB with one from assets dir, for migration testing on existing DB
                 let db_file = temp_dir.path().join("clapshot.sqlite");
                 std::fs::copy("src/tests/assets/databases/clapshot-migration-test-2_v061.sqlite", &db_file).expect("Failed to copy test DB for migration test");
-                cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, Some(org_cmd), Some(temp_dir), IngestUsernameFrom::FileOwner]
+                cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, Some(org_cmd), Some(temp_dir), IngestUsernameFrom::FileOwner]
                     // If we get any client messages, Organizer migration was successful and API server was started
                     wait_for_any_client_msg(&mut ws).await;
                 }
@@ -772,7 +782,7 @@ mod integration_test
                 let test_names: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
                 {
                     let test_names = test_names.clone();
-                    cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone()), None, IngestUsernameFrom::FileOwner]
+                    cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, url_base, 500_000, Some(cmd.clone()), None, IngestUsernameFrom::FileOwner]
                         match org_conn {
                             Some(mut org_conn) => {
                                 match org_conn.list_tests(proto::Empty {}).await {
@@ -816,7 +826,7 @@ mod integration_test
                     let test_results = test_results.clone();
                     let log = log.clone();
 
-                    cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, 500_000, Some(cmd.clone()), Some(temp_dir), IngestUsernameFrom::FileOwner]
+                    cs_main_test! {[_ws, data_dir, incoming_dir, org_conn, url_base, 500_000, Some(cmd.clone()), Some(temp_dir), IngestUsernameFrom::FileOwner]
                         match org_conn {
                             Some(mut org_conn) => {
                                 match org_conn.run_test(org::RunTestRequest { test_name: test_name.clone() }).await {
@@ -874,7 +884,7 @@ mod integration_test
     #[traced_test]
     fn test_ingest_username_from_file_owner() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None, IngestUsernameFrom::FileOwner]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 2500_000, None, None, IngestUsernameFrom::FileOwner]
             // Copy test file to incoming dir (owned by current user)
             let mp4_file = "60fps-example.mp4";
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
@@ -905,7 +915,7 @@ mod integration_test
     #[traced_test]
     fn test_ingest_username_from_folder_name() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None, IngestUsernameFrom::FolderName, Some("test_folder_user".to_string())]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 2500_000, None, None, IngestUsernameFrom::FolderName, Some("test_folder_user".to_string())]
             // Create user folder structure with specific test username
             let current_user = whoami::username();
             let username = "test_folder_user".to_string(); // Different from file owner - proves folder extraction works
@@ -942,7 +952,7 @@ mod integration_test
     #[traced_test]
     fn test_ingest_username_from_folder_name_nested() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None, IngestUsernameFrom::FolderName, Some("test_nested_user".to_string())]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 2500_000, None, None, IngestUsernameFrom::FolderName, Some("test_nested_user".to_string())]
             // Create folder structure with specific test username
             let current_user = whoami::username();
             let username = "test_nested_user".to_string(); // Different from file owner - proves folder extraction works
@@ -1086,13 +1096,15 @@ mod integration_test
         }
 
         /// Create a StorageBackend for this MinIO instance
-        fn storage_backend(&self, media_root: PathBuf, prefix: &str) -> anyhow::Result<StorageBackend> {
+        fn storage_backend(&self, media_root: PathBuf, prefix: &str, url_base: &str) -> anyhow::Result<StorageBackend> {
             StorageBackend::s3(
                 media_root,
                 TEST_BUCKET.to_string(),
                 Some(self.endpoint.clone()),
                 prefix.to_string(),
-                format!("{}/{}", self.endpoint, TEST_BUCKET),
+                Some(format!("{}/{}", self.endpoint, TEST_BUCKET)),
+                url_base.to_string(),
+                Duration::from_secs(3600),
             )
         }
 
@@ -1147,7 +1159,8 @@ mod integration_test
             std::fs::create_dir_all(&media_root)?;
 
             let prefix = format!("test-{}", uuid::Uuid::new_v4());
-            let storage = self.storage_backend(media_root, &prefix)?;
+            let url_base = "http://127.0.0.1:8080".to_string();
+            let storage = self.storage_backend(media_root, &prefix, &url_base)?;
 
             Ok((storage, data_dir, prefix))
         }
@@ -1206,6 +1219,13 @@ mod integration_test
         assert!(minio.object_exists(&format!("{}/large-file/large.mp4", prefix)),
             "Large file should exist in S3");
 
+        // Test 3: Presigned URL generation
+        let rt = tokio::runtime::Runtime::new()?;
+        let presigned = rt.block_on(storage.presigned_url("small-file", "small.mp4"))?;
+        assert!(presigned.contains("X-Amz-Signature"), "Presigned URL should contain signature");
+        assert!(presigned.contains(&format!("{}/small-file/small.mp4", prefix)),
+            "Presigned URL should contain the S3 key");
+
         Ok(())
     }
 
@@ -1229,14 +1249,15 @@ mod integration_test
         // Get S3 client before entering async context (avoids nested runtime)
         let s3_client = minio.s3_client();
 
-        let storage_factory = move |media_root: PathBuf| -> StorageBackend {
+        let storage_factory = move |media_root: PathBuf, url_base: &str| -> StorageBackend {
             StorageBackend::s3(
                 media_root, TEST_BUCKET.to_string(), Some(minio_endpoint.clone()),
-                prefix_clone.clone(), format!("{}/{}", minio_endpoint, TEST_BUCKET),
+                prefix_clone.clone(), Some(format!("{}/{}", minio_endpoint, TEST_BUCKET)),
+                url_base.to_string(), Duration::from_secs(3600),
             ).expect("Failed to create S3 storage backend")
         };
 
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner, None, storage_factory]
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, None, None, IngestUsernameFrom::FileOwner, None, storage_factory]
             // Ingest test video
             let video_file_name = "NASA_Red_Lettuce_excerpt.mov";
             data_dir.copy_from("src/tests/assets/", &[video_file_name]).unwrap();
@@ -1261,6 +1282,70 @@ mod integration_test
         Ok(())
     }
 
+    /// E2E test that the /api/media redirect endpoint returns a presigned S3 URL.
+    #[test]
+    #[serial]
+    #[traced_test]
+    #[cfg(feature = "include_slow_tests")]
+    fn test_s3_media_redirect_endpoint() -> anyhow::Result<()> {
+        TempMinIO::setup_env_vars();
+        let minio = match TempMinIO::start() {
+            Some(m) => m,
+            None => return Ok(()),
+        };
+        minio.create_bucket()?;
+
+        let test_prefix = format!("test-redirect-{}", uuid::Uuid::new_v4());
+        let minio_endpoint = minio.endpoint.clone();
+        let prefix_clone = test_prefix.clone();
+
+        let storage_factory = move |media_root: PathBuf, url_base: &str| -> StorageBackend {
+            StorageBackend::s3(
+                media_root, TEST_BUCKET.to_string(), Some(minio_endpoint.clone()),
+                prefix_clone.clone(), Some(format!("{}/{}", minio_endpoint, TEST_BUCKET)),
+                url_base.to_string(), Duration::from_secs(3600),
+            ).expect("Failed to create S3 storage backend")
+        };
+
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 500_000, None, None, IngestUsernameFrom::FileOwner, None, storage_factory]
+            // Ingest test video
+            let video_file_name = "NASA_Red_Lettuce_excerpt.mov";
+            data_dir.copy_from("src/tests/assets/", &[video_file_name]).unwrap();
+            std::fs::rename(data_dir.join(video_file_name), incoming_dir.join(video_file_name)).unwrap();
+
+            let wait_res = wait_for_reports(&mut ws, true, true, true, None).await;
+            assert!(wait_res.transcode_complete, "Transcode did not complete");
+            assert!(wait_res.thumbs_complete, "Thumbnails did not complete");
+
+            // Give S3 upload time to finish
+            thread::sleep(Duration::from_secs(2));
+
+            // Request the redirect endpoint
+            let redirect_url = format!("{}/api/media/{}/video.mp4", url_base, wait_res.media_id);
+            let client = reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("Failed to build reqwest client");
+            let resp = client
+                .get(&redirect_url)
+                .header("X-Remote-User-Id", whoami::username())
+                .send()
+                .await
+                .expect("Failed to send redirect request");
+
+            assert_eq!(resp.status(), 302, "Expected redirect response");
+            let location = resp.headers()
+                .get("Location")
+                .and_then(|v| v.to_str().ok())
+                .expect("Missing Location header");
+            assert!(location.contains("X-Amz-Signature"), "Location should be a presigned S3 URL");
+            assert!(location.contains(&format!("{}/{}/video.mp4", test_prefix, wait_res.media_id)),
+                "Location should contain the correct S3 key");
+        }
+
+        Ok(())
+    }
+
     #[test]
     fn test_s3_storage_needs_remote_upload() -> anyhow::Result<()> {
         let data_dir = assert_fs::TempDir::new()?;
@@ -1269,6 +1354,223 @@ mod integration_test
         // Local storage should not need remote upload
         let local_storage = StorageBackend::local(media_root.clone(), "http://localhost:8080");
         assert!(!local_storage.needs_remote_upload());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_storage_media_url_local() {
+        let storage = StorageBackend::local(PathBuf::from("/tmp/videos"), "http://localhost:8080");
+        assert_eq!(storage.media_url("abc123/video.mp4"), "http://localhost:8080/videos/abc123/video.mp4");
+        assert_eq!(storage.media_url("/abc123/thumbs/thumb.webp"), "http://localhost:8080/videos/abc123/thumbs/thumb.webp");
+    }
+
+    #[test]
+    fn test_storage_media_url_s3() {
+        let storage = StorageBackend::s3(
+            PathBuf::from("/tmp/videos"),
+            "test-bucket".to_string(),
+            Some("http://minio.example.com".to_string()),
+            "videos".to_string(),
+            None,
+            "http://localhost:8080".to_string(),
+            Duration::from_secs(3600),
+        ).expect("Failed to create S3 storage");
+
+        assert_eq!(storage.media_url("abc123/video.mp4"), "http://localhost:8080/api/media/abc123/video.mp4");
+    }
+
+    #[test]
+    fn test_storage_presigned_url_local_errors() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let storage = StorageBackend::local(PathBuf::from("/tmp/videos"), "http://localhost:8080");
+        let res = rt.block_on(storage.presigned_url("abc123", "video.mp4"));
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_subtitle_from_proto3_strips_query_params() {
+        let subtitle = proto::Subtitle {
+            id: "42".to_string(),
+            media_file_id: "abc123".to_string(),
+            title: "Test".to_string(),
+            language_code: "en".to_string(),
+            playback_url: "http://localhost:8080/api/media/abc123/subs/foo.vtt?X-Amz-Signature=abc".to_string(),
+            orig_url: "http://localhost:8080/api/media/abc123/subs/orig/bar.srt".to_string(),
+            orig_filename: "bar.srt".to_string(),
+            added_time: Some(pbjson_types::Timestamp::from(chrono::Utc::now())),
+            time_offset: 0.0,
+        };
+
+        let model = crate::database::models::Subtitle::from_proto3(&subtitle).expect("from_proto3 failed");
+        assert_eq!(model.filename, Some("foo.vtt".to_string()));
+    }
+
+    #[test]
+    fn test_storage_media_base_url() {
+        let local = StorageBackend::local(PathBuf::from("/tmp/videos"), "http://localhost:8080");
+        assert_eq!(local.media_base_url(), "http://localhost:8080/videos");
+
+        let s3 = StorageBackend::s3(
+            PathBuf::from("/tmp/videos"),
+            "test-bucket".to_string(),
+            Some("http://minio.example.com".to_string()),
+            "videos".to_string(),
+            None,
+            "http://localhost:8080".to_string(),
+            Duration::from_secs(3600),
+        ).expect("Failed to create S3 storage");
+        assert_eq!(s3.media_base_url(), "http://minio.example.com/test-bucket/videos");
+    }
+
+    #[test]
+    fn test_storage_upload_local_noop() {
+        let storage = StorageBackend::local(PathBuf::from("/tmp/videos"), "http://localhost:8080");
+        let progress_called = Arc::new(std::sync::Mutex::new(false));
+        let pc = progress_called.clone();
+        let cb: crate::storage::ProgressCallback = Arc::new(move |p| {
+            assert!((p - 1.0).abs() < f32::EPSILON);
+            *pc.lock().unwrap() = true;
+        });
+        storage.upload_with_progress(Path::new("/tmp/videos/foo.mp4"), Some(cb)).expect("local upload should be a no-op");
+        assert!(*progress_called.lock().unwrap(), "progress callback should have been invoked");
+    }
+
+    #[test]
+    fn test_storage_upload_if_exists_local_noop() {
+        let storage = StorageBackend::local(PathBuf::from("/tmp/videos"), "http://localhost:8080");
+        // Should not panic or error even for a missing path on local backend.
+        storage.upload_if_exists(Path::new("/tmp/videos/does-not-exist.mp4"));
+    }
+
+    #[test]
+    fn test_storage_upload_required_local_noop() {
+        let storage = StorageBackend::local(PathBuf::from("/tmp/videos"), "http://localhost:8080");
+        storage.upload_required(Path::new("/tmp/videos/foo.mp4")).expect("local upload_required should be a no-op");
+    }
+
+    #[test]
+    fn test_key_for_path_local() {
+        let storage = StorageBackend::local(PathBuf::from("/tmp/videos"), "http://localhost:8080");
+        assert_eq!(
+            storage.key_for_path(Path::new("/tmp/videos/abc123/video.mp4")).unwrap(),
+            "videos/abc123/video.mp4"
+        );
+        assert!(storage.key_for_path(Path::new("/outside/videos/foo.mp4")).is_err());
+    }
+
+    #[test]
+    fn test_key_for_path_s3() {
+        let storage = StorageBackend::s3(
+            PathBuf::from("/tmp/videos"),
+            "test-bucket".to_string(),
+            Some("http://minio.example.com".to_string()),
+            "uploads".to_string(),
+            None,
+            "http://localhost:8080".to_string(),
+            Duration::from_secs(3600),
+        ).expect("Failed to create S3 storage");
+        assert_eq!(
+            storage.key_for_path(Path::new("/tmp/videos/abc123/video.mp4")).unwrap(),
+            "uploads/abc123/video.mp4"
+        );
+    }
+
+    #[test]
+    fn test_guess_content_type() {
+        use std::path::Path;
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.mp4")), "video/mp4");
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.mkv")), "video/x-matroska");
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.webm")), "video/webm");
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.mov")), "video/quicktime");
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.webp")), "image/webp");
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.png")), "image/png");
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.jpg")), "image/jpeg");
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.jpeg")), "image/jpeg");
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.vtt")), "text/vtt");
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.srt")), "application/x-subrip");
+        assert_eq!(crate::storage::guess_content_type(Path::new("foo.xyz")), "application/octet-stream");
+    }
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    fn test_s3_default_public_base_url() {
+        // When no endpoint and no public_base_url are provided, should default to AWS S3 URL.
+        let storage = StorageBackend::s3(
+            PathBuf::from("/tmp/videos"),
+            "my-bucket".to_string(),
+            None,
+            "videos".to_string(),
+            None,
+            "http://localhost:8080".to_string(),
+            Duration::from_secs(3600),
+        ).expect("Failed to create AWS S3 storage");
+
+        assert_eq!(storage.media_base_url(), "https://my-bucket.s3.amazonaws.com/videos");
+    }
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    fn test_s3_upload_empty_file() -> anyhow::Result<()> {
+        let minio = match TempMinIO::start() {
+            Some(m) => m,
+            None => return Ok(()),
+        };
+        let (storage, data_dir, prefix) = minio.setup_test()?;
+        let media_root = data_dir.path().join("videos");
+
+        let dir = media_root.join("empty-file");
+        std::fs::create_dir_all(&dir)?;
+        let empty_file = dir.join("empty.mp4");
+        std::fs::write(&empty_file, b"")?;
+
+        let progress_called = Arc::new(std::sync::Mutex::new(false));
+        let pc = progress_called.clone();
+        let cb: crate::storage::ProgressCallback = Arc::new(move |p| {
+            assert!((p - 1.0).abs() < f32::EPSILON);
+            *pc.lock().unwrap() = true;
+        });
+        storage.upload_with_progress(&empty_file, Some(cb))?;
+
+        assert!(*progress_called.lock().unwrap(), "progress callback should have been invoked for empty file");
+        assert!(minio.object_exists(&format!("{}/empty-file/empty.mp4", prefix)),
+            "Empty file should exist in S3");
+
+        Ok(())
+    }
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    fn test_s3_presigned_url_no_prefix() -> anyhow::Result<()> {
+        TempMinIO::setup_env_vars();
+        let minio = match TempMinIO::start() {
+            Some(m) => m,
+            None => return Ok(()),
+        };
+        let data_dir = assert_fs::TempDir::new()?;
+        let media_root = data_dir.path().join("videos");
+        std::fs::create_dir_all(&media_root)?;
+
+        minio.create_bucket()?;
+        let prefix = format!("test-noprefix-{}", uuid::Uuid::new_v4());
+        let storage = StorageBackend::s3(
+            media_root,
+            TEST_BUCKET.to_string(),
+            Some(minio.endpoint.clone()),
+            prefix.clone(),
+            Some(format!("{}/{}", minio.endpoint, TEST_BUCKET)),
+            "http://localhost:8080".to_string(),
+            Duration::from_secs(3600),
+        )?;
+
+        let rt = tokio::runtime::Runtime::new()?;
+        let presigned = rt.block_on(storage.presigned_url("media-id", "video.mp4"))?;
+        assert!(presigned.contains("X-Amz-Signature"), "Presigned URL should contain signature");
+        assert!(presigned.contains(&format!("{}/media-id/video.mp4", prefix)),
+            "Presigned URL should contain the S3 key with prefix");
 
         Ok(())
     }

@@ -1,6 +1,7 @@
 use lib_clapshot_grpc::proto;
 use crate::database::{error::{DBError, DBResult}, DBPaging, DbQueryByMediaFile, PooledConnection};
 use crate::database::models;
+use crate::storage::StorageBackend;
 
 use super::{datetime_to_proto3, proto3_to_datetime};
 
@@ -53,7 +54,7 @@ impl models::MediaFile
         })
     }
 
-    pub fn to_proto3(&self, media_base_url: &str, subtitles: Vec<models::Subtitle>) -> proto::MediaFile
+    pub fn to_proto3(&self, storage: &StorageBackend, subtitles: Vec<models::Subtitle>) -> proto::MediaFile
     {
         let duration = match (self.duration, self.total_frames, &self.fps) {
             (Some(dur), Some(total_frames), Some(fps)) => Some(proto::MediaFileDuration {
@@ -75,12 +76,12 @@ impl models::MediaFile
 
         // Make preview data (thumb sheet and/or thumb url)
         let thumb_url = if matches!(self.has_thumbnail, Some(true)) {
-            Some(format!("{}/thumbs/thumb.webp", format!("{}/{}", media_base_url, &self.id)))
+            Some(storage.media_url(&format!("{}/thumbs/thumb.webp", &self.id)))
         } else { None };
 
         let thumb_sheet = match (self.thumb_sheet_cols, self.thumb_sheet_rows) {
             (Some(cols), Some(rows)) => Some(proto::media_file_preview_data::ThumbSheet {
-                url: format!("{}/thumbs/sheet-{}x{}.webp", format!("{}/{}", media_base_url, &self.id), cols, rows),
+                url: storage.media_url(&format!("{}/thumbs/sheet-{}x{}.webp", &self.id, cols, rows)),
                 rows: rows as u32,
                 cols: cols as u32,
             }),
@@ -110,10 +111,10 @@ impl models::MediaFile
             added_time: Some(datetime_to_proto3(&self.added_time)),
             preview_data,
             processing_metadata,
-            subtitles: subtitles.into_iter().map(|s| s.to_proto3(media_base_url)).collect(),
+            subtitles: subtitles.into_iter().map(|s| s.to_proto3(storage)).collect(),
             default_subtitle_id: self.default_subtitle_id.map(|id| id.to_string()),
-            playback_url: playback_uri.map(|uri| format!("{}/{}/{}", media_base_url, &self.id, uri)),
-            orig_url: orig_uri.map(|uri| format!("{}/{}/{}", media_base_url, &self.id, uri))
+            playback_url: playback_uri.map(|uri| storage.media_url(&format!("{}/{}", &self.id, uri))),
+            orig_url: orig_uri.map(|uri| storage.media_url(&format!("{}/{}", &self.id, uri)))
         }
     }
 
@@ -158,19 +159,19 @@ impl models::Subtitle
             media_file_id: v.media_file_id.clone(),
             title: v.title.clone(),
             language_code: v.language_code.clone(),
-            filename: v.playback_url.split('/').last().map(|s| s.to_string()),
+            filename: v.playback_url.split('/').last()
+                .map(|s| s.split('?').next().unwrap_or(s).to_string()),
             orig_filename: v.orig_filename.clone(),
             added_time: proto3_to_datetime(added_time).ok_or(anyhow::anyhow!("Invalid 'added_time' timestamp"))?,
             time_offset: v.time_offset,
         })
     }
 
-    pub fn to_proto3(&self, media_base_url: &str) -> proto::Subtitle
+    pub fn to_proto3(&self, storage: &StorageBackend) -> proto::Subtitle
     {
-        let base = format!("{}/{}", media_base_url, &self.media_file_id);
-        let orig_url = format!("{}/subs/orig/{}", base, &self.orig_filename);
+        let orig_url = storage.media_url(&format!("{}/subs/orig/{}", &self.media_file_id, &self.orig_filename));
         let playback_url = match &self.filename {
-            Some(f) => format!("{}/subs/{}", base, f),
+            Some(f) => storage.media_url(&format!("{}/subs/{}", &self.media_file_id, f)),
             None => orig_url.clone()
         };
         proto::Subtitle {
@@ -199,7 +200,8 @@ impl models::SubtitleInsert
             media_file_id: s.media_file_id.clone(),
             title: s.title.clone(),
             language_code: s.language_code.clone(),
-            filename: s.playback_url.split('/').last().map(|s| s.to_string()),
+            filename: s.playback_url.split('/').last()
+                .map(|s| s.split('?').next().unwrap_or(s).to_string()),
             orig_filename: s.orig_filename.clone(),
             time_offset: s.time_offset,
         })

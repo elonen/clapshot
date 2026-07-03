@@ -129,11 +129,16 @@ See [Upgrading Guide](doc/upgrading.md) for instructions on installing a new rel
 
 Clapshot can upload processed media and thumbnails to an S3-compatible object store while still staging files locally under `<data_dir>/videos`.
 
+Playback URLs now point at the Clapshot server (`/api/media/...`), which validates the user and returns a short-lived presigned S3 redirect. This means the bucket itself can remain private.
+
 **Required settings** (CLI flags, `clapshot-server.conf`, or `CLAPSHOT_SERVER__*` env vars):
 - `storage-backend = s3`
-- `s3-endpoint = https://s3.example.com`
-- `s3-region = us-east-1`
 - `s3-bucket = clapshot-media`
+
+For MinIO or other S3-compatible services you also need:
+- `s3-endpoint = https://s3.example.com`
+
+For AWS S3 leave `s3-endpoint` unset and configure `AWS_REGION`.
 
 **Authentication** uses the standard AWS SDK credential chain (in order of precedence):
 1. Environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
@@ -142,20 +147,20 @@ Clapshot can upload processed media and thumbnails to an S3-compatible object st
 
 **Optional settings:**
 - `s3-prefix` – path inside the bucket (default: `videos`)
-- `s3-public-url` – base URL used in playback links (defaults to `s3-endpoint/bucket`; set to your CDN/domain if different)
+- `s3-presigned-url-expiry` – presigned redirect lifetime in seconds (default: `3600`)
+- `s3-public-url` – deprecated, kept only for backward compatibility
 
 **Docker env example:**
 ```bash
 -e CLAPSHOT_SERVER__STORAGE_BACKEND=s3 \
--e CLAPSHOT_SERVER__S3_ENDPOINT=https://s3.example.com \
--e CLAPSHOT_SERVER__S3_REGION=us-east-1 \
 -e CLAPSHOT_SERVER__S3_BUCKET=clapshot-media \
+-e CLAPSHOT_SERVER__S3_REGION=us-east-1 \
 -e AWS_ACCESS_KEY_ID=YOUR_KEY \
 -e AWS_SECRET_ACCESS_KEY=YOUR_SECRET \
--e CLAPSHOT_SERVER__S3_PUBLIC_URL=https://cdn.example.com/clapshot-media
+-e CLAPSHOT_SERVER__S3_PRESIGNED_URL_EXPIRY=3600
 ```
 
-Ensure the bucket/prefix is readable at `s3-public-url` for playback, and keep enough local disk for staging uploads under `data_dir/videos`.
+Keep enough local disk for staging uploads under `data_dir/videos`.
 
 
 ## Architecture Overview

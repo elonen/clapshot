@@ -71,7 +71,7 @@ function logoutBasicAuth() {
 				if (onbasicauthlogout) onbasicauthlogout();
 				loggedOut = true;	// Show modal
             } else {
-                alert("Basic auth logout failed.\nStatus code from " + logoutUrl + ": " + res.status + " (not 401)");
+                alert($t('status.logoutFailed', { url: logoutUrl, status: res.status }));
             }
         })
         .catch(error => {
@@ -80,7 +80,7 @@ function logoutBasicAuth() {
 }
 
 function showAbout() {
-	alert("Clapshot Client version " + process.env.CLAPSHOT_CLIENT_VERSION + "\n" +
+	alert($t('status.aboutVersion', { version: process.env.CLAPSHOT_CLIENT_VERSION }) + "\n" +
 		"\n" +
 		"Visit the project page at:\n" +
 		"https://github.com/elonen/clapshot\n");
@@ -92,7 +92,7 @@ async function copyToClipboard() {
 	const fullUrl = currentUrl + urlParams;
 	try {
 		await navigator.clipboard.writeText(fullUrl);
-		alert('Link copied to clipboard.\nSend it to reviewers who have user accounts here.');
+		alert($t('status.linkCopied'));
 	} catch (err) {
 		console.error('Failed to copy link: ', err);
 	}
@@ -134,7 +134,7 @@ function addEDLComments(comments: Proto3.Comment[]) {
 						<div class="relative inline-block text-left">
 							<button type="button"
 							  	class="inline-flex justify-center w-full rounded-md shadow-sm px-2 py-0.5 {$collabId ? 'bg-green-500' : 'bg-gray-800'} text-sm font-medium text-gray-500 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-								aria-haspopup="true" aria-expanded="true" aria-label="Open menu"
+								aria-haspopup="true" aria-expanded="true" aria-label={$t('nav.openMenu')}
 							>
 								<i class="fas fa-bars"></i>
 							</button>

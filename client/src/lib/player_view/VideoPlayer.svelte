@@ -12,6 +12,7 @@ import {HybridVideoDecoder} from './video-decoder/HybridVideoDecoder';
 import {TimecodeUtils} from './video-decoder/timecode';
 import {allComments, curSubtitle, videoIsReady, collabId, curVideo, clientConfig} from '@/stores';
 import LocalStorageCookies from '@/cookies';
+import { t } from '@/i18n';
 import CommentTimelinePin from './CommentTimelinePin.svelte';
 
 
@@ -749,9 +750,9 @@ function handlePinClick(id: string) {
 
 			<!-- Play/Pause -->
 			<span class="flex-1 text-left ml-8 space-x-3 text-l whitespace-nowrap">
-				<button class="hover:text-amber-600 fa-solid fa-chevron-left" onclick={() => step_video(-1)} disabled={time==0} title="Step backwards" aria-label="Step backwards"></button>
-				<button class="hover:text-amber-600 w-4 fa-solid {paused ? (loop ? 'fa-repeat' : 'fa-play') : 'fa-pause'}" id="playbutton" onclick={togglePlay} title="Play/Pause" aria-label="Play/Pause"></button>
-				<button class="hover:text-amber-600 fa-solid fa-chevron-right" onclick={() => step_video(1)} title="Step forwards" aria-label="Step forwards"></button>
+				<button class="hover:text-amber-600 fa-solid fa-chevron-left" onclick={() => step_video(-1)} disabled={time==0} title={$t('player.stepBackward')} aria-label={$t('player.stepBackward')}></button>
+				<button class="hover:text-amber-600 w-4 fa-solid {paused ? (loop ? 'fa-repeat' : 'fa-play') : 'fa-pause'}" id="playbutton" onclick={togglePlay} title={$t('player.playPause')} aria-label={$t('player.playPause')}></button>
+				<button class="hover:text-amber-600 fa-solid fa-chevron-right" onclick={() => step_video(1)} title={$t('player.stepForward')} aria-label={$t('player.stepForward')}></button>
 
 				<!-- Timecode -->
 				<span class="flex-0 mx-4 text-sm font-mono">
@@ -763,9 +764,9 @@ function handlePinClick(id: string) {
                     <!-- Loop control (in, loop-toggle, out) -->
                     <span class="flex-0 px-4 text-sm">
                         <button class="fa-solid fa-square-caret-down hover:text-white {loopStartTime>=0 ? 'text-amber-600' : 'text-gray-400'}"
-                            onclick={() => setLoopPoint(true)} title="Set loop start to current frame" aria-label="Set loop start to current frame"></button>
+                            onclick={() => setLoopPoint(true)} title={$t('player.loopStart')} aria-label={$t('player.loopStart')}></button>
                         <button class="fa-solid fa-square-caret-up hover:text-white {loopEndTime>=0 ? 'text-amber-600' : 'text-gray-400'}"
-                            onclick={() => setLoopPoint(false)} title="Set loop end to current frame" aria-label="Set loop end to current frame"></button>
+                            onclick={() => setLoopPoint(false)} title={$t('player.loopEnd')} aria-label={$t('player.loopEnd')}></button>
                     </span>
                 {/if}
 			</span>
@@ -775,14 +776,14 @@ function handlePinClick(id: string) {
                 {#if ($curVideo?.subtitles?.length ?? 0) > 0}
                     <button
                         class={ $curSubtitle ? 'fa-solid fa-closed-captioning text-amber-600' : 'fa-solid fa-closed-captioning text-gray-400' }
-                        title="Toggle closed captioning"
-                        aria-label="Toggle closed captioning"
+                        title={$t('player.toggleCaptions')}
+                        aria-label={$t('player.toggleCaptions')}
                         onclick={() => toggleSubtitle()}
                     ></button>
                 {:else}
                     <button bind:this={uploadSubtitlesButton}
-                        class="fa-solid fa-closed-captioning text-gray-400" title="Upload subtitles"
-                        aria-label="Upload subtitles"
+                        class="fa-solid fa-closed-captioning text-gray-400" title={$t('player.uploadSubtitles')}
+                        aria-label={$t('player.uploadSubtitles')}
                         onmouseover={() => { changeSubtitleUploadIcon(true); }}
                         onfocus={() => { changeSubtitleUploadIcon(true); }}
                         onmouseout={() => { changeSubtitleUploadIcon(false); }}
@@ -796,7 +797,7 @@ function handlePinClick(id: string) {
 			<span class="flex-0 text-center whitespace-nowrap">
 				<button
 					class="fas {(audio_volume ?? 0)>0 ? 'fa-volume-high' : 'fa-volume-mute'} mx-2"
-					aria-label="{(audio_volume ?? 0)>0 ? 'Mute audio' : 'Unmute audio'}"
+					aria-label={(audio_volume ?? 0)>0 ? $t('player.mute') : $t('player.unmute')}
 					onclick={() => audio_volume = (audio_volume ?? 0)>0 ? 0 : 50}
 					></button>
                 <input class="mx-2" id="vol-control" type="range" min="0" max="100" step="1" bind:value={audio_volume}/>

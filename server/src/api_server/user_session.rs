@@ -151,7 +151,7 @@ pub async fn org_authz<'a>(
         AuthzTopic::MediaFile(v, op) => authz_op::Op::MediaFileOp(
             authz_op::MediaFileOp {
                 op: op.into(),
-                media_file: Some(v.to_proto3(&server.media_base_url, vec![])) }), // omit subtitles for authz check
+                media_file: Some(v.to_proto3(&server.storage, vec![])) }), // omit subtitles for authz check
         AuthzTopic::Comment(c, op) => authz_op::Op::CommentOp(
             authz_op::CommentOp {
                 op: op.into(),

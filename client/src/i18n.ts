@@ -33,6 +33,10 @@ const translations = {
         'status.reloadToLogin': 'Reload page to log in again.',
         'status.subtitles': 'Subtitles',
         'status.dropInstruction': 'Drop video, audio and image files here to upload',
+        'status.linkCopied': 'Link copied to clipboard.\nSend it to reviewers who have user accounts here.',
+        'status.aboutVersion': 'Clapshot Client version {version}',
+        'status.logoutFailed': 'Basic auth logout failed.\nStatus code from {url}: {status} (not 401)',
+        'status.deleteSubtitleConfirm': 'Are you sure you want to delete this subtitle?',
 
         'nav.shareToLoggedInUsers': 'Share to logged in users',
         'nav.downloadOriginal': 'Download original',
@@ -44,6 +48,7 @@ const translations = {
         'nav.about': 'About',
         'nav.logout': 'Logout',
         'nav.language': 'Language',
+        'nav.openMenu': 'Open menu',
 
         'upload.uploading': 'Uploading: {filename}...',
         'upload.progress': '{percent}% uploaded... please wait',
@@ -76,6 +81,20 @@ const translations = {
         'subtitles.save': 'Save',
         'subtitles.download': 'Download',
         'subtitles.delete': 'Del',
+        'subtitles.iso639Info': 'ISO 639 language codes information',
+
+        'player.stepBackward': 'Step backwards',
+        'player.stepForward': 'Step forwards',
+        'player.playPause': 'Play/Pause',
+        'player.loopStart': 'Set loop start to current frame',
+        'player.loopEnd': 'Set loop end to current frame',
+        'player.toggleCaptions': 'Toggle closed captioning',
+        'player.uploadSubtitles': 'Upload subtitles',
+        'player.mute': 'Mute audio',
+        'player.unmute': 'Unmute audio',
+
+        'edlImport.title': 'Import EDL as Comments',
+        'exportComments.title': 'Export Comments',
 
         'general.ok': 'OK',
     },
@@ -92,6 +111,10 @@ const translations = {
         'status.reloadToLogin': '请重新加载页面以再次登录。',
         'status.subtitles': '字幕',
         'status.dropInstruction': '将视频、音频或图片文件拖到此处上传',
+        'status.linkCopied': '链接已复制到剪贴板。\n将其发送给拥有账户的审阅者。',
+        'status.aboutVersion': 'Clapshot 客户端版本 {version}',
+        'status.logoutFailed': '基本认证注销失败。\n来自 {url} 的状态码：{status}（不是 401）',
+        'status.deleteSubtitleConfirm': '确定要删除这条字幕吗？',
 
         'nav.shareToLoggedInUsers': '分享给已登录用户',
         'nav.downloadOriginal': '下载原文件',
@@ -103,6 +126,7 @@ const translations = {
         'nav.about': '关于',
         'nav.logout': '退出',
         'nav.language': '语言',
+        'nav.openMenu': '打开菜单',
 
         'upload.uploading': '正在上传：{filename}...',
         'upload.progress': '已上传 {percent}% ... 请稍候',
@@ -135,6 +159,20 @@ const translations = {
         'subtitles.save': '保存',
         'subtitles.download': '下载',
         'subtitles.delete': '删除',
+        'subtitles.iso639Info': 'ISO 639 语言代码信息',
+
+        'player.stepBackward': '后退一帧',
+        'player.stepForward': '前进一帧',
+        'player.playPause': '播放/暂停',
+        'player.loopStart': '将循环开始设为当前帧',
+        'player.loopEnd': '将循环结束设为当前帧',
+        'player.toggleCaptions': '切换字幕显示',
+        'player.uploadSubtitles': '上传字幕',
+        'player.mute': '静音',
+        'player.unmute': '取消静音',
+
+        'edlImport.title': '导入 EDL 为评论',
+        'exportComments.title': '导出评论',
 
         'general.ok': '确定',
     },
@@ -151,6 +189,10 @@ const translations = {
         'status.reloadToLogin': 'Lataa sivu uudelleen kirjautuaksesi.',
         'status.subtitles': 'Tekstitykset',
         'status.dropInstruction': 'Pudota video-, ääni- ja kuvatiedostoja tähän ladataksesi',
+        'status.linkCopied': 'Linkki kopioitu leikepöydälle.\nLähetä se käyttäjille, joilla on tili täällä.',
+        'status.aboutVersion': 'Clapshot-asiakasohjelman versio {version}',
+        'status.logoutFailed': 'Perusautentikaatiosta uloskirjautuminen epäonnistui.\nTilakoodi kohteesta {url}: {status} (ei 401)',
+        'status.deleteSubtitleConfirm': 'Haluatko varmasti poistaa tämän tekstityksen?',
 
         'nav.shareToLoggedInUsers': 'Jaa kirjautuneille käyttäjille',
         'nav.downloadOriginal': 'Lataa alkuperäinen',
@@ -162,6 +204,7 @@ const translations = {
         'nav.about': 'Tietoja',
         'nav.logout': 'Kirjaudu ulos',
         'nav.language': 'Kieli',
+        'nav.openMenu': 'Avaa valikko',
 
         'upload.uploading': 'Ladataan: {filename}...',
         'upload.progress': '{percent}% ladattu... odota hetki',
@@ -194,6 +237,20 @@ const translations = {
         'subtitles.save': 'Tallenna',
         'subtitles.download': 'Lataa',
         'subtitles.delete': 'Poista',
+        'subtitles.iso639Info': 'ISO 639 -kielikoodien tiedot',
+
+        'player.stepBackward': 'Askel taaksepäin',
+        'player.stepForward': 'Askel eteenpäin',
+        'player.playPause': 'Toista/Pysäytä',
+        'player.loopStart': 'Aseta silmukan alku nykyiseen kehykseen',
+        'player.loopEnd': 'Aseta silmukan loppu nykyiseen kehykseen',
+        'player.toggleCaptions': 'Vaihda tekstitysten näkyvyyttä',
+        'player.uploadSubtitles': 'Lähetä tekstitykset',
+        'player.mute': 'Mykistä ääni',
+        'player.unmute': 'Poista mykistys',
+
+        'edlImport.title': 'Tuo EDL kommentteina',
+        'exportComments.title': 'Vie kommentit',
 
         'general.ok': 'OK',
     },

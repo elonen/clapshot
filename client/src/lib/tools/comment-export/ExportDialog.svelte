@@ -3,6 +3,7 @@ import { curVideo, allComments } from "@/stores";
 import { Modal, Button, Input, Label, Select } from 'flowbite-svelte';
 import { onMount } from "svelte";
 import { exporters, groupComments, downloadFile, type ExportContext } from './index';
+import { t } from '@/i18n';
 
 interface Props {
     isOpen?: boolean;
@@ -68,7 +69,7 @@ function setOptionValue(id: string, value: string | number | boolean) {
 let formatItems = $derived(exporters.map(e => ({ value: e.id, name: e.name })));
 </script>
 
-<Modal title="Export Comments" bind:open={isOpen} class="w-96">
+<Modal title={$t('exportComments.title')} bind:open={isOpen} class="w-96">
     <div class="flex flex-col space-y-4">
         <!-- Format selection -->
         <div>

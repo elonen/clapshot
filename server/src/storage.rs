@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{anyhow, Context};
+use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
 use aws_sdk_s3::{primitives::ByteStream, Client};
 use tokio::fs;
@@ -13,7 +15,7 @@ pub type ProgressCallback = Arc<dyn Fn(f32) + Send + Sync + 'static>;
 const MULTIPART_MIN_SIZE: u64 = 5 * 1024 * 1024;
 const MULTIPART_CHUNK_SIZE: usize = 8 * 1024 * 1024;
 /// Simple content type guessing for a handful of formats we serve.
-fn guess_content_type(path: &Path) -> &'static str {
+pub(crate) fn guess_content_type(path: &Path) -> &'static str {
     match path
         .extension()
         .and_then(|e| e.to_str())
@@ -45,6 +47,7 @@ impl StorageBackend {
         StorageBackend::LocalFs(LocalFsBackend {
             media_root,
             prefix,
+            url_base: url_base.to_string(),
             media_base_url,
         })
     }
@@ -65,8 +68,14 @@ impl StorageBackend {
         bucket: String,
         endpoint: Option<String>,
         prefix: String,
-        public_base_url: String,
+        public_base_url: Option<String>,
+        url_base: String,
+        presigned_url_expiry: Duration,
     ) -> anyhow::Result<Self> {
+        let public_base_url = public_base_url.unwrap_or_else(|| {
+            endpoint.as_ref().map(|ep| format!("{}/{}", ep.trim_end_matches('/'), &bucket))
+                .unwrap_or_else(|| format!("https://{}.s3.amazonaws.com", &bucket))
+        });
         let media_base_url = format!(
             "{}/{}",
             public_base_url.trim_end_matches('/'),
@@ -101,9 +110,11 @@ impl StorageBackend {
         Ok(StorageBackend::S3(ObjectStorageBackend {
             media_root,
             prefix,
+            url_base,
             media_base_url,
             client: Arc::new(client),
             bucket,
+            presigned_url_expiry,
         }))
     }
 
@@ -111,6 +122,29 @@ impl StorageBackend {
         match self {
             StorageBackend::LocalFs(b) => &b.media_base_url,
             StorageBackend::S3(b) => &b.media_base_url,
+        }
+    }
+
+    /// Return the client-visible URL for a media path.
+    ///
+    /// For the local backend this is a direct `/videos/...` URL.
+    /// For S3 this is a `/api/media/...` URL that the server will redirect to a
+    /// short-lived presigned S3 URL.
+    pub fn media_url(&self, rel_path: &str) -> String {
+        let rel_path = rel_path.trim_start_matches('/');
+        match self {
+            StorageBackend::LocalFs(b) => format!("{}/{}", b.media_base_url.trim_end_matches('/'), rel_path),
+            StorageBackend::S3(b) => format!("{}/api/media/{}", b.url_base.trim_end_matches('/'), rel_path),
+        }
+    }
+
+    /// Generate a short-lived presigned S3 URL for a media path.
+    ///
+    /// Returns an error for the local backend.
+    pub async fn presigned_url(&self, media_id: &str, rel_path: &str) -> anyhow::Result<String> {
+        match self {
+            StorageBackend::LocalFs(_) => Err(anyhow!("presigned URLs are not available for local filesystem backend")),
+            StorageBackend::S3(backend) => backend.presigned_url(media_id, rel_path).await,
         }
     }
 
@@ -169,7 +203,7 @@ impl StorageBackend {
         }
     }
 
-    fn key_for_path(&self, abs_path: &Path) -> anyhow::Result<String> {
+    pub(crate) fn key_for_path(&self, abs_path: &Path) -> anyhow::Result<String> {
         let root = self.media_root();
         let rel = abs_path
             .strip_prefix(root)
@@ -193,6 +227,7 @@ impl StorageBackend {
 pub struct LocalFsBackend {
     pub media_root: PathBuf,
     pub prefix: String,
+    pub url_base: String,
     pub media_base_url: String,
 }
 
@@ -200,12 +235,42 @@ pub struct LocalFsBackend {
 pub struct ObjectStorageBackend {
     pub media_root: PathBuf,
     pub prefix: String,
+    pub url_base: String,
     pub media_base_url: String,
     pub bucket: String,
     pub client: Arc<Client>,
+    pub presigned_url_expiry: Duration,
 }
 
 impl ObjectStorageBackend {
+    /// Generate a short-lived presigned S3 URL for `media_id/rel_path`.
+    async fn presigned_url(&self,
+        media_id: &str,
+        rel_path: &str,
+    ) -> anyhow::Result<String> {
+        let rel_path = rel_path.trim_start_matches('/');
+        let prefix = self.prefix.trim_end_matches('/');
+        let key = if prefix.is_empty() {
+            format!("{}/{}", media_id, rel_path)
+        } else {
+            format!("{}/{}/{}", prefix, media_id, rel_path)
+        };
+
+        let presign_config = PresigningConfig::expires_in(self.presigned_url_expiry)
+            .context("invalid presigned URL expiry")?;
+
+        let presigned = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(&key)
+            .presigned(presign_config)
+            .await
+            .context("failed to presign S3 URL")?;
+
+        Ok(presigned.uri().to_string())
+    }
+
     fn upload_with_progress(
         &self,
         abs_path: &Path,

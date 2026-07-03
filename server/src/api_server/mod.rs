@@ -18,6 +18,7 @@ use futures_util::stream::StreamExt;
 use futures_util::SinkExt;
 use warp::ws::Message;
 use warp::http::HeaderMap;
+use warp::http::StatusCode;
 use regex::Regex;
 use std::sync::atomic::Ordering::Relaxed;
 
@@ -39,6 +40,7 @@ pub mod test_utils;
 pub mod tests;
 mod file_upload;
 use file_upload::handle_multipart_upload;
+use crate::api_server::user_session::AuthzError;
 use crate::api_server::user_session::AuthzTopic;
 use crate::api_server::user_session::org_authz;
 use crate::client_cmd;
@@ -422,6 +424,86 @@ fn parse_auth_headers(hdrs: &HeaderMap, default_user_id: &str, filter_regex: &Re
     (user_id, user_name, is_admin, app_cookies, filtered_headers, remote_error)
 }
 
+/// Authenticated media redirect endpoint.
+///
+/// For S3 storage this returns a 302 redirect to a short-lived presigned S3 URL.
+/// For local storage this endpoint is not used (URLs point directly at /videos).
+async fn handle_media_request(
+    media_id: String,
+    tail: warp::path::Tail,
+    headers: HeaderMap,
+    server: ServerState,
+) -> Result<Box<dyn warp::Reply>, warp::Rejection> {
+    let (user_id, user_name, is_admin, _app_cookies, filtered_headers, remote_error) =
+        parse_auth_headers(&headers, &server.default_user, &server.org_http_headers_regex);
+
+    if remote_error.is_some() {
+        return Ok(Box::new(StatusCode::UNAUTHORIZED));
+    }
+
+    let rel_path = tail.as_str();
+
+    let media_file = match models::MediaFile::get(
+        &mut server.db.conn().map_err(|_| warp::reject::not_found())?,
+        &media_id) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!(media_id=%media_id, err=?e, "Media file not found for redirect request");
+            return Ok(Box::new(StatusCode::NOT_FOUND));
+        }
+    };
+
+    // Build a minimal Organizer session for authz checks.
+    // Organizer authz requires a live gRPC connection held by a websocket session,
+    // so the HTTP redirect endpoint can only enforce the default permission model
+    // (owner or admin).
+    let org_session = proto::org::UserSessionData {
+        sid: String::new(),
+        user: Some(proto::UserInfo {
+            id: user_id.clone(),
+            name: user_name,
+        }),
+        is_admin,
+        cookies: HashMap::new(),
+        http_headers: filtered_headers,
+    };
+
+    let organizer: Option<std::sync::Arc<tokio::sync::Mutex<OrganizerConnection>>> = None;
+
+    let default_perm = media_file.user_id == user_id || is_admin;
+    if let Err(e) = user_session::org_authz_with_default(
+        &org_session,
+        "view media file",
+        false,
+        &server,
+        &organizer,
+        default_perm,
+        AuthzTopic::MediaFile(&media_file,
+            proto::org::authz_user_action_request::media_file_op::Op::View),
+    ).await {
+        match e {
+            AuthzError::Denied => {
+                tracing::warn!(media_id=%media_id, user=%user_id, "Media redirect denied");
+                return Ok(Box::new(StatusCode::FORBIDDEN));
+            }
+        }
+    }
+
+    match server.storage.presigned_url(&media_id, rel_path).await {
+        Ok(url) => {
+            Ok(Box::new(warp::reply::with_header(
+                StatusCode::FOUND,
+                "Location",
+                url,
+            )))
+        }
+        Err(e) => {
+            tracing::error!(media_id=%media_id, path=%rel_path, details=%e, "Failed to generate presigned media URL");
+            Ok(Box::new(StatusCode::NOT_FOUND))
+        }
+    }
+}
+
 /// Handle HTTP requests, read authentication headers and dispatch to WebSocket handler.
 async fn run_api_server_async(
     bind_addr: std::net::IpAddr,
@@ -436,6 +518,7 @@ async fn run_api_server_async(
     let server_state_cln1 = server_state.clone();
     let server_state_cln2 = server_state.clone();
     let server_state_cln3 = server_state.clone();
+    let server_state_cln4 = server_state.clone();
 
     let url_base = server_state.url_base.clone();
 
@@ -495,6 +578,14 @@ async fn run_api_server_async(
         warp::fs::dir(server_state_cln1.media_files_dir.clone())
             .with(warp::log("videos")));
 
+    let rt_media = warp::path("api")
+        .and(warp::path("media"))
+        .and(warp::path::param::<String>())
+        .and(warp::path::tail())
+        .and(warp::header::headers_cloned())
+        .and(warp::any().map(move || server_state_cln4.clone()))
+        .and_then(handle_media_request);
+
     let rt_api_ws = warp::path("api").and(warp::path("ws"))
         .and(warp::header::headers_cloned())
         .and(warp::ws())
@@ -538,7 +629,7 @@ async fn run_api_server_async(
             })
         });
 
-    let routes = rt_health.or(rt_api_ws).or(rt_upload).or(rt_videos)
+    let routes = rt_health.or(rt_api_ws).or(rt_upload).or(rt_videos).or(rt_media)
         .with(warp::log("api_server"));
 
 

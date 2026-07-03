@@ -301,7 +301,7 @@ async function onUploadSubtitles() {
 
 function onSubtitleDelete(e: any) {
     const sub_id = e.id;
-    if (window.confirm("Are you sure you want to delete this subtitle?")) {
+    if (window.confirm($t('status.deleteSubtitleConfirm'))) {
         if ($curSubtitle?.id == sub_id) { $curSubtitle = null; }
         wsEmit({ delSubtitle: { id: sub_id } });
     }

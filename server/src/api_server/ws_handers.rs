@@ -102,7 +102,7 @@ pub async fn msg_open_navigation_page(data: &OpenNavigationPage , ses: &mut User
     let mut media_files: Vec<proto::MediaFile> = Vec::new();
     for m in models::MediaFile::get_by_user(&mut server.db.conn()?, &ses.user_id, DBPaging::default())? {
         let subs = models::Subtitle::get_by_media_file(&mut server.db.conn()?, &m.id, DBPaging::default())?;
-        media_files.push(m.to_proto3(&server.media_base_url, subs));
+        media_files.push(m.to_proto3(&server.storage, subs));
     }
 
     let h_txt = if media_files.is_empty() { "<h2>You have no media yet.</h2>" } else { "<h2>All your media files</h2>" };
@@ -137,7 +137,7 @@ pub async fn send_open_media_file_cmd(server: &ServerState, session_id: &str, me
     let conn = &mut server.db.conn()?;
     let v_db = models::MediaFile::get(conn, &media_file_id.into())?;
     let subs = models::Subtitle::get_by_media_file(conn, media_file_id, DBPaging::default())?;
-    let v = v_db.to_proto3(&server.media_base_url, subs);
+    let v = v_db.to_proto3(&server.storage, subs);
     if v.playback_url.is_none() {
         return Err(anyhow!("No playback file"));
     }

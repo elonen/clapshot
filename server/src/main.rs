@@ -167,8 +167,14 @@ struct Args {
 
     /// Public base URL for accessing the bucket/prefix (used for playback URLs).
     /// If not set, defaults to endpoint/bucket or virtual-hosted style URL.
+    /// Deprecated: playback URLs are now server-mediated presigned redirects,
+    /// so the bucket no longer needs to be publicly readable.
     #[arg(long, value_name="URL")]
     s3_public_url: Option<String>,
+
+    /// Presigned S3 URL expiry time in seconds (default: 3600).
+    #[arg(long, value_name="SECONDS", default_value="3600")]
+    s3_presigned_url_expiry: u64,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -232,24 +238,18 @@ fn main() -> anyhow::Result<()> {
             let bucket = args.s3_bucket.clone()
                 .ok_or_else(|| anyhow::anyhow!("--s3-bucket is required for S3 backend"))?;
 
-            // Compute public URL for playback. If not specified, derive from endpoint/bucket.
-            // For custom endpoints (MinIO etc), default to path-style URLs.
-            let public_base_url = args.s3_public_url.clone()
-                .or_else(|| {
-                    args.s3_endpoint.as_ref().map(|ep|
-                        format!("{}/{}", ep.trim_end_matches('/'), &bucket)
-                    )
-                })
-                .ok_or_else(|| anyhow::anyhow!(
-                    "--s3-public-url is required when --s3-endpoint is not set (AWS S3 requires explicit public URL)"
-                ))?;
+            if args.s3_public_url.is_some() {
+                tracing::info!("--s3-public-url is deprecated; playback now uses server-mediated presigned S3 URLs");
+            }
 
             StorageBackend::s3(
                 args.data_dir.join("videos"),
                 bucket,
                 args.s3_endpoint.clone(),
                 args.s3_prefix.clone(),
-                public_base_url,
+                args.s3_public_url.clone(),
+                url_base.clone(),
+                std::time::Duration::from_secs(args.s3_presigned_url_expiry),
             )?
         }
         other => bail!("Unknown storage backend '{}'. Valid options: local, s3", other),
