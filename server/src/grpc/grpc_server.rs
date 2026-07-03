@@ -72,7 +72,7 @@ impl org::organizer_outbound_server::OrganizerOutbound for OrganizerOutboundImpl
                 message: msg_in.message.clone(),
                 details: msg_in.details.clone().unwrap_or_default(),
             };
-            self.server.push_notify_message(&msg, to, persist, msg_in.progress)
+            self.server.push_user_message(&msg, to, persist, msg_in.progress, crate::notification::MessageOrigin::Organizer)
         };
 
         let res = match recipient {

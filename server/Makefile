@@ -1,4 +1,4 @@
-.PHONY: deps clean test docker test run run-local run-docker default debian-local
+.PHONY: deps clean test docker test run run-local run-docker default debian-local get-cur-ver verify-ver
 SHELL := /bin/bash
 
 PLUGIN_BIN=../organizer/basic_folders/run-py-org.sh
@@ -14,8 +14,25 @@ else
   PLATFORM_STR = --platform linux/$(TARGET_ARCH)
 endif
 
-DOCKER_IMG_NAME=clapshot_server_${ARCH}
+# Debian version and Python version (can be overridden via environment)
+DEBIAN_VER ?= trixie
+ifeq ($(DEBIAN_VER),trixie)
+  PYTHON_VER ?= python3.13
+else
+  PYTHON_VER ?= python3.11
+endif
+
+DOCKER_IMG_NAME=clapshot_server_${DEBIAN_VER}_${ARCH}
 DEV_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
+
+# Persistent build caches (Docker named volumes) so repeated/emulated Docker
+# builds don't re-download and recompile every crate from scratch. The cargo
+# registry/git are platform-independent and shared across all builds; the
+# target dir is keyed per distro+arch so objects from different targets never mix.
+CARGO_CACHE_MOUNTS = \
+	--mount type=volume,source=clapshot-cargo-registry,target=/usr/local/cargo/registry \
+	--mount type=volume,source=clapshot-cargo-git,target=/usr/local/cargo/git \
+	--mount type=volume,source=clapshot-target-server-${DEBIAN_VER}-${ARCH},target=/app/server/target
 
 SERVER_CMD=target/debug/clapshot-server
 DEV_DATADIR=DEV_DATADIR
@@ -25,6 +42,15 @@ DEFAULT_USER ?= admin
 
 
 default: ${SERVER_CMD}
+
+get-cur-ver:
+	@grep -m1 '^version' Cargo.toml | sed -E 's/^version *= *"([^"]+)".*/\1/'
+
+verify-ver:
+	@man=$$($(MAKE) -s get-cur-ver); \
+	chg=$$(sed -nE '1s/.*\(([^)]+)\).*/\1/p' debian/changelog | sed -E 's/^[0-9]+://; s/-[^-]*$$//'); \
+	test "$$man" = "$$chg" || { echo "ERROR: server version mismatch: Cargo.toml=$$man changelog=$$chg"; exit 1; }; \
+	echo "server version OK: $$man"
 
 ${DEV_DATADIR}:
 	mkdir -p "$@"
@@ -45,30 +71,38 @@ docker: ${DEV_DATADIR}
 	@echo "NOTE! Creating current user and UID/GID in Docker so bind mount is owned by it."
 	@echo "Otherwise you wouldn't be able to access it without root privileges."
 	@echo "-------------------------------------------------------------------------------"
-	cd .. && DOCKER_BUILDKIT=1 docker build $(PLATFORM_STR) -t ${DOCKER_IMG_NAME}:${DEV_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID}  -f Dockerfile.server .
+	cd .. && DOCKER_BUILDKIT=1 docker build $(PLATFORM_STR) -t ${DOCKER_IMG_NAME}:${DEV_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID} --build-arg DEBIAN_VER=${DEBIAN_VER} --build-arg PYTHON_VER=${PYTHON_VER} -f Dockerfile.server .
 	docker tag ${DOCKER_IMG_NAME}:${DEV_VERSION} ${DOCKER_IMG_NAME}:latest
 
 debian-local: dist_deb/built.${ARCH}.target
 
-dist_deb/built.${ARCH}.target: ${SERVER_CMD} ${DEB_DEPS}
-	cargo install cargo-deb
+dist_deb/built.${ARCH}.target: ${RUST_DEPS} ${DEB_DEPS}
+	@command -v cargo-deb >/dev/null 2>&1 || cargo install cargo-deb
 	cargo deb
 	mkdir -p dist_deb
 	find target/debian/ -maxdepth 1 -type f -exec cp {} dist_deb/ \;
 	touch $@
 
-debian-docker: dist_deb/built.${ARCH}.docker
+debian-docker: dist_deb/built.${DEBIAN_VER}.${ARCH}.docker
 
-dist_deb/built.${ARCH}.docker: ${RUST_DEPS} ${DEB_DEPS} ../Dockerfile.server
+dist_deb/built.${DEBIAN_VER}.${ARCH}.docker: ${RUST_DEPS} ${DEB_DEPS} ../Dockerfile.server
 	@echo "-------------------------------------------------------------------------------"
+	@echo "Building for Debian ${DEBIAN_VER} (${ARCH}) with ${PYTHON_VER}"
 	@echo "NOTE! Creating current user and UID/GID in Docker so bind mount is owned by it."
 	@echo "Otherwise you wouldn't be able to access it without root privileges."
 	@echo "-------------------------------------------------------------------------------"
 	mkdir -p dist_deb
-	cd .. && DOCKER_BUILDKIT=1 docker build $(PLATFORM_STR) -t ${DOCKER_IMG_NAME}:${DEV_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID}  -f Dockerfile.server .
+	cd .. && DOCKER_BUILDKIT=1 docker build $(PLATFORM_STR) -t ${DOCKER_IMG_NAME}:${DEV_VERSION} --build-arg USER=${USER} --build-arg UID=${UID} --build-arg GID=${GID} --build-arg DEBIAN_VER=${DEBIAN_VER} --build-arg PYTHON_VER=${PYTHON_VER} -f Dockerfile.server .
 	docker tag ${DOCKER_IMG_NAME}:${DEV_VERSION} ${DOCKER_IMG_NAME}:latest
-	$(eval CMD="cd /app/server && cp -r --preserve=mode,ownership,timestamps /deb ./dist_deb && ls -l ./dist_deb && make debian-local && cp dist_deb/*.* /deb/ && chown -R ${UID}:${GID} /deb")
-	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${DOCKER_IMG_NAME}:latest  bash -c ${CMD}
+	docker run --rm $(PLATFORM_STR) --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" $(CARGO_CACHE_MOUNTS) --user root ${DOCKER_IMG_NAME}:latest \
+		bash -c "cd /app/server && cp -r --preserve=mode,ownership,timestamps /deb ./dist_deb && make debian-local && cp dist_deb/*.deb /deb/ && chown -R ${UID}:${GID} /deb"
+	@# Tag freshly-built .deb files with the Debian version, inserting it just
+	@# before the arch suffix. Already-tagged debs (this or another distro) keep
+	@# their codename, so cross-distro artifacts left in dist_deb aren't re-tagged.
+	for f in dist_deb/*.deb; do \
+		newname=$$(echo "$$f" | sed -E 's/(_[0-9.]+-?[0-9]*)_(amd64|arm64|all)\.deb$$/\1_${DEBIAN_VER}_\2.deb/'); \
+		[ "$$f" != "$$newname" ] && mv "$$f" "$$newname" || true; \
+	done
 	touch $@
 
 
@@ -81,7 +115,7 @@ test-local:
 		echo "!! Running tests matching filter: '${FILTER}'"; \
 	fi
 
-	@if [ "${CI}" ]; then \
+	@set -o pipefail; if [ "${CI}" ]; then \
 		echo "!! Running in CI: No-default-features = skip expensive tests"; \
 		cargo test --no-default-features ${FILTER} | grep --line-buffered -vE "(TRACE)|((h2|tower|hyper)\:\:)"; \
 	else \

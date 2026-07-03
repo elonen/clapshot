@@ -32,6 +32,8 @@ use crate::api_server::server_state::ServerState;
 use crate::api_server::user_session::Topic;
 use crate::database::error::DBError;
 use crate::database::{models, DBPaging, DbBasicQuery, DbQueryByMediaFile, DbQueryByUser, DbUpdate, DB};
+use crate::notification::NotificationKind;
+use crate::notification::build_comment_notification_event;
 use crate::{client_cmd, optional_str_to_i32_or_tonic_error, send_user_error, send_user_ok, str_to_i32_or_tonic_error};
 
 use lib_clapshot_grpc::proto;
@@ -47,7 +49,7 @@ async fn get_media_file_or_send_error(media_file_id: Option<&str>, ses: &Option<
     match models::MediaFile::get(&mut server.db.conn()?, &media_file_id.into()) {
         Err(DBError::NotFound()) => {
             if let Some(ses) = ses {
-                send_user_error!(ses.user_id, server, Topic::MediaFile(media_file_id), "No such media file.");
+                send_user_error!(ses.user_id, server, Topic::MediaFile(media_file_id), server.tr_user(&ses.user_id, "No such media file."));
             };
             Ok(None)
         }
@@ -105,13 +107,17 @@ pub async fn msg_open_navigation_page(data: &OpenNavigationPage , ses: &mut User
         media_files.push(m.to_proto3(&server.storage, subs));
     }
 
-    let h_txt = if media_files.is_empty() { "<h2>You have no media yet.</h2>" } else { "<h2>All your media files</h2>" };
-    let heading = proto::PageItem{ item: Some(proto::page_item::Item::Html(h_txt.into()))};
+    let h_txt = if media_files.is_empty() {
+        format!("<h2>{}</h2>", server.tr_user(&ses.user_id, "You have no media yet."))
+    } else {
+        format!("<h2>{}</h2>", server.tr_user(&ses.user_id, "All your media files"))
+    };
+    let heading = proto::PageItem{ item: Some(proto::page_item::Item::Html(h_txt))};
     let listing = crate::grpc::folder_listing_for_media_files(&media_files);
     let page = vec![heading, listing];
 
     server.emit_cmd(
-        client_cmd!(ShowPage, { page_items: page, page_id: data.page_id.clone(), page_title: Some("Your Media".to_string())}),
+        client_cmd!(ShowPage, { page_items: page, page_id: data.page_id.clone(), page_title: Some(server.tr_user(&ses.user_id, "Your Media"))}),
         super::SendTo::UserSession(&ses.sid))?;
     Ok(())
 }
@@ -169,6 +175,29 @@ pub async fn del_media_file_and_cleanup(media_file_id: &str, ses: Option<&mut Us
         }
 
         models::MediaFile::delete(&mut server.db.conn()?, &v.id)?;
+
+        // Notify the organizer that a media file was deleted, for any additional cleanup
+        if let Some(ref uri) = server.organizer_uri {
+            if server.organizer_has_connected.load(std::sync::atomic::Ordering::Relaxed) {
+                let uri = uri.clone();
+                let user_id = v.user_id.clone();
+                let media_file_id = v.id.clone();
+                tokio::spawn(async move {
+                    match crate::grpc::grpc_client::connect(uri).await {
+                        Ok(mut org) => {
+                            let req = proto::org::OnMediaFileDeletedRequest { user_id, media_file_id };
+                            if let Err(e) = org.on_media_file_deleted(req).await {
+                                if e.code() != tonic::Code::Unimplemented {
+                                    tracing::error!(err=?e, "Error in organizer on_media_file_deleted() call");
+                                }
+                            }
+                        },
+                        Err(e) => tracing::error!(err=?e, "Failed to connect to organizer for on_media_file_deleted"),
+                    }
+                });
+            }
+        }
+
         let mut details = format!("Added by '{}' on {}. Filename was {}.",
             v.user_id.clone(),
             v.added_time,
@@ -211,7 +240,11 @@ pub async fn del_media_file_and_cleanup(media_file_id: &str, ses: Option<&mut Us
         if let Some(ses) = ses {
             let media_type_str = v.media_type.unwrap_or("file".to_string()).to_title_case();
             send_user_ok!(&ses.user_id, &server, Topic::MediaFile(&v.id),
-                if !cleanup_errors { format!("{} deleted.", media_type_str) } else { format!("{} deleted, but cleanup had errors.", media_type_str) },
+                if !cleanup_errors {
+                    server.tr_user_fmt(&ses.user_id, "{kind} deleted.", &[("kind", &media_type_str)])
+                } else {
+                    server.tr_user_fmt(&ses.user_id, "{kind} deleted, but cleanup had errors.", &[("kind", &media_type_str)])
+                },
                 details, true);
         }
     }
@@ -232,21 +265,45 @@ pub async fn msg_rename_media_file(data: &RenameMediaFile, ses: &mut UserSession
 
         let new_name = data.new_name.trim();
         if new_name.is_empty() || !new_name.chars().any(|c| c.is_alphanumeric()) {
-            send_user_error!(&ses.user_id, server, Topic::MediaFile(&v.id), "Invalid file name (must have letters/numbers)");
+            send_user_error!(&ses.user_id, server, Topic::MediaFile(&v.id), server.tr_user(&ses.user_id, "Invalid file name (must contain a letter or number)"));
             return Ok(());
         }
         if new_name.len() > 160 {
-            send_user_error!(&ses.user_id, server, Topic::MediaFile(&v.id), "Name too long (max 160)");
+            send_user_error!(&ses.user_id, server, Topic::MediaFile(&v.id), server.tr_user(&ses.user_id, "Name too long (max 160)"));
             return Ok(());
         }
         models::MediaFile::rename(&mut server.db.conn()?, &v.id, new_name)?;
         let media_type_str = v.media_type.unwrap_or("file".to_string()).to_title_case();
-        send_user_ok!(&ses.user_id, server, Topic::MediaFile(&v.id), format!("{} renamed.", media_type_str),
-            format!("New name: '{}'", new_name), true);
+        send_user_ok!(&ses.user_id, server, Topic::MediaFile(&v.id),
+            server.tr_user_fmt(&ses.user_id, "{kind} renamed.", &[("kind", &media_type_str)]),
+            server.tr_user_fmt(&ses.user_id, "New name: '{name}'", &[("name", new_name)]), true);
     }
     Ok(())
 }
 
+
+/// Fire a comment notification hook event (no-op unless the hook is enabled for this kind).
+/// The closure (incl. the media-file lookup) only runs when the event is allowlisted.
+fn notify_comment(server: &ServerState, ses: &UserSession, kind: NotificationKind,
+                  comment: &models::Comment, previous_text: Option<&str>)
+{
+    server.notification.emit(kind, || {
+        let (owner, title) = match server.db.conn().ok()
+            .and_then(|mut c| models::MediaFile::get(&mut c, &comment.media_file_id).ok())
+        {
+            Some(mf) => (Some(mf.user_id), mf.title),
+            None => (None, None),
+        };
+        let drawing_abs = comment.drawing.as_ref()
+            .filter(|d| !d.is_empty())
+            .map(|d| server.media_files_dir.join(&comment.media_file_id).join("drawings").join(d)
+                .to_string_lossy().into_owned());
+        let actor = crate::notification::ActorRef {
+            user_id: &ses.user_id, username: &ses.user_name, is_admin: ses.is_admin };
+        build_comment_notification_event(kind, comment, owner.as_deref(), title.as_deref(),
+            drawing_abs, Some(actor), previous_text, &server.url_base)
+    });
+}
 
 pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComment, ses: &mut UserSession, server: &ServerState) -> Res<()> {
 
@@ -312,6 +369,7 @@ pub async fn msg_add_comment(data: &proto::client::client_to_server_cmd::AddComm
     };
     let c = models::Comment::insert(&mut server.db.conn()?, &c)
         .map_err(|e| anyhow!("Failed to add comment: {:?}", e))?;
+    notify_comment(server, ses, NotificationKind::CommentAdded, &c, None);
     // Send to all clients watching this media file
     ses.emit_new_comment(server, c, super::SendTo::MediaFileId(&media_file_id)).await?;
     Ok(())
@@ -336,10 +394,11 @@ pub async fn msg_edit_comment(data: &EditComment, ses: &mut UserSession, server:
                 super::SendTo::MediaFileId(&vid))?;
 
             let c = models::Comment::get(conn, &id)?;
+            notify_comment(server, ses, NotificationKind::CommentEdited, &c, Some(&old.comment));
             ses.emit_new_comment(server, c, super::SendTo::MediaFileId(&vid)).await?;
         }
         Err(DBError::NotFound()) => {
-            send_user_error!(&ses.user_id, server, Topic::None, "Failed to edit comment.", "No such comment. Cannot edit.", true);
+            send_user_error!(&ses.user_id, server, Topic::None, server.tr_user(&ses.user_id, "Failed to edit comment."), server.tr_user(&ses.user_id, "No such comment. Cannot edit."), true);
         }
         Err(e) => { bail!(e); }
     }
@@ -356,23 +415,24 @@ pub async fn msg_del_comment(data: &DelComment, ses: &mut UserSession, server: &
             org_authz_with_default(&ses.org_session, "delete comment", true, server, &ses.organizer,
                 default_perm, AuthzTopic::Comment(&cmt, authz_req::comment_op::Op::Delete)).await?;
 
-            let vid = cmt.media_file_id;
+            let vid = cmt.media_file_id.clone();
             if Some(&ses.user_id) != cmt.user_id.as_ref() && !ses.is_admin {
-                send_user_error!(&ses.user_id, server, Topic::MediaFile(&vid), "Failed to delete comment.", "You can only delete your own comments", true);
+                send_user_error!(&ses.user_id, server, Topic::MediaFile(&vid), server.tr_user(&ses.user_id, "Failed to delete comment."), server.tr_user(&ses.user_id, "You can only delete your own comments"), true);
                 return Ok(());
             }
             let all_comm = models::Comment::get_by_media_file(conn, &vid, DBPaging::default())?;
             if all_comm.iter().any(|c| c.parent_id.map(|i| i.to_string()) == Some(id.to_string())) {
-                send_user_error!(&ses.user_id, server, Topic::MediaFile(&vid), "Failed to delete comment.", "Comment has replies. Cannot delete.", true);
+                send_user_error!(&ses.user_id, server, Topic::MediaFile(&vid), server.tr_user(&ses.user_id, "Failed to delete comment."), server.tr_user(&ses.user_id, "Comment has replies. Cannot delete."), true);
                 return Ok(());
             }
             models::Comment::delete(conn, &id)?;
+            notify_comment(server, ses, NotificationKind::CommentDeleted, &cmt, None);
             server.emit_cmd(
                 client_cmd!(DelComment, {comment_id: id.to_string()}),
                 super::SendTo::MediaFileId(&vid))?;
         }
         Err(DBError::NotFound()) => {
-            send_user_error!(&ses.user_id, server, Topic::None, "Failed to delete comment.", "No such comment. Cannot delete.", true);
+            send_user_error!(&ses.user_id, server, Topic::None, server.tr_user(&ses.user_id, "Failed to delete comment."), server.tr_user(&ses.user_id, "No such comment. Cannot delete."), true);
         }
         Err(e) => { bail!(e); }
     }
@@ -415,7 +475,7 @@ pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server:
 
     tracing::debug!("Writing orig subtitle file to: {:?}", orig_sub_file);
     if orig_sub_file.exists() {
-        send_user_error!(&ses.user_id, server, Topic::MediaFile(&mf.id), "Failed to add subtitle.", format!("Subtitle file already exists: '{:?}'", &orig_fn_clean), true);
+        send_user_error!(&ses.user_id, server, Topic::MediaFile(&mf.id), server.tr_user(&ses.user_id, "Failed to add subtitle."), server.tr_user_fmt(&ses.user_id, "Subtitle file already exists: '{filename}'", &[("filename", &format!("{:?}", &orig_fn_clean))]), true);
         return Ok(());
     }
 
@@ -433,7 +493,7 @@ pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server:
 
         let vtt_path = subs_dir.join(&orig_fn_clean.with_extension("vtt").file_name().context("Bad filename")?);
         if vtt_path.exists() {
-            send_user_error!(&ses.user_id, server, Topic::MediaFile(&mf.id), "Failed to add subtitle.", format!("WebVTT file already exists: '{:?}'", &vtt_path.file_name().context("Bad filename")?), true);
+            send_user_error!(&ses.user_id, server, Topic::MediaFile(&mf.id), server.tr_user(&ses.user_id, "Failed to add subtitle."), server.tr_user_fmt(&ses.user_id, "WebVTT file already exists: '{filename}'", &[("filename", &format!("{:?}", &vtt_path.file_name().context("Bad filename")?))]), true);
             return Ok(());
         }
 
@@ -591,7 +651,7 @@ pub async fn msg_join_collab(data: &JoinCollab, ses: &mut UserSession, server: &
                 )?;
             }
             Err(e) => {
-                send_user_error!(&ses.user_id, server, Topic::MediaFile(&v.id), format!("Failed to join collab session: {}", e));
+                send_user_error!(&ses.user_id, server, Topic::MediaFile(&v.id), server.tr_user_fmt(&ses.user_id, "Failed to join collab session: {error}", &[("error", &e.to_string())]));
             }
         }
     }
@@ -630,7 +690,7 @@ pub async fn msg_collab_report(data: &CollabReport, ses: &mut UserSession, serve
         });
         server.emit_cmd(ce, super::SendTo::Collab(collab_id)).map(|_| ())
     } else {
-        send_user_error!(&ses.user_id, server, Topic::None, "Report rejected: no active collab session.");
+        send_user_error!(&ses.user_id, server, Topic::None, server.tr_user(&ses.user_id, "Report rejected: no active collab session."));
         return Ok(());
     }
 }
@@ -654,7 +714,7 @@ pub async fn msg_move_to_folder(data: &proto::client::client_to_server_cmd::Move
                 anyhow::bail!("Organizer error: {:?}", e);
             }
         }
-    } else { send_user_error!(&ses.user_id, server, Topic::None, "No organizer session."); }
+    } else { send_user_error!(&ses.user_id, server, Topic::None, server.tr_user(&ses.user_id, "No organizer session.")); }
     Ok(())
 }
 
@@ -675,7 +735,7 @@ pub async fn msg_reorder_items(data: &ReorderItems, ses: &mut UserSession, serve
                 anyhow::bail!("Organizer error: {:?}", e);
             }
         }
-    } else { send_user_error!(&ses.user_id, server, Topic::None, "No organizer session."); }
+    } else { send_user_error!(&ses.user_id, server, Topic::None, server.tr_user(&ses.user_id, "No organizer session.")); }
     Ok(())
 }
 
@@ -716,7 +776,7 @@ pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server
     use proto::client::client_to_server_cmd::Cmd;
     let res = match req.cmd.as_ref() {
         None => {
-            send_user_error!(&ses.user_id, server, Topic::None, format!("Missing command from client: {:?}", req));
+            send_user_error!(&ses.user_id, server, Topic::None, server.tr_user_fmt(&ses.user_id, "Missing command from client: {request}", &[("request", &format!("{:?}", req))]));
             Ok(())
         }
         Some(cmd) => match cmd {
@@ -737,6 +797,17 @@ pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server
             Cmd::OrganizerCmd(data) => msg_organizer_cmd(&data, ses, server).await,
             Cmd::MoveToFolder(data) => msg_move_to_folder(&data, ses, server).await,
             Cmd::ReorderItems(data) => msg_reorder_items(&data, ses, server).await,
+            Cmd::SetLanguage(data) => {
+                // Remember the client's UI locale on the session; it's forwarded to the Organizer
+                // (UserSessionData.language) and used to localize server-originated messages.
+                ses.org_session.language = if data.language.is_empty() { None } else { Some(data.language.clone()) };
+                // Re-send the builtin popup actions (Rename/Trash) localized to the new locale. They
+                // are first defined at session start, before the client has reported its language.
+                server.emit_cmd(
+                    client_cmd!(DefineActions, {actions: crate::grpc::make_media_file_popup_actions(ses.org_session.language.as_deref())}),
+                    super::SendTo::UserSession(&ses.sid))?;
+                Ok(())
+            },
             Cmd::Logout(_) => {
                 tracing::info!("logout from client: user={}", ses.user_id);
                 return Err(SessionClose::Logout.into());
@@ -750,7 +821,7 @@ pub async fn msg_dispatch(req: &ClientToServerCmd, ses: &mut UserSession, server
             tracing::warn!("[{}] '{cmd_str}' failed: {}", ses.sid, e);
             // Assume name is regex '^[a-zA-Z0-9_]+' of cmd_str
             let cmd_name = regex::Regex::new(r"^[a-zA-Z0-9_]+").unwrap().find(&cmd_str).map(|m| m.as_str()).unwrap_or(cmd_str.as_str());
-            send_user_error!(&ses.user_id, server, Topic::None, format!("Cmd '{cmd_name}' failed: {e}"));
+            send_user_error!(&ses.user_id, server, Topic::None, server.tr_user_fmt(&ses.user_id, "Cmd '{cmd}' failed: {error}", &[("cmd", cmd_name), ("error", &e.to_string())]));
         }
     }
     Ok(true)

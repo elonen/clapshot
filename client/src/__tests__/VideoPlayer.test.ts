@@ -318,6 +318,50 @@ describe('VideoPlayer.svelte - Elementary Tests', () => {
     });
   });
 
+  describe('queueSeekOnLoad (version switching)', () => {
+    // Svelte renders <video> via template cloning, so the createElement override above doesn't
+    // reach it. Set duration + a play() spy on the actual rendered element per test.
+    function setupVideo(): HTMLVideoElement {
+      const video = document.querySelector('video') as HTMLVideoElement;
+      Object.defineProperty(video, 'duration', { get: () => 120, configurable: true });
+      video.play = vi.fn().mockResolvedValue(undefined) as any;
+      video.pause = vi.fn() as any;
+      return video;
+    }
+
+    it('seeks to the queued time and resumes when it was playing, on loadedmetadata', async () => {
+      const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });
+      const video = setupVideo();
+
+      component.queueSeekOnLoad(50, true);
+      await fireEvent.loadedMetadata(video);
+
+      expect(video.currentTime).toBe(50);
+      expect(video.play).toHaveBeenCalled();
+    });
+
+    it('clamps the queued time to the media duration and stays paused when it was paused', async () => {
+      const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });
+      const video = setupVideo();
+
+      component.queueSeekOnLoad(9999, false);  // duration is 120
+      await fireEvent.loadedMetadata(video);
+
+      expect(video.currentTime).toBe(120);
+      expect(video.play).not.toHaveBeenCalled();
+    });
+
+    it('a normal open (no queued seek) starts at 0 and does not auto-play', async () => {
+      const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });
+      const video = setupVideo();
+
+      await fireEvent.loadedMetadata(video);
+
+      expect(video.currentTime).toBe(0);
+      expect(video.play).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Drawing API Elementary Tests', () => {
     it('should not crash when calling onToggleDraw', () => {
       const { component } = render(VideoPlayer, { props: { src: 'test-video.mp4' } });

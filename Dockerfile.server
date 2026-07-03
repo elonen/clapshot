@@ -1,8 +1,9 @@
-FROM rust:1.88-slim-bookworm AS rust-bookworm-slim
+ARG DEBIAN_VER=trixie
+FROM rust:1-slim-${DEBIAN_VER} AS rust-slim
 
 # ----------------------------------
 
-FROM rust-bookworm-slim AS chef
+FROM rust-slim AS chef
 
 # Create regular user
 ARG USER=docker
@@ -20,12 +21,14 @@ USER ${UID}:${GID}
 RUN cargo install cargo-deb
 USER root
 
-# Add deb-multimedia repository (for a more recent ffmpeg)
-RUN apt-get -qy update
-RUN apt-get -qy install gnupg2 wget
-RUN wget -q https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2024.9.1_all.deb
-RUN dpkg -i deb-multimedia-keyring_2024.9.1_all.deb
-RUN echo "deb https://www.deb-multimedia.org bookworm main non-free" > /etc/apt/sources.list.d/deb-multimedia.list
+# Add deb-multimedia repository (for a more recent ffmpeg) - only needed for bookworm
+ARG DEBIAN_VER=trixie
+RUN apt-get -qy update && apt-get -qy install gnupg2 wget
+RUN if [ "$DEBIAN_VER" = "bookworm" ]; then \
+        wget -q https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/deb-multimedia-keyring_2024.9.1_all.deb && \
+        dpkg -i deb-multimedia-keyring_2024.9.1_all.deb && \
+        echo "deb https://www.deb-multimedia.org bookworm main non-free" > /etc/apt/sources.list.d/deb-multimedia.list; \
+    fi
 RUN apt-get -qy update
 
 # Install system packages
@@ -45,7 +48,8 @@ RUN apt-get -qy install sqlite3 >/dev/null
 RUN apt-get -qy install libssl-dev >/dev/null
 RUN apt-get -qy install libsqlite3-dev >/dev/null
 RUN apt-get -qy install protobuf-compiler >/dev/null
-RUN apt-get -qy install python3 python3.11 python3.11-venv >/dev/null
+ARG PYTHON_VER=python3.13
+RUN apt-get -qy install python3 ${PYTHON_VER} ${PYTHON_VER}-venv >/dev/null
 
 # Install MinIO for S3 integration tests
 RUN apt-get -qy install curl >/dev/null

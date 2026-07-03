@@ -1,9 +1,11 @@
 #!/usr/bin/make -f
 
+# Python version can be overridden via environment (default: python3.11 for bookworm)
+PYTHON_VER ?= python3.11
+
 %:
 	dh $@ --with python-virtualenv
 
 override_dh_virtualenv:
-	dh_virtualenv --builtin-venv --python python3.11 \
-		--preinstall deps/clapshot_grpc-0.0.0+dev.tar.gz \
-		--extra-pip-arg --no-build-isolation
+	dh_virtualenv --builtin-venv --python $(PYTHON_VER) \
+		--preinstall deps/clapshot_grpc-0.0.0+dev-py3-none-any.whl

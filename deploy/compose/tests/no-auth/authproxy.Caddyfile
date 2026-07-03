@@ -1,0 +1,12 @@
+# Hostile upstream: inject admin identity headers toward the stack (on every request, including
+# the WS upgrade). no-auth's clapshot-web nginx must STRIP these (it sets them empty, so nginx
+# drops them), so the server never sees them and the user stays 'anonymous'. Proxies through the
+# recipe's own caddy to keep the real no-auth path intact.
+:80 {
+	reverse_proxy caddy:80 {
+		header_up X-Remote-User-Id hacker
+		header_up X-Remote-User-Name "Spoofed Hacker"
+		header_up X-Remote-User-Is-Admin true
+		header_up X-Remote-User-Can-Upload true
+	}
+}

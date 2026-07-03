@@ -62,10 +62,10 @@ pub type MetadataResult = Result<Metadata, DetailedMsg>;
 fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
 {
     // Link to source file to a temporary file to avoid problems with
-    // special characters in the path with mediainfo
+    // special characters in the path with mediainfo.
+    // Use system temp dir so the link is never inside incoming_dir (which the file monitor scans).
     let uuid = uuid::Uuid::new_v4();
-    let file_dir = file.parent().ok_or("Failed to get parent directory")?;
-    let temp_dir = file_dir.join(uuid.to_string());
+    let temp_dir = std::env::temp_dir().join(uuid.to_string());
     
     // Preserve original file extension to help mediainfo detect format correctly
     let extension = file.extension()
@@ -213,6 +213,24 @@ fn read_metadata_from_file(args: &IncomingFile) -> Result<Metadata, String>
 {
     let json = run_mediainfo(&args.file_path)?;
     extract_variables(json, args, || Ok(args.file_path.metadata().map_err(|e| format!("Failed to get file size: {:?}", e))?.len()))
+}
+
+/// Read fps and total frame count from a (transcoded) media file.
+///
+/// The metadata stored at ingest time comes from the *source* file, which has no fps
+/// for audio (and a misleading one for still images). After transcoding, the playable
+/// video is what the client uses to compute SMPTE timecodes, so its fps/frame count
+/// must be read back from the produced file.
+pub(super) fn read_fps_and_frame_count(file: &PathBuf) -> Result<(Decimal, u32), String>
+{
+    let json = run_mediainfo(file)?;
+    let args = IncomingFile {
+        file_path: file.clone(),
+        user_id: String::new(),
+        cookies: Default::default(),
+    };
+    let md = extract_variables(json, &args, || file.metadata().map(|m| m.len()).map_err(|e| e.to_string()))?;
+    Ok((md.fps, md.total_frames))
 }
 
 /// Listens to inq for new files to scan for metadata with Mediainfo shell command.

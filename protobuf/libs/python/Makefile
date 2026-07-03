@@ -1,7 +1,7 @@
 PACKAGE_NAME := clapshot_grpc
 PACKAGE_VERSION := 0.0.0+dev
 
-TARGET_FILE := dist/$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz
+TARGET_FILE := dist/$(PACKAGE_NAME)-$(PACKAGE_VERSION)-py3-none-any.whl
 
 VENV := _venv
 PYTHON := $(VENV)/bin/python
@@ -21,9 +21,9 @@ PY_SRC := $(wildcard *.py) $(wildcard src/**/*.py) $(wildcard ../../protobuf/pro
 $(TARGET_FILE): $(PY_SRC) $(VENV) $(MYPY) $(GENERATED_DIR)/__init__.py
 	$(MYPY) src --no-strict-optional
 	$(PYTHON) -m pip install build
-	$(PYTHON) -m build --sdist
+	$(PYTHON) -m build --wheel
 	@echo "------- Build complete -------"
-	@echo "pip install dist/$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz"
+	@echo "pip install $(TARGET_FILE)"
 
 package: $(TARGET_FILE)
 

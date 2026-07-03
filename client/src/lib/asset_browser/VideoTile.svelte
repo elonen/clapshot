@@ -2,6 +2,7 @@
 
 import ScrubbableVideoThumb from './ScrubbableVideoThumb.svelte';
 import TileVisualizationOverride from './TileVisualizationOverride.svelte';
+import Badges from './Badges.svelte';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import {rgbToCssColor, cssVariables} from './utils';
 import {latestProgressReports} from '@/stores';
@@ -18,29 +19,22 @@ import type { MediaProgressReport } from '@/types';
 
 export function data() { return item; }
 
-// Convert `basecolor` (folder color override) to a CSS variable.
-let orig_basecolor = visualization?.baseColor ?
-    rgbToCssColor(visualization.baseColor.r, visualization.baseColor.g, visualization.baseColor.b) :
-    rgbToCssColor(71, 85, 105);
-
-let basecolor = $state(orig_basecolor);
-
 // Watch for (transcoding) progress reports from server, and update progress bar if one matches this item.
 let progress: number|undefined = $state(undefined);
 let progressMsg: string|undefined = $state(undefined);
 
-// Use effect to watch for progress reports
+// basecolor: gray during transcoding, otherwise derived from visualization prop
+let basecolor = $derived(
+    progress !== undefined ? rgbToCssColor(40, 40, 40) :
+    visualization?.baseColor ?
+        rgbToCssColor(visualization.baseColor.r, visualization.baseColor.g, visualization.baseColor.b) :
+        rgbToCssColor(71, 85, 105)
+);
+
 $effect(() => {
-    if ($latestProgressReports) {
-        const report = $latestProgressReports.find((r: MediaProgressReport) => r.mediaFileId === item.id);
-        const newProgress = report?.progress;
-        const newMsg = report?.msg;
-        if (newProgress !== progress || newMsg !== progressMsg) {
-            progress = newProgress;
-            progressMsg = newMsg;
-            basecolor = progress !== undefined ? rgbToCssColor(40, 40, 40) : orig_basecolor;
-        }
-    }
+    const report = $latestProgressReports?.find((r: MediaProgressReport) => r.mediaFileId === item.id);
+    progress = report?.progress;
+    progressMsg = report?.msg;
 });
 
 function fmt_date(d: Date | undefined) {
@@ -52,6 +46,8 @@ function fmt_date(d: Date | undefined) {
 
 <div class="w-full h-full video-list-video video-list-selector flex flex-col"
     use:cssVariables={{basecolor}}>
+
+    <Badges badges={visualization?.badges}/>
 
     <!-- Preview -->
     {#if item.previewData?.thumbUrl}
@@ -103,6 +99,7 @@ function fmt_date(d: Date | undefined) {
     border-radius: 0.375rem;
     padding: 0.5rem;
     box-shadow: inset 0px -12px 25px 5px rgba(0, 0, 0, 0.4);
+    position: relative;   /* anchor for the Badges (top-right) */
 }
 
 :global(.selectedTile .video-list-video) {

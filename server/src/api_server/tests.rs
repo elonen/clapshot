@@ -189,6 +189,37 @@ pub async fn expect_user_msg(ws: &mut crate::api_server::test_utils::WsClient, e
     }
 }
 
+/// Like `expect_user_msg`, but tolerant of slow background processing.
+///
+/// Ingest/transcode notifications are emitted only after external tools (mediainfo,
+/// ffmpeg) finish, so their timing is racy under load. Instead of assuming the message
+/// has already arrived, poll the websocket for up to `timeout_secs`, skipping unrelated
+/// messages, until a user message of `evt_type` shows up. Each underlying read has a
+/// 0.25s timeout that doubles as the poll interval.
+pub async fn wait_for_user_msg(ws: &mut crate::api_server::test_utils::WsClient, evt_type: proto::user_message::Type, timeout_secs: u32) -> proto::UserMessage
+{
+    use lib_clapshot_grpc::proto::client::{ServerToClientCmd, server_to_client_cmd as s2c};
+    println!(" --wait_for_user_msg of type {:?} (timeout {}s) ....", evt_type, timeout_secs);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs as u64);
+    loop {
+        if let Some(s2c::Cmd::ShowMessages(m)) =
+            crate::api_server::test_utils::try_get_parsed::<ServerToClientCmd>(ws).await.and_then(|c| c.cmd)
+        {
+            if let Some(msg) = m.msgs.iter().find(|msg| msg.r#type == evt_type as i32) {
+                return msg.clone();
+            }
+            // Fail fast (don't burn the whole timeout) if ingest errored out unexpectedly.
+            if evt_type != proto::user_message::Type::Error {
+                assert!(!m.msgs.iter().any(|msg| msg.r#type == proto::user_message::Type::Error as i32),
+                    "Got ERROR type message while waiting for {:?}: {:?}", evt_type, m.msgs);
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            panic!("Timed out after {}s waiting for user message of type {:?}", timeout_secs, evt_type);
+        }
+    }
+}
+
 #[tokio::test]
 #[traced_test]
 async fn test_api_rename_media_file()
@@ -516,4 +547,176 @@ fn test_remote_error_header() {
         parse_auth_headers(&headers_no_error, "anonymous", &regex);
 
     assert_eq!(remote_error_none, None);
+}
+
+
+/// Exercises the notification hook end-to-end through the cheap api_test harness:
+/// comment events come from ws commands, media/message events from injecting
+/// UserMessages into the same msg_relay the pipeline uses. The harness wires a
+/// recording sink (allowlist '*'); we drain `ts.notification_rx` to assert.
+#[tokio::test]
+#[traced_test]
+async fn test_api_notification_hook()
+{
+    use crate::notification::{NotificationEvent, NotificationKind};
+
+    async fn next_notification(
+        rx: &crossbeam_channel::Receiver<NotificationEvent>,
+        kind: NotificationKind,
+    ) -> serde_json::Value {
+        use std::time::{Duration, Instant};
+        let start = Instant::now();
+        let mut seen = Vec::new();
+        loop {
+            match rx.try_recv() {
+                Ok(ev) if ev.kind == kind => return ev.payload,
+                Ok(ev) => seen.push(ev.kind.as_str()),
+                Err(crossbeam_channel::TryRecvError::Empty) => {
+                    assert!(start.elapsed() < Duration::from_secs(5),
+                        "Timed out waiting for {} notification; saw {:?}", kind.as_str(), seen);
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+                Err(e) => panic!("notification channel closed: {e}"),
+            }
+        }
+    }
+
+    api_test! {[ws, ts]
+        let media_id = ts.media_files[0].id.clone();
+        let media_owner = ts.media_files[0].user_id.clone();
+        open_media_file(&mut ws, &media_id).await;
+
+        // ---- comment_added (plain) ----
+        send_server_cmd!(ws, AddComment, AddComment{media_file_id: media_id.clone(), comment: "Hello world".into(), ..Default::default()});
+        expect_client_cmd!(&mut ws, AddComments);
+        let p = next_notification(&ts.notification_rx, NotificationKind::CommentAdded).await;
+        assert_eq!(p["event"], "comment_added");
+        assert_eq!(p["actor"]["user_id"], "user.num1");
+        assert_eq!(p["actor"]["is_admin"], false);
+        assert_eq!(p["comment"]["text"], "Hello world");
+        assert_eq!(p["comment"]["author"]["user_id"], "user.num1");
+        assert_eq!(p["comment"]["drawing"], serde_json::Value::Null);
+        assert_eq!(p["media_file"]["id"], media_id);
+        assert_eq!(p["media_file"]["owner_user_id"], media_owner);
+        assert!(p["url"].as_str().unwrap().contains(&format!("vid={}", media_id)));
+        let cid = p["comment"]["id"].as_str().unwrap().to_string();
+
+        // ---- comment_added with drawing: path must point at an already-written file ----
+        let drw = "data:image/webp;charset=utf-8;base64,SU1BR0VfREFUQQ==";
+        send_server_cmd!(ws, AddComment, AddComment{media_file_id: media_id.clone(), comment: "With drawing".into(), drawing: Some(drw.into()), ..Default::default()});
+        expect_client_cmd!(&mut ws, AddComments);
+        let p = next_notification(&ts.notification_rx, NotificationKind::CommentAdded).await;
+        let drawing_path = p["comment"]["drawing"].as_str().expect("drawing path present");
+        assert!(std::path::Path::new(drawing_path).exists(),
+            "drawing file must exist on disk before the notification fires: {drawing_path}");
+
+        // ---- comment_edited carries previous_text ----
+        send_server_cmd!(ws, EditComment, EditComment{comment_id: cid.clone(), new_comment: "Edited!".into(), ..Default::default()});
+        expect_client_cmd!(&mut ws, DelComment);
+        expect_client_cmd!(&mut ws, AddComments);
+        let p = next_notification(&ts.notification_rx, NotificationKind::CommentEdited).await;
+        assert_eq!(p["comment"]["text"], "Edited!");
+        assert_eq!(p["comment"]["previous_text"], "Hello world");
+        assert_eq!(p["actor"]["user_id"], "user.num1");
+
+        // ---- comment_deleted ----
+        send_server_cmd!(ws, DelComment, DelComment{comment_id: cid.clone()});
+        expect_client_cmd!(&mut ws, DelComment);
+        let p = next_notification(&ts.notification_rx, NotificationKind::CommentDeleted).await;
+        assert_eq!(p["comment"]["id"], cid);
+        assert_eq!(p["comment"]["text"], "Edited!");
+
+        // ---- media_file_added (pipeline -> msg_relay) ----
+        ts.user_msg_tx.send(UserMessage{
+            topic: UserMessageTopic::MediaFileAdded,
+            user_id: Some("user.num1".into()),
+            media_file_id: Some(media_id.clone()),
+            ..Default::default()
+        }).unwrap();
+        let p = next_notification(&ts.notification_rx, NotificationKind::MediaFileAdded).await;
+        assert_eq!(p["event"], "media_file_added");
+        assert_eq!(p["media_file"]["id"], media_id);
+        assert_eq!(p["media_file"]["owner_user_id"], media_owner);
+        assert_eq!(p["actor"], serde_json::Value::Null);
+
+        // ---- media_file_updated carries the change message ----
+        ts.user_msg_tx.send(UserMessage{
+            topic: UserMessageTopic::MediaFileUpdated,
+            user_id: Some("user.num1".into()),
+            media_file_id: Some(media_id.clone()),
+            msg: "Transcoding done".into(),
+            ..Default::default()
+        }).unwrap();
+        let p = next_notification(&ts.notification_rx, NotificationKind::MediaFileUpdated).await;
+        assert_eq!(p["message"], "Transcoding done");
+        assert_eq!(p["media_file"]["id"], media_id);
+
+        // ---- message_persisted (pipeline origin) ----
+        ts.user_msg_tx.send(UserMessage{
+            topic: UserMessageTopic::Ok,
+            user_id: Some("user.num1".into()),
+            msg: "Job done".into(),
+            ..Default::default()
+        }).unwrap();
+        let p = next_notification(&ts.notification_rx, NotificationKind::MessagePersisted).await;
+        assert_eq!(p["origin"], "pipeline");
+        assert_eq!(p["message"]["event_name"], "ok");
+        assert_eq!(p["message"]["text"], "Job done");
+        assert_eq!(p["message"]["recipient_user_id"], "user.num1");
+    }
+}
+
+
+/// Full vertical: a real ws comment travels through the sink, the bounded queue,
+/// the `run_forever` worker thread, and into an actual (temporary) hook script on
+/// disk. Unlike `test_api_notification_hook` (which drains the channel directly),
+/// this exercises the worker loop and real process invocation end-to-end.
+#[tokio::test]
+#[traced_test]
+async fn test_notification_hook_runs_real_script()
+{
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
+
+    // Recording script: append "<event>\t<stdin-json>\n" to a sink file.
+    let dir = tempfile::tempdir().unwrap();
+    let sink = dir.path().join("hook.log");
+    let script = dir.path().join("record.sh");
+    std::fs::write(&script, format!(
+        "#!/bin/sh\nprintf '%s\\t' \"$CLAPSHOT_NOTIFICATION_EVENT\" >> '{0}'\ncat >> '{0}'\nprintf '\\n' >> '{0}'\n",
+        sink.display())).unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    api_test! {[ws, ts]
+        // Drive the real worker thread off the harness's notification channel.
+        let _worker = {
+            let rx = ts.notification_rx.clone();
+            let script = script.clone();
+            std::thread::spawn(move || crate::notification::run_forever(rx, script))
+        };
+
+        let media_id = ts.media_files[0].id.clone();
+        open_media_file(&mut ws, &media_id).await;
+
+        send_server_cmd!(ws, AddComment, AddComment{media_file_id: media_id.clone(), comment: "Ping from a real script".into(), ..Default::default()});
+        expect_client_cmd!(&mut ws, AddComments);
+
+        // Poll the on-disk sink the script writes to. The script appends the record
+        // in three steps (event name + tab, then the stdin JSON, then a newline), so
+        // only treat it as complete once the trailing newline is present -- otherwise
+        // we can race in and read "comment_added\t" before `cat` has written the JSON.
+        let start = Instant::now();
+        let recorded = loop {
+            if let Ok(s) = std::fs::read_to_string(&sink) {
+                if s.contains("comment_added") && s.ends_with('\n') { break s; }
+            }
+            assert!(start.elapsed() < Duration::from_secs(5),
+                "hook script never ran; sink still empty");
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        };
+        assert!(recorded.starts_with("comment_added\t"), "event name via env: {recorded:?}");
+        assert!(recorded.contains("\"text\":\"Ping from a real script\""), "JSON payload via stdin: {recorded:?}");
+
+        // Worker exits on its own once the server (and thus the sink tx) is dropped.
+    }
 }

@@ -78,10 +78,10 @@ function MakeLetterAvatar(name: string | null, size: number): string {
     return canvas.toDataURL();  // Base64 encoded data url string + colour hex
 }
 
-const letterAvatar = MakeLetterAvatar(username, parseFloat(width));
 let avatarImage: HTMLImageElement | undefined = $state();
 onMount(() => {
     if (avatarImage) {
+        const letterAvatar = MakeLetterAvatar(username, parseFloat(width));
         avatarImage.src = (src && (src!=="")) ? src : letterAvatar;
     }
 });

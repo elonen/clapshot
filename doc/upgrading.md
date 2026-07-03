@@ -1,5 +1,12 @@
 # Upgrading Clapshot to a new release
 
+> **Docker Compose deployments** ([`deploy/compose/`](../deploy/compose/)) upgrade differently:
+> pull the repo and redeploy (`docker compose pull && docker compose up -d`, or via
+> Portainer/Komodo). Config and migrations are handled by the images; your data and users persist in
+> volumes. Pin `CLAPSHOT_VERSION` for deliberate upgrades. See
+> [deploy/compose/README.md](../deploy/compose/README.md). The steps below are for **`.deb`-based**
+> deployments.
+
 These instructions are for basic .deb-based deployments, adapt as necessary for custom ones.
 
 1. Stop the server, `systemctl stop clapshot-server`
@@ -17,6 +24,56 @@ These instructions are for basic .deb-based deployments, adapt as necessary for 
  - The basic_folders Organizer plugin doesn't have its own systemd entry (it's executed by the Server), so you don't need to `systemctl stop/start` it. It also piggybacks the server when doing migrations.
 
 If you find this migration guide lacking, please contribute corrections and additions on the [Clapshot's GitHub page](https://github.com/elonen/clapshot).
+
+## Migrating the demo/installer auth from htadmin to HTWicket
+
+Starting with the HTWicket-based demo image (`elonen/clapshot:latest-demo-htwicket`) and
+the updated `deploy/debian/install-clapshot-deb.sh`, the PHP `htadmin` + HTTP Basic Auth example
+has been replaced by [HTWicket](https://github.com/elonen/htwicket): a small nginx
+`auth_request` gateway that manages the same `/var/www/.htpasswd`, but adds a real login
+form, working cookie logout, and a web user-management UI. If you used a custom
+authentication setup (OAuth, LDAP, Kerberos, ...) none of this affects you — the
+`X-Remote-User-*` header contract is unchanged.
+
+For deployments based on the old htadmin example:
+
+1. **Passwords carry over automatically.** HTWicket reads the same `/var/www/.htpasswd`
+   and verifies all the legacy hash formats (DES crypt, `$apr1$`, `$1$`, `$5$`/`$6$`,
+   bcrypt). No reset, no import, no user re-creation. The new *random admin password*
+   behavior only applies to **fresh** installs (no existing `.htpasswd`); your existing
+   file is never touched on upgrade.
+
+2. **The separate `htadmin` management login is gone — and it does not migrate.** htadmin
+   kept its own admin account (`admin_user` / `admin_pwd_hash`) in `config.ini`, *outside*
+   `.htpasswd`, so there is nothing to import. HTWicket has no separate management account:
+   the user-management UI at **`/htwicket/admin`** is gated by a `[superadmins]` rule over
+   your *real* `.htpasswd` users. By default, **the user named `admin` doubles as the
+   HTWicket superadmin** (plus anyone with `is_admin = true` in the sidecar). So just log in
+   as your existing `admin`.
+   - No `admin` user, or forgot the password? Reset it on the CLI:
+     `sudo -u www-data htwicket user passwd admin --random` (prints a new password), or
+     `sudo -u www-data htwicket user add admin` to create one.
+   - Superadmin named something other than `admin`? Edit `[superadmins].expr` in
+     `/etc/htwicket.toml`, or add `[users."NAME"] is_admin = true` to `/var/www/.htwicket.toml`.
+
+3. **Switch the nginx site** from `clapshot+htadmin.nginx.conf` to
+   `clapshot+htwicket.nginx.conf` and remove the old one (two `default_server` blocks
+   prevent nginx from starting). Install the `htwicket` package and
+   `systemctl enable --now htwicket`. The `deploy/debian/install-clapshot-deb.sh` script does all
+   of this for you (and removes the stale htadmin config + `/var/www/htadmin` on re-run).
+   You no longer need `php-fpm`.
+
+4. **Client logout.** Set `"user_menu_show_basic_auth_logout": false` and add a
+   `{"label":"Logout","type":"url","data":"/htwicket/logout"}` item to
+   `user_menu_extra_items` in `/etc/clapshot_client.conf`, so the menu offers HTWicket's
+   real logout instead of the old (now removed) Basic-Auth `/logout` hack. The installer
+   does this automatically.
+
+5. **Cookie scheme gotcha (important).** HTWicket marks its session cookie `Secure` over
+   HTTPS. If your public URL is `https://`, keep `insecure_cookies = false`; if it is plain
+   `http://`, set `insecure_cookies = true`. A mismatch makes login *silently* fail (the
+   browser drops the cookie). The installer and demo entrypoint derive this from the URL
+   scheme automatically.
 
 ## Recovering lost comments from 0.5.6 -> 0.6.0 migration
 

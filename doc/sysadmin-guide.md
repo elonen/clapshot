@@ -43,7 +43,7 @@ See [upgrading.md](upgrading.md) for details about upgrading.
 
 Clapshot server itself contains no authentication code. Instead, it trusts
 HTTP server (reverse proxy) to take care of that and to pass authenticated user ID
-and username in request headers. This is exactly what the basic auth / htadmin demo
+and username in request headers. This is exactly what the HTWicket demo
 above does, too:
 
  - `X-Remote-User-Id` / `X_Remote_User_Id` / `HTTP_X_REMOTE_USER_ID` – Authenticated user's ID (e.g. "alice.brown")
@@ -52,10 +52,10 @@ above does, too:
  - `X-Remote-User-Can-Upload` / `X_Remote_User_Can_Upload` / `HTTP_X_REMOTE_USER_CAN_UPLOAD` – If set to "1" or "true", user is allowed to upload media files
  - `X-Remote-Error` / `X_Remote_Error` / `HTTP_X_REMOTE_ERROR` – If set, displays authentication error message instead of normal UI
 
-Most modern real-world deployments will likely use some more advanced authentication mechanism, such as OAuth, Kerberos etc, but htadmin is a good starting point.
+Most modern real-world deployments will likely use some more advanced authentication mechanism, such as OAuth, Kerberos etc, but [HTWicket](https://github.com/elonen/htwicket) is a good starting point. It's a small nginx `auth_request` gateway that manages an `.htpasswd` file, offers a login form with real cookie logout, and a web UI for user management. Per-user attributes (admin rights, upload permission, display name) are kept in a sidecar `.htwicket.toml` and exposed to Clapshot via `[headers.*]` CEL expressions.
 
-See [clapshot+htadmin.nginx.conf](client/debian/additional_files/clapshot+htadmin.nginx.conf) (Nginx config example) and [Dockerfile.demo](Dockerfile.demo) +
-[docker-entry_htadmin.sh](test/docker-entry_htadmin.sh) for details on how the integration works.
+See [clapshot+htwicket.nginx.conf](client/debian/additional_files/clapshot+htwicket.nginx.conf) (Nginx config example) and [Dockerfile.demo](Dockerfile.demo) +
+[docker-entry_htwicket.sh](test/docker-entry_htwicket.sh) for details on how the integration works.
 
 Authorization is also supposed to be handled on web server, at least for now.
 See for example https://github.com/elonen/ldap_authz_proxy on how to authorize users against Active Directory/LDAP groups using Nginx. I wrote it to complement Nginx spnego authn, which uses Kerberos and thus doesn't really have a concept of groups.
@@ -72,29 +72,33 @@ Clapshot's `basic_folders` Organizer supports restricting file upload permission
 
 Upload permission is controlled via the `X-Remote-User-Can-Upload` header set by your reverse proxy. Set it "true" to allow uploads; "false" to deny.
 
-#### Nginx Example
+#### HTWicket Example
 
-Since htAdmin doesn't support groups, the example Nginx config just matches usernames:
+In the HTWicket demo, upload permission is a per-user `can_upload` field (default `true`)
+stored in the sidecar `.htwicket.toml` and turned into the `X-Remote-User-Can-Upload`
+header by a CEL expression in `/etc/htwicket.toml`:
 
-```nginx
-# Define upload permissions per user
-map $remote_user $can_upload {
-    default true;    # Allow uploads for all users by default
-    bob false;       # Deny uploads for user 'bob'
-}
+```toml
+# /etc/htwicket.toml
+[fields.can_upload]
+type = "bool"
+default = true
 
-server {
-    location /api {
-        proxy_pass http://127.0.0.1:8095/api;
-
-        # Pass upload permission to Clapshot
-        proxy_set_header X-Remote-User-Can-Upload $can_upload;
-        # ... other headers
-    }
-}
+[headers.X-Remote-User-Can-Upload]
+type = "bool"
+expr = "fields.can_upload"
 ```
 
-The `demo-htadmin` Docker image includes a demo user with restricted upload permissions:
+```toml
+# /var/www/.htwicket.toml (sidecar) - deny uploads for user 'bob'
+[users."bob"]
+can_upload = false
+```
+
+If instead your reverse proxy authenticates users some other way, just have it set the
+`X-Remote-User-Can-Upload` header ("true"/"false") however it sees fit.
+
+The `demo-htwicket` Docker image includes a demo user with restricted upload permissions:
 
 - `bob:bob123` (cannot upload files) - demonstrates upload permission restrictions
 
@@ -164,6 +168,14 @@ User assignment security depends on the chosen method:
 - Consider that any user who can create directories in `incoming/` can impersonate other users
 - This mode is ideal for (S)FTP scenarios where you control directory creation through the FTP server configuration
 
+### Notifications (e‑mail / Slack / …)
+
+Clapshot can call an external script on comment, user-message, and media-file
+events so you can send e‑mail, Slack messages, etc. It is **off by default**;
+enable it with `notification-script` (and optionally `notification-events`) in
+the config. See the **[Notification Hook guide](notification-hook.md)** for setup,
+the event list, and the JSON payload reference.
+
 ### Docker Environment Configuration
 
 Clapshot's Docker demo containers support comprehensive configuration via environment variables, allowing you to customize server behavior without rebuilding images or mounting custom config files.
@@ -199,7 +211,7 @@ docker run --rm -it -p 8080:80 \
   -e CLAPSHOT_SERVER__INGEST_USERNAME_FROM=folder-name \
   -e CLAPSHOT_SERVER__URL_BASE=http://clapshot.example.com/ \
   -v clapshot-demo:/mnt/clapshot-data/data \
-  elonen/clapshot:latest-demo-htadmin
+  elonen/clapshot:latest-demo-htwicket
 ```
 
 **Development Configuration:**
@@ -239,11 +251,15 @@ For the complete list, see the [server configuration file](../server/debian/addi
 
 #### Docker Compose Example
 
+> This snippet only **illustrates env-var configuration** on the single-container demo image — it
+> is *not* a production deployment. For real Docker deployments, use the maintained
+> [Compose recipes](../deploy/compose/) (the same `CLAPSHOT_SERVER__*` variables apply, set in `.env`).
+
 ```yaml
 version: '3.8'
 services:
   clapshot:
-    image: elonen/clapshot:latest-demo-htadmin
+    image: elonen/clapshot:latest-demo-htwicket
     ports:
       - "8080:80"
     volumes:

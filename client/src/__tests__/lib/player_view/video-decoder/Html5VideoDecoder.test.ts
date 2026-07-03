@@ -59,8 +59,8 @@ describe('TimecodeUtils', () => {
       expect(TimecodeUtils.smpteToFrame('00:01:00', 24)).toBe(1440);
     });
 
-    it('should throw on invalid timecode', () => {
-      expect(() => TimecodeUtils.smpteToFrame('invalid', 24)).toThrow();
+    it('returns 0 (does not throw) on invalid timecode', () => {
+      expect(TimecodeUtils.smpteToFrame('invalid', 24)).toBe(0);
     });
   });
 

@@ -1,4 +1,46 @@
-clapshot-client (0.9.2) bookworm; urgency=low
+clapshot-client (0.12.0) unstable; urgency=low
+
+  * New feature: "Version sets" (versioned media) UI
+  * New feature: gettext-based localized UI (Finnish, Chinese, French)
+  * Fix: localize builtin popup actions/dialogs and apply locale before
+    first render
+  * Upgrade Vite and npm dependencies
+  * Demo: replaced PHP 'htadmin' + HTTP Basic Auth with 'HTWicket':
+    same .htpasswd but modern crypto, proper login/logout/manage pages.
+    See doc/upgrading.md for migration notes.
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 12 Jun 2026 12:00:00 +0300
+
+clapshot-client (0.11.1) unstable; urgency=low
+
+  * (Follow server versioning)
+
+ -- Jarno Elonen <elonen@iki.fi>  Thu, 04 Jun 2026 12:00:00 +0300
+
+clapshot-client (0.11.0) unstable; urgency=low
+
+  * New feature: Fullscreen button and 'f' shortcut key, with associated
+    frame stepping fixes (closes #141, #139)
+  * Fix: Audio player crash on fps=0 (guard client timecode, closes #136)
+  * Upgrade npm dependencies
+
+ -- Jarno Elonen <elonen@iki.fi>  Tue, 02 Jun 2026 12:00:00 +0300
+
+clapshot-client (0.10.0) unstable; urgency=low
+
+  * New feature: "Sort by Timecode" toggle for comments
+  * New feature: Real-time folder refresh for non-owner clients observing
+    a folder when changes occur
+  * Fix: Video playback on Safari (subtitle track and TouchEvent issues,
+    closes #105)
+  * Fix: Use JPEG fallback when WEBP thumbnails not supported (Safari)
+  * Improvement: Audio volume setting now persists longer (max duration
+    instead of 12h default)
+  * Add Debian 13 (Trixie) .deb build support
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 27 Mar 2026 12:00:00 +0200
+
+clapshot-client (0.9.2) unstable; urgency=low
 
   * New feature: Comment export to EDL, Premiere XML, CSV, SRT, and OTIO formats
   * New export dialog UI in NavBar

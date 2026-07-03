@@ -1,0 +1,12 @@
+# Stub for "your authenticating proxy": authenticate (here: hard-coded), then SET the trusted
+# identity headers and forward to clapshot-web. header_up replaces any client-supplied value,
+# and applies to the WebSocket upgrade too — which is the whole point (browsers can't set WS
+# handshake headers). A real proxy would also authenticate per-request and strip client headers.
+:80 {
+	reverse_proxy clapshot-web:80 {
+		header_up X-Remote-User-Id tadmin
+		header_up X-Remote-User-Name "Test Admin"
+		header_up X-Remote-User-Is-Admin true
+		header_up X-Remote-User-Can-Upload true
+	}
+}

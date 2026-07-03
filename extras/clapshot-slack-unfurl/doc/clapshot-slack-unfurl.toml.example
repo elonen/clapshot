@@ -1,0 +1,35 @@
+# Path to Clapshot's media files directory
+videos_dir = "/mnt/clapshot-data/data/videos"
+
+# Path to Clapshot's SQLite database
+sqlite_path = "/mnt/clapshot-data/data/clapshot.sqlite"
+
+# Slack tokens — prefer setting SLACK_BOT_TOKEN and SLACK_APP_TOKEN
+# environment variables instead of storing secrets here.
+# If env vars are set, they take precedence over these values.
+#slack_bot_token = "xoxb-..."
+#slack_app_token = "xapp-..."
+
+# Channel allowlist — unfurls are only shown in these channels.
+# Use channel IDs for exact match, or "name:<regex>" for name patterns.
+# An empty list denies all channels.
+#
+# Scale images to fit within these width bounds (pixels) before uploading.
+# Useful because thumbnails are small and drawings can be full 1920px+.
+# Omit or comment out to skip scaling.
+#image_min_width = 800
+#image_max_width = 1200
+
+# Enable debug logging (also settable via --debug CLI flag).
+#debug = false
+
+# Log to a file instead of stdout (also settable via --log PATH CLI flag).
+#log_path = "/var/log/clapshot-slack-unfurl.log"
+
+# Note: name regexes only work for public channels (or private ones where
+# the bot has been invited). For private channels, use channel IDs instead.
+allowed_channels = [
+    # "C04ABCD1234",
+    # "GD5678EFG",           # private channel — use ID
+    # "name:^project-x-.*",  # public channels — name regex OK
+]

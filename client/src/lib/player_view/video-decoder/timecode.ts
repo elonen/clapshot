@@ -7,6 +7,13 @@ export const TimecodeUtils = {
    * Convert frame number to SMPTE timecode string (HH:MM:SS:FF).
    */
   frameToSMPTE(frame: number, frameRate: number): string {
+    // A non-positive or non-finite frame rate (e.g. fps=0 for audio whose DB row
+    // was never updated from the transcoded video) would divide by zero and yield
+    // "NaN:NaN:NaN:NaN". Degrade to a neutral timecode instead.
+    if (!Number.isFinite(frameRate) || frameRate <= 0) {
+      return '00:00:00:00';
+    }
+
     const totalFrames = Math.floor(frame);
     const framesPerMinute = frameRate * 60;
     const framesPerHour = framesPerMinute * 60;
@@ -34,8 +41,11 @@ export const TimecodeUtils = {
    */
   smpteToFrame(smpte: string, frameRate: number): number {
     const parts = smpte.split(':').map(Number);
-    if (parts.length < 3 || parts.some(isNaN)) {
-      throw new Error(`Invalid SMPTE timecode: ${smpte}`);
+    // A malformed/NaN timecode (e.g. "NaN:NaN:NaN:NaN" persisted while fps was 0) or a
+    // non-positive/non-finite frame rate would otherwise throw and unwind the player's
+    // reactive chain, breaking the whole UI. Degrade to frame 0 instead.
+    if (parts.length < 3 || parts.some(isNaN) || !Number.isFinite(frameRate) || frameRate <= 0) {
+      return 0;
     }
 
     const [hours, minutes, seconds, frames = 0] = parts;

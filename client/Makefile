@@ -1,4 +1,4 @@
-.PHONY: dev docker build clean dist docker npm-deps npm-check-local npm-test-local docker-deb debian-docker debian-local test-docker build-local dev-local dev-docker default
+.PHONY: dev docker build clean dist docker npm-deps npm-check-local npm-test-local docker-deb debian-docker debian-local test-docker build-local dev-local dev-docker default get-cur-ver verify-ver
 
 PACKAGE_VERSION=$(shell (git rev-parse --short HEAD || date +"%Y-%m-%d" || echo "dev"))
 PACKAGE=clapshot_client
@@ -6,25 +6,36 @@ PACKAGE=clapshot_client
 UID=$(shell id -u)
 GID=$(shell id -g)
 
+# Debian version (can be overridden via environment)
+DEBIAN_VER ?= trixie
+
 CLIENT_DEPS=$(shell find src/ public/ package*.json tsconfig.json vite.config.ts -type f 2>/dev/null) $(shell find ../protobuf/proto -type f)
 DEB_DEPS=$(shell find debian/ -type f)
 
 
 default: build-local
 
+
+get-cur-ver:
+	@jq -r '.version' package.json
+
+verify-ver:
+	@man=$$($(MAKE) -s get-cur-ver); \
+	chg=$$(sed -nE '1s/.*\(([^)]+)\).*/\1/p' debian/changelog | sed -E 's/^[0-9]+://; s/-[^-]*$$//'); \
+	test "$$man" = "$$chg" || { echo "ERROR: client version mismatch: package.json=$$man changelog=$$chg"; exit 1; }; \
+	echo "client version OK: $$man"
+
 clean:
 	rm -rf node_modules dist dist_deb
 	cd ../protobuf/libs/typescript && make clean
 
 npm-deps:
-	npm install vite
 	npm install
 	cd ../protobuf/libs/typescript && make
 
 docker: clean
-	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} -f Dockerfile.client .
+	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg DEBIAN_VER=${DEBIAN_VER} -f Dockerfile.client .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:latest
-
 
 
 npm-check-local: npm-deps
@@ -42,21 +53,28 @@ debian-local:
 	dpkg-buildpackage -us -uc -b
 
 docker-deb:
-	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg TARGET=deb  -f Dockerfile.client .
+	cd .. && DOCKER_BUILDKIT=1 docker build -t ${PACKAGE}:${PACKAGE_VERSION} --build-arg TARGET=deb --build-arg DEBIAN_VER=${DEBIAN_VER} -f Dockerfile.client .
 	docker tag ${PACKAGE}:${PACKAGE_VERSION} ${PACKAGE}:deb
 
-debian-docker: dist_deb/built.docker
+debian-docker: dist_deb/built.${DEBIAN_VER}.docker
 
-dist_deb/built.docker: ${CLIENT_DEPS} ${DEB_DEPS} ../Dockerfile.client
+dist_deb/built.${DEBIAN_VER}.docker: ${CLIENT_DEPS} ${DEB_DEPS} ../Dockerfile.client
+	@echo "Building client for Debian ${DEBIAN_VER}"
 	@which jq || (echo "ERROR: Please install jq first." && exit 1)
-	rm -rf dist_deb
 	mkdir -p dist_deb
 	$(MAKE) docker-deb
 	$(eval PVER=$(shell jq -r '.version' package.json))
 	test -n ${PVER}
 	$(eval PKGDIR=${PACKAGE}-${PVER})
-	$(eval CMD="mkdir -p /deb/ && cp -a /build /deb/${PKGDIR} && cd /deb/${PKGDIR}/client && make debian-local && mv /deb/${PKGDIR}/*.deb /deb/ && rm -rf /deb/${PKGDIR} && chown -R ${UID}:${GID} /deb")
-	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:deb  bash -c ${CMD}
+	docker run --rm --mount type=bind,source="$$(pwd)/dist_deb",target="/deb" --user root ${PACKAGE}:deb \
+		bash -c "mkdir -p /deb/ && cp -a /build /deb/${PKGDIR} && cd /deb/${PKGDIR}/client && make debian-local && cp /deb/${PKGDIR}/*.deb /deb/ && rm -rf /deb/${PKGDIR} && chown -R ${UID}:${GID} /deb"
+	@# Tag freshly-built .deb files with the Debian version, inserting it just
+	@# before the arch suffix. Already-tagged debs (this or another distro) keep
+	@# their codename, so cross-distro artifacts left in dist_deb aren't re-tagged.
+	for f in dist_deb/*.deb; do \
+		newname=$$(echo "$$f" | sed -E 's/(_[0-9.]+-?[0-9]*)_(amd64|arm64|all)\.deb$$/\1_${DEBIAN_VER}_\2.deb/'); \
+		[ "$$f" != "$$newname" ] && mv "$$f" "$$newname" || true; \
+	done
 	touch $@
 
 dev-local: npm-deps

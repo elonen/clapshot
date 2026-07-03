@@ -10,8 +10,10 @@ use anyhow::bail;
 pub mod video_pipeline;
 pub mod api_server;
 pub mod database;
+pub mod notification;
 pub mod tests;
 pub mod grpc;
+pub mod i18n;
 pub mod storage;
 
 pub const PKG_VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -47,6 +49,8 @@ impl ClapshotInit {
         transcode_script: String,
         thumbnail_script: String,
         transcode_decision_script: String,
+        notification_script: Option<String>,
+        notification_events: String,
         org_http_headers_regex: regex::Regex,
         storage: crate::storage::StorageBackend,
         terminate_flag: Arc<AtomicBool>)
@@ -79,6 +83,24 @@ impl ClapshotInit {
         let grpc_srv_listening_flag = Arc::new(AtomicBool::new(false));
         let db: Arc<DB> = Arc::new(database::DB::open_db_file(&db_file).unwrap());
 
+        // Build the notification hook. Disabled (no worker thread, no-op at call
+        // sites) unless a script is configured.
+        let notification = match notification_script {
+            Some(ref script) if !script.is_empty() => {
+                let patterns = notification::parse_event_patterns(&notification_events);
+                let unknown = notification::unknown_patterns(&patterns);
+                if !unknown.is_empty() {
+                    tracing::warn!(unknown=?unknown, valid=%notification::all_event_names(),
+                        "Unknown --notification-events patterns (ignored).");
+                }
+                let (sink, rx) = notification::NotificationSink::new(patterns);
+                let script_path = PathBuf::from(script);
+                thread::spawn(move || notification::run_forever(rx, script_path));
+                sink
+            },
+            _ => notification::NotificationSink::disabled(),
+        };
+
         // Run API server
         let (user_msg_tx, user_msg_rx) = unbounded::<api_server::UserMessage>();
         let (upload_tx, upload_rx) = unbounded::<video_pipeline::IncomingFile>();
@@ -92,7 +114,8 @@ impl ClapshotInit {
                 grpc_srv_listening_flag.clone(),
                 default_user,
                 terminate_flag.clone(),
-                org_http_headers_regex);
+                org_http_headers_regex,
+                notification);
             let grpc_srv = if (&organizer_uri).is_some() { Some(grpc_server_bind.clone()) } else { None };
             let ub = url_base.clone();
             thread::spawn(move || { api_server::run_forever(user_msg_rx, grpc_srv, upload_tx, bind_api.to_string(), ub, cors_origins, server, port) })
@@ -368,6 +391,8 @@ pub fn run_clapshot(
     transcode_script: String,
     thumbnail_script: String,
     transcode_decision_script: String,
+    notification_script: Option<String>,
+    notification_events: String,
     org_http_headers_regex: regex::Regex,
     storage: crate::storage::StorageBackend,
 ) -> anyhow::Result<()> {
@@ -393,6 +418,8 @@ pub fn run_clapshot(
         transcode_script,
         thumbnail_script,
         transcode_decision_script,
+        notification_script,
+        notification_events,
         org_http_headers_regex,
         storage,
         terminate_flag.clone()

@@ -15,6 +15,7 @@ distclean:
 clean: distclean
 
 debian-docker:
+	set -e; \
 	for dir in $(SUBDIRS); do \
-		cd $$dir && $(MAKE) debian-docker; \
+		$(MAKE) --no-print-directory -C $$dir debian-docker; \
 	done

@@ -5,14 +5,19 @@ import { dndzone, TRIGGERS, SOURCES } from 'svelte-dnd-action';
 import { selectedTiles } from '@/stores';
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import TileVisualizationOverride from './TileVisualizationOverride.svelte';
-import {rgbToCssColor, cssVariables} from './utils';
+import VideoTile from './VideoTile.svelte';
+import {rgbToCssColor, cssVariables, dropContainsFolder} from './utils';
+import {acts} from '@tadashi/svelte-notification';
+import { t } from "@/i18n";
 
     interface Props {
         id?: any;
         name?: string;
         preview_items?: Proto3.PageItem_FolderListing_Item[];
         visualization?: Proto3.PageItem_FolderListing_Item_Visualization|undefined;
+        showAsMediaTile?: boolean;
         ondropitemsinto?: (event: {folderId: any, items: any[]}) => void;
+        onrejectdrop?: () => void;
     }
 
     let {
@@ -20,8 +25,15 @@ import {rgbToCssColor, cssVariables} from './utils';
         name = "",
         preview_items = [],
         visualization = undefined,
-        ondropitemsinto
+        showAsMediaTile = false,
+        ondropitemsinto,
+        onrejectdrop
     }: Props = $props();
+
+// If showAsMediaTile is true, this folder should render as a media tile,
+// previewing preview_items[0] (the active media), with the folder's title as the label.
+let mediaTileFile = $derived(
+    preview_items[0]?.mediaFile ? {...preview_items[0].mediaFile, title: name} : null);
 
 
 function contentPreviewItems(data: Proto3.PageItem_FolderListing_Item[]): Proto3.PageItem_FolderListing_Item[] {
@@ -43,6 +55,15 @@ function onSink(e: any) {
     // Remove duplicates
     newItems = newItems.filter((item, pos) =>
         newItems.map((mi) => mi['id']).indexOf(item['id']) === pos );
+
+    // Media-tile folders (e.g. version sets) accept media files only -- reject folder drops.
+    if (showAsMediaTile && dropContainsFolder(newItems)) {
+        acts.add({mode: 'warning', message: $t("This target accepts media — folders can’t be dropped here."), lifetime: 5});
+        dndItems = [];
+        // dnd already pulled the dragged item out of the source listing; request a re-render so it reappears.
+        onrejectdrop?.();
+        return;
+    }
 
     if (ondropitemsinto) ondropitemsinto({'folderId': id, 'items': newItems});
 
@@ -71,9 +92,9 @@ function finalize(e: any) {
 }
 
 // Convert `basecolor` (folder color override) to a CSS variable.
-let basecolor = visualization?.baseColor ?
+let basecolor = $derived(visualization?.baseColor ?
     rgbToCssColor(visualization.baseColor.r, visualization.baseColor.g, visualization.baseColor.b) :
-    '#3b73a5';
+    '#3b73a5');
 
 </script>
 
@@ -84,7 +105,7 @@ let basecolor = visualization?.baseColor ?
     use:cssVariables={{basecolor}}
 >
 
-    <div class="w-full h-full video-list-folder"
+    <div class="w-full h-full {showAsMediaTile ? 'media-tile-zone' : 'video-list-folder'}"
         use:dndzone="{{items: dndItems, morphDisabled: true, dragDisabled: true, zoneTabIndex: -1, centreDraggedOnCursor: true}}"
         onconsider={consider}
         onfinalize={finalize}
@@ -92,6 +113,13 @@ let basecolor = visualization?.baseColor ?
     {#each dndItems as _item, _i}<span></span>{/each}
     </div>
 
+    {#if showAsMediaTile}
+    <div class="media-tile-content">
+        {#if mediaTileFile}
+            <VideoTile item={mediaTileFile} visualization={visualization}/>
+        {/if}
+    </div>
+    {:else}
     <div class="w-[85%] h-[85%] flex flex-col folder-deco" title="{name}">
         <div class="w-full flex-shrink-0 min-h-[1em] whitespace-nowrap overflow-hidden text-s mt-1 mb-0.5">
             <div class="text-slate-400 w-full video-title-line py-0 my-0"><span title="{name}">{name}</span></div>
@@ -134,6 +162,7 @@ let basecolor = visualization?.baseColor ?
             {/if}
         {/if}
     </div>
+    {/if}
 
 </div>
 
@@ -141,6 +170,15 @@ let basecolor = visualization?.baseColor ?
 :global(.aboutToDrop) {
     border: 1px solid red;
     scale: 0.5;
+}
+
+.media-tile-zone {
+    position: absolute;
+    inset: 0;
+}
+.media-tile-content {
+    position: absolute;
+    inset: 0;
 }
 
 .folder-deco {

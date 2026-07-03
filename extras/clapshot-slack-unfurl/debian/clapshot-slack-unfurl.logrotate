@@ -1,0 +1,11 @@
+/var/log/clapshot-slack-unfurl/unfurl.log {
+    weekly
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    postrotate
+        systemctl kill -s HUP clapshot-slack-unfurl.service 2>/dev/null || true
+    endscript
+}

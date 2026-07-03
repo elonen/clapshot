@@ -75,7 +75,13 @@ impl DB {
     /// Connect to SQLite database with an URL (use this for memory databases)
     pub fn open_db_url(db_url: &str) -> DBResult<Self> {
         let manager = ConnectionManager::<SqliteConnection>::new(db_url);
-        let pool = Pool::builder().max_size(16).build(manager).context("Failed to build DB pool")?;
+        // `build()` eagerly opens (and blocks on) `min_idle` connections, which
+        // defaults to `max_size`. Pinning min_idle to 1 lets the pool still grow to
+        // max_size under real concurrent load, but avoids opening 16 connections --
+        // each with its own WAL/SHM file handles -- up front. That eager allocation,
+        // multiplied across many parallel test databases, exhausts the process file
+        // descriptor limit and makes SQLite fail to even open new database files.
+        let pool = Pool::builder().max_size(16).min_idle(Some(1)).build(manager).context("Failed to build DB pool")?;
         Ok(DB {
             pool,
             broken_for_test: AtomicBool::new(false),

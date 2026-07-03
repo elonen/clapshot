@@ -1,8 +1,18 @@
 #!/bin/bash
 set -e
 
-# Local directory to bind mount to clapshot_host container. Modify if needed.
-LOCAL_DATA_DIR="$(pwd)/CLAPSHOT_CLOUDFLARE_VOLUME"
+# DEMO SCRIPT — exposes the single-container Clapshot *demo* image over a temporary
+# Cloudflare tunnel. Handy for showing Clapshot to someone without DNS/certs, but it is
+# NOT a production deployment: the container is the all-in-one demo build and Cloudflare's
+# free plan limits upload size/time. For real internet-facing use, deploy a Compose recipe
+# (deploy/compose/) with CADDY_CERT_DOMAIN set, or a .deb install behind your own HTTPS proxy.
+
+# Docker named volume for Clapshot's data (DB, videos, gRPC sockets). Modify if needed.
+# A named volume (not a host bind mount) keeps everything on the Linux VM's
+# filesystem, so it works the same on Windows/macOS/Linux. Host bind mounts on
+# Windows (NTFS via Docker's file-sharing layer) can't host the UNIX sockets
+# Clapshot uses for server<->organizer gRPC, and break SQLite locking.
+DATA_VOLUME="clapshot_cloudflare_data"
 
 # Set these if you have a Cloudflare tunnel token and don't want to use an anonymous (trycloudflare.com) tunnel:
 
@@ -13,7 +23,7 @@ LOCAL_DATA_DIR="$(pwd)/CLAPSHOT_CLOUDFLARE_VOLUME"
 # (These you probably don't need to change)
 
 # Docker images
-CLAPSHOT_DOCKER_IMAGE="elonen/clapshot:latest-demo-htadmin"
+CLAPSHOT_DOCKER_IMAGE="elonen/clapshot:latest-demo-htwicket"
 CLOUDFLARED_DOCKER_IMAGE="cloudflare/cloudflared:latest"
 
 # Network and container names
@@ -42,8 +52,11 @@ case "$(uname -sr)" in
          ;;
 esac
 
+echo "--- DEMO ONLY: not a production deployment. For real internet use, deploy a"
+echo "    Compose recipe (deploy/compose/) with CADDY_CERT_DOMAIN set instead. ---"
+echo " "
 echo "--- SECURITY WARNING ---"
-echo "This will expose your local dir '$LOCAL_DATA_DIR' to the Internet via "
+echo "This will expose Clapshot (data stored in Docker volume '$DATA_VOLUME') to the Internet via "
 echo -n "Clapshot server and Cloudflare tunnel "
 if [ -n "$CUSTOM_CLOUDFLARE_URL" ]; then
     echo "on your custom URL: '$CUSTOM_CLOUDFLARE_URL'."
@@ -58,12 +71,12 @@ echo "Press Ctrl-C to abort or Enter to continue..."
 read
 
 
-# Local data dir
-if [ -d "$LOCAL_DATA_DIR" ]; then
-    echo "Ok, directory '$LOCAL_DATA_DIR' already exists."
+# Docker named volume for the data
+if docker volume inspect "$DATA_VOLUME" >/dev/null 2>&1; then
+    echo "Ok, Docker volume '$DATA_VOLUME' already exists."
 else
-    echo "Creating '$LOCAL_DATA_DIR' directory"
-    mkdir -p "$LOCAL_DATA_DIR"
+    echo "Creating Docker volume '$DATA_VOLUME'..."
+    docker volume create "$DATA_VOLUME"
 fi
 
 # Docker network to connect the containers
@@ -101,33 +114,37 @@ if [ -z "$TOKEN_OPT" ]; then
 else
     docker run -d --name $CLOUDFLARED_CONTAINER --network $NETWORK_NAME $CLOUDFLARED_DOCKER_IMAGE tunnel --no-autoupdate run $TOKEN_OPT --url http://$CLAPSHOT_HOST_CONTAINER:80
 fi
-sleep 5
-
-
 # Find out the public URL
 echo " "
-echo "Cloudflared logs:"
-echo "================="
-docker logs $CLOUDFLARED_CONTAINER
-echo "================="
-echo " "
-
 if [ -n "$CUSTOM_CLOUDFLARE_URL" ]; then
-    echo "Using your your custom Cloudflare URL: $CUSTOM_CLOUDFLARE_URL"
+    echo "Using your custom Cloudflare URL: $CUSTOM_CLOUDFLARE_URL"
     CLOUDFLARED_URL="$CUSTOM_CLOUDFLARE_URL"
 else
-    echo "Trying to find the (dynamic/anonymous) Cloudflare URL..."
-    CLOUDFLARED_URL=$(docker logs $CLOUDFLARED_CONTAINER 2>&1 | grep -o 'https://[a-zA-Z0-9.-]*\.trycloudflare\.com')
-    if [ -z "$CLOUDFLARED_URL" ]; then
-    echo "ERROR: Cloudflared URL not found"
-    exit 1
-    else
-        if [[ ! "$CLOUDFLARED_URL" =~ ^https://[a-zA-Z0-9.-]*\.trycloudflare\.com$ ]]; then
-            echo "ERROR: Invalid Cloudflared URL format: $CLOUDFLARED_URL"
+    # The anonymous quick-tunnel URL takes ~5s to appear in the logs, so poll for
+    # it instead of relying on a fixed sleep (that was a race we kept losing, which
+    # made the script exit before starting Clapshot -> tunnel hit a dead origin).
+    echo "Waiting for the (dynamic/anonymous) Cloudflare URL to appear in '$CLOUDFLARED_CONTAINER' logs..."
+    CLOUDFLARED_URL=""
+    for _ in $(seq 1 60); do
+        if [ -z "$(docker ps -q -f name=$CLOUDFLARED_CONTAINER)" ]; then
+            echo "ERROR: container '$CLOUDFLARED_CONTAINER' stopped before a URL appeared. Logs:"
+            docker logs $CLOUDFLARED_CONTAINER 2>&1 | tail -30
             exit 1
         fi
-        echo "Ok. Dynamic Cloudflared URL found: $CLOUDFLARED_URL"
+        CLOUDFLARED_URL=$(docker logs $CLOUDFLARED_CONTAINER 2>&1 | grep -o 'https://[a-zA-Z0-9.-]*\.trycloudflare\.com' | head -1)
+        [ -n "$CLOUDFLARED_URL" ] && break
+        sleep 1
+    done
+    if [ -z "$CLOUDFLARED_URL" ]; then
+        echo "ERROR: Cloudflared URL not found after 60s. Recent logs:"
+        docker logs $CLOUDFLARED_CONTAINER 2>&1 | tail -30
+        exit 1
     fi
+    if [[ ! "$CLOUDFLARED_URL" =~ ^https://[a-zA-Z0-9.-]*\.trycloudflare\.com$ ]]; then
+        echo "ERROR: Invalid Cloudflared URL format: $CLOUDFLARED_URL"
+        exit 1
+    fi
+    echo "Ok. Dynamic Cloudflared URL found: $CLOUDFLARED_URL"
 fi
 
 
@@ -151,9 +168,28 @@ done
 # Always set URL_BASE and CORS to Cloudflare URL (override any existing values)
 ENV_ARGS="$ENV_ARGS -e CLAPSHOT_SERVER__URL_BASE=$CLOUDFLARED_URL -e CLAPSHOT_SERVER__CORS=$CLOUDFLARED_URL"
 
-docker run -d --name $CLAPSHOT_HOST_CONTAINER --mount type=bind,source=$LOCAL_DATA_DIR,target=/mnt/clapshot-data/data --network $NETWORK_NAME $ENV_ARGS $CLAPSHOT_DOCKER_IMAGE
+docker run -d --name $CLAPSHOT_HOST_CONTAINER --mount type=volume,source=$DATA_VOLUME,target=/mnt/clapshot-data/data --network $NETWORK_NAME $ENV_ARGS $CLAPSHOT_DOCKER_IMAGE
 
+
+# Wait until Clapshot's nginx actually serves, so the public URL doesn't greet
+# visitors with a transient "Bad gateway" while the server is still booting.
+echo "Waiting for Clapshot to come up..."
+for _ in $(seq 1 30); do
+    if [ -z "$(docker ps -q -f name=$CLAPSHOT_HOST_CONTAINER)" ]; then
+        echo "ERROR: container '$CLAPSHOT_HOST_CONTAINER' exited during startup. Logs:"
+        docker logs $CLAPSHOT_HOST_CONTAINER 2>&1 | tail -40
+        exit 1
+    fi
+    code=$(docker exec $CLAPSHOT_HOST_CONTAINER curl -s -o /dev/null -w '%{http_code}' http://localhost:80/ 2>/dev/null || true)
+    [ -n "$code" ] && [ "$code" != "000" ] && break
+    sleep 1
+done
+
+echo " "
+echo "==================================================================="
+echo "  Clapshot is now available at:  $CLOUDFLARED_URL"
+echo "==================================================================="
+echo " "
 
 # Start tailing the logs
-sleep 3
 docker logs -f $CLAPSHOT_HOST_CONTAINER

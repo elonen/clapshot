@@ -1,0 +1,14 @@
+# Test-only overlay (applied by run.sh after the recipe + harness). no-auth/site.conf STRIPS
+# inbound X-Remote-User-*, so a client can't spoof identity. To exercise that on the path that
+# matters — the WebSocket upgrade, which a browser's extraHTTPHeaders can't set — this stub
+# 'authproxy' plays a hostile upstream: it injects admin X-Remote-User-* in front of the stack.
+# test.env points CLAPSHOT_URL_BASE (and thus ws_url) here, so every request including the WS
+# carries the spoof; clapshot-web must strip it and the server must stay 'anonymous'.
+services:
+  authproxy:
+    image: caddy:2-alpine
+    restart: "no"
+    depends_on:
+      caddy: { condition: service_started }
+    volumes:
+      - "${TESTS_DIR}/no-auth/authproxy.Caddyfile:/etc/caddy/Caddyfile:ro"

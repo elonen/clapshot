@@ -4,6 +4,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../proto");
     let proto_files = vec![root.join("clapshot.proto")];
 
+    // The .proto sources live outside this crate, so cargo won't re-run codegen on edits unless we
+    // declare them as inputs. Without this, editing e.g. organizer.proto leaves stale Rust bindings.
+    for entry in std::fs::read_dir(&root)? {
+        let path = entry?.path();
+        if path.extension().and_then(|e| e.to_str()) == Some("proto") {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
+    }
+
     let descriptor_path = PathBuf::from(env::var("OUT_DIR").unwrap())
         .join("clapshot_descriptor.bin");
 

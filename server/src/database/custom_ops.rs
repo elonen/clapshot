@@ -67,6 +67,28 @@ impl models::MediaFile {
         Ok(())
     }
 
+    /// Update fps and total frame count for a media file.
+    ///
+    /// At ingest these come from the source file, which has no fps for audio. After
+    /// transcoding they are refreshed from the actual playable (transcoded) output,
+    /// so the client can compute valid SMPTE timecodes.
+    ///
+    /// # Arguments
+    /// * `conn` - Database connection
+    /// * `vid` - Id of the media file
+    /// * `new_fps` - Frames per second (as stored, e.g. "60.000")
+    /// * `new_total_frames` - Total number of frames in the transcoded video
+    pub fn set_fps_and_frame_count(conn: &mut PooledConnection, vid: &str, new_fps: &str, new_total_frames: i32) -> EmptyDBResult
+    {
+        use schema::media_files::dsl::*;
+        retry_if_db_locked!({
+            diesel::update(media_files.filter(id.eq(vid)))
+                .set((fps.eq(new_fps), total_frames.eq(new_total_frames)))
+                .execute(conn)
+        })?;
+        Ok(())
+    }
+
     /// Set default subtitle id for a media file.
     ///
     /// # Arguments

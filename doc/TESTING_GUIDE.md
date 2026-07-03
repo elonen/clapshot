@@ -414,7 +414,7 @@ sudo systemctl start clapshot-server
 docker run --rm -it -p 8080:80 -v clapshot-demo:/mnt/clapshot-data/data elonen/clapshot:latest-demo
 
 # Multi-user demo with auth
-docker run --rm -it -p 8080:80 -v clapshot-demo-htadmin:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htadmin
+docker run --rm -it -p 8080:80 -v clapshot-demo-htwicket:/mnt/clapshot-data/data elonen/clapshot:latest-demo-htwicket
 ```
 
 #### Cloudflare Tunnel Testing

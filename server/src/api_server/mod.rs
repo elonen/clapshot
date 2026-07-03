@@ -51,6 +51,8 @@ use crate::grpc::grpc_client::OrganizerConnection;
 use crate::grpc::grpc_client::OrganizerURI;
 use crate::grpc::{grpc_server, make_media_file_popup_actions};
 use crate::api_server::ws_handers::SessionClose;
+use crate::notification::NotificationKind;
+use crate::notification::{build_media_file_notification_event, build_message_notification_event};
 use crate::video_pipeline::IncomingFile;
 use crate::PKG_VERSION;
 use self::user_session::UserSession;
@@ -139,6 +141,7 @@ async fn handle_ws_session(
             is_admin,
             cookies,
             http_headers: filtered_headers,
+            language: None,   // set later when the client sends SetLanguage
         }
     };
 
@@ -178,7 +181,7 @@ async fn handle_ws_session(
 
     // Define default actions. Organizer may call DefineActions later to override these.
     if let Err(e) = server.emit_cmd(
-            client_cmd!(DefineActions, {actions: make_media_file_popup_actions()}),
+            client_cmd!(DefineActions, {actions: make_media_file_popup_actions(ses.org_session.language.as_deref())}),
             SendTo::MsgSender(&ses.sender)) {
         tracing::error!(details=%e, "Error sending define_actions to client. Closing session.");
         return;
@@ -694,14 +697,65 @@ async fn run_api_server_async(
                 proto_msg.progress = m.progress;
 
                 // Message to all watchers of a media file
-                if let Some(vid) = m.media_file_id {
+                if let Some(ref vid) = m.media_file_id {
                     if let Err(_) = server_state.emit_cmd(
                         client_cmd!(ShowMessages, { msgs: vec![proto_msg.clone()] }),
-                        SendTo::MediaFileId(&vid)
+                        SendTo::MediaFileId(vid)
                     ) {
-                        tracing::error!(media_file=vid, "Failed to send notification to media file watchers.");
+                        tracing::error!(media_file=vid, "Failed to send message to media file watchers.");
                     }
                 };
+
+                // Notification hook: media file ingested / metadata updated.
+                if matches!(m.topic, UserMessageTopic::MediaFileAdded | UserMessageTopic::MediaFileUpdated) {
+                    let kind = if matches!(m.topic, UserMessageTopic::MediaFileAdded) {
+                        NotificationKind::MediaFileAdded
+                    } else {
+                        NotificationKind::MediaFileUpdated
+                    };
+                    if let Some(ref media_file_id) = m.media_file_id {
+                        // Gate the DB lookup on `wants` so disabled/filtered events stay free.
+                        if server_state.notification.wants(kind) {
+                            if let Some(mf) = server_state.db.conn().ok()
+                                .and_then(|mut c| models::MediaFile::get(&mut c, media_file_id).ok())
+                            {
+                                let change = if m.msg.is_empty() { None } else { Some(m.msg.as_str()) };
+                                server_state.notification.emit(kind, ||
+                                    build_media_file_notification_event(kind, &mf, change, &server_state.url_base));
+                            }
+                        }
+                    }
+                }
+
+                // Notify organizer about newly ingested media files so it can
+                // adopt orphan files into the user's folder and refresh viewers.
+                // Spawned as a separate task to avoid blocking the msg_relay loop.
+                if matches!(m.topic, UserMessageTopic::MediaFileAdded) {
+                    if let (Some(ref user_id), Some(ref media_file_id)) = (&m.user_id, &m.media_file_id) {
+                        tracing::debug!(user=user_id.as_str(), media_file=media_file_id.as_str(), "MediaFileAdded: notifying organizer about ingested file");
+                        metrics::counter!("on_media_file_ingested.attempt").increment(1);
+                        if let Some(ref uri) = server_state.organizer_uri {
+                            if server_state.organizer_has_connected.load(Relaxed) {
+                                let uri = uri.clone();
+                                let user_id = user_id.clone();
+                                let media_file_id = media_file_id.clone();
+                                tokio::spawn(async move {
+                                    match crate::grpc::grpc_client::connect(uri).await {
+                                        Ok(mut org) => {
+                                            let req = proto::org::OnMediaFileIngestedRequest { user_id, media_file_id };
+                                            if let Err(e) = org.on_media_file_ingested(req).await {
+                                                if e.code() != tonic::Code::Unimplemented {
+                                                    tracing::error!(err=?e, "Error in organizer on_media_file_ingested() call");
+                                                }
+                                            }
+                                        },
+                                        Err(e) => tracing::error!(err=?e, "Failed to connect to organizer for on_media_file_ingested"),
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
 
                 // Message to a single user
                 // Save it to the database, marking it as seen if sending it to the user succeeds
@@ -712,7 +766,7 @@ async fn run_api_server_async(
                         SendTo::UserId(&user_id))
                     {
                         Ok(session_cnt) => { user_was_online = session_cnt>0 },
-                        Err(e) => tracing::error!(user=user_id, details=%e, "Failed to send user notification."),
+                        Err(e) => tracing::error!(user=user_id, details=%e, "Failed to send user message."),
                     }
                     if !(matches!(m.topic, UserMessageTopic::Progress | UserMessageTopic::MediaFileAdded | UserMessageTopic::MediaFileUpdated)) {
                         let msg = models::MessageInsert {
@@ -721,7 +775,10 @@ async fn run_api_server_async(
                         };
                         server_state.db.conn()
                             .and_then(|mut conn| models::Message::insert(&mut conn, &msg))
-                            .map_err(|e| tracing::error!(details=%e, "Failed to save user notification in DB."))
+                            .map(|stored| server_state.notification.emit(
+                                NotificationKind::MessagePersisted,
+                                || build_message_notification_event(&stored, crate::notification::MessageOrigin::Pipeline, &server_state.url_base)))
+                            .map_err(|e| tracing::error!(details=%e, "Failed to save user message in DB."))
                             .ok();
                     }
                 };

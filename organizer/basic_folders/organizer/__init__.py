@@ -1,5 +1,6 @@
 import json
 from logging import Logger
+from typing import Optional
 
 import clapshot_grpc.proto.clapshot as clap
 import clapshot_grpc.proto.clapshot.organizer as org
@@ -17,10 +18,12 @@ from .user_session_methods import on_start_user_session_impl, navigate_page_impl
 from .folder_op_methods import move_to_folder_impl, reorder_items_impl
 from .testing_methods import list_tests_impl, run_test_impl
 from .authz_methods import authz_user_action_impl
+from .helpers.l10n import localized
 
 from .helpers.folders import FoldersHelper
 from .helpers.pages import PagesHelper
 from .helpers.actiondefs import ActiondefsHelper
+from .helpers.viewer_tracker import FolderViewerTracker
 from . import metaplugin as mp
 
 
@@ -29,7 +32,6 @@ try:
 except ImportError:
     def override(func):  # type: ignore
         return func
-
 
 
 class OrganizerInbound(org.OrganizerInboundBase):
@@ -43,8 +45,17 @@ class OrganizerInbound(org.OrganizerInboundBase):
         self.log = logger
         self.debug = debug
         self.server_info = None  # Will be set during handshake
+        self.folder_viewer_tracker = FolderViewerTracker()
         self.metaplugin_loader = mp.MetaPluginLoader(METAPLUGINS_DIR, logger)
         self.metaplugin_loader.load_plugins()
+
+    async def notify_folder_viewers(self, folder_id: int, exclude_sid: Optional[str]) -> None:
+        """Send an empty ShowPage (refresh hint) to all sessions viewing folder_id, except exclude_sid."""
+        for sid in self.folder_viewer_tracker.get_other_viewers(folder_id, exclude_sid):
+            try:
+                await self.srv.client_show_page(org.ClientShowPageRequest(sid=sid))
+            except Exception as e:
+                self.log.debug(f"notify_folder_viewers: failed to notify sid '{sid}': {e}")
 
 
     # Migration methods
@@ -70,7 +81,7 @@ class OrganizerInbound(org.OrganizerInboundBase):
         self.log.debug(f"Got handshake. Server info: {json.dumps(server_info.to_dict())}")
         self.server_info = server_info
 
-        srv_dep = org.OrganizerDependency(name="clapshot.server", min_ver=org.SemanticVersionNumber(major=0, minor=6, patch=0))
+        srv_dep = org.OrganizerDependency(name="clapshot.server", min_ver=org.SemanticVersionNumber(major=0, minor=10, patch=0))
         self.srv = await connect_back_to_server(server_info, MODULE_NAME, VERSION.split("."), "Basic folders for the UI", [srv_dep], self.log)
 
         debug_sql = False  # set to True to log all SQL queries
@@ -99,34 +110,82 @@ class OrganizerInbound(org.OrganizerInboundBase):
 
     @override
     @organizer_grpc_handler
+    @localized
     async def on_start_user_session(self, on_start_user_session_request: org.OnStartUserSessionRequest) -> org.OnStartUserSessionResponse:
         return await on_start_user_session_impl(self, on_start_user_session_request)
 
     @override
     @organizer_grpc_handler
+    @localized
     async def navigate_page(self, navigate_page_request: org.NavigatePageRequest) -> org.ClientShowPageRequest:
         return await navigate_page_impl(self, navigate_page_request)
 
     @override
     @organizer_grpc_handler
+    @localized
     async def cmd_from_client(self, cmd_from_client_request: org.CmdFromClientRequest) -> clap.Empty:
         return await cmd_from_client_impl(self, cmd_from_client_request)
 
     @override
     @organizer_grpc_handler
+    @localized
     async def authz_user_action(self, authz_user_action_request: org.AuthzUserActionRequest) -> org.AuthzResponse:
         return await authz_user_action_impl(self, authz_user_action_request)
+
+
+    # Server lifecycle events
+
+    @override
+    @organizer_grpc_handler
+    async def on_media_file_ingested(self, req: org.OnMediaFileIngestedRequest) -> clap.Empty:
+        from .database.operations import db_get_or_create_user_root_folder
+        from .database.models import DbUser
+
+        with self.db_new_session() as dbs:
+            user = dbs.query(DbUser).filter(DbUser.id == req.user_id).one_or_none()
+            if not user:
+                self.log.warning(f"on_media_file_ingested: user '{req.user_id}' not found, skipping folder adoption")
+                return clap.Empty()
+            root_folder = await db_get_or_create_user_root_folder(
+                dbs, clap.UserInfo(id=user.id, name=user.name), self.srv, self.log)
+            root_folder_id = root_folder.id
+            dbs.commit()
+
+        await self.notify_folder_viewers(root_folder_id, exclude_sid=None)
+        return clap.Empty()
+
+    @override
+    @organizer_grpc_handler
+    async def on_media_file_deleted(self, req: org.OnMediaFileDeletedRequest) -> clap.Empty:
+        # A media file was trashed server-side. Check if versions sets became empty, and repair.
+        affected_parents = await self.folders_helper.repair_version_sets(req.user_id)
+        for parent_id in set(affected_parents):
+            await self.notify_folder_viewers(parent_id, exclude_sid=None)
+        return clap.Empty()
 
 
     # Folder operation methods
 
     @override
     @organizer_grpc_handler
+    @localized
     async def move_to_folder(self, move_to_folder_request: org.MoveToFolderRequest) -> clap.Empty:
-        return await move_to_folder_impl(self, move_to_folder_request)
+        try:
+            return await move_to_folder_impl(self, move_to_folder_request)
+        except Exception:
+            # The client optimistically removes the dragged item(s) from the listing (drag-and-drop).
+            # On ANY failure (e.g. a rejected folder->version-set drop), re-render the client's current
+            # view so the un-moved item reappears, then propagate the error (the server shows its message).
+            try:
+                page = await self.pages_helper.construct_navi_page(move_to_folder_request.ses, None)
+                await self.srv.client_show_page(page)
+            except Exception as e:
+                self.log.warning(f"move_to_folder: failed to refresh client view after a move error: {e}")
+            raise
 
     @override
     @organizer_grpc_handler
+    @localized
     async def reorder_items(self, reorder_items_request: org.ReorderItemsRequest) -> clap.Empty:
         return await reorder_items_impl(self, reorder_items_request)
 

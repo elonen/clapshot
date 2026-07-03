@@ -62,6 +62,7 @@ pub async fn handle_multipart_upload(
                 is_admin,
                 cookies: cookies.clone(),
                 http_headers: filtered_headers,
+                language: None,   // uploads aren't a live UI session
             };
 
             match org_authz_with_default(&org_session, "upload media file", true, &server, &Some(organizer),

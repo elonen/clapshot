@@ -1,0 +1,13 @@
+# Test-only overlay (applied by run.sh after the recipe + harness). The custom-proxy recipe
+# expects YOUR authenticating reverse proxy in front, injecting X-Remote-User-*. There's none
+# in the test, so this stub stands in for it: it sets those headers on every request — crucially
+# including the WebSocket upgrade, which a browser's extraHTTPHeaders cannot reach. test.env
+# points CLAPSHOT_URL_BASE (and thus ws_url) at this proxy, so all traffic flows through it.
+services:
+  authproxy:
+    image: caddy:2-alpine
+    restart: "no"
+    depends_on:
+      clapshot-web: { condition: service_started }
+    volumes:
+      - "${TESTS_DIR}/custom-proxy/authproxy.Caddyfile:/etc/caddy/Caddyfile:ro"

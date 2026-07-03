@@ -56,7 +56,10 @@ pub async fn connect(uri: OrganizerURI) -> anyhow::Result<OrganizerConnection>
                 .connect().await.context("HTTP Channel::connect failed")?
         },
     };
-    Ok(OrganizerInboundClient::new(channel))
+    let client = OrganizerInboundClient::new(channel)
+        .max_decoding_message_size(32 * 1024 * 1024)
+        .max_encoding_message_size(32 * 1024 * 1024);
+    Ok(client)
 }
 
 /// Parse Organizer plugin arguments and spawn it if necessary

@@ -1,0 +1,47 @@
+clapshot-slack-unfurl for Debian
+================================
+
+Daemon
+------
+The package installs a systemd service `clapshot-slack-unfurl.service`,
+running as www-data by default. Enable and start it with:
+
+    systemctl enable --now clapshot-slack-unfurl
+
+Configuration
+-------------
+Config: /etc/clapshot-slack-unfurl.toml (dpkg conffile, chmod 600).
+Edit videos_dir and sqlite_path to match your Clapshot data directory.
+Upgrades will prompt if the file was locally modified.
+
+Set Slack tokens via environment variables (preferred) by creating
+/etc/default/clapshot-slack-unfurl:
+
+    SLACK_BOT_TOKEN=xoxb-...
+    SLACK_APP_TOKEN=xapp-...
+
+Then add `EnvironmentFile=/etc/default/clapshot-slack-unfurl` to the
+[Service] section of the systemd unit override:
+
+    systemctl edit clapshot-slack-unfurl
+
+Alternatively, uncomment and set tokens directly in the TOML config.
+
+Logging
+-------
+Logs to /var/log/clapshot-slack-unfurl/unfurl.log (directory managed by
+systemd's LogsDirectory=). Logrotate config installed to
+/etc/logrotate.d/clapshot-slack-unfurl (weekly, 4 rotations, compressed).
+Sends SIGHUP to reopen log file after rotation.
+
+Security
+--------
+The systemd unit runs with ProtectSystem=strict, ProtectHome=true,
+NoNewPrivileges=true, and PrivateTmp=true. The service only needs
+read access to Clapshot's data directory and outbound network for
+Slack Socket Mode.
+
+Channel allowlist in the TOML config controls which Slack channels
+receive unfurls. An empty list denies all channels.
+
+Example config: /usr/share/doc/clapshot-slack-unfurl/clapshot-slack-unfurl.toml.example

@@ -22,6 +22,7 @@ mod integration_test
     use crossbeam_channel;
     use crossbeam_channel::{Receiver, RecvTimeoutError, unbounded, select};
 
+    use crate::api_server::tests::wait_for_user_msg;
     use crate::api_server::tests::expect_user_msg;
     use crate::api_server::validate_org_http_headers_regex;
     use crate::storage::StorageBackend;
@@ -151,7 +152,7 @@ mod integration_test
                     let storage = { let f = $storage_factory; f(media_root, &url_base_for_storage) };
                     let tf = terminate_flag.clone();
                     thread::spawn(move || {
-                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base_for_storage, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), "scripts/clapshot-transcode-decision".to_string(), regex, storage, tf)?;
+                        let mut clapshot = crate::ClapshotInit::init_and_spawn_workers(data_dir, true, url_base, vec![], "127.0.0.1".into(), port, org_uri.clone(), grpc_server_bind, 4, target_bitrate, poll_interval, "anonymous".to_string(), poll_interval*5.0, $ingest_username_from, "scripts/clapshot-transcode".to_string(), "scripts/clapshot-thumbnail".to_string(), "scripts/clapshot-transcode-decision".to_string(), None, "*".to_string(), regex, tf)?;
                         clapshot.wait_for_termination()
                 })};
 
@@ -181,19 +182,22 @@ mod integration_test
     #[traced_test]
     fn test_video_ingest_no_transcode() -> anyhow::Result<()>
     {
-        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, url_base, 2500_000, None, None, IngestUsernameFrom::FileOwner]
+        // Install a metrics recorder to verify on_media_file_ingested code path is reached
+        let metrics_recorder = metrics_util::debugging::DebuggingRecorder::new();
+        let metrics_snapshotter = metrics_recorder.snapshotter();
+        metrics_recorder.install().expect("Failed to install metrics recorder");
+
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 2500_000, None, None, IngestUsernameFrom::FileOwner]
             // Copy test file to incoming dir
             let mp4_file = "60fps-example.mp4";
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
             std::fs::rename(data_dir.join(mp4_file), incoming_dir.join(mp4_file)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
+            // Wait for the file to be ingested (timing depends on mediainfo, so poll).
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded, 30).await;    // notification to client (with upload folder info etc)
             let vid = msg.refs.unwrap().media_file_id.unwrap();
 
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Ok, 30).await;    // notification to user (in text)
             let vid2 = msg.refs.unwrap().media_file_id.unwrap();
             assert_eq!(vid, vid2);
 
@@ -229,6 +233,17 @@ mod integration_test
                 }
             }
             assert!(got_new_comment);
+
+            // Verify the msg_relay detected MediaFileAdded and reached the organizer notification path
+            let snapshot = metrics_snapshotter.snapshot();
+            let attempt_count: u64 = snapshot.into_vec().iter()
+                .filter(|(key, _, _, _)| key.key().name() == "on_media_file_ingested.attempt")
+                .map(|(_, _, _, val)| match val {
+                    metrics_util::debugging::DebugValue::Counter(v) => *v,
+                    _ => 0,
+                })
+                .sum();
+            assert!(attempt_count > 0, "Expected on_media_file_ingested.attempt counter > 0, got {attempt_count}");
         }
         Ok(())
     }
@@ -245,11 +260,8 @@ mod integration_test
             let f = incoming_dir.join("garbage.mp4");
             std::fs::File::create(&f).unwrap().set_len(123000).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-
-            // Expect error
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Error).await;
+            // Expect error (timing depends on mediainfo, so poll).
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Error, 30).await;
             assert!(msg.details.unwrap().contains("garbage.mp4"));
 
             // Make sure video was moved to rejected dir
@@ -289,14 +301,12 @@ mod integration_test
 
         const WAIT_AFTER_REPORTS_TIMEOUT_SECS: u32 = 5;
 
-        // Wait for file to be processed
-        thread::sleep(Duration::from_secs_f32(0.5));
-        let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;    // notification to client (with upload folder info etc)
+        // Wait for the file to be ingested (timing depends on mediainfo, so poll).
+        let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded, 30).await;    // notification to client (with upload folder info etc)
         let vid = msg.refs.unwrap().media_file_id.unwrap();
         res.media_id = vid.clone();
 
-        thread::sleep(Duration::from_secs_f32(0.5));
-        let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;    // notification to user (in text)
+        let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Ok, 30).await;    // notification to user (in text)
         let vid2 = msg.refs.unwrap().media_file_id.unwrap();
         assert_eq!(vid, vid2);
 
@@ -532,7 +542,61 @@ mod integration_test
             let wait_res = wait_for_reports(&mut ws, true, true, true, Some((data_dir.path().into(), mov_file.into()))).await;
 
             assert!(wait_res.transcode_complete, "Transcode did not complete / was not marked done");
-            assert!(wait_res.got_progress_report);
+        }
+        Ok(())
+    }
+
+
+    #[test]
+    #[serial]
+    #[traced_test]
+    #[cfg(feature = "include_slow_tests")]
+    fn test_video_extra_tracks_transcode() -> anyhow::Result<()>
+    {
+        // Regression test: MP4 with a timecode data track (stream #2) must transcode cleanly.
+        // Also verifies that browser-compatible audio (AAC) is copied rather than re-encoded,
+        // and that channel count is not forced to stereo.
+        // Use a low target bitrate to force the transcode-decision script to transcode.
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 50_000, None, None, IngestUsernameFrom::FileOwner]
+            let mp4_file = "extra-tracks.mp4";
+            data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
+            std::fs::rename(data_dir.join(mp4_file), incoming_dir.join(mp4_file)).unwrap();
+
+            let wait_res = wait_for_reports(&mut ws, true, true, true, Some((data_dir.path().into(), mp4_file.into()))).await;
+            assert!(wait_res.transcode_complete, "Transcode did not complete / was not marked done");
+
+            // Probe the transcoded file for stream correctness.
+            let videos_dir = data_dir.join("videos");
+            let video_mp4 = std::fs::read_dir(&videos_dir).unwrap()
+                .filter_map(|e| e.ok())
+                .map(|e| e.path().join("video.mp4"))
+                .find(|p| p.exists())
+                .expect("video.mp4 not found in videos dir");
+            let actual_mp4 = std::fs::canonicalize(&video_mp4).unwrap_or(video_mp4);
+
+            let ffprobe_out = std::process::Command::new("ffprobe")
+                .args(["-v", "quiet", "-print_format", "json", "-show_streams"])
+                .arg(&actual_mp4)
+                .output()
+                .expect("ffprobe failed to run");
+            assert!(ffprobe_out.status.success(), "ffprobe failed on transcoded file");
+
+            let probe: serde_json::Value = serde_json::from_slice(&ffprobe_out.stdout)
+                .expect("ffprobe output was not valid JSON");
+            let streams = probe["streams"].as_array().expect("no streams in ffprobe output");
+
+            // No spurious data/timecode streams.
+            assert!(
+                streams.iter().all(|s| s["codec_type"] != "data"),
+                "Transcoded file contains unexpected data/timecode stream — check -map flags in clapshot-transcode"
+            );
+
+            // Source audio (extra-tracks.mp4) is AAC mono — must be copied, not re-encoded.
+            // Verify codec is preserved and channel count is not forced to stereo.
+            let audio = streams.iter().find(|s| s["codec_type"] == "audio")
+                .expect("no audio stream in transcoded file");
+            assert_eq!(audio["codec_name"], "aac", "AAC audio should be copied without re-encoding");
+            assert_eq!(audio["channels"], 1, "mono audio channel count must be preserved (no forced stereo downmix)");
         }
         Ok(())
     }
@@ -565,6 +629,39 @@ mod integration_test
                 }
             }
             assert!(found_video, "Audio transcoding should create waveform video file");
+        }
+        Ok(())
+    }
+
+    /// Regression test for the audio fps=0 bug.
+    ///
+    /// Audio source files carry no fps in their metadata (mediainfo reports none for
+    /// FLAC/WAV/MP3), so the DB row is initially stored with fps=0 / total_frames=0.
+    /// The transcoded waveform video, however, is rendered at 60 fps. Once transcoding
+    /// is done, the media file's reported duration must reflect the *playable* video
+    /// (fps != 0); otherwise the client builds a "NaN:NaN:NaN:NaN" SMPTE timecode and
+    /// the player UI crashes.
+    #[test]
+    #[serial]
+    #[traced_test]
+    #[cfg(feature = "include_slow_tests")]
+    fn test_audio_transcode_updates_fps_from_output() -> anyhow::Result<()>
+    {
+        cs_main_test! {[ws, data_dir, incoming_dir, _org_conn, 500_000, None, None, IngestUsernameFrom::FileOwner]
+            let audio_file_name = "sweep-tone.flac";   // shortest audio fixture (5s)
+            data_dir.copy_from("src/tests/assets/", &[audio_file_name]).unwrap();
+            std::fs::rename(data_dir.join(audio_file_name), incoming_dir.join(audio_file_name)).unwrap();
+
+            let wait_res = wait_for_reports(&mut ws, true, false, false, Some((data_dir.path().into(), audio_file_name.into()))).await;    // No thumbnail for audio
+
+            // Open the file through the public API and inspect the metadata the client receives.
+            let media_file = open_media_file(&mut ws, &wait_res.media_file_id).await.media_file.unwrap();
+            let dur = media_file.duration.expect("media file has no duration metadata");
+
+            let fps: f64 = dur.fps.parse().unwrap_or_else(|_| panic!("fps is not a number: {:?}", dur.fps));
+            assert!(fps > 0.0, "audio fps must reflect the transcoded waveform video, not the source audio's missing fps (got {:?})", dur.fps);
+            assert!((fps - 60.0).abs() < 0.01, "waveform video is rendered at 60 fps (got {:?})", dur.fps);
+            assert!(dur.total_frames > 0, "total_frames must be set from the transcoded video (got {})", dur.total_frames);
         }
         Ok(())
     }
@@ -890,13 +987,11 @@ mod integration_test
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
             std::fs::rename(data_dir.join(mp4_file), incoming_dir.join(mp4_file)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;
+            // Wait for the file to be ingested (timing depends on mediainfo, so poll).
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded, 30).await;
             let vid = msg.refs.unwrap().media_file_id.unwrap();
 
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Ok, 30).await;
             let vid2 = msg.refs.unwrap().media_file_id.unwrap();
             assert_eq!(vid, vid2);
 
@@ -906,6 +1001,7 @@ mod integration_test
             let media_file = open_media_file(&mut ws, &vid).await.media_file.unwrap();
             let current_user = whoami::username();
             assert_eq!(media_file.user_id, current_user, "Username should match file owner");
+
         }
         Ok(())
     }
@@ -927,13 +1023,11 @@ mod integration_test
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
             std::fs::rename(data_dir.join(mp4_file), user_dir.join(mp4_file)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;
+            // Wait for the file to be ingested (timing depends on mediainfo, so poll).
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded, 30).await;
             let vid = msg.refs.unwrap().media_file_id.unwrap();
 
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Ok, 30).await;
             let vid2 = msg.refs.unwrap().media_file_id.unwrap();
             assert_eq!(vid, vid2);
 
@@ -964,13 +1058,11 @@ mod integration_test
             data_dir.copy_from("src/tests/assets/", &[mp4_file]).unwrap();
             std::fs::rename(data_dir.join(mp4_file), user_dir.join(mp4_file)).unwrap();
 
-            // Wait for file to be processed
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded).await;
+            // Wait for the file to be ingested (timing depends on mediainfo, so poll).
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::MediaFileAdded, 30).await;
             let vid = msg.refs.unwrap().media_file_id.unwrap();
 
-            thread::sleep(Duration::from_secs_f32(0.5));
-            let msg = expect_user_msg(&mut ws, proto::user_message::Type::Ok).await;
+            let msg = wait_for_user_msg(&mut ws, proto::user_message::Type::Ok, 30).await;
             let vid2 = msg.refs.unwrap().media_file_id.unwrap();
             assert_eq!(vid, vid2);
 

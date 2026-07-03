@@ -12,7 +12,8 @@ from organizer.helpers import media_type_to_vis_icon
 from organizer.utils import folder_path_to_uri_arg
 import organizer.metaplugin as mp
 
-from .folders import FoldersHelper
+from .folders import FoldersHelper, version_number, VERSION_BADGE_COLOR, VERSION_ACTIVE_COLOR
+from .l10n import _, pgettext
 from organizer.database.models import DbMediaFile, DbFolder, DbUser
 
 
@@ -36,6 +37,8 @@ class PagesHelper:
         cur_folder = folder_path[-1]
         parent_folder = folder_path[-2] if len(folder_path) > 1 else None
 
+        if self.organizer_inbound:
+            self.organizer_inbound.folder_viewer_tracker.register(cur_folder.id, ses.sid)
 
         pg_items: list[clap.PageItem] = []
 
@@ -56,9 +59,9 @@ class PagesHelper:
         For each user in the database, show a virtual folder that opens their home folder.
         Admin can also trash all user's content from here.
         """
-        pg_items.append(clap.PageItem(html="<h3><strong>ADMIN</strong> – User Folders</h3>"))
+        pg_items.append(clap.PageItem(html=_("<h3><strong>ADMIN</strong> – User Folders</h3>")))
 
-        pg_items.append(clap.PageItem(html="<p>The following users currently have a home folder and/or media files.<br/>Uploading files or moving items to these folders will transfer ownership to that user.<br/>Trashing a user's home folder will delete everything they have.</p>"))
+        pg_items.append(clap.PageItem(html=_("<p>The following users currently have a home folder and/or media files.<br/>Uploading files or moving items to these folders will transfer ownership to that user.<br/>Trashing a user's home folder will delete everything they have.</p>")))
 
         with self.db_new_session() as dbs:
             all_users: list[DbUser] = dbs.query(DbUser).order_by(DbUser.id).distinct().all()
@@ -101,11 +104,12 @@ class PagesHelper:
             pg_items.append(clap.PageItem(folder_listing=user_folder_listing))
 
             # Add batch cleanup button
-            pg_items.append(clap.PageItem(html="""
+            confirm_msg = _("This will delete ALL users who have no media files and only empty root folders.\n\nComments from deleted users will be preserved but marked as from deleted users.\n\nAre you sure?")
+            pg_items.append(clap.PageItem(html=f"""
                 <div style="margin-top: 2em;">
-                    <button onclick="if(confirm('This will delete ALL users who have no media files and only empty root folders.\\n\\nComments from deleted users will be preserved but marked as from deleted users.\\n\\nAre you sure?')) { clapshot.callOrganizer('cleanup_empty_user', {folder_id: '*'}); }"
+                    <button onclick="if(confirm({json.dumps(confirm_msg)})) {{ clapshot.callOrganizer('cleanup_empty_user', {{folder_id: '*'}}); }}"
                             style="background-color: #7f4f26; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
-                        🗑️ Delete all users without media
+                        🗑️ {_("Delete all users without media")}
                     </button>
                 </div>
             """))
@@ -139,7 +143,7 @@ class PagesHelper:
         media_list = await self.srv.db_get_media_files(org.DbGetMediaFilesRequest(ids=org.IdList(ids=media_ids)))
         media_by_id = {v.id: v for v in media_list.items}
 
-        async def media_file_to_page_item(vid_id: str, popup_actions: list[str]) -> clap.PageItemFolderListingItem:
+        async def media_file_to_page_item(vid_id: str, popup_actions: list[str], vis: Optional[clap.PageItemFolderListingItemVisualization] = None) -> clap.PageItemFolderListingItem:
             assert re.match(r"^[0-9a-fA-F]+$", vid_id), f"Unexpected media file ID format: {vid_id}"
             return clap.PageItemFolderListingItem(
                 media_file = media_by_id[vid_id],
@@ -147,14 +151,34 @@ class PagesHelper:
                     lang = clap.ScriptCallLang.JAVASCRIPT,
                     code = f'clapshot.openMediaFile("{vid_id}");'),
                 popup_actions = popup_actions,
-                vis = media_type_to_vis_icon(media_by_id[vid_id].media_type))
+                vis = vis if vis is not None else media_type_to_vis_icon(media_by_id[vid_id].media_type))
+
+        # In a version set's "Manage Versions" view, each item is a version: orange vN badge,
+        # the Active one tinted cyan, and a per-version "Set Active Ver" popup.
+        # Read-only classification (the current set may itself be invalid -- render defensively as a
+        # normal folder rather than mutating it here; repair_version_sets() does the actual fix-up).
+        is_vset = self.folders_helper.renders_as_version_set(cur_folder, folder_db_items)
+        ordered_media = [it for it in folder_db_items if isinstance(it, DbMediaFile)]
+        vset_active_id = self.folders_helper.displayed_active_id(cur_folder, ordered_media) if is_vset else None
+        vset_total = len(ordered_media)
+        vset_left_index = {m.id: i for i, m in enumerate(ordered_media)}
 
         listing_items: list[clap.PageItemFolderListingItem] = []
         for itm in folder_db_items:
             if isinstance(itm, DbFolder):
                 listing_items.append(await self.folders_helper.folder_to_page_item(itm, popup_actions, ses))
             elif isinstance(itm, DbMediaFile):
-                listing_items.append(await media_file_to_page_item(itm.id, popup_actions))
+                if is_vset:
+                    n = version_number(vset_left_index[itm.id], vset_total)
+                    base_icon = media_type_to_vis_icon(media_by_id[itm.id].media_type)
+                    vis = clap.PageItemFolderListingItemVisualization(
+                        icon = base_icon.icon,
+                        badges = [clap.PageItemFolderListingItemVisualizationBadge(text=f"v{n}", color=VERSION_BADGE_COLOR)],
+                        base_color = VERSION_ACTIVE_COLOR if itm.id == vset_active_id else None)
+                    listing_items.append(await media_file_to_page_item(itm.id, popup_actions + ["set_active_version"], vis=vis))
+                else:
+                    # Media files in a normal folder can be grouped into a new version set.
+                    listing_items.append(await media_file_to_page_item(itm.id, popup_actions + ["make_versioned"]))
             else:
                 raise ValueError(f"Unknown item type: {itm}")
 
@@ -176,7 +200,7 @@ class PagesHelper:
         folder_listing = clap.PageItemFolderListing(
             items = listing_items,
             allow_reordering = True,
-            popup_actions = ["new_folder"],
+            popup_actions = [] if is_vset else ["new_folder"],   # version sets can't hold subfolders
             listing_data = listing_data,
             allow_upload = can_upload,
             media_file_added_action = "on_media_file_added")
@@ -185,8 +209,8 @@ class PagesHelper:
         pg_items.append(clap.PageItem(folder_listing=folder_listing))
         if len(folder_listing.items) == 0:
             if can_upload:
-                pg_items.append(clap.PageItem(html="<p style='margin-top: 1em;'><i class='far fa-circle-question text-blue-400'></i> Use the drop zone to <strong>upload media files</strong>, or right-click on the empty space above to <strong>create a folder</strong>.</p>"))
-                pg_items.append(clap.PageItem(html="<p>After that, drag items to <strong>reorder</strong>, or drop them <strong>into folders</strong>. Hold shift to multi-select.</p>"))
+                pg_items.append(clap.PageItem(html=_("<p style='margin-top: 1em;'><i class='far fa-circle-question text-blue-400'></i> Use the drop zone to <strong>upload media files</strong>, or right-click on the empty space above to <strong>create a folder</strong>.</p>")))
+                pg_items.append(clap.PageItem(html=_("<p>After that, drag items to <strong>reorder</strong>, or drop them <strong>into folders</strong>. Hold shift to multi-select.</p>")))
 
         return pg_items
 
@@ -207,7 +231,7 @@ def _make_breadcrumbs_html(folder_path: list[DbFolder], cur_user_id: str, user_r
         HTML string with breadcrumb navigation in <h3> tags
     """
     if not folder_path:
-        return "<h3>Root folder</h3>"   # Fallback, should not happen in normal operation
+        return f"<h3>{_('Root folder')}</h3>"   # Fallback, should not happen in normal operation
 
     def _get_folder_display_title(folder: DbFolder, cur_user_id: str) -> str:
         # Indicate shared folders with user ID in brackets
@@ -216,9 +240,10 @@ def _make_breadcrumbs_html(folder_path: list[DbFolder], cur_user_id: str, user_r
 
         # If it's the user's root folder, show "Home"
         if folder.id == user_root_folder_id:
-            return "Home"
+            # TRANSLATORS: breadcrumb label for the user's own home folder (not "house")
+            return pgettext("folder", "Home")
 
-        return folder.title or "UNNAMED"
+        return folder.title or pgettext("folder", "UNNAMED")
 
 
     def _create_folder_link(folder_id: int, title: str) -> str:
@@ -245,7 +270,7 @@ def _make_breadcrumbs_html(folder_path: list[DbFolder], cur_user_id: str, user_r
 
     # Last item in bold and non-clickable (current folder)
     if breadcrumb_items:
-        _, current_title = breadcrumb_items[-1]
+        _unused, current_title = breadcrumb_items[-1]
         breadcrumb_links.append(f"<strong>{html_escape(current_title)}</strong>")
 
     return f"<h3>{' ▶ '.join(breadcrumb_links)}</h3>"

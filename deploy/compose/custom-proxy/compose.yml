@@ -1,0 +1,47 @@
+name: clapshot-custom-proxy
+
+# Clapshot behind YOUR authenticating reverse proxy. Same stack as no-auth, but site.conf
+# TRUSTS the inbound X-Remote-User-* your proxy sets. Your proxy MUST authenticate, set
+# those headers, and strip client-supplied ones; keep this stack reachable only through it.
+# There is NO Caddy here: your proxy is the TLS terminator and public entry. Point it at
+# clapshot-web — port 80 on this stack's Compose network, or the published WEB_BIND:WEB_PORT.
+# Edit only .env (see .env.example).
+
+services:
+  config-check:
+    image: ghcr.io/elonen/clapshot-server:${CLAPSHOT_VERSION:-latest}
+    entrypoint: ["/usr/local/bin/clapshot-config-check"]
+    environment:
+      CLAPSHOT_URL_BASE: "${CLAPSHOT_URL_BASE:-http://127.0.0.1:8080/}"
+    restart: "no"
+
+  clapshot-server:
+    image: ghcr.io/elonen/clapshot-server:${CLAPSHOT_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      config-check: { condition: service_completed_successfully }
+    environment:
+      CLAPSHOT_SERVER__URL_BASE: "${CLAPSHOT_URL_BASE:-http://127.0.0.1:8080/}"
+      CLAPSHOT_SERVER__CORS: "${CLAPSHOT_CORS:-$CLAPSHOT_URL_BASE}"
+    volumes:
+      - "${CLAPSHOT_DATA_DIR:-clapshot-data}:/mnt/clapshot-data/data"
+
+  # The public entry for this stack. Your proxy targets this (clapshot-web:80 on the
+  # Compose network, or the published WEB_BIND:WEB_PORT below).
+  clapshot-web:
+    image: ghcr.io/elonen/clapshot-web:${CLAPSHOT_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      clapshot-server: { condition: service_started }
+    environment:
+      CLAPSHOT_URL_BASE: "${CLAPSHOT_URL_BASE:-http://127.0.0.1:8080/}"
+      CLAPSHOT_APP_TITLE: "${CLAPSHOT_APP_TITLE:-Clapshot}"
+      CLAPSHOT_LOGO_URL: "${CLAPSHOT_LOGO_URL:-clapshot-logo.svg}"
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:80"
+    volumes:
+      - "./site.conf:/etc/nginx/conf.d/default.conf:ro"
+      - "${CLAPSHOT_DATA_DIR:-clapshot-data}:/mnt/clapshot-data/data:ro"
+
+volumes:
+  clapshot-data:

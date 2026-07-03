@@ -1,0 +1,1052 @@
+msgid ""
+msgstr ""
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-09 20:48+0300\n"
+"Language: fi\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:176
+msgid "Internal error in authz: {desc}"
+msgstr "Sisäinen virhe käyttöoikeuksien tarkistuksessa: {desc}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:183
+msgid "Permission denied"
+msgstr "Ei käyttöoikeutta"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:217
+msgid "Permission denied: {desc}"
+msgstr "Ei käyttöoikeutta: {desc}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:52
+msgid "No such media file."
+msgstr "Mediatiedostoa ei löydy."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:111
+msgid "You have no media yet."
+msgstr "Ei vielä yhtään tiedostoa."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:113
+msgid "All your media files"
+msgstr "Kaikki mediatiedostosi"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:120
+msgid "Your Media"
+msgstr "Oma media"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:244
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:45
+msgid "{kind} deleted."
+msgstr "{kind} poistettu."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:246
+msgid "{kind} deleted, but cleanup had errors."
+msgstr "{kind} poistettu, mutta siivouksessa tapahtui virheitä."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:268
+msgid "Invalid file name (must contain a letter or number)"
+msgstr "Virheellinen tiedostonimi (täytyy sisältää kirjain tai numero)"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:272
+msgid "Name too long (max 160)"
+msgstr "Nimi on liian pitkä (enintään 160)"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:278
+msgid "{kind} renamed."
+msgstr "{kind} nimettiin uudelleen."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:279
+msgid "New name: '{name}'"
+msgstr "Uusi nimi: '{name}'"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:401
+msgid "Failed to edit comment."
+msgstr "Kommentin muokkaaminen epäonnistui."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:401
+msgid "No such comment. Cannot edit."
+msgstr "Kommenttia ei löydy. Ei voida muokata."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:420
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:425
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:435
+msgid "Failed to delete comment."
+msgstr "Kommentin poistaminen epäonnistui."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:420
+msgid "You can only delete your own comments"
+msgstr "Voit poistaa vain omia kommenttejasi"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:425
+msgid "Comment has replies. Cannot delete."
+msgstr "Kommenttiin on vastauksia. Ei voida poistaa."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:435
+msgid "No such comment. Cannot delete."
+msgstr "Kommenttia ei löydy. Ei voida poistaa."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:478
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:495
+msgid "Failed to add subtitle."
+msgstr "Tekstityksen lisääminen epäonnistui."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:478
+msgid "Subtitle file already exists: '{filename}'"
+msgstr "Tekstitystiedosto on jo olemassa: '{filename}'"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:495
+msgid "WebVTT file already exists: '{filename}'"
+msgstr "WebVTT-tiedosto on jo olemassa: '{filename}'"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:652
+msgid "Failed to join collab session: {error}"
+msgstr "Yhteisistuntoon liittyminen epäonnistui: {error}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:691
+msgid "Report rejected: no active collab session."
+msgstr "Raportti hylätty: ei aktiivista yhteisistuntoa."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:715
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:736
+msgid "No organizer session."
+msgstr "Ei organizer-istuntoa."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:777
+msgid "Missing command from client: {request}"
+msgstr "Asiakkaalta puuttuu komento: {request}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:822
+msgid "Cmd '{cmd}' failed: {error}"
+msgstr "Komento '{cmd}' epäonnistui: {error}"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:59
+msgid "Rename item"
+msgstr "Nimeä kohde uudelleen"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:60
+msgid "Unknown item type in rename action. Please report this bug."
+msgstr "Tuntematon kohdetyyppi nimeämistoiminnossa. Ilmoita tästä virheestä."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:77
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:39
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:40
+msgid "Rename"
+msgstr "Nimeä uudelleen"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:84
+msgid "Rename selected items"
+msgstr "Nimeä valitut kohteet uudelleen"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:99
+msgid "Are you sure you want to trash this item?"
+msgstr "Haluatko varmasti siirtää tämän kohteen roskakoriin?"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:100
+msgid "Are you sure you want to trash '{title}'?"
+msgstr "Haluatko varmasti siirtää kohteen '{title}' roskakoriin?"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:101
+msgid "Are you sure you want to trash folder '{title}' and ALL CONTENTS?"
+msgstr "Haluatko varmasti siirtää kansion '{title}' ja KAIKEN SEN SISÄLLÖN roskakoriin?"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:102
+msgid "Are you sure you want to trash ALL selected items?"
+msgstr "Haluatko varmasti siirtää KAIKKI valitut kohteet roskakoriin?"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:103
+msgid "Unknown item type in trash action. Please report this bug."
+msgstr "Tuntematon kohdetyyppi roskakoritoiminnossa. Ilmoita tästä virheestä."
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:134
+msgid "Trash"
+msgstr "Roskakoriin"
+
+#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:141
+msgid "Trash selected items"
+msgstr "Siirrä valitut kohteet roskakoriin"
+
+#: client/src/App.svelte:319
+msgid "Are you sure you want to delete this subtitle?"
+msgstr "Haluatko varmasti poistaa tämän tekstityksen?"
+
+#: client/src/App.svelte:342
+msgid "Invalid time offset: {offset}"
+msgstr "Virheellinen aikasiirtymä: {offset}"
+
+#: client/src/App.svelte:739
+msgid "Server version too old (v{version}). Please update server."
+msgstr "Palvelimen versio on liian vanha (v{version}). Päivitä palvelin."
+
+#: client/src/App.svelte:746
+msgid ""
+"Client version too old (client v{clientVersion} for server "
+"v{serverVersion}). Please update client."
+msgstr ""
+"Client-versio on liian vanha (v{clientVersion} vs. palvelimen "
+"v{serverVersion}). Päivitä versio."
+
+#: client/src/App.svelte:896
+msgid "Bad video open request. See log."
+msgstr "Virheellinen videon avauspyyntö. Katso loki."
+
+#: client/src/App.svelte:1064
+msgid "Connecting server..."
+msgstr "Yhdistetään palvelimeen..."
+
+#: client/src/App.svelte:1072
+msgid "View connection errors"
+msgstr "Näytä yhteysvirheet"
+
+#: client/src/App.svelte:1078
+msgid "See browser JS console for more details."
+msgstr "Lisätietoja selaimen JS-konsolissa."
+
+#: client/src/App.svelte:1110
+msgid "Sort: date posted"
+msgstr "Järjestys: lisäyspäivä"
+
+#: client/src/App.svelte:1110
+msgid "Sort: timecode"
+msgstr "Järjestys: aikakoodi"
+
+#: client/src/App.svelte:1130
+msgid "Subtitles"
+msgstr "Tekstitykset"
+
+#: client/src/App.svelte:1152
+msgctxt "collab"
+msgid "Collaborative viewing session active."
+msgstr "Yhteiskatseluistunto aktiivinen."
+
+#: client/src/App.svelte:1153
+msgctxt "collab"
+msgid "Session ID is {id}"
+msgstr "Istunnon tunnus on {id}"
+
+#: client/src/App.svelte:1154
+msgctxt "collab"
+msgid "Actions like seek, play and draw are mirrored to all participants."
+msgstr ""
+"Toiminnot kuten kelaus, toisto ja piirtäminen peilataan kaikille "
+"osallistujille."
+
+#: client/src/App.svelte:1155
+msgctxt "collab"
+msgid "To invite people, copy browser URL and send it to them."
+msgstr "Kutsuaksesi muita, kopioi selaimen osoite ja lähetä se osallistujille."
+
+#: client/src/App.svelte:1156
+msgctxt "collab"
+msgid "Exit by clicking the green icon in header."
+msgstr "Poistu napsauttamalla vihreää kuvaketta ylärivillä."
+
+#. button to acknowledge
+#: client/src/App.svelte:1157
+msgctxt "collab"
+msgid "Understood"
+msgstr "Selvä"
+
+#: client/src/App.svelte:1186
+msgid "Drop video, audio and image files here to upload"
+msgstr "Pudota video-, ääni- ja kuvatiedostoja tähän ladataksesi"
+
+#: client/src/App.svelte:1217
+msgid "Latest messages"
+msgstr "Viimeisimmät viestit"
+
+#: client/src/lib/NavBar.svelte:70
+msgid ""
+"Basic auth logout failed.\n"
+"Status code from {url}: {status} (not 401)"
+msgstr ""
+"Basic auth -uloskirjautuminen epäonnistui.\n"
+"Tilakoodi osoitteesta {url}: {status} (ei 401)"
+
+#: client/src/lib/NavBar.svelte:79
+msgid ""
+"Clapshot Client version {version}\n"
+"\n"
+"Visit the project page at:\n"
+"https://github.com/elonen/clapshot\n"
+msgstr ""
+"Clapshot client versio {version}\n"
+"\n"
+"Projektin verkkosivut:\n"
+"https://github.com/elonen/clapshot\n"
+
+#: client/src/lib/NavBar.svelte:88
+msgid ""
+"Link copied to clipboard.\n"
+"Send it to reviewers who have user accounts here."
+msgstr ""
+"Linkki kopioitiin leikepöydälle.\n"
+"Lähetä se katsojille, joilla on käyttäjätili järjestelmässä."
+
+#: client/src/lib/NavBar.svelte:140
+msgid "Share to logged in users"
+msgstr "Jaa kirjautuneille käyttäjille"
+
+#: client/src/lib/NavBar.svelte:142
+msgid "Download original"
+msgstr "Lataa alkuperäinen"
+
+#: client/src/lib/NavBar.svelte:145
+msgctxt "collab"
+msgid "Leave collaborative Session"
+msgstr "Poistu yhteisistunnosta"
+
+#: client/src/lib/NavBar.svelte:147
+msgctxt "collab"
+msgid "Collaboration is disabled here"
+msgstr "Yhteisistunto ei käytettävissä"
+
+#: client/src/lib/NavBar.svelte:147 client/src/lib/NavBar.svelte:149
+msgctxt "collab"
+msgid "Start Collaborative Session"
+msgstr "Aloita yhteisistunto"
+
+#: client/src/lib/NavBar.svelte:153
+msgid "Experimental tools"
+msgstr "Kokeelliset työkalut"
+
+#: client/src/lib/NavBar.svelte:157 client/src/lib/tools/EDLImport.svelte:107
+msgid "Import EDL as Comments"
+msgstr "Tuo EDL kommentteina"
+
+#: client/src/lib/NavBar.svelte:158
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:72
+msgid "Export Comments"
+msgstr "Vie kommentit"
+
+#: client/src/lib/NavBar.svelte:190 client/src/lib/NavBar.svelte:191
+msgctxt "menu"
+msgid "Language"
+msgstr "Kieli"
+
+#: client/src/lib/NavBar.svelte:200 client/src/lib/NavBar.svelte:217
+msgid "Logout"
+msgstr "Kirjaudu ulos"
+
+#. menu item that opens the 'About this app' dialog
+#: client/src/lib/NavBar.svelte:202
+msgctxt "menu"
+msgid "About"
+msgstr "Tietoja"
+
+#: client/src/lib/NavBar.svelte:218
+msgid "Reload page to log in again."
+msgstr "Lataa sivu uudelleen kirjautuaksesi."
+
+#: client/src/lib/asset_browser/FileUpload.svelte:51
+msgid "{percent}% uploaded... please wait"
+msgstr "{percent}% ladattu... odota hetki"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:61
+msgid "Upload Failed"
+msgstr "Lataus epäonnistui"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:66
+msgid "Upload Aborted"
+msgstr "Lataus keskeytetty"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:76
+msgid "Uploading: {filename}..."
+msgstr "Ladataan: {filename}..."
+
+#: client/src/lib/asset_browser/FileUpload.svelte:101
+msgid "Drop rejected. Only video, audio and image files are allowed."
+msgstr "Tiedostotyyppiä ei tueta. Sallitut: video, kuva ja ääni."
+
+#: client/src/lib/asset_browser/FolderTile.svelte:61
+msgid "This target accepts media — folders can’t be dropped here."
+msgstr "Tämä kohde hyväksyy vain mediaa — ei kansioita."
+
+#: client/src/lib/player_view/CommentCard.svelte:44
+msgid "Delete comment?"
+msgstr "Poista kommentti?"
+
+#: client/src/lib/player_view/CommentCard.svelte:106
+msgid "Link copied to clipboard"
+msgstr "Linkki kopioitu leikepöydälle"
+
+#: client/src/lib/player_view/CommentCard.svelte:107
+#: client/src/lib/player_view/CommentCard.svelte:108
+#: client/src/lib/player_view/CommentCard.svelte:167
+#: client/src/lib/player_view/CommentCard.svelte:168
+msgid "Copy link"
+msgstr "Kopioi linkki"
+
+#: client/src/lib/player_view/CommentCard.svelte:155
+msgid "(edited)"
+msgstr "(muokattu)"
+
+#. button to reply to a comment (verb, not the noun 'a reply')
+#: client/src/lib/player_view/CommentCard.svelte:175
+msgctxt "comment"
+msgid "Reply"
+msgstr "Vastaa"
+
+#: client/src/lib/player_view/CommentCard.svelte:177
+msgctxt "comment"
+msgid "Edit"
+msgstr "Muokkaa"
+
+#. short label for the Delete button (abbreviation of 'Delete')
+#: client/src/lib/player_view/CommentCard.svelte:179
+msgctxt "comment"
+msgid "Del"
+msgstr "Poista"
+
+#: client/src/lib/player_view/CommentCard.svelte:190
+msgid "Your reply..."
+msgstr "Vastauksesi..."
+
+#: client/src/lib/player_view/CommentInput.svelte:66
+msgctxt "comment"
+msgid "Undo"
+msgstr "Kumoa"
+
+#: client/src/lib/player_view/CommentInput.svelte:67
+msgctxt "comment"
+msgid "Redo"
+msgstr "Tee uudelleen"
+
+#: client/src/lib/player_view/CommentInput.svelte:80
+msgid "Add a comment - at current time..."
+msgstr "Lisää kommentti (nykyiseen kohtaan)..."
+
+#: client/src/lib/player_view/CommentInput.svelte:80
+msgid "Add a comment..."
+msgstr "Lisää kommentti..."
+
+#: client/src/lib/player_view/CommentInput.svelte:85
+msgid "Comment is time specific?"
+msgstr "Kommentti on aikakohtainen?"
+
+#: client/src/lib/player_view/CommentInput.svelte:100
+msgid "Draw on video"
+msgstr "Piirrä videon päälle"
+
+#: client/src/lib/player_view/CommentInput.svelte:108
+msgctxt "comment"
+msgid "Send"
+msgstr "Lähetä"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:64
+msgid "Edit subtitle"
+msgstr "Muokkaa tekstitystä"
+
+#. label for the subtitle's display-name field (a noun, not a page heading)
+#: client/src/lib/player_view/SubtitleCard.svelte:73
+msgctxt "subtitle"
+msgid "Title"
+msgstr "Otsikko"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:79
+msgid "Language code"
+msgstr "Kielikoodi"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:85
+msgid "Time offset (sec)"
+msgstr "Aikasiirtymä (sek)"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:91
+msgid "Default Subtitle"
+msgstr "Oletustekstitys"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:94
+msgctxt "subtitle"
+msgid "Save"
+msgstr "Tallenna"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:95
+msgctxt "subtitle"
+msgid "Download"
+msgstr "Lataa"
+
+#. short label for the Delete button (abbreviation of 'Delete')
+#: client/src/lib/player_view/SubtitleCard.svelte:96
+msgctxt "subtitle"
+msgid "Del"
+msgstr "Poista"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:460
+#: client/src/lib/player_view/VideoPlayer.svelte:469
+msgid "Seek failed to: {target}"
+msgstr "Siirtyminen kohtaan {target} epäonnistui"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:489
+msgid "Video loading not done? Cannot enable drawing."
+msgstr "Videon lataus kesken? Piirtäminen ei käytössä."
+
+#: client/src/lib/player_view/VideoPlayer.svelte:568
+msgid "Failed to show image."
+msgstr "Kuvan näyttäminen epäonnistui."
+
+#: client/src/lib/tools/EDLImport.svelte:86
+msgid "No time spans found when parsing EDL."
+msgstr "EDL:ää luettaessa ei löytynyt aikavälejä."
+
+#: client/src/lib/tools/EDLImport.svelte:124
+msgid "Parsed spans"
+msgstr "Luetut aikavälit"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:76
+msgid "Export format"
+msgstr "Vientimuoto"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:82
+msgid "Frame rate"
+msgstr "Kuvataajuus (FPS)"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:89
+msgid "Format options"
+msgstr "Muotoasetukset"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:155
+msgid "No comments to export."
+msgstr "Ei vietäviä kommentteja."
+
+#: organizer/basic_folders/organizer/database/operations.py:194
+msgid "Multiple root folders in DB. Please report to support."
+msgstr "Tietokannassa on useita juurikansioita. Ilmoita tästä tukeen."
+
+#: organizer/basic_folders/organizer/database/operations.py:195
+msgid ""
+"Users should have one root folder. This inconsistency was fixed, but your "
+"home view might contain unexpected folders."
+msgstr ""
+"Käyttäjillä tulisi olla yksi juurikansio. Tämä virhe korjattiin, mutta "
+"kotinäkymässäsi voi olla odottamattomia kansioita."
+
+#: organizer/basic_folders/organizer/database/operations.py:202
+#, python-brace-format
+msgid "Home of '{name}'"
+msgstr "Käyttäjän '{name}' koti"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:38
+msgid "Destination folder not found"
+msgstr "Kohdekansiota ei löydy"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:50
+msgid "A version set can only contain media files"
+msgstr "Versiosarja voi sisältää vain mediatiedostoja"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:67
+#, python-brace-format
+msgid "Folder id '{id}' not found"
+msgstr "Ei kansiota tunnisteella '{id}'"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:69
+msgid "Cannot move a folder into itself"
+msgstr "Kansiota ei voi siirtää itsensä sisään"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:71
+msgid "Cannot move another user's folder"
+msgstr "Et voi siirtää toisen käyttäjän kansiota"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:77
+#, python-brace-format
+msgid "Folder with ID '{id}' is a root folder? Cannot move."
+msgstr "Kansio tunnisteella '{id}' on juurikansio? Ei siirrettävissä."
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:89
+#, python-brace-format
+msgid "Media file '{id}' not found"
+msgstr "Mediatiedostoa '{id}' ei löydy"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:91
+msgid "Cannot move another user's media file"
+msgstr "Et voi siirtää toisen käyttäjän tiedostoja"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:329
+#, python-brace-format
+msgid "Parent folder {id} not found"
+msgstr "Yläkansiota {id} ei löydy"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:331
+msgid "Cannot reorder items in another user's folder"
+msgstr "Et voi järjestellä toisen käyttäjän tiedostoja"
+
+#: organizer/basic_folders/organizer/folder_op_methods.py:351
+msgid "No folder ID in UI listing, cannot reorder"
+msgstr "UI-listauksessa ei kansiotunnistetta, järjestely ei mahdollista"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:36
+msgid "New folder"
+msgstr "Uusi kansio"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:39
+msgid "Create a new folder"
+msgstr "Luo uusi kansio"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:43
+msgid "Name for the new folder"
+msgstr "Uuden kansion nimi"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:51
+msgid "Move to parent"
+msgstr "Siirrä yläkansioon"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:54
+msgid "Move item to parent folder"
+msgstr "Siirrä kohde yläkansioon"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:93
+msgid "Share folder"
+msgstr "Jaa kansio"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:96
+msgid "Create a shareable link to this folder"
+msgstr "Luo jaettava linkki tähän kansioon"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:103
+msgid "No folder selected to share"
+msgstr "Ei valittua jaettavaa kansiota"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:113
+msgid "Stop sharing"
+msgstr "Lopeta jakaminen"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:116
+msgid "Revoke the shared link for this folder"
+msgstr "Peruuta tämän kansion jakolinkki"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:123
+msgid "No folder selected to unshare"
+msgstr "Ei valittua kansiota, jonka jako peruutetaan"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:126
+msgid "Are you sure you want to revoke the shared link for this folder?"
+msgstr "Haluatko varmasti peruuttaa tämän kansion jakolinkin?"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:135
+msgid "Copy URL"
+msgstr "Kopioi linkki"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:138
+msgid "Copy the shared link to clipboard"
+msgstr "Kopioi jakolinkki leikepöydälle"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:148
+msgid "No shared link available for this folder"
+msgstr "Tälle kansiolle ei ole saatavilla jakolinkkiä"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:157
+msgid ""
+"Shared link copied to clipboard!\n"
+"\n"
+"NOTE: Sharing a folder reveals direct links to all files currently in it, "
+"effectively giving recipient PERMANENT access to them, even if remove the "
+"folder share later."
+msgstr ""
+"Jakolinkki kopioitiin leikepöydälle!\n"
+"\n"
+"HUOM: Kansion jakaminen paljastaa suorat linkit kaikkiin siinä tällä "
+"hetkellä oleviin tiedostoihin ja antaa vastaanottajalle käytännössä PYSYVÄN "
+"pääsyn niihin, vaikka peruuttaisit kansion jaon myöhemmin."
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:159
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:162
+msgid "Copy this shared link:"
+msgstr "Kopioi tämä jakolinkki:"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:170
+msgid "Into Version Set"
+msgstr "Muunna versiosarjaksi"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:173
+msgid "Turn this folder into a version set (revisions of one media file)"
+msgstr "Muuta tämä kansio versiosarjaksi (yhden mediatiedoston versiot)"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:179
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:196
+msgid "No folder selected"
+msgstr "Ei valittua kansiota"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:187
+msgid "Into Normal Folder"
+msgstr "Muunna tavalliseksi kansioksi"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:190
+msgid "Turn this version set back into a normal folder"
+msgstr "Muuta tämä versiosarja tavalliseksi kansioksi"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:204
+msgid "Make Versioned"
+msgstr "Ryhmittele versiosarjaksi"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:207
+msgid "Group the selected media files into a new version set"
+msgstr "Ryhmittele valitut mediatiedostot uudeksi versiosarjaksi"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:213
+msgid "No media files selected"
+msgstr "Ei valittuja mediatiedostoja"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:221
+msgid "Manage Versions"
+msgstr "Hallitse versioita"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:224
+msgid "Open the version set to manage its versions"
+msgstr "Avaa versiosarja hallitaksesi sen versioita"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:230
+msgid "No version set selected"
+msgstr "Ei valittua versiosarjaa"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:239
+msgid "Set Active Version"
+msgstr "Aseta aktiiviseksi versioksi"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:242
+msgid "Make this version the active one for the set"
+msgstr "Aseta tämä versio sarjan aktiiviseksi versioksi"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:250
+msgid "Cannot set active version (missing ids)"
+msgstr "Aktiivista versiota ei voi asettaa (tunnisteet puuttuvat)"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:259
+msgid "Delete user"
+msgstr "Poista käyttäjä"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:262
+msgid "Delete user if they have no content (only empty root folder)"
+msgstr "Poista käyttäjä, jos hänellä ei ole sisältöä (vain tyhjä juurikansio)"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:269
+msgid "No user folder selected for cleanup"
+msgstr "Ei valittua käyttäjäkansiota siivottavaksi"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:272
+msgid ""
+"This will delete the user if they have no media files and only an empty root "
+"folder.\n"
+"\n"
+"Comments from this user will be preserved but marked as from a deleted "
+"user.\n"
+"\n"
+"Are you sure?"
+msgstr ""
+"Tämä poistaa käyttäjän, jos hänellä ei ole mediatiedostoja ja vain tyhjä "
+"juurikansio.\n"
+"\n"
+"Tämän käyttäjän kommentit säilytetään, mutta merkitään poistetun käyttäjän "
+"kommenteiksi.\n"
+"\n"
+"Oletko varma?"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:212
+msgid "Cannot fetch contents of another user's folder"
+msgstr "Toisen käyttäjän kansion sisältöä ei voi hakea"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:256
+#: organizer/basic_folders/organizer/helpers/folders.py:568
+#: organizer/basic_folders/organizer/helpers/folders.py:601
+#, python-brace-format
+msgid "Folder ID '{folder_id}' not found"
+msgstr "Kansiota tunnisteella '{folder_id}' ei löydy"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:260
+msgid "Cannot trash another user's folder"
+msgstr "Toisen käyttäjän kansiota ei voi poistaa roskakoriin"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:373
+#: organizer/basic_folders/organizer/helpers/folders.py:519
+#: organizer/basic_folders/organizer/helpers/folders.py:656
+#: organizer/basic_folders/organizer/helpers/pages.py:246
+msgctxt "folder"
+msgid "UNNAMED"
+msgstr "NIMETÖN"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:477
+#, python-brace-format
+msgid "v{num} — {title}"
+msgstr "v{num} — {title}"
+
+#. TRANSLATORS: dropdown label for selecting a media version (a noun)
+#: organizer/basic_folders/organizer/helpers/folders.py:480
+msgctxt "folder"
+msgid "Version"
+msgstr "Versio"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:481
+msgid "Switch version"
+msgstr "Vaihda versio"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:530
+msgid "Cannot create folder in another user's folder"
+msgstr "Et voi luoda kansiota toisen käyttäjän kansioon"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:532
+msgid "Folder name too long"
+msgstr "Kansion nimi on liian pitkä"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:534
+msgid "Folder name cannot be empty"
+msgstr "Kansion nimi ei voi olla tyhjä"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:537
+msgid "Item with this name already exists in the this folder"
+msgstr "Tämän niminen kohde on jo samassa kansiossa"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:572
+msgid "Only the folder owner can create shares"
+msgstr "Vain kansion omistaja voi luoda jakoja"
+
+#: organizer/basic_folders/organizer/helpers/folders.py:605
+msgid "Only the folder owner can revoke sharing"
+msgstr "Vain kansion omistaja voi peruuttaa jaon"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:62
+msgid "<h3><strong>ADMIN</strong> – User Folders</h3>"
+msgstr "<h3><strong>YLLÄPITÄJÄ</strong> – Käyttäjäkansiot</h3>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:64
+msgid ""
+"<p>The following users currently have a home folder and/or media files.<br/"
+">Uploading files or moving items to these folders will transfer ownership to "
+"that user.<br/>Trashing a user's home folder will delete everything they "
+"have.</p>"
+msgstr ""
+"<p>Seuraavilla käyttäjillä on tällä hetkellä kotikansio ja/tai "
+"mediatiedostoja.<br/>Tiedostojen lähettäminen tai kohteiden siirtäminen "
+"näihin kansioihin siirtää omistajuuden kyseiselle käyttäjälle.<br/>Käyttäjän "
+"kotikansion poistaminen roskakoriin poistaa kaiken, mitä hänellä on.</p>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:107
+msgid ""
+"This will delete ALL users who have no media files and only empty root "
+"folders.\n"
+"\n"
+"Comments from deleted users will be preserved but marked as from deleted "
+"users.\n"
+"\n"
+"Are you sure?"
+msgstr ""
+"Tämä poistaa KAIKKI käyttäjät, joilla ei ole mediatiedostoja ja vain tyhjät "
+"juurikansiot.\n"
+"\n"
+"Poistettujen käyttäjien kommentit säilytetään, mutta merkitään poistettujen "
+"käyttäjien kommenteiksi.\n"
+"\n"
+"Oletko varma?"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:112
+msgid "Delete all users without media"
+msgstr "Poista kaikki käyttäjät, joilla ei ole mediaa"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:212
+msgid ""
+"<p style='margin-top: 1em;'><i class='far fa-circle-question text-"
+"blue-400'></i> Use the drop zone to <strong>upload media files</strong>, or "
+"right-click on the empty space above to <strong>create a folder</strong>.</p>"
+msgstr ""
+"<p style='margin-top: 1em;'><i class='far fa-circle-question text-"
+"blue-400'></i> Käytä pudotusaluetta <strong>mediatiedostojen lähettämiseen</"
+"strong> tai napsauta hiiren oikealla painikkeella yllä olevaa tyhjää tilaa "
+"<strong>luodaksesi kansion</strong>.</p>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:213
+msgid ""
+"<p>After that, drag items to <strong>reorder</strong>, or drop them "
+"<strong>into folders</strong>. Hold shift to multi-select.</p>"
+msgstr ""
+"<p>Tämän jälkeen voit <strong>järjestää uudelleen</strong> raahaamalla "
+"kohteita tai pudottaa ne <strong>kansioihin</strong>. Valitse useita "
+"pitämällä vaihtonäppäintä pohjassa.</p>"
+
+#: organizer/basic_folders/organizer/helpers/pages.py:234
+msgid "Root folder"
+msgstr "Juurikansio"
+
+#. TRANSLATORS: breadcrumb label for the user's own home folder (not "house")
+#: organizer/basic_folders/organizer/helpers/pages.py:244
+msgctxt "folder"
+msgid "Home"
+msgstr "Koti"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:32
+#, python-brace-format
+msgid "Command argument '{key}' must be an integer"
+msgstr "Komennon argumentin '{key}' täytyy olla kokonaisluku"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:94
+msgid "This shared folder link is invalid or has been revoked"
+msgstr "Tämä jaetun kansion linkki on virheellinen tai se on peruutettu"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:150
+msgid "new_folder command missing 'name' argument"
+msgstr "new_folder-komennosta puuttuu 'name'-argumentti"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:157
+msgid "set_folder_kind requires 'id' and 'kind'"
+msgstr "set_folder_kind vaatii 'id'- ja 'kind'-argumentit"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:161
+#, python-brace-format
+msgid "Invalid folder kind: {kind}"
+msgstr "Virheellinen kansiotyyppi: {kind}"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:166
+#: organizer/basic_folders/organizer/user_session_methods.py:260
+#: organizer/basic_folders/organizer/user_session_methods.py:287
+#: organizer/basic_folders/organizer/user_session_methods.py:331
+#: organizer/basic_folders/organizer/user_session_methods.py:356
+#: organizer/basic_folders/organizer/user_session_methods.py:487
+#, python-brace-format
+msgid "Folder ID '{id}' not found"
+msgstr "Kansiota tunnisteella '{id}' ei löydy"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:168
+msgid "Cannot change another user's folder"
+msgstr "Et voi muuttaa toisen käyttäjän kansiota"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:176
+msgid "Cannot turn the root folder into a version set"
+msgstr "Juurikansiota ei voi muuttaa versiosarjaksi"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:180
+msgid "Cannot make a version set from a folder that contains subfolders"
+msgstr "Versiosarjaa ei voi tehdä kansiosta, joka sisältää alikansioita"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:184
+msgid "A version set needs at least one media file"
+msgstr "Versiosarja tarvitsee vähintään yhden mediatiedoston"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:206
+msgid "Make Versioned works on media files only; deselect folders"
+msgstr ""
+"Versioitavaksi muuttaminen toimii vain mediatiedostoilla; poista kansioiden "
+"valinta"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:210
+msgid "Select at least one media file to make versioned"
+msgstr "Valitse vähintään yksi mediatiedosto versioitavaksi"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:215
+msgid "Selected media file is not in any folder"
+msgstr "Valittu mediatiedosto ei ole missään kansiossa"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:219
+msgid "Cannot modify another user's folder"
+msgstr "Toisen käyttäjän kansiota ei voi muokata"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:229
+msgid ""
+"All selected media files must be in the same folder to group them into a "
+"version set"
+msgstr ""
+"Kaikkien valittujen mediatiedostojen täytyy olla samassa kansiossa, jotta ne "
+"voidaan ryhmitellä versiosarjaksi"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:231
+msgid "Version Set"
+msgstr "Versiosarja"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:252
+msgid "set_active_version requires 'folder_id' and 'media_file_id'"
+msgstr "set_active_version vaatii 'folder_id'- ja 'media_file_id'-argumentit"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:262
+msgid "Cannot change another user's version set"
+msgstr "Et voi muuttaa toisen käyttäjän versiosarjaa"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:267
+msgid "That media file is not in this version set"
+msgstr "Kyseinen mediatiedosto ei ole tässä versiosarjassa"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:326
+msgid "rename_folder command missing 'id' or 'new_name' argument"
+msgstr "rename_folder-komennosta puuttuu 'id'- tai 'new_name'-argumentti"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:348
+msgid "trash_folder command missing 'id' argument"
+msgstr "trash_folder-komennosta puuttuu 'id'-argumentti"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:381
+msgid "share_folder command missing 'id' argument"
+msgstr "share_folder-komennosta puuttuu 'id'-argumentti"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:392
+msgid "Server URL base not configured - cannot generate shareable URLs"
+msgstr ""
+"Palvelimen URL-perusosoitetta ei ole määritetty - jaettavia osoitteita ei "
+"voi luoda"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:403
+msgid "Folder shared. Use popup/'Copy URL' to get a link."
+msgstr ""
+"Kansio jaettu. Hae linkki ponnahdusikkunasta tai 'Kopioi linkki' "
+"-toiminnolla."
+
+#: organizer/basic_folders/organizer/user_session_methods.py:404
+#, python-brace-format
+msgid "Folder sharing token created for '{title}'."
+msgstr "Kansion jakotunnus luotiin kohteelle '{title}'."
+
+#: organizer/basic_folders/organizer/user_session_methods.py:411
+msgid "revoke_share command missing 'id' argument"
+msgstr "revoke_share-komennosta puuttuu 'id'-argumentti"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:430
+msgid "Folder sharing has been revoked"
+msgstr "Kansion jako on peruutettu"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:436
+msgid "This folder is not currently shared"
+msgstr "Tätä kansiota ei ole tällä hetkellä jaettu"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:443
+msgid "cleanup_empty_user command missing 'folder_id' argument"
+msgstr "cleanup_empty_user-komennosta puuttuu 'folder_id'-argumentti"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:446
+msgid "Only admin can clean up users"
+msgstr "Vain ylläpitäjä voi siivota käyttäjiä"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:470
+#, python-brace-format
+msgid "Cleaned up {count} empty user"
+msgid_plural "Cleaned up {count} empty users"
+msgstr[0] "Siivottiin {count} tyhjä käyttäjä"
+msgstr[1] "Siivottiin {count} tyhjää käyttäjää"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:471
+msgid ""
+"Comments from deleted users are preserved but marked as from deleted users."
+msgstr ""
+"Poistettujen käyttäjien kommentit säilytetään, mutta merkitään poistettujen "
+"käyttäjien kommenteiksi."
+
+#: organizer/basic_folders/organizer/user_session_methods.py:477
+msgid "No empty users found to clean up"
+msgstr "Siivottavia tyhjiä käyttäjiä ei löytynyt"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:504
+#, python-brace-format
+msgid "User '{id}' has been cleaned up (deleted)"
+msgstr "Käyttäjä '{id}' on siivottu (poistettu)"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:505
+msgid ""
+"Comments from this user are preserved but marked as from a deleted user."
+msgstr ""
+"Tämän käyttäjän kommentit säilytetään, mutta merkitään poistetun käyttäjän "
+"kommenteiksi."
+
+#: organizer/basic_folders/organizer/user_session_methods.py:511
+#, python-brace-format
+msgid "User '{id}' was not deleted"
+msgstr "Käyttäjää '{id}' ei poistettu"
+
+#: organizer/basic_folders/organizer/user_session_methods.py:512
+msgid "User still has media files or non-empty folders."
+msgstr "Käyttäjällä on edelleen mediatiedostoja tai ei-tyhjiä kansioita."
+
+#: organizer/basic_folders/organizer/user_session_methods.py:516
+#, python-brace-format
+msgid "Unknown organizer command: {cmd}"
+msgstr "Tuntematon organizer-komento: {cmd}"

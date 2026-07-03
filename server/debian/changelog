@@ -1,4 +1,46 @@
-clapshot-server (0.9.2) bookworm; urgency=low
+clapshot-server (0.12.0) unstable; urgency=low
+
+  * New feature: "Version sets" (versioned media) — protocol and server
+    support for special folders that present as single media items
+  * New feature: gettext-based translation framework (Finnish, Chinese,
+    French)
+  * Add example Mattermost (incoming webhook) notification script
+  * Server test fixes
+  * Demo & installer: replaced PHP 'htadmin' + HTTP Basic Auth with HTWicket:
+    same .htpasswd but modern crypto, proper login/logout/manage pages.
+    See doc/upgrading.md for migration notes.
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 12 Jun 2026 12:00:00 +0300
+
+clapshot-server (0.11.1) unstable; urgency=low
+
+  * New feature: Optional external notification hook for comment, message,
+    and media events (runs a user script; off by default)
+  * Show full notification script output at DEBUG log level
+
+ -- Jarno Elonen <elonen@iki.fi>  Thu, 04 Jun 2026 12:00:00 +0300
+
+clapshot-server (0.11.0) unstable; urgency=low
+
+  * Fix: Transcoding of files with extra timecode tracks; preserve audio
+    quality (closes #129)
+  * Fix: Audio player crash on fps=0 (refresh fps/frames post-transcode,
+    closes #136)
+  * Upgrade Rust dependencies
+
+ -- Jarno Elonen <elonen@iki.fi>  Tue, 02 Jun 2026 12:00:00 +0300
+
+clapshot-server (0.10.0) unstable; urgency=low
+
+  * New feature: OnMediaFileIngestedRequest in server->organizer protocol,
+    enabling organizers to be notified about ingested media files
+  * Increase gRPC (Tonic) message size limit from 4MB to 32MB
+  * Add Debian 13 (Trixie) .deb build support
+  * Fix: Use JPEG fallback when WEBP thumbnails not supported (Safari)
+
+ -- Jarno Elonen <elonen@iki.fi>  Fri, 27 Mar 2026 12:00:00 +0200
+
+clapshot-server (0.9.2) unstable; urgency=low
 
   * New feature: User-editable transcoding decision script (clapshot-transcode-decision)
   * Configuration: WebM with AV1/VP8/VP9 codecs no longer transcoded by default

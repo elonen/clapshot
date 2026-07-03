@@ -102,6 +102,14 @@ Customizable media processing through external scripts with hardware acceleratio
   - **Multi-Format Output**: Configurable output formats and quality settings
 - *References: [doc/transcoding.md](doc/transcoding.md), [scripts/clapshot-transcode-decision](server/scripts/clapshot-transcode-decision), [scripts/clapshot-transcode](server/scripts/clapshot-transcode), [scripts/clapshot-thumbnail](server/scripts/clapshot-thumbnail), [src1](server/src/video_pipeline/script_processor.rs)*
 
+### **Notification Hook**
+Optional external script invoked on comment add/edit/delete, persisted user messages, and media file add/update — for e‑mail, Slack, or other integrations. Off by default; organizer-agnostic.
+  - **Event types**: `comment_added`, `comment_edited`, `comment_deleted`, `message_persisted`, `media_file_added`, `media_file_updated`
+  - **Interface**: event name in `CLAPSHOT_NOTIFICATION_EVENT`, full event as a JSON object on stdin
+  - **Non-blocking**: queued, run on a dedicated worker, never blocks or fails commenting/uploads
+  - **Filtering**: server-side glob allowlist (`--notification-events`) plus in-script filtering
+- *References: [doc/notification-hook.md](doc/notification-hook.md), [example](server/scripts/clapshot-notification.example), [src](server/src/notification/mod.rs)*
+
 ### **Special `trash/` and `rejected/` folders**
 Special folders for "deleted" (trashed) and non-ingestible files.
 - *References: [src1](server/src/video_pipeline/cleanup_rejected.rs)*
@@ -151,11 +159,15 @@ Sharing system with security controls and access management.
   - **Cleanup**: Share tokens cleaned up when folders are deleted
 - *References: [src1](organizer/basic_folders/organizer/folder_op_methods.py), [src2](organizer/basic_folders/organizer/helpers/folders.py)*
 
+### **Version Sets**
+Group revisions of the same media file into one item with a version badge; pick the active version from a player dropdown and manage versions in a dedicated folder view.
+- *References: [doc/version-sets.md](doc/version-sets.md), [src1](organizer/basic_folders/organizer/helpers/folders.py), [src2](organizer/basic_folders/organizer/user_session_methods.py)*
+
 ## Administration and security
 
 ### **Authentication-Agnostic Design**
 Works with authentication systems through reverse proxy integration (requires proxy configuration for OAuth, LDAP, Kerberos, SAML, etc.).
-- *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [clapshot+htadmin.nginx.conf](client/debian/additional_files/clapshot+htadmin.nginx.conf)*
+- *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [clapshot+htwicket.nginx.conf](client/debian/additional_files/clapshot+htwicket.nginx.conf)*
 
 ### **Automatic User Create**
 Clapshot creates a user and a folder for them every time a new username is encountered in reverse proxy HTTP headers.
@@ -173,9 +185,9 @@ Administrator users (specified by HTTP headers, again) can edit users and their 
 Native Debian packages for production deployment with systemd integration.
 - *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [Makefile](Makefile), [server/debian/](server/debian/)*
 
-### **Docker Deployment Examples**
-Pre-configured Docker images for easy deployment with multiple authentication options.
-- *References: [README.md](README.md), [Dockerfile.demo](Dockerfile.demo), [test/run-cloudflare.sh](test/run-cloudflare.sh)*
+### **Docker Compose Deployment Recipes**
+Ready-to-deploy Compose stacks with automatic HTTPS via Caddy — the recommended way to run Clapshot on Docker. Use `htwicket` (built-in login) or `custom-proxy` (your own IdP) when you need authentication; a `no-auth` recipe is also available. The single-container demo image is for quick evaluation only.
+- *References: [deploy/compose/](deploy/compose/), [deploy/README.md](deploy/README.md), [Dockerfile.demo](Dockerfile.demo) (demo image), [test/run-cloudflare.sh](test/run-cloudflare.sh) (demo tunnel)*
 
 ### **Nginx Reverse Proxy Examples**
 Complete Nginx configuration examples for HTTPS, authentication, and static file serving.
@@ -194,6 +206,12 @@ SQLite-based storage with integrity monitoring and maintenance capabilities.
 ### **Health Monitoring**
 Health check endpoint, and adjustable verbosity logging for system monitoring.
 - *References: [doc/sysadmin-guide.md](doc/sysadmin-guide.md), [src1](server/src/api_server/mod.rs)*
+
+## Extras
+
+### **Slack Unfurl Bot**
+Optional companion daemon that shows rich Clapshot link previews in Slack channels (thumbnail, title, duration, comment text, timecode). Runs co-located with Clapshot, connects to Slack via Socket Mode (no public endpoint needed), and supports a channel allowlist.
+- *References: [extras/clapshot-slack-unfurl/](extras/clapshot-slack-unfurl/)*
 
 ## Development
 

@@ -1,7 +1,7 @@
 <script lang="ts">
 
 import { onMount } from 'svelte';
-import { curUsername, curUserPic, curVideo, mediaFileId, collabId, userMenuItems } from "@/stores";
+import { curUsername, curUserPic, curVideo, mediaFileId, collabId, userMenuItems, playerHeaderHtml } from "@/stores";
 import Avatar from '@/lib/Avatar.svelte';
 import {latestProgressReports, clientConfig} from '@/stores';
 import type { MediaProgressReport } from '@/types';
@@ -71,6 +71,7 @@ function logoutBasicAuth() {
 				if (onbasicauthlogout) onbasicauthlogout();
 				loggedOut = true;	// Show modal
             } else {
+                alert($t("Basic auth logout failed.\nStatus code from {url}: {status} (not 401)", { url: logoutUrl, status: res.status }));
                 alert($t('status.logoutFailed', { url: logoutUrl, status: res.status }));
             }
         })
@@ -84,6 +85,7 @@ function showAbout() {
 		"\n" +
 		"Visit the project page at:\n" +
 		"https://github.com/elonen/clapshot\n");
+	alert($t("Clapshot Client version {version}\n\nVisit the project page at:\nhttps://github.com/elonen/clapshot\n", { version: process.env.CLAPSHOT_CLIENT_VERSION ?? "" }));
 }
 
 async function copyToClipboard() {
@@ -93,6 +95,7 @@ async function copyToClipboard() {
 	try {
 		await navigator.clipboard.writeText(fullUrl);
 		alert($t('status.linkCopied'));
+		alert($t('Link copied to clipboard.\nSend it to reviewers who have user accounts here.'));
 	} catch (err) {
 		console.error('Failed to copy link: ', err);
 	}
@@ -129,7 +132,11 @@ function addEDLComments(comments: Proto3.Comment[]) {
 			{#if $mediaFileId}
 			<span class="grid grid-flow-row auto-rows-max items-center text-gray-600 mx-4">
 					<h2 class=" text-lg text-center">
-						<span class="font-mono">{$mediaFileId}</span>
+						{#if $playerHeaderHtml}
+							<span data-testid="player-header-html">{@html $playerHeaderHtml}</span>
+						{:else}
+							<span class="font-mono">{$mediaFileId}</span>
+						{/if}
 
 						<div class="relative inline-block text-left">
 							<button type="button"
@@ -140,23 +147,25 @@ function addEDLComments(comments: Proto3.Comment[]) {
 							</button>
 
 						<Dropdown class="w-64 text-sm clapshot-dropdown" simple>
-							<DropdownItem onclick={copyToClipboard}><i class="fas fa-share-square"></i> {$t('nav.shareToLoggedInUsers')}</DropdownItem>
+							<DropdownItem onclick={copyToClipboard}><i class="fas fa-share-square"></i> {$t("Share to logged in users")}</DropdownItem>
 							{#if $curVideo?.origUrl}
-								<DropdownItem title="Download original file"><a href={$curVideo?.origUrl} download><i class="fas fa-download"></i> {$t('nav.downloadOriginal')}</a></DropdownItem>
+								<DropdownItem title="Download original file"><a href={$curVideo?.origUrl} download><i class="fas fa-download"></i> {$t("Download original")}</a></DropdownItem>
 							{/if}
 							{#if $collabId}
-								<DropdownItem href="?vid={$mediaFileId}" class="text-green-400"><i class="fas fa-users"></i> {$t('nav.leaveCollab')}</DropdownItem>
+								<DropdownItem href="?vid={$mediaFileId}" class="text-green-400"><i class="fas fa-users"></i> {$t("Leave collaborative Session", { context: "collab" })}</DropdownItem>
+							{:else if $playerHeaderHtml}
+								<DropdownItem class="text-gray-600 cursor-not-allowed" data-testid="start-collab-disabled" title={$t("Collaboration is disabled here", { context: "collab" })}><i class="fas fa-user-plus"></i> {$t("Start Collaborative Session", { context: "collab" })}</DropdownItem>
 							{:else}
-								<DropdownItem href="?vid={$mediaFileId}&collab={randomSessionId}" title="Start collaborative session"><i class="fas fa-user-plus"></i> {$t('nav.startCollab')}</DropdownItem>
+								<DropdownItem href="?vid={$mediaFileId}&collab={randomSessionId}" title="Start collaborative session"><i class="fas fa-user-plus"></i> {$t("Start Collaborative Session", { context: "collab" })}</DropdownItem>
 							{/if}
 
 							<DropdownItem>
-								<i class="fas fa-cog"></i> {$t('nav.experimentalTools')}
+								<i class="fas fa-cog"></i> {$t("Experimental tools")}
 								<ChevronRightOutline class="w-6 h-6 ms-2 float-right" />
 							</DropdownItem>
 							<Dropdown placement="right-start" class="w-64 text-sm clapshot-dropdown" simple>
-								<DropdownItem onclick={() => isEDLImportOpen = true}><i class="fas fa-file-import"></i> {$t('nav.importEdl')}</DropdownItem>
-								<DropdownItem onclick={() => isExportOpen = true}><i class="fas fa-file-export"></i> {$t('nav.exportComments')}</DropdownItem>
+								<DropdownItem onclick={() => isEDLImportOpen = true}><i class="fas fa-file-import"></i> {$t("Import EDL as Comments")}</DropdownItem>
+								<DropdownItem onclick={() => isExportOpen = true}><i class="fas fa-file-export"></i> {$t("Export Comments")}</DropdownItem>
 								<EDLImport bind:isOpen={isEDLImportOpen} onaddcomments={addEDLComments}/>
 								<ExportDialog bind:isOpen={isExportOpen}/>
 							</Dropdown>
@@ -164,6 +173,9 @@ function addEDLComments(comments: Proto3.Comment[]) {
 						</div>
 
 					</h2>
+				{#if !$playerHeaderHtml}
+					<span class="mx-4 text-xs text-center">{$curVideo?.title}</span>
+				{/if}
 
 					{#if videoProgressVal !== undefined}
 						<div class="flex flex-col items-center gap-1 mt-1 mb-2">
@@ -197,8 +209,8 @@ function addEDLComments(comments: Proto3.Comment[]) {
 			{#if $userMenuItems != undefined && $userMenuItems.length > 0}
 				<Dropdown class="w-44 text-sm clapshot-dropdown" simple>
 					<DropdownItem class="flex items-center space-x-2">
-						<span>{$t('nav.language')}</span>
-						<select class="bg-gray-800 text-xs rounded px-2 py-1" value={$locale} onchange={onLocaleChange} aria-label={$t('nav.language')}>
+						<span>{$t("Language", { context: "menu" })}</span>
+						<select class="bg-gray-800 text-xs rounded px-2 py-1" value={$locale} onchange={onLocaleChange} aria-label={$t("Language", { context: "menu" })}>
 							{#each localeOptions as loc}
 								<option value={loc.id} selected={loc.id === $locale}>{loc.label}</option>
 							{/each}
@@ -207,9 +219,9 @@ function addEDLComments(comments: Proto3.Comment[]) {
 					<DropdownDivider />
 					{#each $userMenuItems as item}
 						{#if item.type === "logout-basic-auth"}
-							<DropdownItem onclick={() => logoutBasicAuth()}>{$t('nav.logout')}</DropdownItem>
+							<DropdownItem onclick={() => logoutBasicAuth()}>{$t("Logout")}</DropdownItem>
 						{:else if item.type === "about"}
-							<DropdownItem onclick={showAbout}>{$t('nav.about')}</DropdownItem>
+							<DropdownItem onclick={showAbout}>{$t("About", { context: "menu", comment: "menu item that opens the 'About this app' dialog" })}</DropdownItem>
 						{:else if item.type === "divider"}
 							<DropdownDivider />
 						{:else if item.type === "url"}
@@ -224,8 +236,8 @@ function addEDLComments(comments: Proto3.Comment[]) {
 	</div>
 </nav>
 
-<Modal title={$t('nav.logout')} dismissable={false} bind:open={loggedOut} class="w-96">
-	<p><i class="fas fa fa-sign-in"></i> {$t('status.reloadToLogin')}</p>
+<Modal title={$t("Logout")} dismissable={false} bind:open={loggedOut} class="w-96">
+	<p><i class="fas fa fa-sign-in"></i> {$t("Reload page to log in again.")}</p>
 </Modal>
 
 

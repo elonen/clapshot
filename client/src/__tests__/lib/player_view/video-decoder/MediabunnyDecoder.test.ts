@@ -73,8 +73,8 @@ describe('MediabunnyDecoder (via TimecodeUtils)', () => {
       expect(TimecodeUtils.smpteToFrame('00:00:02', 24)).toBe(48);
     });
 
-    it('throws on invalid format', () => {
-      expect(() => TimecodeUtils.smpteToFrame('invalid', 24)).toThrow();
+    it('returns 0 (does not throw) on invalid format', () => {
+      expect(TimecodeUtils.smpteToFrame('invalid', 24)).toBe(0);
     });
   });
 

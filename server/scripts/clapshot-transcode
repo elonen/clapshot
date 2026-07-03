@@ -39,7 +39,10 @@ set -euo pipefail
 VIDEO_CODEC="${VIDEO_CODEC:-libx264}"
 VIDEO_PRESET="${VIDEO_PRESET:-faster}"
 AUDIO_CODEC="${AUDIO_CODEC:-aac}"
-AUDIO_BITRATE="${AUDIO_BITRATE:-128000}"
+# Fallback bitrate used only when a stream must be re-encoded (e.g. PCM → AAC).
+# Streams already in a browser-compatible codec (aac, mp3, ac3, eac3, flac, opus, alac)
+# are copied without re-encoding, so this value does not affect them.
+AUDIO_BITRATE="${AUDIO_BITRATE:-192000}"
 AUDIO_BITRATE_AUDIO="${AUDIO_BITRATE_AUDIO:-384k}"
 
 # Hardware acceleration options (empty by default)
@@ -55,22 +58,66 @@ fi
 # Set output file (always MP4 for compatibility)
 OUTPUT_FILE="${CLAPSHOT_OUTPUT_DIR}/${CLAPSHOT_OUTPUT_PREFIX}.mp4"
 
-# Build ffmpeg command based on media type (extracted from ffmpeg_processor.rs)
+# ---------------------------------------------------------------------------
+# build_audio_map REENCODE_BITRATE
+#
+# Populates the global AUDIO_STREAM_OPTS array with per-stream codec options
+# for every audio stream in CLAPSHOT_INPUT_FILE.
+#
+# Codecs that can be muxed into MP4 without re-encoding are copied as-is,
+# preserving quality, channel layout, and sample rate:
+#   aac, mp3, ac3, eac3, flac (all major browsers since 2017, Safari 17+),
+#   opus (Chrome/Firefox since ~2014, Safari 17+), alac.
+#
+# Everything else (notably PCM variants from WAV/AIFF) is re-encoded to AAC
+# at REENCODE_BITRATE. Channel count is never forced down — no -ac 2.
+# ---------------------------------------------------------------------------
+build_audio_map() {
+    local reencode_bitrate="$1"
+    AUDIO_STREAM_OPTS=()
+    local idx=0
+    while IFS= read -r codec; do
+        case "$codec" in
+            aac|mp3|mp3float|ac3|eac3|flac|opus|alac)
+                echo "Audio stream $idx ($codec): copying without re-encode" >&2
+                AUDIO_STREAM_OPTS+=(-c:a:$idx copy)
+                ;;
+            *)
+                echo "Audio stream $idx ($codec): re-encoding to $AUDIO_CODEC at $reencode_bitrate" >&2
+                AUDIO_STREAM_OPTS+=(-c:a:$idx "$AUDIO_CODEC" -b:a:$idx "$reencode_bitrate")
+                ;;
+        esac
+        idx=$((idx + 1))
+    done < <(ffprobe -v quiet -select_streams a \
+                     -show_entries stream=codec_name \
+                     -of csv=p=0 \
+                     "$CLAPSHOT_INPUT_FILE" 2>/dev/null)
+}
+
+# Build ffmpeg command based on media type
 case "$CLAPSHOT_MEDIA_TYPE" in
     "video")
-        # Max 1080p, stereo 128kbps audio AAC (lines 139-152 in original)
+        # Select only first video + optional audio streams.
+        # -map 0:v:0        : first video stream only; excludes data/timecode tracks
+        # -map 0:a?         : all audio streams, optional (no error if none present)
+        # timecode=         : clear timecode metadata so the mp4 muxer does not
+        #                     auto-create a companion tmcd track (ffmpeg 7.x behaviour)
+        # No -ac 2          : channel count is preserved per stream
+        build_audio_map "$AUDIO_BITRATE"
+
         FFMPEG_OPTS=(
-            -map 0
-            -dn
+            -map 0:v:0
+            -map "0:a?"
+            -metadata:s:v:0 timecode=
             -c:v "$VIDEO_CODEC"
             -vf "${VIDEO_FILTER_SCALE}=1920:-8"
             -preset "$VIDEO_PRESET"
-            -c:a "$AUDIO_CODEC"
-            -ac 2
             -strict experimental
             -b:v "$CLAPSHOT_TARGET_BITRATE"
-            -b:a "$AUDIO_BITRATE"
         )
+        # Append per-stream audio codec options separately: bash 3.x treats empty
+        # array [@] expansion as unbound under set -u, so guard with a length check.
+        [ ${#AUDIO_STREAM_OPTS[@]} -gt 0 ] && FFMPEG_OPTS+=("${AUDIO_STREAM_OPTS[@]}")
 
         # Add additional QSV options if using QSV codec
         if [[ "$VIDEO_CODEC" == *"qsv"* ]]; then
@@ -86,7 +133,9 @@ case "$CLAPSHOT_MEDIA_TYPE" in
         ;;
 
     "audio")
-        # Complex filter for waveform visualization
+        # Waveform visualization: render a scrolling waveform as the video track,
+        # and carry the original audio alongside it.
+        # Audio is copied if already browser-compatible in MP4; re-encoded otherwise.
         FILTER_COMPLEX="color=c=white:s=2x720 [cursor]; \
 [0:a] showwavespic=s=1920x720:split_channels=1:draw=scale:filter=peak:colors=#181818 [stillwave_peak];\
 [0:a] showwavespic=s=1920x720:split_channels=1:draw=scale:filter=average [stillwave_avg];\
@@ -97,8 +146,9 @@ case "$CLAPSHOT_MEDIA_TYPE" in
 \
 [progress] format=yuv420p [out]"
 
+        build_audio_map "$AUDIO_BITRATE_AUDIO"
+
         FFMPEG_OPTS=(
-            -dn
             -r 60
             -filter_complex "$FILTER_COMPLEX"
             -map "[out]"
@@ -106,15 +156,16 @@ case "$CLAPSHOT_MEDIA_TYPE" in
             -strict experimental
             -c:v "$VIDEO_CODEC"
             -b:v "$CLAPSHOT_TARGET_BITRATE"
-            -c:a "$AUDIO_CODEC"
-            -b:a "$AUDIO_BITRATE_AUDIO"
         )
+        [ ${#AUDIO_STREAM_OPTS[@]} -gt 0 ] && FFMPEG_OPTS+=("${AUDIO_STREAM_OPTS[@]}")
         ;;
 
     "image")
+        # Still image looped to a 1-second video clip; no audio expected.
+        # -map 0:v:0 + timecode= : same tmcd-prevention as the video branch.
         FFMPEG_OPTS=(
-            -map 0
-            -dn
+            -map 0:v:0
+            -metadata:s:v:0 timecode=
             -c:v "$VIDEO_CODEC"
             -tune stillimage
             -vf "scale=1920:-8,loop=-1:1"

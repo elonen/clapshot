@@ -69,6 +69,10 @@ service OrganizerInbound {
     rpc authz_user_action(AuthzUserActionRequest) returns (AuthzResponse);
     rpc cmd_from_client(CmdFromClientRequest) returns (Empty);
 
+    // Server lifecycle events
+    rpc on_media_file_ingested(OnMediaFileIngestedRequest) returns (Empty);
+    rpc on_media_file_deleted(OnMediaFileDeletedRequest) returns (Empty);
+
     // Calls from client when user interacts with the folder UI
     rpc move_to_folder(MoveToFolderRequest) returns (Empty);
     rpc reorder_items(ReorderItemsRequest) returns (Empty);
@@ -182,6 +186,7 @@ message UserSessionData {
     bool is_admin = 3;
     map<string, string> cookies = 4;
     map<string, string> http_headers = 5;
+    optional string language = 6;   // User's UI locale (e.g. "fi", "zh"); used to localize Organizer-originated text. Unset = source language (English).
 }
 
 // ---------------------------------------------------------
@@ -216,6 +221,16 @@ message ReorderItemsRequest {
     UserSessionData ses = 1;
     repeated FolderItemID ids = 2;
     map<string, string> listing_data = 3;
+}
+
+message OnMediaFileIngestedRequest {
+    string user_id = 1;
+    string media_file_id = 2;
+}
+
+message OnMediaFileDeletedRequest {
+    string user_id = 1;
+    string media_file_id = 2;
 }
 
 message AuthzUserActionRequest {

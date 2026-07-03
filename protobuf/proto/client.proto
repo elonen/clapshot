@@ -143,6 +143,9 @@ message ClientToServerCmd {
     }
     message Logout {
     }
+    message SetLanguage {
+        string language = 1;        // User's UI locale (e.g. "fi", "zh"); empty = source language (English)
+    }
 
     oneof cmd {
         OpenNavigationPage open_navigation_page = 10;
@@ -171,5 +174,7 @@ message ClientToServerCmd {
         ReorderItems reorder_items = 140;
 
         Logout logout = 150;
+
+        SetLanguage set_language = 160;
     }
 }

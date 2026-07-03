@@ -1,0 +1,12 @@
+# Generated-by-env Caddyfile (shared across recipes). The caddy service derives these from
+# .env:  CADDY_SITE_ADDRESS = domain (HTTPS/ACME) or ":80" (plain HTTP);
+#        CADDY_TLS = "tls <cert> <key>" for own certs, else empty (automatic ACME);
+#        CADDY_GLOBAL = "email ..." or empty.
+{
+	{$CADDY_GLOBAL}
+}
+
+{$CADDY_SITE_ADDRESS} {
+	{$CADDY_TLS}
+	reverse_proxy clapshot-web:80
+}

@@ -1,6 +1,6 @@
 [package]
 name = "clapshot-server"
-version = "0.9.2"
+version = "0.12.0"
 edition = "2021"
 
 description = "Clapshot video/media review tool (backend)"
@@ -16,7 +16,7 @@ copyright = "2022-2024, Jarno Elonen <elonen@iki.fi>"
 section = "unknown"
 changelog = "debian/changelog"
 
-depends = "$auto, python3, ffmpeg, mediainfo, logrotate, psmisc"
+depends = "$auto, python3, ffmpeg, mediainfo, jq, logrotate, psmisc"
 
 extended-description = """\
 Clapshot is a web-based cooperative video review tool.
@@ -35,11 +35,12 @@ assets = [
     ["debian/additional_files/clapshot-server.conf", "etc/", "644"],
     ["debian/additional_files/run-with-conf.sh", "usr/share/clapshot-server/", "755"],
     
-    # Transcoding, thumbnailing, and decision scripts
+    # Transcoding, thumbnailing, decision and notification hook scripts
     ["scripts/clapshot-transcode", "usr/share/clapshot-server/scripts/", "755"],
     ["scripts/clapshot-thumbnail", "usr/share/clapshot-server/scripts/", "755"],
     ["scripts/clapshot-transcode-decision", "usr/share/clapshot-server/scripts/", "755"],
-    
+    ["scripts/clapshot-notification.example", "usr/share/clapshot-server/scripts/", "755"],
+
     # Configuration files
     ["debian/additional_files/clapshot-transcode.conf", "etc/", "644"],
 ]
@@ -74,7 +75,7 @@ path-absolutize = "3.0.14"
 serde_json = "1.0.145"
 rust_decimal = "1.29.1"
 threadpool = "1.8.1"
-diesel = { version = "2.3.3", features = ["sqlite", "r2d2", "chrono", "returning_clauses_for_sqlite_3_35"] }
+diesel = { version = "2.3.8", features = ["sqlite", "r2d2", "chrono", "returning_clauses_for_sqlite_3_35"] }
 r2d2 = "0.8.10"
 serde = "1.0.228"
 diesel_migrations = "2.3.0"
@@ -88,7 +89,7 @@ async-std = "1.12.0"
 sha2 = "0.10.6"
 hex = "0.4.3"
 mpart-async = "0.7.0"
-bytes = "1.4.0"
+bytes = "1.11.1"
 futures-util = { version = "0.3.28" }
 futures = "0.3.28"
 mime = "0.3.17"
@@ -97,7 +98,7 @@ file-owner = "0.1.1"
 unix-named-pipe = "0.2.0"
 num_cpus = "1.15.0"
 urlencoding = "2.1.2"
-rand = "0.9.1"
+rand = "0.9.3"
 thiserror = "2.0.17"
 anyhow = "1.0.100"
 tracing-appender = "0.2.2"
@@ -111,25 +112,28 @@ tower = { version = "0.5.2", features = ["util"] }
 libc = "0.2.142"
 semver = "1.0.27"
 parking_lot = "0.12.1"
-time = "0.3.44"
+time = "0.3.47"
 pbjson = "0.8"
 pbjson-types = "0.8"
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 portpicker = "0.1.1"
 flate2 = "1.0.25"
-tar = "0.4.40"
+tar = "0.4.46"
 indoc = "2.0.5"
 Inflector = "0.11.4"
 serial_test = "3.1.1"
 aspasia = "0.2.0"
+metrics = "0.24"
 aws-config = { version = "1.8", default-features = false, features = ["rustls", "rt-tokio"] }
 aws-sdk-s3 = { version = "1.115", default-features = false, features = ["rustls"] }
 aws-types = "1.3"
 http = "0.2"
+metrics-util = "0.20.4"
 
 [dev-dependencies]
 assert_fs = "1.0.13"
+metrics-util = "0.20"
 tracing-test = {version="0.2.4", features=["no-env-filter"] }
 reqwest = { version = "0.12.4", default-features = false, features = ["blocking", "json", "rustls-tls", "multipart", "stream"] }
 url = "2.3.1"

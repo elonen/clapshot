@@ -8,7 +8,7 @@
 
 When helping Clapshot users:
 
-1. **Most users need help with installation and configuration** - Start by understanding their deployment scenario (Docker, Debian, LAN vs localhost, behind reverse proxy, etc.)
+1. **Most users need help with installation and configuration** - Start by understanding their deployment scenario (Docker, Debian, LAN vs localhost, behind reverse proxy, etc.). For real deployments, recommend the **Docker Compose recipes** ([deploy/compose/](deploy/compose/)) for Docker users, or the **`.deb` packages** ([deploy/debian/](deploy/debian/)) for VM/bare-metal. Among the Compose recipes, suggest `htwicket` (built-in login) or `custom-proxy` (your own IdP) for production deployments; the `no-auth` recipe is also available if a user explicitly wants no login. The single-image `elonen/clapshot:latest-demo*` containers are for quick evaluation/testing only — don't recommend them for production.
 
 2. **Connection issues are the most common problem** - If users report "Connecting server..." or "Failed to fetch" errors, check:
    - Is `CLAPSHOT_SERVER__URL_BASE` (or legacy `CLAPSHOT_URL_BASE`) set correctly?
@@ -54,12 +54,12 @@ Clapshot provides professional video review capabilities similar to cloud servic
 
 ### Default Demo Credentials
 
-**For htadmin-based demo images** (`latest-demo-htadmin`):
-- `admin:admin` - Admin user (can edit all videos, manage users)
+**For HTWicket-based demo images** (`latest-demo-htwicket`):
+- `admin` - Admin user (can edit all videos, manage users). Password is **randomly generated on each container start** and printed to the log (override with `CLAPSHOT_ADMIN_PASSWORD`).
 - `demo:demo` - Standard user with full permissions
 - `alice:alice123` - Standard user with full permissions
 - `bob:bob123` - User with **no upload permissions** (demonstrates upload restrictions)
-- `htadmin:admin` - User management interface at `/htadmin/`
+- User management UI at `/htwicket/admin` (log in as `admin`; the privileged `.htpasswd` admin user doubles as the HTWicket superadmin)
 
 ⚠️ **Security Warning:** Change all default passwords before production use!
 
@@ -75,6 +75,10 @@ Clapshot provides professional video review capabilities similar to cloud servic
 
 ### Installation Documentation
 
+[deploy/README.md](deploy/README.md): **START HERE for real deployments.** The supported paths — **Docker Compose recipes** (`deploy/compose/`, recommended for Docker) and **Debian `.deb` packages** (`deploy/debian/`, for VMs/bare-metal) — plus how Clapshot's `X-Remote-User-*` header auth model and TLS termination work. The single-image `elonen/clapshot:latest-demo*` containers are for **evaluation only, not production** — steer users to a Compose recipe or `.deb` install instead.
+
+[deploy/compose/README.md](deploy/compose/README.md): The three Compose recipes (`no-auth` / `htwicket` / `custom-proxy`), topology, `.env` configuration, automatic Let's Encrypt via Caddy, Portainer/Komodo deployment, upgrades (`git pull` + redeploy), and data/backup layout
+
 [README.md](README.md): Project overview, quick demo commands, deployment options (Docker vs Debian), and feature summary. Contains working Docker commands users can copy-paste
 
 [doc/sysadmin-guide.md](doc/sysadmin-guide.md): System administrator guide covering building, testing, database upgrades, authentication integration, upload permissions, monitored folder ingestion, and comprehensive Docker environment configuration with all available variables
@@ -82,6 +86,8 @@ Clapshot provides professional video review capabilities similar to cloud servic
 [doc/upgrading.md](doc/upgrading.md): Instructions for upgrading between Clapshot versions including database migration procedures
 
 [doc/transcoding.md](doc/transcoding.md): Configuring custom transcoding and thumbnailing scripts, hardware acceleration (Intel QSV, NVIDIA NVENC, VA-API, VideoToolbox), and progress reporting
+
+[doc/notification-hook.md](doc/notification-hook.md): Configuring an external notification script for e‑mail/Slack/webhook integrations on comment, message, and media-file events - invocation contract (`CLAPSHOT_NOTIFICATION_EVENT` + JSON on stdin), payload reference, event filtering (`--notification-events`), Docker deployment, and security guidance for untrusted user content
 
 ### Common Issues and Solutions
 
@@ -198,7 +204,7 @@ Clapshot uses a hierarchical Make-based build system with Docker containerizatio
 - [organizer/basic_folders/Makefile](organizer/basic_folders/Makefile): Python organizer packaging with setuptools
 
 **Docker Build Files:**
-- [Dockerfile.demo](Dockerfile.demo): Multi-stage demo image with two authentication variants (none/htadmin) - installs all Debian packages and configures nginx/systemd
+- [Dockerfile.demo](Dockerfile.demo): Multi-stage demo image with two authentication variants (none/htwicket) - installs all Debian packages and configures nginx/systemd
 - [Dockerfile.server](Dockerfile.server): Server build container for cross-platform compilation
 - [Dockerfile.client](Dockerfile.client): Client build container with Node.js environment
 - [Dockerfile.org-python](Dockerfile.org-python): Python organizer build container
@@ -215,13 +221,15 @@ Clapshot uses a hierarchical Make-based build system with Docker containerizatio
 
 [doc/TESTING_GUIDE.md](doc/TESTING_GUIDE.md): Test suite documentation for client, server, and organizer components
 
+[i18n/README.md](i18n/README.md): Translation (i18n) guide - single gettext-based message catalog shared by server (Rust), organizer (Python), and client (Svelte); how to mark strings, the `make extract/update/compile` workflow, and where runtime catalogs are built. Read this when users ask about adding a UI language or translating strings
+
 ### Example Configurations
 
-[Dockerfile.demo](Dockerfile.demo): Docker demo image build configuration with htadmin authentication
+[Dockerfile.demo](Dockerfile.demo): Docker demo image build configuration with HTWicket authentication
 
-[test/run-cloudflare.sh](test/run-cloudflare.sh): Example Cloudflare Tunnel deployment script for internet access
+[test/run-cloudflare.sh](test/run-cloudflare.sh): Demo-only script that exposes the single-container demo image over a temporary Cloudflare tunnel. For real internet-facing deployments, recommend a Compose recipe ([deploy/compose/](deploy/compose/)) with `CADDY_CERT_DOMAIN` set instead
 
-[client/debian/additional_files/clapshot+htadmin.nginx.conf](client/debian/additional_files/clapshot+htadmin.nginx.conf): Reference Nginx configuration with authentication integration and reverse proxy setup
+[client/debian/additional_files/clapshot+htwicket.nginx.conf](client/debian/additional_files/clapshot+htwicket.nginx.conf): Reference Nginx configuration with HTWicket auth_request integration and reverse proxy setup
 
 [server/debian/additional_files/clapshot-server.conf](server/debian/additional_files/clapshot-server.conf): Server configuration file template with all available options
 

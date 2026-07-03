@@ -1,0 +1,9 @@
+{
+  "name": "clapshot-compose-tests",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright smoke tests for the deploy/compose recipes. Installed inside the official Playwright container. Keep the version in sync with PLAYWRIGHT_IMAGE.",
+  "dependencies": {
+    "@playwright/test": "1.61.0"
+  }
+}

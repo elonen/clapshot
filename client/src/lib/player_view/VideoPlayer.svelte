@@ -11,6 +11,7 @@ import * as Proto3 from '@clapshot_protobuf/typescript';
 import {HybridVideoDecoder} from './video-decoder/HybridVideoDecoder';
 import {TimecodeUtils} from './video-decoder/timecode';
 import {allComments, curSubtitle, videoIsReady, collabId, curVideo, clientConfig} from '@/stores';
+import { t } from '@/i18n';
 import LocalStorageCookies from '@/cookies';
 import { t } from '@/i18n';
 import CommentTimelinePin from './CommentTimelinePin.svelte';
@@ -32,6 +33,26 @@ let videoElem: any = $state();
 let time: number = $state(0);
 let duration: number | undefined = $state();
 let paused: boolean = $state(true);
+
+// Pending seek to apply once the (newly opened) media's metadata is loaded. Used when Organizer
+// wants to open a video at a specific time/frame, but the video isn't loaded yet so we don't know its duration/frame count.
+let queuedSeek: { time: number, resume: boolean } | null = null;
+
+export function queueSeekOnLoad(timeSec: number, resume: boolean) {
+    queuedSeek = { time: timeSec, resume };
+}
+
+function onLoadedMetadata() {
+    prepare_drawing();
+    if (queuedSeek) {
+        const dur = videoElem.duration;
+        const t = (dur && isFinite(dur)) ? Math.min(queuedSeek.time, dur) : queuedSeek.time;
+        time = t;
+        videoElem.currentTime = t;
+        if (queuedSeek.resume) { videoElem.play(); }
+        queuedSeek = null;
+    }
+}
 
 // Duration abstraction for better testability
 export function getEffectiveDuration(): number {
@@ -67,6 +88,16 @@ let loopEndTime: number = $state(-2);
 let videoCanvasContainer: any = $state();
 let videoDecoder: HybridVideoDecoder | null = null;
 
+// Fullscreen: we fullscreen `playerRoot` (the wrapper holding BOTH the video
+// container and the controls), so the HTML5<->Mediabunny render-mode switch (which
+// only toggles visibility of children inside videoCanvasContainer) survives without
+// breaking out of fullscreen. In fullscreen the control bar becomes an auto-hiding
+// overlay so the video/frame image fills the whole screen.
+let playerRoot: HTMLElement | undefined = $state();
+let isFullscreen: boolean = $state(false);
+let controlsVisible: boolean = $state(true);
+let hideControlsTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+
 let debug_layout: boolean = false; // Set to true to show CSS layout boxes
 let commentsWithTc: Proto3.Comment[] = $derived(
     $allComments
@@ -92,7 +123,7 @@ function initializeVolume() {
 run(() => {
     if (videoElem && audio_volume !== undefined) {
         videoElem.volume = audio_volume / 100;
-        LocalStorageCookies.set('audio_volume', audio_volume.toString(), null);
+        LocalStorageCookies.set('audio_volume', audio_volume.toString(), Number.MAX_SAFE_INTEGER);
     }
 });
 
@@ -178,6 +209,8 @@ onMount(async () => {
     curSubtitle.subscribe(() => { offsetTextTracks(); });
     animationFrameId = requestAnimationFrame(handleTimeUpdate);
     initializeVolume();
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 });
 
 onDestroy(async () => {
@@ -191,6 +224,9 @@ onDestroy(async () => {
     }
     videoDecoder?.dispose();
     videoDecoder = null;
+    clearTimeout(hideControlsTimer);
+    document.removeEventListener('fullscreenchange', onFullscreenChange);
+    document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
 });
 
 // Monitor video elem "loop" property in a timer.
@@ -268,6 +304,42 @@ function togglePlay() {
     setPlayback(should_play, "VideoPlayer");
 }
 
+// Exit fullscreen if currently active (e.g. when showing a comment, whose panel
+// lives outside the fullscreen element). No-op when not in fullscreen.
+export function exitFullscreen() {
+    const doc = document as any;
+    if (document.fullscreenElement ?? doc.webkitFullscreenElement) {
+        (document.exitFullscreen ?? doc.webkitExitFullscreen)?.call(document);
+    }
+}
+
+function toggleFullscreen() {
+    const el = playerRoot as any;
+    const doc = document as any;
+    if (document.fullscreenElement ?? doc.webkitFullscreenElement) {
+        exitFullscreen();
+    } else {
+        (el?.requestFullscreen ?? el?.webkitRequestFullscreen)?.call(el);
+    }
+}
+
+// While fullscreen, hide the control overlay after a short idle; reveal on mouse move.
+function showControlsTemporarily() {
+    controlsVisible = true;
+    clearTimeout(hideControlsTimer);
+    hideControlsTimer = setTimeout(() => { if (isFullscreen) controlsVisible = false; }, 2500);
+}
+
+function onFullscreenChange() {
+    isFullscreen = !!(document.fullscreenElement ?? (document as any).webkitFullscreenElement);
+    if (isFullscreen) {
+        showControlsTemporarily();
+    } else {
+        clearTimeout(hideControlsTimer);
+        controlsVisible = true;
+    }
+}
+
 function clickOnVideo(event: MouseEvent ) {
     if ($curVideo?.mediaType.toLowerCase().startsWith("audio")) {
         // Audio file videos show a waveform, so use clicks for seeking instead of play/pause
@@ -328,6 +400,7 @@ export function getCurFrame() {
 
 async function step_video(frames: number) {
     if (!videoDecoder) return;
+    if (!videoElem.paused) { videoElem.pause(); }  // stepping frames implies pausing playback
 
     const direction = frames < 0 ? -1 : 1;
     const position = await videoDecoder.stepFrame(direction as 1 | -1, Math.abs(frames));
@@ -353,6 +426,7 @@ const WINDOW_KEY_ACTIONS: {[key: string]: (e: KeyboardEvent)=>any} = {
             if (videoElem) { videoElem.loop = !videoElem.loop; }
             if (!videoElem.loop) { loopStartTime = -1; loopEndTime = -2; }
         },
+        'f': () => toggleFullscreen(),
     };
 
 function onWindowKeyPress(e: KeyboardEvent): void {
@@ -384,7 +458,7 @@ export async function seekToSMPTE(smpte: string) {
         const time = TimecodeUtils.smpteToTime(smpte, videoDecoder!.frameRate);
         await videoDecoder!.seekToTime(time);
     } catch(err) {
-        acts.add({mode: 'warning', message: `Seek failed to: ${smpte}`, lifetime: 3});
+        acts.add({mode: 'warning', message: $t("Seek failed to: {target}", { target: smpte }), lifetime: 3});
     }
 }
 
@@ -393,7 +467,7 @@ export async function seekToFrame(frame: number) {
     try {
         await videoDecoder!.seekToFrame(frame);
     } catch(err) {
-        acts.add({mode: 'warning', message: `Seek failed to: ${frame}`, lifetime: 3});
+        acts.add({mode: 'warning', message: $t("Seek failed to: {target}", { target: frame }), lifetime: 3});
     }
 }
 
@@ -413,7 +487,7 @@ export function onToggleDraw(mode_on: boolean) {
             draw_canvas.style.visibility = "hidden";
         }
     } catch(err) {
-        acts.add({mode: 'error', message: `Video loading not done? Cannot enable drawing.`, lifetime: 3});
+        acts.add({mode: 'error', message: $t("Video loading not done? Cannot enable drawing."), lifetime: 3});
     }
 }
 
@@ -492,7 +566,7 @@ export async function setDrawing(drawing: string) {
         draw_canvas.style.pointerEvents = "none";
     }
     catch(err) {
-        acts.add({mode: 'error', message: `Failed to show image.`, lifetime: 3});
+        acts.add({mode: 'error', message: $t("Failed to show image."), lifetime: 3});
     }
 }
 
@@ -680,8 +754,10 @@ function handlePinClick(id: string) {
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
+    bind:this={playerRoot}
     onkeydown={onWindowKeyPress}
-    class="w-full h-full flex flex-col object-contain"
+    onmousemove={() => { if (isFullscreen) showControlsTemporarily(); }}
+    class="w-full h-full flex flex-col object-contain relative {isFullscreen ? 'bg-black' : ''} {isFullscreen && !controlsVisible ? 'cursor-none' : ''}"
     role="main"
 >
 	<div  class="flex-1 grid place-items-center relative min-h-[12em]"
@@ -696,7 +772,7 @@ function handlePinClick(id: string) {
 				class="h-full w-full"
 				style="opacity: {$videoIsReady ? 1.0 : 0}; transition-opacity: 1.0s;"
 				bind:this={videoElem}
-				onloadedmetadata={prepare_drawing}
+				onloadedmetadata={onLoadedMetadata}
 				onclick={clickOnVideo}
 				bind:currentTime={time}
                 ontimeupdate={handleTimeUpdate}
@@ -722,7 +798,7 @@ function handlePinClick(id: string) {
 		</div>
 	</div>
 
-	<div class="flex-none relative {debug_layout?'border-2 border-red-600':''}">
+	<div class="flex-none {debug_layout?'border-2 border-red-600':''} {isFullscreen ? 'absolute bottom-0 left-0 right-0 z-[200] bg-black/60 transition-opacity duration-300 ' + (controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none') : 'relative'}">
 
 		<div class="flex-1 space-y-0 leading-none relative">
 			<progress value="{(time / getEffectiveDuration()) || 0}"
@@ -806,6 +882,16 @@ function handlePinClick(id: string) {
 
 			<!-- Video duration -->
 			<span class="flex-0 text-lg mx-4">{format_tc(getEffectiveDuration())}</span>
+
+			<!-- Fullscreen toggle -->
+			<span class="flex-0 text-center whitespace-nowrap">
+				<button
+					class="hover:text-amber-600 fa-solid {isFullscreen ? 'fa-compress' : 'fa-expand'} mx-2"
+					onclick={toggleFullscreen}
+					title="Toggle fullscreen (f)"
+					aria-label="Toggle fullscreen"
+				></button>
+			</span>
 		</div>
 	</div>
 

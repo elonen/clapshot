@@ -145,6 +145,9 @@ cat <<- "EOF"
 EOF
 cat <<-EOF
 ---  Browse ${CLAPSHOT_SERVER__URL_BASE}  ---
+---
+---  ⚠ DEMO / EVALUATION build — single container, NOT for production.
+---    See Docker Compose deployment recipes in the repo docs.
 ==============================================
 EOF
 

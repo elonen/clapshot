@@ -6,9 +6,9 @@ import {fade, slide} from "svelte/transition";
 
 import * as Proto3 from '@clapshot_protobuf/typescript';
 
-import {allComments, curUsername, curUserId, videoIsReady, mediaFileId, curVideo, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle, clientConfig} from './stores';
+import {allComments, curUsername, curUserId, videoIsReady, mediaFileId, curVideo, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle, clientConfig, playerHeaderHtml} from './stores';
 import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "./types";
-import { t, initLocale } from './i18n';
+import { t, initLocale, locale, currentLocale } from './i18n';
 
 import CommentCard from './lib/player_view/CommentCard.svelte'
 import SubtitleCard from './lib/player_view/SubtitleCard.svelte';
@@ -21,12 +21,21 @@ import {folderItemsToIDs, type VideoListDefItem} from "@/lib/asset_browser/types
 import FolderListing from './lib/asset_browser/FolderListing.svelte';
 import LocalStorageCookies from './cookies';
 import RawHtmlItem from './lib/asset_browser/RawHtmlItem.svelte';
+import { indentCommentTree, countTimedRootComments, type CommentSortMode } from '@/lib/commentTree';
 import { ClientToServerCmd } from '@clapshot_protobuf/typescript/dist/src/client';
 
 let videoPlayer: VideoPlayer | undefined = $state();
 let commentInput: CommentInput | undefined = $state();
 let debugLayout: boolean = false;
 let uiConnectedState: boolean = $state(false); // true if UI should look like we're connected to the server
+
+let commentSortMode: CommentSortMode = $state((LocalStorageCookies.get('comment_sort_mode') as CommentSortMode) ?? 'timecode');
+
+function toggleCommentSort() {
+    commentSortMode = commentSortMode === 'timecode' ? 'date' : 'timecode';
+    LocalStorageCookies.set('comment_sort_mode', commentSortMode, Number.MAX_SAFE_INTEGER);
+    $allComments = indentCommentTree($allComments, commentSortMode);
+}
 
 let collabDialogAck = $state(false);  // true if user has clicked "OK" on the collab dialog
 let lastCollabControllingUser: string | null = null;    // last user to control the video in a collab session
@@ -136,7 +145,7 @@ function onCommentInputButton(e: any) {
 
 function onDisplayComment(e: any) {
     if (!$curVideo) { throw Error("No video loaded"); }
-    if (videoPlayer) videoPlayer.seekToSMPTE(e.timecode);
+    if (videoPlayer && e.timecode) videoPlayer.seekToSMPTE(e.timecode);
     // Close draw mode while showing (drawing from a saved) comment
     if (videoPlayer && e.drawing) { videoPlayer.setDrawing(e.drawing); }
     if (e.subtitleId) { $curSubtitle = $curVideo.subtitles.find((s) => s.id == e.subtitleId) ?? null; }
@@ -217,6 +226,12 @@ function activateComment(e: any) {
         console.warn("Comment not found:", commentId);
         acts.add({mode: 'warning', message: 'Comment not found', lifetime: 3});
         return;
+    }
+
+    // Showing a comment: pause playback and leave fullscreen so the comment panel is visible
+    if (videoPlayer) {
+        videoPlayer.setPlayback(false, "comment_activate");
+        videoPlayer.exitFullscreen();
     }
 
     // If comment has a timecode, activate it on the timeline (seek, set loop points)
@@ -301,7 +316,7 @@ async function onUploadSubtitles() {
 
 function onSubtitleDelete(e: any) {
     const sub_id = e.id;
-    if (window.confirm($t('status.deleteSubtitleConfirm'))) {
+    if (window.confirm($t("Are you sure you want to delete this subtitle?"))) {
         if ($curSubtitle?.id == sub_id) { $curSubtitle = null; }
         wsEmit({ delSubtitle: { id: sub_id } });
     }
@@ -324,7 +339,7 @@ async function onSubtitleUpdate(e: any) {
     const isDefault = e.isDefault;
     if (isNaN(sub.timeOffset)) {
         console.error("Invalid time offset: ", sub.timeOffset);
-        acts.add({mode: 'error', message: "Invalid time offset: " + sub.timeOffset, lifetime: 5});
+        acts.add({mode: 'error', message: $t("Invalid time offset: {offset}", { offset: sub.timeOffset }), lifetime: 5});
         return;
     }
     wsEmit({ editSubtitleInfo: {
@@ -434,7 +449,6 @@ else
 
 
 let uploadUrl: string = $state("");
-let transcodePreferred: boolean = $state(true);
 
 
 // -------------------------------------------------------------
@@ -545,6 +559,18 @@ function sendQueueLoop()
 setTimeout(sendQueueLoop, 500); // Start the loop
 
 
+// When the user switches UI language (after initial load), tell the server and re-render the
+// current navigation page so Organizer-rendered text re-localizes. The initial send happens in
+// the websocket "open" handler; this only fires on subsequent changes.
+let localeSyncReady = false;
+locale.subscribe((loc) => {
+    if (!localeSyncReady) { localeSyncReady = true; return; }  // skip the initial subscribe fire
+    if (!isConnected()) return;
+    wsEmit({ setLanguage: { language: loc } });
+    if (!$mediaFileId) { wsEmit({ openNavigationPage: { pageId: $curPageId ?? undefined } }); }
+});
+
+
 let reconnectDelay = 100;  // for exponential backoff
 
 
@@ -645,6 +671,9 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
         uiConnectedState = true;
         connectionErrors.set([]);
 
+        // Tell the server our UI locale before requesting any page or media
+        wsEmit({ setLanguage: { language: currentLocale() } });
+
         if ($mediaFileId) {
             console.debug(`Socket connected, mediaFileId=${mediaFileId}. Requesting openMediaFile`);
             wsEmit({openMediaFile: { mediaFileId: $mediaFileId }});
@@ -705,14 +734,14 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             // welcome
             if (cmd.welcome) {
                 if (!cmd.welcome.hasOwnProperty("serverVersion") || (process.env.CLAPSHOT_MIN_SERVER_VERSION && cmd.welcome.serverVersion < process.env.CLAPSHOT_MIN_SERVER_VERSION)) {
-                    const msg = "Server version too old (v" + cmd.welcome.serverVersion + "). Please update server.";
+                    const msg = $t("Server version too old (v{version}). Please update server.", { version: cmd.welcome.serverVersion });
                     console.error(msg);
                     window.alert(msg);
                     return;
                 }
                 console.log("Connected to server v" + cmd.welcome.serverVersion);
                 if (process.env.CLAPSHOT_MAX_SERVER_VERSION && cmd.welcome.serverVersion > process.env.CLAPSHOT_MAX_SERVER_VERSION) {
-                    const msg = "Client version too old (client v" + process.env.CLAPSHOT_CLIENT_VERSION + " for server v" + cmd.welcome.serverVersion + "). Please update client.";
+                    const msg = $t("Client version too old (client v{clientVersion} for server v{serverVersion}). Please update client.", { clientVersion: process.env.CLAPSHOT_CLIENT_VERSION ?? "", serverVersion: cmd.welcome.serverVersion });
                     console.error(msg);
                     window.alert(msg);
                     return;
@@ -726,6 +755,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 $curUsername = cmd.welcome.user.name ?? cmd.welcome.user.id;
                 $curUserId = cmd.welcome.user.id;
                 $curUserIsAdmin = cmd.welcome.isAdmin;
+                // (UI locale is sent in the websocket "open" handler, before the first page request.)
             }
             // error
             else if (cmd.error) {
@@ -734,6 +764,13 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             }
             // showPage
             else if (cmd.showPage) {
+                // Empty showPage (no pageItems, no pageId) = refresh hint: folder contents may have changed
+                if (!cmd.showPage.pageItems?.length && !cmd.showPage.pageId) {
+                    if (!$mediaFileId) {
+                        wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}});
+                    }
+                    return;
+                }
                 const newPageId = cmd.showPage.pageId ?? null;  // turn undefined into null
                 console.debug("showPage. newPageId=", newPageId, "$curPageId=", $curPageId);
 
@@ -751,6 +788,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 }
 
                 $curPageId = newPageId;
+                $playerHeaderHtml = null;  // showing a folder view => drop any player header HTML
                 closePlayerIfOpen();  // No-op if no video is open
                 $curPageItems = [...cmd.showPage.pageItems];  // force svelte to re-render
             }
@@ -825,8 +863,16 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     $curPageId = null;  // Clear the current page ID, so popHistoryState will know to reopen it if needed
 
                     if ($mediaFileId != v.id) {
-                        console.debug("[Browser history] Pushing new media file state: ", v.id);
-                        history.pushState({mediaFileId: v.id}, '', `/?vid=${v.id}`);
+                        // Push a new history entry only when first ENTERING the player.
+                        // If video is changing inside the player, replace the current history entry instead.
+                        const enteringPlayer = ($mediaFileId == null);
+                        if (enteringPlayer) {
+                            console.debug("[Browser history] Entering player, pushing media file state: ", v.id);
+                            history.pushState({mediaFileId: v.id}, '', `/?vid=${v.id}`);
+                        } else {
+                            console.debug("[Browser history] In-player switch, replacing media file state: ", v.id);
+                            history.replaceState({mediaFileId: v.id}, '', `/?vid=${v.id}`);
+                        }
                         document.title = "Clapshot - " + (v.title ?? v.id);
                     }
 
@@ -845,7 +891,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                         wsEmit({joinCollab: { collabId: $collabId, mediaFileId: $mediaFileId! }});
 
                 } catch(error) {
-                    acts.add({mode: 'danger', message: 'Bad video open request. See log.', lifetime: 5});
+                    acts.add({mode: 'danger', message: $t('Bad video open request. See log.'), lifetime: 5});
                     console.error("Invalid video open request. Error: ", error);
                 }
             }
@@ -866,32 +912,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 }
 
                 // Re-sort / turn updated comment tree into an indented, ordered list for UI
-                function indentCommentTree(items: IndentedComment[]): IndentedComment[]
-                {
-                    let rootComments = items.filter(item => item.comment.parentId == null);
-                    rootComments.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
-
-                    // Recursive DFS function to traverse and build the ordered list
-                    function dfs(c: IndentedComment, depth: number, result: IndentedComment[]): void {
-                        if (result.find((it) => it.comment.id === c.comment.id)) return;  // already added, cut infinite loop
-                        result.push({ ...c, indent: depth });
-                        let children = items.filter(item => (item.comment.parentId === c.comment.id));
-                        children.sort((a, b) => (a.comment.created?.getTime() ?? 0) - (b.comment.created?.getTime() ?? 0));
-                        for (let child of children)
-                        dfs(child, depth + 1, result);
-                    }
-
-                    let res: IndentedComment[] = [];
-                    rootComments.forEach((c) => dfs(c, 0, res));
-
-                    // Add any orphaned comments to the end (we may receive them out of order)
-                    items.forEach((c) => {
-                        if (!res.find((it) => it.comment.id === c.comment.id))
-                        res.push(c);
-                    });
-                    return res;
-                }
-                $allComments = indentCommentTree($allComments);
+                $allComments = indentCommentTree($allComments, commentSortMode);
 
                 // Try to activate comment from URL hash if conditions are met
                 tryActivateHashComment();
@@ -965,7 +986,15 @@ function openMediaFileListItem(e: { detail: { item: Proto3.PageItem_FolderListin
 // Expose some API functions to browser JS (=scripts from Server and Organizer)
 
 (window as any).clapshot = {
-    openMediaFile: (mediaFileId: string) => { wsEmit({ openMediaFile: { mediaFileId } }) },
+    openMediaFile: (mediaFileId: string, opts?: { headerHtml?: string, keepHTML?: boolean, preserveTime?: boolean }) => {
+        // Player header HTML: keep it (switching within a header), set it, or clear it (plain open).
+        if (!opts?.keepHTML) { playerHeaderHtml.set(opts?.headerHtml ?? null); }
+        // Optionally resume the current timecode + play state in the newly opened media.
+        const time = (opts?.preserveTime && videoPlayer) ? videoPlayer.getCurTime() : 0;
+        const wasPlaying = (opts?.preserveTime && videoPlayer) ? !videoPlayer.isPaused() : false;
+        wsEmit({ openMediaFile: { mediaFileId } });
+        if (opts?.preserveTime && videoPlayer) { videoPlayer.queueSeekOnLoad(time, wasPlaying); }
+    },
     renameMediaFile: (mediaFileId: string, newName: string) => { wsEmit({ renameMediaFile: { mediaFileId, newName } }) },
     delMediaFile: (mediaFileId: string) => { wsEmit({ delMediaFile: { mediaFileId } }) },
 
@@ -1030,7 +1059,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
         <!-- ========== "connecting" spinner ============= -->
         <div transition:fade class="w-full h-full text-5xl text-slate-600 align-middle text-center">
             <h1 class="m-16" style="font-family: 'Yanone Kaffeesatz', sans-serif;">
-                {$t('status.connecting')}
+                {$t("Connecting server...")}
             </h1>
             <div class="fa-2x block">
                 <i class="fas fa-spinner connecting-spinner"></i>
@@ -1038,13 +1067,13 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
             <div class="m-16 text-xs">
                 {#if $connectionErrors.length > 0}
                     <details class="connection-errors">
-                        <summary class="connection-errors cursor-pointer text-slate-600">{$t('status.viewConnectionErrors')}</summary>
+                        <summary class="connection-errors cursor-pointer text-slate-600">{$t("View connection errors")}</summary>
                         <ul>
                             {#each $connectionErrors as ce}
                             <li><code>{ce}</code></li>
                             {/each}
                         </ul>
-                        <p class="m-4 text-sm"><em>See browser JS console for more details.</em></p>
+                        <p class="m-4 text-sm"><em>{$t("See browser JS console for more details.")}</em></p>
                     </details>
                 {/if}
             </div>
@@ -1073,6 +1102,13 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
 
             {#if $allComments.length > 0 || $curSubtitle}
             <div id="comment_list" transition:fade class="flex flex-col h-full w-72 bg-gray-900 py-2 px-2 ml-2">
+                {#if countTimedRootComments($allComments) >= 2}
+                <div class="flex-none flex items-center text-xs text-gray-500 pb-1">
+                    <button class="hover:text-gray-300 transition-colors" onclick={toggleCommentSort}>
+                        <i class="fa fa-sort mr-1"></i>{commentSortMode === 'timecode' ? $t("Sort: timecode") : $t("Sort: date posted")}
+                    </button>
+                </div>
+                {/if}
                 <div class="flex-grow overflow-y-auto space-y-2">
                     {#each $allComments as it}
                         <CommentCard
@@ -1089,7 +1125,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                     {#if $curVideo.subtitles}
                         <!-- Subtitles -->
                         <div class="flex justify-between text-gray-500 items-center py-2 border-t border-gray-500">
-                            <h6>{$t('status.subtitles')}</h6>
+                            <h6>{$t("Subtitles")}</h6>
                             <button class="fa fa-plus-circle" title="Upload subtitles" aria-label="Upload subtitles" onclick={onUploadSubtitles}></button>
                         </div>
                         {#each $curVideo.subtitles as sub}
@@ -1111,12 +1147,12 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
         {#if $collabId && !collabDialogAck}
         <div class="fixed top-0 left-0 w-full h-full flex justify-center items-center">
             <div class="bg-gray-900 text-white p-4 rounded-md shadow-lg text-center leading-loose">
-                <p class="text-xl text-green-500">{$t('status.collabActiveTitle')}</p>
-                <p class="">{$t('status.collabSessionId', {id: $collabId})}</p>
-                <p class="">{$t('status.collabActionsMirrored')}</p>
-                <p class="">{$t('status.collabInvite')}</p>
-                <p class="">{$t('status.collabExit')}</p>
-                <button class="bg-gray-800 hover:bg-gray-700 text-green m-2 p-2 rounded-md shadow-lg" onclick={preventDefault(()=>collabDialogAck=true)}>{$t('status.collabUnderstood')}</button>
+                <p class="text-xl text-green-500">{$t("Collaborative viewing session active.", { context: "collab" })}</p>
+                <p class="">{$t("Session ID is {id}", { context: "collab", id: $collabId })}</p>
+                <p class="">{$t("Actions like seek, play and draw are mirrored to all participants.", { context: "collab" })}</p>
+                <p class="">{$t("To invite people, copy browser URL and send it to them.", { context: "collab" })}</p>
+                <p class="">{$t("Exit by clicking the green icon in header.", { context: "collab" })}</p>
+                <button class="bg-gray-800 hover:bg-gray-700 text-green m-2 p-2 rounded-md shadow-lg" onclick={preventDefault(()=>collabDialogAck=true)}>{$t("Understood", { context: "collab", "comment": "button to acknowledge" })}</button>
             </div>
         </div>
         {/if}
@@ -1134,26 +1170,18 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                         <div class="my-6">
                             <!-- ========== upload widget ============= -->
                             {#if pit.folderListing.allowUpload}
-                                <div class="flex justify-end items-center text-gray-400 text-sm mb-2 gap-3">
-                                    <span class="uppercase tracking-wide text-xs text-gray-500">Transcode</span>
-                                    <label class="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" bind:checked={transcodePreferred} class="h-4 w-4 rounded border-gray-600 bg-slate-900" />
-                                        <span class="text-gray-200">{transcodePreferred ? "Transcode then upload" : "Upload directly to storage"}</span>
-                                    </label>
-                                </div>
                                 <div class="h-24 border-4 border-dashed border-gray-700">
                                     <FileUpload
                                         postUrl={uploadUrl}
                                         listingData={pit.folderListing.listingData ?? {}}
                                         mediaFileAddedAction={pit.folderListing.mediaFileAddedAction}
-                                        transcodePreferred={transcodePreferred}
                                     >
                                         <div class="flex flex-col justify-center items-center h-full">
                                             <div class="text-2xl text-gray-700">
                                                 <i class="fas fa-upload"></i>
                                             </div>
                                             <div class="text-xl text-gray-700">
-                                                {$t('status.dropInstruction')}
+                                                {$t("Drop video, audio and image files here to upload")}
                                             </div>
                                         </div>
                                     </FileUpload>
@@ -1171,6 +1199,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                                     on:open-item = {openMediaFileListItem}
                                     on:reorder-items = {onReorderItems}
                                     on:move-to-folder = {onMoveItemsToFolder}
+                                    on:refresh-listing = {() => wsEmit({openNavigationPage: {pageId: $curPageId ?? undefined}})}
                                     on:popup-action = {onMediaFileListPopupAction}
                                 />
                             </div>
@@ -1183,7 +1212,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
             <div>
                 {#if $userMessages.length>0}
                 <h1 class="text-2xl m-6 mt-12 text-slate-500">
-                    {$t('status.latestMessages')}
+                    {$t("Latest messages")}
                 </h1>
                 <div class="gap-4 max-h-56 overflow-y-auto border-l px-2 border-gray-900" role="log">
                     {#each $userMessages as msg}

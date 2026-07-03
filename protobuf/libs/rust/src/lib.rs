@@ -65,6 +65,10 @@ pub async fn run_organizer_outbound_grpc_server(
         .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
         .build_v1()?;
 
+    let service = service
+        .max_decoding_message_size(32 * 1024 * 1024)
+        .max_encoding_message_size(32 * 1024 * 1024);
+
     let srv = tonic::transport::Server::builder()
         .add_service(refl)
         .add_service(service);
@@ -181,7 +185,9 @@ pub async fn connect_back_and_finish_handshake(
         },
     };
 
-    let mut client = OrganizerOutboundConnection::new(channel);
+    let mut client = OrganizerOutboundConnection::new(channel)
+        .max_decoding_message_size(32 * 1024 * 1024)
+        .max_encoding_message_size(32 * 1024 * 1024);
     client.handshake(org_info).await?;
 
     Ok(client)

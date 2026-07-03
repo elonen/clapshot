@@ -1,4 +1,5 @@
-FROM node:24.2-bookworm-slim
+ARG DEBIAN_VER=trixie
+FROM node:24-${DEBIAN_VER}-slim
 
 # Install system packages
 RUN apt-get -qy update >/dev/null
