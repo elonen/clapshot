@@ -27,13 +27,13 @@ let localeOptions = $state(availableLocales);
 let videoProgressMsg: string | undefined = $state(undefined);
 let videoProgressVal: number | undefined = $state(undefined);
 
-onMount(async () => {
-	const unsubscribe = latestProgressReports.subscribe((reports: MediaProgressReport[]) => {
-		const match = reports.find((r: MediaProgressReport) => r.mediaFileId === $mediaFileId);
-		videoProgressMsg = match?.msg;
-		videoProgressVal = match?.progress;
-	});
-	return () => unsubscribe();
+onMount(() => {
+    const unsubscribe = latestProgressReports.subscribe((reports: MediaProgressReport[]) => {
+        const match = reports.find((r: MediaProgressReport) => r.mediaFileId === $mediaFileId);
+        videoProgressMsg = match?.msg;
+        videoProgressVal = match?.progress;
+    });
+    return () => unsubscribe();
 });
 
 $effect(() => {

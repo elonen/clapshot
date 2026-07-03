@@ -687,6 +687,7 @@ function handlePinClick(id: string) {
 	<div  class="flex-1 grid place-items-center relative min-h-[12em]"
 			 style="{debug_layout?'border: 2px solid orange;':''}">
 		<div bind:this={videoCanvasContainer} class="absolute h-full {debug_layout?'border-4 border-x-zinc-50':''}">
+			<!-- svelte-ignore a11y_media_has_caption -->
 			<video
 				transition:scale
 				src="{src}"
