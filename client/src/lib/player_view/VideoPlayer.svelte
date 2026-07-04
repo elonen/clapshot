@@ -833,7 +833,7 @@ function handlePinClick(id: string) {
 				<!-- Timecode -->
 				<span class="flex-0 mx-4 text-sm font-mono">
 					<input class="bg-transparent hover:bg-gray-700 w-32" value="{currentTimecode}" onchange={(e) => onTimecodeEdited(e)}/>
-					FR <input class="bg-transparent hover:bg-gray-700 w-16" value="{currentFrame}" onchange={(e) => onFrameEdited(e)}/>
+					{$t("FR", { context: "frame label", comment: "short label for the frame number input field" })} <input class="bg-transparent hover:bg-gray-700 w-16" value="{currentFrame}" onchange={(e) => onFrameEdited(e)}/>
 				</span>
 
                {#if !$collabId}
@@ -887,8 +887,8 @@ function handlePinClick(id: string) {
 				<button
 					class="hover:text-amber-600 fa-solid {isFullscreen ? 'fa-compress' : 'fa-expand'} mx-2"
 					onclick={toggleFullscreen}
-					title="Toggle fullscreen (f)"
-					aria-label="Toggle fullscreen"
+					title={$t("Toggle fullscreen (f)")}
+					aria-label={$t("Toggle fullscreen")}
 				></button>
 			</span>
 		</div>

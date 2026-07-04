@@ -88,6 +88,13 @@ function extractSvelte(file, src) {
     if (n.type === 'CallExpression' && n.callee?.type === 'Identifier' && n.callee.name in MARKERS) {
       handleCall(n.callee.name, n.arguments?.[0], n.arguments?.[1], 'estree', `${rel(file)}:${lineOf(src, n.start)}`, warn);
     }
+    // Also handle imperative use: get(t)("msgid", opts) or get(tc)("ctx", "msgid")
+    if (n.type === 'CallExpression' && n.callee?.type === 'CallExpression' && n.callee.callee?.type === 'Identifier' && n.callee.callee.name === 'get' && n.callee.arguments?.[0]?.type === 'Identifier') {
+      const innerName = n.callee.arguments[0].name;
+      if (innerName in MARKERS) {
+        handleCall(innerName, n.arguments?.[0], n.arguments?.[1], 'estree', `${rel(file)}:${lineOf(src, n.start)}`, warn);
+      }
+    }
     for (const k in n) if (k !== 'start' && k !== 'end' && k !== 'loc') walk(n[k]);
   })(ast);
 }
@@ -98,6 +105,14 @@ function extractTs(file, src) {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text in MARKERS) {
       const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
       handleCall(node.expression.text, node.arguments[0], node.arguments[1], 'ts', `${rel(file)}:${line}`, warn);
+    }
+    // Also handle imperative use: get(t)("msgid", opts) or get(tc)("ctx", "msgid")
+    if (ts.isCallExpression(node) && ts.isCallExpression(node.expression) && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === 'get' && node.expression.arguments.length > 0 && ts.isIdentifier(node.expression.arguments[0])) {
+      const innerName = node.expression.arguments[0].text;
+      if (innerName in MARKERS) {
+        const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+        handleCall(innerName, node.arguments[0], node.arguments[1], 'ts', `${rel(file)}:${line}`, warn);
+      }
     }
     ts.forEachChild(node, visit);
   })(sf);

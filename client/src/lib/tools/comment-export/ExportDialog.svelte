@@ -1,6 +1,6 @@
 <script lang="ts">
 import { curVideo, allComments } from "@/stores";
-import { Modal, Button, Input, Label, Select } from 'flowbite-svelte';
+import { Modal, Button, Input, Label } from 'flowbite-svelte';
 import { onMount } from "svelte";
 import { exporters, groupComments, downloadFile, type ExportContext } from './index';
 import { t } from '@/i18n';
@@ -64,9 +64,6 @@ function handleExport() {
 function setOptionValue(id: string, value: string | number | boolean) {
     optionValues = { ...optionValues, [id]: value };
 }
-
-// Format dropdown items
-let formatItems = $derived(exporters.map(e => ({ value: e.id, name: e.name })));
 </script>
 
 <Modal title={$t("Export Comments")} bind:open={isOpen} class="w-96">
@@ -74,7 +71,16 @@ let formatItems = $derived(exporters.map(e => ({ value: e.id, name: e.name })));
         <!-- Format selection -->
         <div>
             <Label for="format_select">{$t("Export format")}</Label>
-            <Select id="format_select" items={formatItems} bind:value={selectedExporterId} class="mt-1" />
+            <select
+                id="format_select"
+                value={selectedExporterId}
+                onchange={(e) => selectedExporterId = e.currentTarget.value}
+                class="mt-1 block w-full rounded-lg border border-gray-600 bg-gray-700 p-2.5 text-sm text-white focus:border-blue-500 focus:ring-blue-500"
+            >
+                {#each exporters as e}
+                    <option value={e.id}>{e.name}</option>
+                {/each}
+            </select>
         </div>
 
         <!-- Frame rate (common to most formats) -->
@@ -141,15 +147,15 @@ let formatItems = $derived(exporters.map(e => ({ value: e.id, name: e.name })));
     <!-- Action buttons -->
     <div class="flex gap-2 mt-4">
         {#if groupedComments.length > 0}
-            <Button onclick={handleExport} color="primary">Export</Button>
+            <Button onclick={handleExport} color="primary">{$t("Export")}</Button>
         {/if}
-        <Button onclick={() => {isOpen = false;}} color="alternative">Cancel</Button>
+        <Button onclick={() => {isOpen = false;}} color="alternative">{$t("Cancel")}</Button>
     </div>
 
     <!-- Comments summary -->
     {#if groupedComments.length > 0}
         <p class="mt-4 text-sm text-gray-400">
-            {groupedComments.length} comment{groupedComments.length !== 1 ? 's' : ''} will be exported.
+            {groupedComments.length === 1 ? $t("1 comment will be exported.") : $t("{n} comments will be exported.", { n: groupedComments.length })}
         </p>
     {:else}
         <p class="mt-4 text-gray-400">{$t("No comments to export.")}</p>

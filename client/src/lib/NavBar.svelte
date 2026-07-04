@@ -143,14 +143,14 @@ function addEDLComments(comments: Proto3.Comment[]) {
 						<Dropdown class="w-64 text-sm clapshot-dropdown" simple>
 							<DropdownItem onclick={copyToClipboard}><i class="fas fa-share-square"></i> {$t("Share to logged in users")}</DropdownItem>
 							{#if $curVideo?.origUrl}
-								<DropdownItem title="Download original file"><a href={$curVideo?.origUrl} download><i class="fas fa-download"></i> {$t("Download original")}</a></DropdownItem>
+								<DropdownItem title={$t("Download original")}><a href={$curVideo?.origUrl} download><i class="fas fa-download"></i> {$t("Download original")}</a></DropdownItem>
 							{/if}
 							{#if $collabId}
 								<DropdownItem href="?vid={$mediaFileId}" class="text-green-400"><i class="fas fa-users"></i> {$t("Leave collaborative Session", { context: "collab" })}</DropdownItem>
 							{:else if $playerHeaderHtml}
 								<DropdownItem class="text-gray-600 cursor-not-allowed" data-testid="start-collab-disabled" title={$t("Collaboration is disabled here", { context: "collab" })}><i class="fas fa-user-plus"></i> {$t("Start Collaborative Session", { context: "collab" })}</DropdownItem>
 							{:else}
-								<DropdownItem href="?vid={$mediaFileId}&collab={randomSessionId}" title="Start collaborative session"><i class="fas fa-user-plus"></i> {$t("Start Collaborative Session", { context: "collab" })}</DropdownItem>
+								<DropdownItem href="?vid={$mediaFileId}&collab={randomSessionId}" title={$t("Start Collaborative Session", { context: "collab" })}><i class="fas fa-user-plus"></i> {$t("Start Collaborative Session", { context: "collab" })}</DropdownItem>
 							{/if}
 
 							<DropdownItem>
@@ -174,7 +174,7 @@ function addEDLComments(comments: Proto3.Comment[]) {
 					{#if videoProgressVal !== undefined}
 						<div class="flex flex-col items-center gap-1 mt-1 mb-2">
 							<div class="text-xs italic text-gray-500 text-center px-2">
-								{videoProgressMsg || 'Processing...'}
+								{videoProgressMsg || $t("Processing...")}
 							</div>
 							<div class="w-48 h-2 rounded-full bg-gray-200 overflow-hidden">
 								<div class="h-full bg-amber-500 transition-all duration-200" style={`width: ${(Math.max(0, Math.min(1, videoProgressVal)) * 100).toFixed(0)}%`}></div>

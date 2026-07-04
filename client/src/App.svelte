@@ -9,6 +9,7 @@ import * as Proto3 from '@clapshot_protobuf/typescript';
 import {allComments, curUsername, curUserId, videoIsReady, mediaFileId, curVideo, curPageId, curPageItems, userMessages, latestProgressReports, collabId, userMenuItems, serverDefinedActions, curUserIsAdmin, connectionErrors, curSubtitle, clientConfig, playerHeaderHtml} from './stores';
 import {IndentedComment, type UserMenuItem, type StringMap, type MediaProgressReport} from "./types";
 import { t, initLocale, locale, currentLocale } from './i18n';
+import { get } from 'svelte/store';
 
 import CommentCard from './lib/player_view/CommentCard.svelte'
 import SubtitleCard from './lib/player_view/SubtitleCard.svelte';
@@ -224,7 +225,7 @@ function activateComment(e: any) {
 
     if (!c) {
         console.warn("Comment not found:", commentId);
-        acts.add({mode: 'warning', message: 'Comment not found', lifetime: 3});
+        acts.add({mode: 'warning', message: $t("Comment not found"), lifetime: 3});
         return;
     }
 
@@ -265,7 +266,7 @@ function onSubtitleChange(e: any) {
         $curSubtitle = $curVideo.subtitles.find((s) => s.id == sub_id) ?? null;
         if ($curSubtitle == null && sub_id != null) {
             console.error("Subtitle not found: ", sub_id);
-            acts.add({mode: 'error', message: "Subtitle not found. See log.", lifetime: 5});
+            acts.add({mode: 'error', message: $t("Subtitle not found. See log."), lifetime: 5});
         }
     }
     if ($collabId) {
@@ -306,7 +307,7 @@ async function onUploadSubtitles() {
                     }});
                 } catch (e) {
                     console.error('Error adding subtitle file:', e);
-                    acts.add({mode: 'error', message: 'Error adding subtitle file. See log.', lifetime: 5});
+                    acts.add({mode: 'error', message: $t("Error adding subtitle file. See log."), lifetime: 5});
                 }
             };
             reader.readAsDataURL(file);
@@ -395,7 +396,7 @@ const urlParams = new URLSearchParams(window.location.search);
 urlParams.forEach((value, key) => {
     if (key != "vid" && key != "collab" && key != "p") {
         console.error("Got UNKNOWN URL parameter: '" + key + "'. Value= " + value);
-        acts.add({mode: 'warn', message: "Unknown URL parameter: '" + key + "'", lifetime: 5});
+        acts.add({mode: 'warn', message: $t("Unknown URL parameter: '{key}'", { key }), lifetime: 5});
     }
 });
 
@@ -691,7 +692,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
             // log message, fileName, lineNumber
             console.error("Exception in Websocket handler: ", e);
             console.log(e.stack);
-            acts.add({mode: 'danger', message: 'Client error: ' + e, lifetime: 5});
+            acts.add({mode: 'danger', message: $t("Client error: {error}", { error: e }), lifetime: 5});
         }
     }
 
@@ -749,7 +750,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
 
                 if (!cmd.welcome.user) {
                     console.error("No user in welcome message");
-                    acts.add({mode: 'danger', message: 'No user in welcome message', lifetime: 5});
+                    acts.add({mode: 'danger', message: $t("No user in welcome message"), lifetime: 5});
                     return;
                 }
                 $curUsername = cmd.welcome.user.name ?? cmd.welcome.user.id;
@@ -779,11 +780,11 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                     if (newPageId !== null) {
                         console.debug("[Browser history] Pushing new page state: ", newPageId);
                         history.pushState({pageId: newPageId}, '', `/?p=${encodeURIComponent(newPageId)}`);
-                        document.title = "Clapshot - " + (cmd.showPage.pageTitle ?? newPageId);
+                        document.title = get(t)("Clapshot - {title}", { title: cmd.showPage.pageTitle ?? newPageId });
                     } else {
                         console.debug("[Browser history] Pushing empty state (default page)");
                         history.pushState({pageId: null}, '', './');
-                        document.title = "Clapshot - Home";
+                        document.title = "Clapshot - " + $t("Home");
                     }
                 }
 
@@ -873,7 +874,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                             console.debug("[Browser history] In-player switch, replacing media file state: ", v.id);
                             history.replaceState({mediaFileId: v.id}, '', `/?vid=${v.id}`);
                         }
-                        document.title = "Clapshot - " + (v.title ?? v.id);
+                        document.title = get(t)("Clapshot - {title}", { title: v.title ?? v.id });
                     }
 
                     $mediaFileId = v.id;
@@ -936,7 +937,7 @@ function connectWebsocketAfterAuthCheck(ws_url: string)
                 }
                 if (lastCollabControllingUser != evt.fromUser) {
                     lastCollabControllingUser = evt.fromUser;
-                    acts.add({mode: 'info', message: lastCollabControllingUser + " is controlling", lifetime: 5});
+                    acts.add({mode: 'info', message: $t("{user} is controlling", { user: lastCollabControllingUser }), lifetime: 5});
                 }
             }
             // setCookies
@@ -977,7 +978,7 @@ function openMediaFileListItem(e: { detail: { item: Proto3.PageItem_FolderListin
         });
     } else {
         console.error("No openAction script for item: " + item);
-        acts.add({mode: 'error', message: "No open action for item. See log.", lifetime: 5});
+        acts.add({mode: 'error', message: $t("No open action for item. See log."), lifetime: 5});
     }
 }
 
@@ -1017,7 +1018,7 @@ function callOrganizerScript(script: Proto3.ScriptCall|undefined, action_args: O
     }
     if (script.lang != Proto3.ScriptCall_Lang.JAVASCRIPT ) {
         console.error("BUG: Unsupported Organizer script language: " + script.lang);
-        acts.add({mode: 'error', message: "BUG: Unsupported script lang. See log.", lifetime: 5});
+        acts.add({mode: 'error', message: $t("BUG: Unsupported script lang. See log."), lifetime: 5});
         return;
     }
     const Function = function () {}.constructor;
@@ -1028,7 +1029,7 @@ function callOrganizerScript(script: Proto3.ScriptCall|undefined, action_args: O
         scriptFn(action_args);
     } catch (e: any) {
         console.error("Error in organizer script:", e);
-        acts.add({mode: 'error', message: "Organizer script error. See log.", lifetime: 5});
+        acts.add({mode: 'error', message: $t("Organizer script error. See log."), lifetime: 5});
     }
 }
 
@@ -1126,7 +1127,7 @@ function onMediaFileListPopupAction(e: { detail: { action: Proto3.ActionDef, ite
                         <!-- Subtitles -->
                         <div class="flex justify-between text-gray-500 items-center py-2 border-t border-gray-500">
                             <h6>{$t("Subtitles")}</h6>
-                            <button class="fa fa-plus-circle" title="Upload subtitles" aria-label="Upload subtitles" onclick={onUploadSubtitles}></button>
+                            <button class="fa fa-plus-circle" title={$t("Upload subtitles")} aria-label={$t("Upload subtitles")} onclick={onUploadSubtitles}></button>
                         </div>
                         {#each $curVideo.subtitles as sub}
                             <SubtitleCard

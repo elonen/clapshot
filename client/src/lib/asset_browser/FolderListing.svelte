@@ -14,6 +14,7 @@ import { fade } from "svelte/transition";
 
 import { selectedTiles, serverDefinedActions } from "@/stores";
 import * as Proto3 from '@clapshot_protobuf/typescript';
+import { t } from "@/i18n";
 
   /*
    * ⚠️  COMPLEXITY WARNING ⚠️
@@ -178,13 +179,13 @@ function dispatchOpenItem(id: string) {
     let it = items.find(item => item.id === id);
     if (it && it.obj.openAction) {
         let el = document.getElementById("videolist_item__" + id);
-        if (!el) { alert("UI BUG: item not found"); } else {
+        if (!el) { alert($t("UI BUG: item not found")); } else {
             el.classList.add("videolist_item_pump_anim");
             setTimeout(() => { el?.classList.remove("videolist_item_pump_anim"); }, 1000);
         }
         dispatch("open-item", { item: it.obj, listingData });
     } else {
-        alert("UI BUG: item not found or missing openAction");
+        alert($t("UI BUG: item not found or missing openAction"));
     }
 }
 
@@ -271,9 +272,9 @@ function handleMouseUp(e: MouseEvent, item: VideoListDefItem) {
 
 function hidePopupMenus() {
     let popupContainer = document.querySelector('#popup-container');
-    if (!popupContainer) { alert("UI BUG: popup container missing"); return; }
+    if (!popupContainer) { alert($t("UI BUG: popup container missing")); return; }
     for (let child of popupContainer.children as any) {
-        if (!('hide' in child)) { alert("UI BUG: popup container child missing hide()"); }
+        if (!('hide' in child)) { alert($t("UI BUG: popup container child missing hide()")); }
         child.hide();
     }
 }
@@ -282,7 +283,7 @@ function hidePopupMenus() {
 function onContextMenu(e: MouseEvent, item: VideoListDefItem|null)
 {
     let popupContainer = document.querySelector('#popup-container');
-    if (!popupContainer) { alert("UI BUG: popup container missing"); return; }
+    if (!popupContainer) { alert($t("UI BUG: popup container missing")); return; }
     hidePopupMenus();
 
     let actions: Proto3.ActionDef[] = [];
@@ -419,7 +420,7 @@ function enterKeyInterceptor(node: HTMLElement) {
                             onrejectdrop={() => dispatch("refresh-listing")}
                         />
                     {:else}
-                        <div>Unknown item type</div>
+                        <div>{$t("Unknown item type")}</div>
                     {/if}
                 {/if}
             </div>

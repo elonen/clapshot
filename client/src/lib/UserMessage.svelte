@@ -2,6 +2,7 @@
 import { slide } from "svelte/transition";
 import * as Proto3 from '@clapshot_protobuf/typescript';
 import '@fortawesome/fontawesome-free/css/all.min.css';
+import { t } from '@/i18n';
 
     interface Props {
         msg: Proto3.UserMessage;
@@ -17,11 +18,11 @@ function isError(msg: Proto3.UserMessage): boolean {
 function msgTypeName(msg: Proto3.UserMessage): string {
     switch (msg.type) {
         case Proto3.UserMessage_Type.OK:
-            return 'OK';
+            return $t('OK');
         case Proto3.UserMessage_Type.ERROR:
-            return 'ERROR';
+            return $t('ERROR');
         case Proto3.UserMessage_Type.PROGRESS:
-            return 'PROGRESS';
+            return $t('PROGRESS');
         default:
             return '';
     }

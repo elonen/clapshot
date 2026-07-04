@@ -77,7 +77,7 @@ function handleKeyDown(event: { key: string; }) {
         <div>
             <label for="language_code" class="block text-sm font-medium text-gray-500">
                 {$t("Language code")}
-                <a href="https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes" target="_blank" class="text-xs text-gray-500 hover:text-gray-300" aria-label="ISO 639 language codes information"><i class="fas fa-circle-info"></i></a>
+                <a href="https://en.wikipedia.org/wiki/List_of_ISO_639_language_codes" target="_blank" class="text-xs text-gray-500 hover:text-gray-300" aria-label={$t("ISO 639 language codes information")}><i class="fas fa-circle-info"></i></a>
             </label>
             <input id="language_code" minlength="2" maxlength="3"  type="text" bind:value={languageCode} class="mt-1 block w-full uppercase font-mono rounded-md shadow-sm text-gray-400 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300">
         </div>

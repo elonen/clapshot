@@ -106,17 +106,17 @@ const handleAccept = () => {
 
 <Modal title={$t("Import EDL as Comments")} bind:open={isOpen} class="w-96">
     <form bind:this={edlForm} class="flex flex-col space-y-1" action="#">
-        <Label for="file_up">Upload EDL</Label>
+        <Label for="file_up">{$t("Upload EDL")}</Label>
         <Fileupload id="file_up" accept=".edl" onchange={handleFileUpload} />
-        <Label for="fps_input" class="pt-2">Frame rate</Label>
+        <Label for="fps_input" class="pt-2">{$t("Frame rate")}</Label>
         <Input id="fps_input" type="number" bind:value={frameRate}/>
     </form>
     
     <div class="flex gap-2 mt-4">
         {#if edlEvents.length>0}
-            <Button onclick={handleAccept} color="primary">Add as comments</Button>
+            <Button onclick={handleAccept} color="primary">{$t("Add as comments")}</Button>
         {/if}
-        <Button onclick={() => {isOpen=false;}} color="alternative">Cancel</Button>
+        <Button onclick={() => {isOpen=false;}} color="alternative">{$t("Cancel")}</Button>
     </div>
 
     <!-- scrollable list of time spans for review -->
