@@ -560,3 +560,202 @@ impl ObjectStorageBackend {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn test_guess_content_type() {
+        assert_eq!(guess_content_type(Path::new("foo.mp4")), "video/mp4");
+        assert_eq!(guess_content_type(Path::new("foo.MP4")), "video/mp4");
+        assert_eq!(guess_content_type(Path::new("foo.mkv")), "video/x-matroska");
+        assert_eq!(guess_content_type(Path::new("foo.webm")), "video/webm");
+        assert_eq!(guess_content_type(Path::new("foo.mov")), "video/quicktime");
+        assert_eq!(guess_content_type(Path::new("foo.webp")), "image/webp");
+        assert_eq!(guess_content_type(Path::new("foo.png")), "image/png");
+        assert_eq!(guess_content_type(Path::new("foo.jpg")), "image/jpeg");
+        assert_eq!(guess_content_type(Path::new("foo.jpeg")), "image/jpeg");
+        assert_eq!(guess_content_type(Path::new("foo.vtt")), "text/vtt");
+        assert_eq!(guess_content_type(Path::new("foo.srt")), "application/x-subrip");
+        assert_eq!(guess_content_type(Path::new("foo.unknown")), "application/octet-stream");
+        assert_eq!(guess_content_type(Path::new("foo")), "application/octet-stream");
+    }
+
+    #[test]
+    fn test_local_backend_accessors() {
+        let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080");
+        assert_eq!(storage.media_base_url(), "http://localhost:8080/videos");
+        assert_eq!(storage.media_root(), Path::new("/data/videos"));
+        assert!(!storage.needs_remote_upload());
+    }
+
+    #[test]
+    fn test_local_media_url() {
+        let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080/");
+        assert_eq!(
+            storage.media_url("abc123/video.mp4"),
+            "http://localhost:8080/videos/abc123/video.mp4"
+        );
+        assert_eq!(
+            storage.media_url("/abc123/thumbs/thumb.webp"),
+            "http://localhost:8080/videos/abc123/thumbs/thumb.webp"
+        );
+    }
+
+    #[test]
+    fn test_key_for_path_local() {
+        let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080");
+        assert_eq!(
+            storage.key_for_path(Path::new("/data/videos/abc123/video.mp4")).unwrap(),
+            "videos/abc123/video.mp4"
+        );
+        assert!(storage.key_for_path(Path::new("/outside/video.mp4")).is_err());
+    }
+
+    #[test]
+    fn test_key_for_path_normalizes_backslashes() {
+        // Even on Unix this documents the intended cross-platform behaviour.
+        let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080");
+        let key = storage.key_for_path(Path::new("/data/videos/abc123\\video.mp4")).unwrap();
+        assert_eq!(key, "videos/abc123/video.mp4");
+    }
+
+    #[test]
+    fn test_presigned_url_local_errors() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080");
+        let res = rt.block_on(storage.presigned_url("abc123", "video.mp4"));
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("presigned URLs are not available"));
+    }
+
+    #[test]
+    fn test_upload_with_progress_local_invokes_callback() {
+        let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080");
+        let called = Arc::new(AtomicBool::new(false));
+        let called2 = called.clone();
+        let cb: ProgressCallback = Arc::new(move |p| {
+            assert!((p - 1.0).abs() < f32::EPSILON);
+            called2.store(true, Ordering::SeqCst);
+        });
+        storage.upload_with_progress(Path::new("/data/videos/foo.mp4"), Some(cb)).unwrap();
+        assert!(called.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn test_upload_with_progress_async_local_invokes_callback() {
+        let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080");
+        let called = Arc::new(AtomicBool::new(false));
+        let called2 = called.clone();
+        let cb: ProgressCallback = Arc::new(move |p| {
+            assert!((p - 1.0).abs() < f32::EPSILON);
+            called2.store(true, Ordering::SeqCst);
+        });
+        storage.upload_with_progress_async(Path::new("/data/videos/foo.mp4"), Some(cb)).await.unwrap();
+        assert!(called.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn test_upload_if_exists_local_noop_for_missing_path() {
+        let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080");
+        storage.upload_if_exists(Path::new("/data/videos/does-not-exist.mp4"));
+    }
+
+    #[test]
+    fn test_upload_required_local_noop() {
+        let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080");
+        storage.upload_required(Path::new("/data/videos/foo.mp4")).unwrap();
+    }
+
+    #[test]
+    fn test_s3_default_public_base_url_for_aws() {
+        let storage = StorageBackend::s3(
+            PathBuf::from("/data/videos"),
+            "my-bucket".to_string(),
+            None,
+            Some("eu-west-1".to_string()),
+            "media".to_string(),
+            None,
+            "http://localhost:8080".to_string(),
+            Duration::from_secs(3600),
+        )
+        .expect("failed to create AWS S3 backend");
+        assert_eq!(storage.media_base_url(), "https://my-bucket.s3.amazonaws.com/media");
+    }
+
+    #[test]
+    fn test_s3_default_public_base_url_for_minio() {
+        let storage = StorageBackend::s3(
+            PathBuf::from("/data/videos"),
+            "my-bucket".to_string(),
+            Some("http://minio.example.com:9000".to_string()),
+            None,
+            "media".to_string(),
+            None,
+            "http://localhost:8080".to_string(),
+            Duration::from_secs(3600),
+        )
+        .expect("failed to create MinIO backend");
+        assert_eq!(storage.media_base_url(), "http://minio.example.com:9000/my-bucket/media");
+    }
+
+    #[test]
+    fn test_s3_media_url_and_needs_remote_upload() {
+        let storage = StorageBackend::s3(
+            PathBuf::from("/data/videos"),
+            "my-bucket".to_string(),
+            Some("http://minio.example.com".to_string()),
+            None,
+            "videos".to_string(),
+            None,
+            "http://localhost:8080".to_string(),
+            Duration::from_secs(3600),
+        )
+        .expect("failed to create S3 backend");
+        assert!(storage.needs_remote_upload());
+        assert_eq!(
+            storage.media_url("abc123/video.mp4"),
+            "http://localhost:8080/api/media/abc123/video.mp4"
+        );
+    }
+
+    #[test]
+    fn test_s3_key_for_path_with_prefix() {
+        let storage = StorageBackend::s3(
+            PathBuf::from("/data/videos"),
+            "my-bucket".to_string(),
+            Some("http://minio.example.com".to_string()),
+            None,
+            "uploads".to_string(),
+            None,
+            "http://localhost:8080".to_string(),
+            Duration::from_secs(3600),
+        )
+        .expect("failed to create S3 backend");
+        assert_eq!(
+            storage.key_for_path(Path::new("/data/videos/abc123/video.mp4")).unwrap(),
+            "uploads/abc123/video.mp4"
+        );
+    }
+
+    #[test]
+    fn test_s3_key_for_path_without_prefix() {
+        let storage = StorageBackend::s3(
+            PathBuf::from("/data/videos"),
+            "my-bucket".to_string(),
+            Some("http://minio.example.com".to_string()),
+            None,
+            "".to_string(),
+            None,
+            "http://localhost:8080".to_string(),
+            Duration::from_secs(3600),
+        )
+        .expect("failed to create S3 backend");
+        assert_eq!(
+            storage.key_for_path(Path::new("/data/videos/abc123/video.mp4")).unwrap(),
+            "abc123/video.mp4"
+        );
+    }
+}
