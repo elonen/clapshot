@@ -658,6 +658,28 @@ mod tests {
     }
 
     #[test]
+    fn test_upload_with_progress_local_from_blocking_thread() {
+        // The sync wrapper should reuse the current runtime handle from a blocking
+        // thread (spawn_blocking), which is how async callers should invoke it.
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080");
+        let called = Arc::new(AtomicBool::new(false));
+        let called2 = called.clone();
+        let cb: ProgressCallback = Arc::new(move |p| {
+            assert!((p - 1.0).abs() < f32::EPSILON);
+            called2.store(true, Ordering::SeqCst);
+        });
+        rt.block_on(async {
+            tokio::task::spawn_blocking(move || {
+                storage.upload_with_progress(Path::new("/data/videos/foo.mp4"), Some(cb)).unwrap();
+            })
+            .await
+            .unwrap();
+        });
+        assert!(called.load(Ordering::SeqCst));
+    }
+
+    #[test]
     fn test_upload_if_exists_local_noop_for_missing_path() {
         let storage = StorageBackend::local(PathBuf::from("/data/videos"), "http://localhost:8080");
         storage.upload_if_exists(Path::new("/data/videos/does-not-exist.mp4"));
