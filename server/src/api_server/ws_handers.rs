@@ -485,7 +485,9 @@ pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server:
     };
 
     tokio::fs::write(&orig_sub_file, file_contents).await.context("Failed to write orig subtitle file")?;
-    server.storage.upload_if_exists(&orig_sub_file);
+    let storage = server.storage.clone();
+    let orig_sub_file_clone = orig_sub_file.clone();
+    tokio::task::spawn_blocking(move || storage.upload_if_exists(&orig_sub_file_clone)).await.ok();
 
     // Convert to WebVTT if needed
     let playback_filename ={
@@ -522,7 +524,9 @@ pub async fn msg_add_subtitle(data: &AddSubtitle, ses: &mut UserSession, server:
                 }
                 temp_workaround_aspasia_webvtt_bug(&vtt_path)?;
 
-                server.storage.upload_if_exists(&vtt_path);
+                let storage = server.storage.clone();
+                let vtt_path_clone = vtt_path.clone();
+                tokio::task::spawn_blocking(move || storage.upload_if_exists(&vtt_path_clone)).await.ok();
                 Some(vtt_path.file_name().context("Bad filename")?.to_str().context("Bad filename")?.to_string())
             },
             Err(e) => return Err(anyhow!("Failed to parse subtitle file: {:?}", e)),

@@ -170,6 +170,11 @@ struct Args {
     #[arg(long, value_name="URL")]
     s3_endpoint: Option<String>,
 
+    /// S3 region (e.g. us-east-1). For AWS S3 this overrides AWS_REGION.
+    /// For MinIO this is usually ignored but may be required by some SDK calls.
+    #[arg(long, value_name="REGION")]
+    s3_region: Option<String>,
+
     /// S3 bucket (required for S3 backend)
     #[arg(long, value_name="BUCKET")]
     s3_bucket: Option<String>,
@@ -262,6 +267,7 @@ fn main() -> anyhow::Result<()> {
                 args.data_dir.join("videos"),
                 bucket,
                 args.s3_endpoint.clone(),
+                args.s3_region.clone(),
                 args.s3_prefix.clone(),
                 args.s3_public_url.clone(),
                 url_base.clone(),

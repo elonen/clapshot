@@ -8,12 +8,63 @@ use aws_sdk_s3::types::{CompletedMultipartUpload, CompletedPart};
 use aws_sdk_s3::{primitives::ByteStream, Client};
 use tokio::fs;
 use tokio::io::AsyncReadExt;
+use tokio::runtime::Handle;
 use tracing;
 
 pub type ProgressCallback = Arc<dyn Fn(f32) + Send + Sync + 'static>;
 
 const MULTIPART_MIN_SIZE: u64 = 5 * 1024 * 1024;
 const MULTIPART_CHUNK_SIZE: usize = 8 * 1024 * 1024;
+const S3_RETRY_COUNT: usize = 3;
+const S3_RETRY_BASE_DELAY_MS: u64 = 250;
+
+/// Build an S3 client with optional custom endpoint and region.
+async fn build_s3_client(endpoint: &Option<String>, s3_region: Option<&str>) -> Client {
+    let mut config_loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
+
+    // Only override endpoint for non-AWS S3 (MinIO, etc.)
+    if let Some(ref ep) = endpoint {
+        config_loader = config_loader.endpoint_url(ep);
+    }
+    if let Some(region) = s3_region {
+        config_loader = config_loader.region(aws_sdk_s3::config::Region::new(region.to_string()));
+    }
+
+    let sdk_config = config_loader.load().await;
+    let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
+        // Force path-style for MinIO compatibility
+        .force_path_style(endpoint.is_some())
+        .build();
+    Client::from_conf(s3_config)
+}
+
+/// Simple retry helper for async S3 operations with exponential backoff.
+async fn retry_s3_operation<F, Fut, T, E>(
+    desc: &str,
+    operation: F,
+) -> anyhow::Result<T>
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = Result<T, aws_sdk_s3::error::SdkError<E>>>,
+    E: std::fmt::Debug + std::fmt::Display + std::error::Error + Send + Sync + 'static,
+{
+    let mut last_err = None;
+    for attempt in 0..S3_RETRY_COUNT {
+        match operation().await {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                tracing::warn!(attempt = attempt + 1, max = S3_RETRY_COUNT, err = %e, "S3 operation failed: {}", desc);
+                last_err = Some(e);
+                if attempt + 1 < S3_RETRY_COUNT {
+                    let delay = S3_RETRY_BASE_DELAY_MS * 2u64.pow(attempt as u32);
+                    tokio::time::sleep(Duration::from_millis(delay.min(5000))).await;
+                }
+            }
+        }
+    }
+    Err(anyhow!("{} failed after {} attempts: {}", desc, S3_RETRY_COUNT, last_err.unwrap()))
+}
+
 /// Simple content type guessing for a handful of formats we serve.
 pub(crate) fn guess_content_type(path: &Path) -> &'static str {
     match path
@@ -62,11 +113,12 @@ impl StorageBackend {
     /// 5. EC2 instance metadata (IAM role)
     ///
     /// For MinIO or other S3-compatible storage, set endpoint to the service URL.
-    /// For AWS S3, leave endpoint as None and set AWS_REGION environment variable.
+    /// For AWS S3, leave endpoint as None and configure AWS_REGION, or pass s3_region.
     pub fn s3(
         media_root: PathBuf,
         bucket: String,
         endpoint: Option<String>,
+        s3_region: Option<String>,
         prefix: String,
         public_base_url: Option<String>,
         url_base: String,
@@ -82,29 +134,21 @@ impl StorageBackend {
             prefix.trim_end_matches('/')
         );
 
-        // Create a temporary runtime just for client initialization.
-        // The client survives after the runtime is dropped.
-        // We don't persist the runtime to avoid "cannot drop runtime in async context" panics
-        // when the storage is dropped inside another tokio runtime (e.g., during server shutdown).
-        let client = {
-            let rt = tokio::runtime::Runtime::new().context("create tokio runtime for S3 client init")?;
-            let client = rt.block_on(async {
-                let mut config_loader = aws_config::defaults(aws_config::BehaviorVersion::latest());
-
-                // Only override endpoint for non-AWS S3 (MinIO, etc.)
-                if let Some(ref ep) = endpoint {
-                    config_loader = config_loader.endpoint_url(ep);
-                }
-
-                let sdk_config = config_loader.load().await;
-                let s3_config = aws_sdk_s3::config::Builder::from(&sdk_config)
-                    // Force path-style for MinIO compatibility
-                    .force_path_style(endpoint.is_some())
-                    .build();
-                Client::from_conf(s3_config)
-            });
-            // rt is dropped here, but client survives
-            client
+        // Build the SDK client. This function is called from a synchronous main(), so we need
+        // a temporary runtime unless we're already inside one (tests may call us from a runtime).
+        let client = match Handle::try_current() {
+            Ok(handle) => {
+                handle.block_on(async {
+                    build_s3_client(&endpoint, s3_region.as_deref()).await
+                })
+            }
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new()
+                    .context("create tokio runtime for S3 client init")?;
+                rt.block_on(async {
+                    build_s3_client(&endpoint, s3_region.as_deref()).await
+                })
+            }
         };
 
         Ok(StorageBackend::S3(ObjectStorageBackend {
@@ -187,6 +231,9 @@ impl StorageBackend {
     }
 
     /// Upload a file, optionally reporting progress (0.0 - 1.0) while streaming to object storage.
+    ///
+    /// This is a synchronous wrapper that can be called from any thread. If a Tokio
+    /// runtime handle is available it is reused; otherwise a temporary runtime is created.
     pub fn upload_with_progress(
         &self,
         abs_path: &Path,
@@ -200,6 +247,26 @@ impl StorageBackend {
                 Ok(())
             }
             StorageBackend::S3(backend) => backend.upload_with_progress(abs_path, progress),
+        }
+    }
+
+    /// Async variant of [`Self::upload_with_progress`].
+    ///
+    /// Callers running inside a Tokio runtime should prefer this and wrap it in
+    /// [`tokio::task::spawn_blocking`] if they need a synchronous interface.
+    pub async fn upload_with_progress_async(
+        &self,
+        abs_path: &Path,
+        progress: Option<ProgressCallback>,
+    ) -> anyhow::Result<()> {
+        match self {
+            StorageBackend::LocalFs(_) => {
+                if let Some(cb) = progress {
+                    cb(1.0);
+                }
+                Ok(())
+            }
+            StorageBackend::S3(backend) => backend.upload_with_progress_async(abs_path, progress).await,
         }
     }
 
@@ -276,165 +343,220 @@ impl ObjectStorageBackend {
         abs_path: &Path,
         progress: Option<ProgressCallback>,
     ) -> anyhow::Result<()> {
+        let fut = self.upload_with_progress_async(abs_path, progress);
+        match Handle::try_current() {
+            Ok(handle) => handle.block_on(fut),
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new()
+                    .context("create tokio runtime for S3 upload")?;
+                rt.block_on(fut)
+            }
+        }
+    }
+
+    async fn upload_with_progress_async(
+        &self,
+        abs_path: &Path,
+        progress: Option<ProgressCallback>,
+    ) -> anyhow::Result<()> {
         let key = StorageBackend::S3(self.clone()).key_for_path(abs_path)?;
         let ct = guess_content_type(abs_path);
         let bucket = self.bucket.clone();
         let client = self.client.clone();
         let path = abs_path.to_path_buf();
 
-        // Create a fresh runtime for each upload to avoid "cannot drop runtime in async context" panics.
-        // This is slightly less efficient than reusing a runtime, but much safer when the storage
-        // is held by code that runs inside another tokio runtime (like the api_server).
-        let rt = tokio::runtime::Runtime::new().context("create tokio runtime for S3 upload")?;
-        rt.block_on(async move {
-            let mut file = fs::File::open(&path)
-                .await
-                .with_context(|| format!("Open file {:?}", path))?;
-            let meta = file.metadata().await?;
-            let total_len = meta.len();
+        let mut file = fs::File::open(&path)
+            .await
+            .with_context(|| format!("Open file {:?}", path))?;
+        let meta = file.metadata().await?;
+        let total_len = meta.len();
 
-            if total_len == 0 {
-                if let Some(cb) = progress.as_ref() {
-                    cb(1.0);
-                }
-                client
-                    .put_object()
-                    .bucket(&bucket)
-                    .key(&key)
-                    .body(ByteStream::from(Vec::new()))
-                    .content_type(ct)
-                    .send()
-                    .await
-                    .context("upload empty object to storage")?;
-                return Ok(());
+        if total_len == 0 {
+            if let Some(cb) = progress.as_ref() {
+                cb(1.0);
             }
-
-            if total_len <= MULTIPART_MIN_SIZE {
-                let mut buffer = Vec::with_capacity(total_len as usize);
-                file.read_to_end(&mut buffer).await?;
-
-                client
-                    .put_object()
-                    .bucket(&bucket)
-                    .key(&key)
-                    .body(ByteStream::from(buffer))
-                    .content_type(ct)
-                    .send()
-                    .await
-                    .context("upload small object to storage")?;
-
-                if let Some(cb) = progress {
-                    cb(1.0);
+            retry_s3_operation("put_object (empty)", || {
+                let bucket = bucket.clone();
+                let key = key.clone();
+                let client = client.clone();
+                async move {
+                    client
+                        .put_object()
+                        .bucket(&bucket)
+                        .key(&key)
+                        .body(ByteStream::from(Vec::new()))
+                        .content_type(ct)
+                        .send()
+                        .await
                 }
-                return Ok(());
-            }
+            })
+            .await
+            .context("upload empty object to storage")?;
+            return Ok(());
+        }
 
-            let upload = client
-                .create_multipart_upload()
-                .bucket(&bucket)
-                .key(&key)
-                .content_type(ct)
-                .send()
-                .await
-                .context("initiate multipart upload")?;
+        if total_len <= MULTIPART_MIN_SIZE {
+            let mut buffer = Vec::with_capacity(total_len as usize);
+            file.read_to_end(&mut buffer).await?;
 
-            let upload_id = upload
-                .upload_id()
-                .ok_or(anyhow!("Missing upload id from multipart upload"))?
-                .to_string();
-
-            let mut parts = Vec::new();
-            let mut buf = vec![0u8; MULTIPART_CHUNK_SIZE];
-            let mut part_number = 1;
-            let mut uploaded: u64 = 0;
-
-            loop {
-                // Read a complete chunk (read() may return short reads with async I/O)
-                // S3 requires all parts except the last to be >= 5MB
-                let mut chunk_size = 0;
-                loop {
-                    let bytes_read = file.read(&mut buf[chunk_size..]).await?;
-                    if bytes_read == 0 {
-                        break; // EOF
-                    }
-                    chunk_size += bytes_read;
-                    if chunk_size >= MULTIPART_CHUNK_SIZE {
-                        break; // Full chunk
-                    }
+            retry_s3_operation("put_object (small)", || {
+                let bucket = bucket.clone();
+                let key = key.clone();
+                let client = client.clone();
+                let body = ByteStream::from(buffer.clone());
+                async move {
+                    client
+                        .put_object()
+                        .bucket(&bucket)
+                        .key(&key)
+                        .body(body)
+                        .content_type(ct)
+                        .send()
+                        .await
                 }
-
-                if chunk_size == 0 {
-                    break; // No more data
-                }
-
-                let body = ByteStream::from(buf[..chunk_size].to_vec());
-                let res = client
-                    .upload_part()
-                    .bucket(&bucket)
-                    .key(&key)
-                    .upload_id(&upload_id)
-                    .part_number(part_number)
-                    .body(body)
-                    .send()
-                    .await
-                    .with_context(|| format!("upload part {part_number}"))?;
-
-                let etag = res
-                    .e_tag()
-                    .ok_or(anyhow!("Missing etag for uploaded part {part_number}"))?
-                    .to_string();
-
-                parts.push(
-                    CompletedPart::builder()
-                        .e_tag(etag)
-                        .part_number(part_number)
-                        .build(),
-                );
-
-                uploaded += chunk_size as u64;
-                if let Some(cb) = progress.as_ref() {
-                    cb((uploaded as f32 / total_len as f32).clamp(0.0, 1.0));
-                }
-
-                part_number += 1;
-            }
-
-            let multipart = CompletedMultipartUpload::builder()
-                .set_parts(Some(parts))
-                .build();
-
-            if let Err(e) = client
-                .complete_multipart_upload()
-                .bucket(&bucket)
-                .key(&key)
-                .upload_id(&upload_id)
-                .multipart_upload(multipart)
-                .send()
-                .await
-            {
-                tracing::error!(
-                    details=%e,
-                    upload_id=%upload_id,
-                    key=%key,
-                    "Completing multipart upload failed, aborting"
-                );
-                // Best-effort abort; ignore abort error to bubble the original failure.
-                let _ = client
-                    .abort_multipart_upload()
-                    .bucket(&bucket)
-                    .key(&key)
-                    .upload_id(upload_id)
-                    .send()
-                    .await;
-                return Err(anyhow!("complete multipart upload: {e}"));
-            }
+            })
+            .await
+            .context("upload small object to storage")?;
 
             if let Some(cb) = progress {
                 cb(1.0);
             }
-            Ok::<(), anyhow::Error>(())
-        })?;
+            return Ok(());
+        }
 
+        let upload = retry_s3_operation("create_multipart_upload", || {
+            let bucket = bucket.clone();
+            let key = key.clone();
+            let client = client.clone();
+            async move {
+                client
+                    .create_multipart_upload()
+                    .bucket(&bucket)
+                    .key(&key)
+                    .content_type(ct)
+                    .send()
+                    .await
+            }
+        })
+        .await
+        .context("initiate multipart upload")?;
+
+        let upload_id = upload
+            .upload_id()
+            .ok_or(anyhow!("Missing upload id from multipart upload"))?
+            .to_string();
+
+        let mut parts = Vec::new();
+        let mut buf = vec![0u8; MULTIPART_CHUNK_SIZE];
+        let mut part_number = 1;
+        let mut uploaded: u64 = 0;
+
+        loop {
+            // Read a complete chunk (read() may return short reads with async I/O)
+            // S3 requires all parts except the last to be >= 5MB
+            let mut chunk_size = 0;
+            loop {
+                let bytes_read = file.read(&mut buf[chunk_size..]).await?;
+                if bytes_read == 0 {
+                    break; // EOF
+                }
+                chunk_size += bytes_read;
+                if chunk_size >= MULTIPART_CHUNK_SIZE {
+                    break; // Full chunk
+                }
+            }
+
+            if chunk_size == 0 {
+                break; // No more data
+            }
+
+            let pn = part_number;
+            let res = retry_s3_operation(&format!("upload_part {part_number}"),
+                || {
+                    let bucket = bucket.clone();
+                    let key = key.clone();
+                    let upload_id = upload_id.clone();
+                    let client = client.clone();
+                    let body = ByteStream::from(buf[..chunk_size].to_vec());
+                    async move {
+                        client
+                            .upload_part()
+                            .bucket(&bucket)
+                            .key(&key)
+                            .upload_id(&upload_id)
+                            .part_number(pn)
+                            .body(body)
+                            .send()
+                            .await
+                    }
+                },
+            )
+            .await
+            .with_context(|| format!("upload part {part_number}"))?;
+
+            let etag = res
+                .e_tag()
+                .ok_or(anyhow!("Missing etag for uploaded part {part_number}"))?
+                .to_string();
+
+            parts.push(
+                CompletedPart::builder()
+                    .e_tag(etag)
+                    .part_number(part_number)
+                    .build(),
+            );
+
+            uploaded += chunk_size as u64;
+            if let Some(cb) = progress.as_ref() {
+                cb((uploaded as f32 / total_len as f32).clamp(0.0, 1.0));
+            }
+
+            part_number += 1;
+        }
+
+        let multipart = CompletedMultipartUpload::builder()
+            .set_parts(Some(parts))
+            .build();
+
+        if let Err(e) = retry_s3_operation("complete_multipart_upload", || {
+            let bucket = bucket.clone();
+            let key = key.clone();
+            let upload_id = upload_id.clone();
+            let client = client.clone();
+            let multipart = multipart.clone();
+            async move {
+                client
+                    .complete_multipart_upload()
+                    .bucket(&bucket)
+                    .key(&key)
+                    .upload_id(&upload_id)
+                    .multipart_upload(multipart)
+                    .send()
+                    .await
+            }
+        })
+        .await
+        {
+            tracing::error!(
+                details=%e,
+                upload_id=%upload_id,
+                key=%key,
+                "Completing multipart upload failed, aborting"
+            );
+            // Best-effort abort; ignore abort error to bubble the original failure.
+            let _ = client
+                .abort_multipart_upload()
+                .bucket(&bucket)
+                .key(&key)
+                .upload_id(&upload_id)
+                .send()
+                .await;
+            return Err(anyhow!("complete multipart upload: {e}"));
+        }
+
+        if let Some(cb) = progress {
+            cb(1.0);
+        }
         Ok(())
     }
 }

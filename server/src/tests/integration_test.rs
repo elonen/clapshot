@@ -1194,6 +1194,7 @@ mod integration_test
                 media_root,
                 TEST_BUCKET.to_string(),
                 Some(self.endpoint.clone()),
+                None,
                 prefix.to_string(),
                 Some(format!("{}/{}", self.endpoint, TEST_BUCKET)),
                 url_base.to_string(),
@@ -1345,6 +1346,7 @@ mod integration_test
         let storage_factory = move |media_root: PathBuf, url_base: &str| -> StorageBackend {
             StorageBackend::s3(
                 media_root, TEST_BUCKET.to_string(), Some(minio_endpoint.clone()),
+                None,
                 prefix_clone.clone(), Some(format!("{}/{}", minio_endpoint, TEST_BUCKET)),
                 url_base.to_string(), Duration::from_secs(3600),
             ).expect("Failed to create S3 storage backend")
@@ -1395,6 +1397,7 @@ mod integration_test
         let storage_factory = move |media_root: PathBuf, url_base: &str| -> StorageBackend {
             StorageBackend::s3(
                 media_root, TEST_BUCKET.to_string(), Some(minio_endpoint.clone()),
+                None,
                 prefix_clone.clone(), Some(format!("{}/{}", minio_endpoint, TEST_BUCKET)),
                 url_base.to_string(), Duration::from_secs(3600),
             ).expect("Failed to create S3 storage backend")
@@ -1464,6 +1467,7 @@ mod integration_test
             PathBuf::from("/tmp/videos"),
             "test-bucket".to_string(),
             Some("http://minio.example.com".to_string()),
+            None,
             "videos".to_string(),
             None,
             "http://localhost:8080".to_string(),
@@ -1508,6 +1512,7 @@ mod integration_test
             PathBuf::from("/tmp/videos"),
             "test-bucket".to_string(),
             Some("http://minio.example.com".to_string()),
+            None,
             "videos".to_string(),
             None,
             "http://localhost:8080".to_string(),
@@ -1558,6 +1563,7 @@ mod integration_test
             PathBuf::from("/tmp/videos"),
             "test-bucket".to_string(),
             Some("http://minio.example.com".to_string()),
+            None,
             "uploads".to_string(),
             None,
             "http://localhost:8080".to_string(),
@@ -1593,6 +1599,7 @@ mod integration_test
         let storage = StorageBackend::s3(
             PathBuf::from("/tmp/videos"),
             "my-bucket".to_string(),
+            None,
             None,
             "videos".to_string(),
             None,
@@ -1653,6 +1660,7 @@ mod integration_test
             media_root,
             TEST_BUCKET.to_string(),
             Some(minio.endpoint.clone()),
+            None,
             prefix.clone(),
             Some(format!("{}/{}", minio.endpoint, TEST_BUCKET)),
             "http://localhost:8080".to_string(),

@@ -3,6 +3,9 @@ dist_deb/
 .claude
 .idea
 .local-tmp/
+.local-bin/
 .idea/
 .local-temp
 .env
+/minio
+/mc
