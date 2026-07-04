@@ -85,7 +85,7 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
         },
         Err(e) => {
             tracing::debug!("Hard link failed ({}), falling back to symlink", e);
-            std::os::unix::fs::symlink(file, &link_path).map_err(|e| e.to_string())?;
+            std::os::unix::fs::symlink(std::fs::canonicalize(file).map_err(|e| e.to_string())?, &link_path).map_err(|e| e.to_string())?;
         }
     }
 
