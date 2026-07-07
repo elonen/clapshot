@@ -48,7 +48,7 @@ function onLoadedMetadata() {
         const t = (dur && isFinite(dur)) ? Math.min(queuedSeek.time, dur) : queuedSeek.time;
         time = t;
         videoElem.currentTime = t;
-        if (queuedSeek.resume) { videoElem.play(); }
+        if (queuedSeek.resume) { videoElem.play().catch(() => {}); }
         queuedSeek = null;
     }
 }
@@ -240,6 +240,7 @@ async function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) 
     // Check for touch event using 'touches' property (TouchEvent global may not exist on desktop Safari)
     const isTouch = 'touches' in e;
     if (!isTouch && !(e.buttons & 1)) return; // mouse not down
+    const gen = ++scrubGen;
     videoElem.pause();
     const clientX = isTouch ? (e as TouchEvent).touches[0].clientX : (e as MouseEvent).clientX;
     const { left, right } = (target as HTMLProgressElement).getBoundingClientRect();
@@ -248,6 +249,7 @@ async function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) 
     // Use stepper for seeking (handles both HTML5 and Mediabunny modes)
     if (videoDecoder) {
         const pos = await videoDecoder.seekToTime(newTime);
+        if (gen !== scrubGen) return; // superseded by a newer scrub or playback start
         time = pos.timestamp;
     } else {
         // Fallback before stepper is initialized
@@ -261,6 +263,11 @@ async function handleMove(e: MouseEvent | TouchEvent, target: EventTarget|null) 
     if (videoElem) { videoElem.focus(); }
 }
 
+// Bumped on every scrub and playback start. In-flight handleMove() continuations compare
+// against it and bail out when superseded, so their stale time/paused writes can't
+// yank the timeline back or pause a playback the user started in the meantime.
+let scrubGen = 0;
+
 let playback_request_source: string|undefined = undefined;
 
 /// Start / stop playback
@@ -273,9 +280,10 @@ export function setPlayback(play: boolean, request_source: string|undefined): bo
         return false;       // "no change"
 
     if (play) {
+        scrubGen++;
         videoDecoder?.prepareForPlayback();
         seekSideEffects();
-        videoElem.play();
+        videoElem.play().catch(() => {}); // interrupted by a later pause() - benign
     }
     else
         videoElem.pause();
@@ -525,6 +533,7 @@ export function getScreenshot() : string
 }
 
 export async function collabPlay(seek_time: number, looping: boolean) {
+    scrubGen++;
     videoDecoder?.prepareForPlayback();
     videoElem.loop = looping;
     videoElem.pause();
@@ -535,7 +544,7 @@ export async function collabPlay(seek_time: number, looping: boolean) {
         time = seek_time;
     }
     seekSideEffects();
-    videoElem.play();
+    videoElem.play().catch(() => {}); // interrupted by a later pause() - benign
 }
 
 export async function collabPause(seek_time: number, looping: boolean, drawing: string|undefined) {

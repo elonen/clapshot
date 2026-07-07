@@ -35,6 +35,8 @@ export class MediabunnyDecoder implements IVideoDecoder {
 
   // Serializes async seek operations to prevent sample leaks
   private seekQueue: Promise<void> = Promise.resolve();
+  // Latest-wins coalescing: queued seeks superseded by a newer one skip their (expensive) decode
+  private latestSeekId = 0;
 
   constructor(
     videoSource: string | Blob,
@@ -188,8 +190,12 @@ export class MediabunnyDecoder implements IVideoDecoder {
   async seekToTime(seconds: number): Promise<FramePosition> {
     if (!this.sink) throw new Error('MediabunnyDecoder not initialized');
 
+    const seekId = ++this.latestSeekId;
+
     // Serialize seeks to prevent race conditions that leak samples
     const seekOp = this.seekQueue.then(async () => {
+      if (seekId !== this.latestSeekId) return; // superseded while waiting in queue
+
       // Get new sample first
       const newSample = await this.sink!.getSample(seconds);
 
