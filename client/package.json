@@ -1,9 +1,9 @@
 {
   "name": "clapshot-client",
   "private": true,
-  "version": "0.12.0",
-  "clapshot_min_server_version": "0.12.0",
-  "clapshot_max_server_version": "0.12.0",
+  "version": "0.12.1",
+  "clapshot_min_server_version": "0.12.1",
+  "clapshot_max_server_version": "0.12.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

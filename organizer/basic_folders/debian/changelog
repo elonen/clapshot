@@ -1,3 +1,11 @@
+clapshot-organizer-basic-folders (0.12.1) unstable; urgency=low
+
+  * (Follow client and server versioning)
+  * Build/infra: default Debian Docker base to Trixie; per-component
+    version handling in Makefiles
+
+ -- Jarno Elonen <elonen@iki.fi>  Tue, 07 Jul 2026 12:00:00 +0300
+
 clapshot-organizer-basic-folders (0.12.0) unstable; urgency=low
 
   * New feature: "Version sets" (versioned media) — special folders that
