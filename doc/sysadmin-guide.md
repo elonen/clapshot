@@ -62,7 +62,9 @@ See for example https://github.com/elonen/ldap_authz_proxy on how to authorize u
 If you want to use Kerberos, you may also want to check out https://github.com/elonen/debian-nginx-spnego
 for .deb packages.
 
-There are currently no demos for any of these more advanced auths (`vouch-proxy` example for Okta, Google etc. would be especially welcome, if you want to contribute!).
+For a complete worked example, see [Auth example: Gitea (OIDC) + oauth2-proxy](auth-example-gitea+oauth2proxy.md) — it authenticates against a Gitea instance as an OIDC provider and maps Gitea org/team membership to login access and Clapshot admin rights.
+
+There are currently no demos for other advanced auths (a `vouch-proxy` example for Okta, Google etc. would be especially welcome, if you want to contribute!).
 
 ### Upload Permission Control
 

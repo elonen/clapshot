@@ -93,7 +93,8 @@ See [deploy/compose/README.md](../deploy/compose/README.md) for Portainer/Komodo
 Already running nginx, Traefik, Authentik, oauth2-proxy, Kerberos, etc.? Use the
 [`custom-proxy`](../deploy/compose/custom-proxy/) recipe — it trusts the `X-Remote-User-*`
 headers your proxy sets, and your proxy terminates TLS. See
-[Advanced Authentication](sysadmin-guide.md#advanced-authentication).
+[Advanced Authentication](sysadmin-guide.md#advanced-authentication), or the worked
+[Gitea (OIDC) + oauth2-proxy example](auth-example-gitea+oauth2proxy.md).
 
 
 ## Linux VM Installation

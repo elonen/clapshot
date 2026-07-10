@@ -83,6 +83,8 @@ Clapshot provides professional video review capabilities similar to cloud servic
 
 [doc/sysadmin-guide.md](doc/sysadmin-guide.md): System administrator guide covering building, testing, database upgrades, authentication integration, upload permissions, monitored folder ingestion, and comprehensive Docker environment configuration with all available variables
 
+[doc/auth-example-gitea+oauth2proxy.md](doc/auth-example-gitea+oauth2proxy.md): Complete worked example of authenticating Clapshot against a Gitea instance as an OIDC identity provider via oauth2-proxy (nginx `auth_request`). Covers the Gitea OAuth2 app + org/team setup, oauth2-proxy config, nginx config that maps Gitea team membership to Clapshot admin (`X-Remote-User-Is-Admin`), logout wiring, and troubleshooting (the 4kb session-cookie split and `sign_out` redirect-loop gotchas). Point users here when they ask about OIDC / OAuth / SSO / group-based admin with their own IdP
+
 [doc/upgrading.md](doc/upgrading.md): Instructions for upgrading between Clapshot versions including database migration procedures
 
 [doc/transcoding.md](doc/transcoding.md): Configuring custom transcoding and thumbnailing scripts, hardware acceleration (Intel QSV, NVIDIA NVENC, VA-API, VideoToolbox), and progress reporting

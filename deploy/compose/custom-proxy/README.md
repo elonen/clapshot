@@ -7,7 +7,10 @@ except the nginx `site.conf` **trusts** the inbound `X-Remote-User-*` headers in
 stripping them and there's no Caddy (your own proxy does TLS termination and auth).
 
 See the header contract and examples in
-[Advanced Authentication](../../../doc/sysadmin-guide.md#advanced-authentication).
+[Advanced Authentication](../../../doc/sysadmin-guide.md#advanced-authentication). For a
+full worked IdP example, see
+[Gitea (OIDC) + oauth2-proxy](../../../doc/auth-example-gitea+oauth2proxy.md) — front this
+recipe with that oauth2-proxy + nginx `auth_request` layer.
 
 ## ⚠️ Security — your proxy is the trust boundary
 
