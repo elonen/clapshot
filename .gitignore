@@ -1,7 +1,11 @@
 dist_deb/
 .DS_Store
 .claude
+.idea
+.local-tmp/
+.local-bin/
 .idea/
 .local-temp
-.local-tmp/
 .env
+/minio
+/mc

@@ -61,6 +61,23 @@ afterEach(() => {
   cleanup();
 })
 
+// Mock localStorage for i18n and other browser-dependent tests
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: vi.fn((key: string) => store[key] || null),
+    setItem: vi.fn((key: string, value: string) => { store[key] = value; }),
+    removeItem: vi.fn((key: string) => { delete store[key]; }),
+    clear: vi.fn(() => { store = {}; }),
+  };
+})();
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+  configurable: true,
+});
+
 // Mock WebSocket globally
 global.WebSocket = class MockWebSocket {
   static CONNECTING = 0;

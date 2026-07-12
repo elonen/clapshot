@@ -1,3 +1,4 @@
+use crate::storage::StorageBackend;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -27,6 +28,8 @@ pub struct ServerState {
     pub db: Arc<DB>,
     pub media_files_dir: PathBuf,
     pub upload_dir: PathBuf,
+    pub media_base_url: String,
+    pub storage: StorageBackend,
     pub url_base: String,
     pub default_user: String,
     pub org_http_headers_regex: Regex,
@@ -52,6 +55,7 @@ impl ServerState {
         media_files_dir: &Path,
         upload_dir: &Path,
         url_base: &str,
+        storage: StorageBackend,
         organizer_uri: Option<OrganizerURI>,
         grpc_srv_listening_flag: Arc<AtomicBool>,
         default_user: String,
@@ -63,6 +67,8 @@ impl ServerState {
             db,
             media_files_dir: media_files_dir.to_path_buf(),
             upload_dir: upload_dir.to_path_buf(),
+            media_base_url: storage.media_base_url().to_string(),
+            storage,
             grpc_srv_listening_flag,
             terminate_flag,
             url_base: url_base.to_string(),

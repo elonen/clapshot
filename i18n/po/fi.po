@@ -1,183 +1,205 @@
 msgid ""
 msgstr ""
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-09 20:48+0300\n"
+"POT-Creation-Date: 2026-06-25 05:21+0800\n"
 "Language: fi\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:176
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/user_session.rs:176
 msgid "Internal error in authz: {desc}"
 msgstr "Sisäinen virhe käyttöoikeuksien tarkistuksessa: {desc}"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:183
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/user_session.rs:183
 msgid "Permission denied"
 msgstr "Ei käyttöoikeutta"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/user_session.rs:217
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/user_session.rs:217
 msgid "Permission denied: {desc}"
 msgstr "Ei käyttöoikeutta: {desc}"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:52
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:52
 msgid "No such media file."
 msgstr "Mediatiedostoa ei löydy."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:111
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:111
 msgid "You have no media yet."
 msgstr "Ei vielä yhtään tiedostoa."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:113
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:113
 msgid "All your media files"
 msgstr "Kaikki mediatiedostosi"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:120
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:120
 msgid "Your Media"
 msgstr "Oma media"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:244
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:45
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:244
+#: /home/mikesolar/Projects/clapshot/server/src/i18n.rs:45
 msgid "{kind} deleted."
 msgstr "{kind} poistettu."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:246
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:246
 msgid "{kind} deleted, but cleanup had errors."
 msgstr "{kind} poistettu, mutta siivouksessa tapahtui virheitä."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:268
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:268
 msgid "Invalid file name (must contain a letter or number)"
 msgstr "Virheellinen tiedostonimi (täytyy sisältää kirjain tai numero)"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:272
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:272
 msgid "Name too long (max 160)"
 msgstr "Nimi on liian pitkä (enintään 160)"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:278
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:278
 msgid "{kind} renamed."
 msgstr "{kind} nimettiin uudelleen."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:279
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:279
 msgid "New name: '{name}'"
 msgstr "Uusi nimi: '{name}'"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:401
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:401
 msgid "Failed to edit comment."
 msgstr "Kommentin muokkaaminen epäonnistui."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:401
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:401
 msgid "No such comment. Cannot edit."
 msgstr "Kommenttia ei löydy. Ei voida muokata."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:420
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:425
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:435
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:420
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:425
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:435
 msgid "Failed to delete comment."
 msgstr "Kommentin poistaminen epäonnistui."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:420
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:420
 msgid "You can only delete your own comments"
 msgstr "Voit poistaa vain omia kommenttejasi"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:425
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:425
 msgid "Comment has replies. Cannot delete."
 msgstr "Kommenttiin on vastauksia. Ei voida poistaa."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:435
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:435
 msgid "No such comment. Cannot delete."
 msgstr "Kommenttia ei löydy. Ei voida poistaa."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:478
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:495
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:478
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:496
 msgid "Failed to add subtitle."
 msgstr "Tekstityksen lisääminen epäonnistui."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:478
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:478
 msgid "Subtitle file already exists: '{filename}'"
 msgstr "Tekstitystiedosto on jo olemassa: '{filename}'"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:495
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:496
 msgid "WebVTT file already exists: '{filename}'"
 msgstr "WebVTT-tiedosto on jo olemassa: '{filename}'"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:652
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:654
 msgid "Failed to join collab session: {error}"
 msgstr "Yhteisistuntoon liittyminen epäonnistui: {error}"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:691
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:693
 msgid "Report rejected: no active collab session."
 msgstr "Raportti hylätty: ei aktiivista yhteisistuntoa."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:715
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:736
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:717
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:738
 msgid "No organizer session."
 msgstr "Ei organizer-istuntoa."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:777
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:779
 msgid "Missing command from client: {request}"
 msgstr "Asiakkaalta puuttuu komento: {request}"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/api_server/ws_handers.rs:822
+#: /home/mikesolar/Projects/clapshot/server/src/api_server/ws_handers.rs:824
 msgid "Cmd '{cmd}' failed: {error}"
 msgstr "Komento '{cmd}' epäonnistui: {error}"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:59
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:59
 msgid "Rename item"
 msgstr "Nimeä kohde uudelleen"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:60
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:60
 msgid "Unknown item type in rename action. Please report this bug."
 msgstr "Tuntematon kohdetyyppi nimeämistoiminnossa. Ilmoita tästä virheestä."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:77
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:39
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/i18n.rs:40
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:77
+#: /home/mikesolar/Projects/clapshot/server/src/i18n.rs:39
+#: /home/mikesolar/Projects/clapshot/server/src/i18n.rs:40
 msgid "Rename"
 msgstr "Nimeä uudelleen"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:84
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:84
 msgid "Rename selected items"
 msgstr "Nimeä valitut kohteet uudelleen"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:99
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:99
 msgid "Are you sure you want to trash this item?"
 msgstr "Haluatko varmasti siirtää tämän kohteen roskakoriin?"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:100
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:100
 msgid "Are you sure you want to trash '{title}'?"
 msgstr "Haluatko varmasti siirtää kohteen '{title}' roskakoriin?"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:101
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:101
 msgid "Are you sure you want to trash folder '{title}' and ALL CONTENTS?"
-msgstr "Haluatko varmasti siirtää kansion '{title}' ja KAIKEN SEN SISÄLLÖN roskakoriin?"
+msgstr ""
+"Haluatko varmasti siirtää kansion '{title}' ja KAIKEN SEN SISÄLLÖN "
+"roskakoriin?"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:102
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:102
 msgid "Are you sure you want to trash ALL selected items?"
 msgstr "Haluatko varmasti siirtää KAIKKI valitut kohteet roskakoriin?"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:103
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:103
 msgid "Unknown item type in trash action. Please report this bug."
 msgstr "Tuntematon kohdetyyppi roskakoritoiminnossa. Ilmoita tästä virheestä."
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:134
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:134
 msgid "Trash"
 msgstr "Roskakoriin"
 
-#: /Users/jarno/projects/clapshot-mrg/clapshot/server/src/grpc/mod.rs:141
+#: /home/mikesolar/Projects/clapshot/server/src/grpc/mod.rs:141
 msgid "Trash selected items"
 msgstr "Siirrä valitut kohteet roskakoriin"
 
-#: client/src/App.svelte:319
+#: client/src/App.svelte:228
+msgid "Comment not found"
+msgstr "Kommenttia ei löytynyt"
+
+#: client/src/App.svelte:269
+msgid "Subtitle not found. See log."
+msgstr "Tekstitystä ei löytynyt. Katso loki."
+
+#: client/src/App.svelte:310
+msgid "Error adding subtitle file. See log."
+msgstr "Virhe lisättäessä tekstitystiedostoa. Katso loki."
+
+#: client/src/App.svelte:320
 msgid "Are you sure you want to delete this subtitle?"
 msgstr "Haluatko varmasti poistaa tämän tekstityksen?"
 
-#: client/src/App.svelte:342
+#: client/src/App.svelte:343
 msgid "Invalid time offset: {offset}"
 msgstr "Virheellinen aikasiirtymä: {offset}"
 
-#: client/src/App.svelte:739
+#: client/src/App.svelte:399
+msgid "Unknown URL parameter: '{key}'"
+msgstr "Tuntematon URL-parametri: '{key}'"
+
+#: client/src/App.svelte:695
+msgid "Client error: {error}"
+msgstr "Client-virhe: {error}"
+
+#: client/src/App.svelte:738
 msgid "Server version too old (v{version}). Please update server."
 msgstr "Palvelimen versio on liian vanha (v{version}). Päivitä palvelin."
 
-#: client/src/App.svelte:746
+#: client/src/App.svelte:745
 msgid ""
 "Client version too old (client v{clientVersion} for server "
 "v{serverVersion}). Please update client."
@@ -185,76 +207,109 @@ msgstr ""
 "Client-versio on liian vanha (v{clientVersion} vs. palvelimen "
 "v{serverVersion}). Päivitä versio."
 
-#: client/src/App.svelte:896
+#: client/src/App.svelte:753
+msgid "No user in welcome message"
+msgstr "Ei käyttäjää tervetuloviestissä"
+
+#: client/src/App.svelte:783 client/src/App.svelte:877
+msgid "Clapshot - {title}"
+msgstr "Clapshot - {title}"
+
+#: client/src/App.svelte:787
+msgid "Home"
+msgstr "Koti"
+
+#: client/src/App.svelte:895
 msgid "Bad video open request. See log."
 msgstr "Virheellinen videon avauspyyntö. Katso loki."
 
-#: client/src/App.svelte:1064
+#: client/src/App.svelte:940
+msgid "{user} is controlling"
+msgstr "{user} ohjaa"
+
+#: client/src/App.svelte:981
+msgid "No open action for item. See log."
+msgstr "Kohteelle ei ole avaus-toimintoa. Katso loki."
+
+#: client/src/App.svelte:1021
+msgid "BUG: Unsupported script lang. See log."
+msgstr "BUG: Ei-tuettu skriptikieli. Katso loki."
+
+#: client/src/App.svelte:1032
+msgid "Organizer script error. See log."
+msgstr "Organizer-skriptivirhe. Katso loki."
+
+#: client/src/App.svelte:1063
 msgid "Connecting server..."
 msgstr "Yhdistetään palvelimeen..."
 
-#: client/src/App.svelte:1072
+#: client/src/App.svelte:1071
 msgid "View connection errors"
 msgstr "Näytä yhteysvirheet"
 
-#: client/src/App.svelte:1078
+#: client/src/App.svelte:1077
 msgid "See browser JS console for more details."
 msgstr "Lisätietoja selaimen JS-konsolissa."
 
-#: client/src/App.svelte:1110
+#: client/src/App.svelte:1109
 msgid "Sort: date posted"
 msgstr "Järjestys: lisäyspäivä"
 
-#: client/src/App.svelte:1110
+#: client/src/App.svelte:1109
 msgid "Sort: timecode"
 msgstr "Järjestys: aikakoodi"
 
-#: client/src/App.svelte:1130
+#: client/src/App.svelte:1129
 msgid "Subtitles"
 msgstr "Tekstitykset"
 
-#: client/src/App.svelte:1152
+#: client/src/App.svelte:1130 client/src/lib/player_view/VideoPlayer.svelte:861
+#: client/src/lib/player_view/VideoPlayer.svelte:862
+msgid "Upload subtitles"
+msgstr "Lataa tekstitys"
+
+#: client/src/App.svelte:1151
 msgctxt "collab"
 msgid "Collaborative viewing session active."
 msgstr "Yhteiskatseluistunto aktiivinen."
 
-#: client/src/App.svelte:1153
+#: client/src/App.svelte:1152
 msgctxt "collab"
 msgid "Session ID is {id}"
 msgstr "Istunnon tunnus on {id}"
 
-#: client/src/App.svelte:1154
+#: client/src/App.svelte:1153
 msgctxt "collab"
 msgid "Actions like seek, play and draw are mirrored to all participants."
 msgstr ""
 "Toiminnot kuten kelaus, toisto ja piirtäminen peilataan kaikille "
 "osallistujille."
 
-#: client/src/App.svelte:1155
+#: client/src/App.svelte:1154
 msgctxt "collab"
 msgid "To invite people, copy browser URL and send it to them."
 msgstr "Kutsuaksesi muita, kopioi selaimen osoite ja lähetä se osallistujille."
 
-#: client/src/App.svelte:1156
+#: client/src/App.svelte:1155
 msgctxt "collab"
 msgid "Exit by clicking the green icon in header."
 msgstr "Poistu napsauttamalla vihreää kuvaketta ylärivillä."
 
 #. button to acknowledge
-#: client/src/App.svelte:1157
+#: client/src/App.svelte:1156
 msgctxt "collab"
 msgid "Understood"
 msgstr "Selvä"
 
-#: client/src/App.svelte:1186
+#: client/src/App.svelte:1185
 msgid "Drop video, audio and image files here to upload"
 msgstr "Pudota video-, ääni- ja kuvatiedostoja tähän ladataksesi"
 
-#: client/src/App.svelte:1217
+#: client/src/App.svelte:1216
 msgid "Latest messages"
 msgstr "Viimeisimmät viestit"
 
-#: client/src/lib/NavBar.svelte:70
+#: client/src/lib/NavBar.svelte:74
 msgid ""
 "Basic auth logout failed.\n"
 "Status code from {url}: {status} (not 401)"
@@ -262,7 +317,7 @@ msgstr ""
 "Basic auth -uloskirjautuminen epäonnistui.\n"
 "Tilakoodi osoitteesta {url}: {status} (ei 401)"
 
-#: client/src/lib/NavBar.svelte:79
+#: client/src/lib/NavBar.svelte:83
 msgid ""
 "Clapshot Client version {version}\n"
 "\n"
@@ -274,7 +329,7 @@ msgstr ""
 "Projektin verkkosivut:\n"
 "https://github.com/elonen/clapshot\n"
 
-#: client/src/lib/NavBar.svelte:88
+#: client/src/lib/NavBar.svelte:92
 msgid ""
 "Link copied to clipboard.\n"
 "Send it to reviewers who have user accounts here."
@@ -282,84 +337,134 @@ msgstr ""
 "Linkki kopioitiin leikepöydälle.\n"
 "Lähetä se katsojille, joilla on käyttäjätili järjestelmässä."
 
-#: client/src/lib/NavBar.svelte:140
+#: client/src/lib/NavBar.svelte:138
+msgid "Open menu"
+msgstr "Avaa valikko"
+
+#: client/src/lib/NavBar.svelte:144
 msgid "Share to logged in users"
 msgstr "Jaa kirjautuneille käyttäjille"
 
-#: client/src/lib/NavBar.svelte:142
+#: client/src/lib/NavBar.svelte:146
 msgid "Download original"
 msgstr "Lataa alkuperäinen"
 
-#: client/src/lib/NavBar.svelte:145
+#: client/src/lib/NavBar.svelte:149
 msgctxt "collab"
 msgid "Leave collaborative Session"
 msgstr "Poistu yhteisistunnosta"
 
-#: client/src/lib/NavBar.svelte:147
+#: client/src/lib/NavBar.svelte:151
 msgctxt "collab"
 msgid "Collaboration is disabled here"
 msgstr "Yhteisistunto ei käytettävissä"
 
-#: client/src/lib/NavBar.svelte:147 client/src/lib/NavBar.svelte:149
+#: client/src/lib/NavBar.svelte:151 client/src/lib/NavBar.svelte:153
 msgctxt "collab"
 msgid "Start Collaborative Session"
 msgstr "Aloita yhteisistunto"
 
-#: client/src/lib/NavBar.svelte:153
+#: client/src/lib/NavBar.svelte:157
 msgid "Experimental tools"
 msgstr "Kokeelliset työkalut"
 
-#: client/src/lib/NavBar.svelte:157 client/src/lib/tools/EDLImport.svelte:107
+#: client/src/lib/NavBar.svelte:161 client/src/lib/tools/EDLImport.svelte:107
 msgid "Import EDL as Comments"
 msgstr "Tuo EDL kommentteina"
 
-#: client/src/lib/NavBar.svelte:158
-#: client/src/lib/tools/comment-export/ExportDialog.svelte:72
+#: client/src/lib/NavBar.svelte:162
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:69
 msgid "Export Comments"
 msgstr "Vie kommentit"
 
-#: client/src/lib/NavBar.svelte:190 client/src/lib/NavBar.svelte:191
+#: client/src/lib/NavBar.svelte:177
+#: client/src/lib/asset_browser/VideoTile.svelte:76
+msgid "Processing..."
+msgstr "Käsitellään..."
+
+#: client/src/lib/NavBar.svelte:205 client/src/lib/NavBar.svelte:206
 msgctxt "menu"
 msgid "Language"
 msgstr "Kieli"
 
-#: client/src/lib/NavBar.svelte:200 client/src/lib/NavBar.svelte:217
+#: client/src/lib/NavBar.svelte:215 client/src/lib/NavBar.svelte:232
 msgid "Logout"
 msgstr "Kirjaudu ulos"
 
 #. menu item that opens the 'About this app' dialog
-#: client/src/lib/NavBar.svelte:202
+#: client/src/lib/NavBar.svelte:217
 msgctxt "menu"
 msgid "About"
 msgstr "Tietoja"
 
-#: client/src/lib/NavBar.svelte:218
+#: client/src/lib/NavBar.svelte:233
 msgid "Reload page to log in again."
 msgstr "Lataa sivu uudelleen kirjautuaksesi."
 
-#: client/src/lib/asset_browser/FileUpload.svelte:51
+#: client/src/lib/UserMessage.svelte:21
+msgid "OK"
+msgstr "OK"
+
+#: client/src/lib/UserMessage.svelte:23
+msgid "ERROR"
+msgstr "VIRHE"
+
+#: client/src/lib/UserMessage.svelte:25
+msgid "PROGRESS"
+msgstr "EDISTYMINEN"
+
+#: client/src/lib/asset_browser/FileUpload.svelte:53
 msgid "{percent}% uploaded... please wait"
 msgstr "{percent}% ladattu... odota hetki"
 
-#: client/src/lib/asset_browser/FileUpload.svelte:61
+#: client/src/lib/asset_browser/FileUpload.svelte:63
 msgid "Upload Failed"
 msgstr "Lataus epäonnistui"
 
-#: client/src/lib/asset_browser/FileUpload.svelte:66
+#: client/src/lib/asset_browser/FileUpload.svelte:68
 msgid "Upload Aborted"
 msgstr "Lataus keskeytetty"
 
-#: client/src/lib/asset_browser/FileUpload.svelte:76
+#: client/src/lib/asset_browser/FileUpload.svelte:78
 msgid "Uploading: {filename}..."
 msgstr "Ladataan: {filename}..."
 
-#: client/src/lib/asset_browser/FileUpload.svelte:101
+#: client/src/lib/asset_browser/FileUpload.svelte:105
 msgid "Drop rejected. Only video, audio and image files are allowed."
 msgstr "Tiedostotyyppiä ei tueta. Sallitut: video, kuva ja ääni."
+
+#: client/src/lib/asset_browser/FolderListing.svelte:182
+msgid "UI BUG: item not found"
+msgstr "UI-BUG: kohdetta ei löytynyt"
+
+#: client/src/lib/asset_browser/FolderListing.svelte:188
+msgid "UI BUG: item not found or missing openAction"
+msgstr "UI-BUG: kohdetta ei löytynyt tai siltä puuttuu avaus-toiminto"
+
+#: client/src/lib/asset_browser/FolderListing.svelte:275
+#: client/src/lib/asset_browser/FolderListing.svelte:286
+msgid "UI BUG: popup container missing"
+msgstr "UI-BUG: ponnahdusvalikon säiliö puuttuu"
+
+#: client/src/lib/asset_browser/FolderListing.svelte:277
+msgid "UI BUG: popup container child missing hide()"
+msgstr "UI-BUG: ponnahdusvalikon lapselta puuttuu hide()"
+
+#: client/src/lib/asset_browser/FolderListing.svelte:423
+msgid "Unknown item type"
+msgstr "Tuntematon kohdetyyppi"
 
 #: client/src/lib/asset_browser/FolderTile.svelte:61
 msgid "This target accepts media — folders can’t be dropped here."
 msgstr "Tämä kohde hyväksyy vain mediaa — ei kansioita."
+
+#: client/src/lib/asset_browser/VideoTile.svelte:42
+msgid "(no date)"
+msgstr "(ei päivämäärää)"
+
+#: client/src/lib/asset_browser/VideoTile.svelte:69
+msgid "video icon"
+msgstr "video-ikoni"
 
 #: client/src/lib/player_view/CommentCard.svelte:44
 msgid "Delete comment?"
@@ -411,6 +516,10 @@ msgctxt "comment"
 msgid "Redo"
 msgstr "Tee uudelleen"
 
+#: client/src/lib/player_view/CommentInput.svelte:70
+msgid "Select {color} color"
+msgstr "Valitse {color} väri"
+
 #: client/src/lib/player_view/CommentInput.svelte:80
 msgid "Add a comment - at current time..."
 msgstr "Lisää kommentti (nykyiseen kohtaan)..."
@@ -445,6 +554,10 @@ msgstr "Otsikko"
 #: client/src/lib/player_view/SubtitleCard.svelte:79
 msgid "Language code"
 msgstr "Kielikoodi"
+
+#: client/src/lib/player_view/SubtitleCard.svelte:80
+msgid "ISO 639 language codes information"
+msgstr "ISO 639 -kielikoodien tiedot"
 
 #: client/src/lib/player_view/SubtitleCard.svelte:85
 msgid "Time offset (sec)"
@@ -483,27 +596,100 @@ msgstr "Videon lataus kesken? Piirtäminen ei käytössä."
 msgid "Failed to show image."
 msgstr "Kuvan näyttäminen epäonnistui."
 
+#: client/src/lib/player_view/VideoPlayer.svelte:829
+msgid "Step backwards"
+msgstr "Kelaa taaksepäin"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:830
+msgid "Play/Pause"
+msgstr "Toista/Pysäytä"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:831
+msgid "Step forwards"
+msgstr "Kelaa eteenpäin"
+
+#. short label for the frame number input field
+#: client/src/lib/player_view/VideoPlayer.svelte:836
+msgctxt "frame label"
+msgid "FR"
+msgstr "KU"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:843
+msgid "Set loop start to current frame"
+msgstr "Aseta silmukan alku nykyiseen kehykseen"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:845
+msgid "Set loop end to current frame"
+msgstr "Aseta silmukan loppu nykyiseen kehykseen"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:855
+#: client/src/lib/player_view/VideoPlayer.svelte:856
+msgid "Toggle closed captioning"
+msgstr "Vaihda tekstitystä päälle/pois"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:876
+msgid "Mute audio"
+msgstr "Mykistä ääni"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:876
+msgid "Unmute audio"
+msgstr "Palauta ääni"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:890
+msgid "Toggle fullscreen (f)"
+msgstr "Vaihda koko näyttöön (f)"
+
+#: client/src/lib/player_view/VideoPlayer.svelte:891
+msgid "Toggle fullscreen"
+msgstr "Vaihda koko näyttöön"
+
 #: client/src/lib/tools/EDLImport.svelte:86
 msgid "No time spans found when parsing EDL."
 msgstr "EDL:ää luettaessa ei löytynyt aikavälejä."
+
+#: client/src/lib/tools/EDLImport.svelte:109
+msgid "Upload EDL"
+msgstr "Lataa EDL"
+
+#: client/src/lib/tools/EDLImport.svelte:111
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:88
+msgid "Frame rate"
+msgstr "Kuvataajuus (FPS)"
+
+#: client/src/lib/tools/EDLImport.svelte:117
+msgid "Add as comments"
+msgstr "Lisää kommentteina"
+
+#: client/src/lib/tools/EDLImport.svelte:119
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:152
+msgid "Cancel"
+msgstr "Peruuta"
 
 #: client/src/lib/tools/EDLImport.svelte:124
 msgid "Parsed spans"
 msgstr "Luetut aikavälit"
 
-#: client/src/lib/tools/comment-export/ExportDialog.svelte:76
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:73
 msgid "Export format"
 msgstr "Vientimuoto"
 
-#: client/src/lib/tools/comment-export/ExportDialog.svelte:82
-msgid "Frame rate"
-msgstr "Kuvataajuus (FPS)"
-
-#: client/src/lib/tools/comment-export/ExportDialog.svelte:89
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:95
 msgid "Format options"
 msgstr "Muotoasetukset"
 
-#: client/src/lib/tools/comment-export/ExportDialog.svelte:155
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:150
+msgid "Export"
+msgstr "Vie"
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:158
+msgid "1 comment will be exported."
+msgstr "1 kommentti viedään."
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:158
+msgid "{n} comments will be exported."
+msgstr "{n} kommenttia viedään."
+
+#: client/src/lib/tools/comment-export/ExportDialog.svelte:161
 msgid "No comments to export."
 msgstr "Ei vietäviä kommentteja."
 
@@ -620,19 +806,7 @@ msgstr "Ei valittua kansiota, jonka jako peruutetaan"
 msgid "Are you sure you want to revoke the shared link for this folder?"
 msgstr "Haluatko varmasti peruuttaa tämän kansion jakolinkin?"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:135
-msgid "Copy URL"
-msgstr "Kopioi linkki"
-
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:138
-msgid "Copy the shared link to clipboard"
-msgstr "Kopioi jakolinkki leikepöydälle"
-
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:148
-msgid "No shared link available for this folder"
-msgstr "Tälle kansiolle ei ole saatavilla jakolinkkiä"
-
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:157
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:136
 msgid ""
 "Shared link copied to clipboard!\n"
 "\n"
@@ -646,81 +820,81 @@ msgstr ""
 "hetkellä oleviin tiedostoihin ja antaa vastaanottajalle käytännössä PYSYVÄN "
 "pääsyn niihin, vaikka peruuttaisit kansion jaon myöhemmin."
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:159
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:162
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:141
+msgid "Copy URL"
+msgstr "Kopioi linkki"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:144
+msgid "Copy the shared link to clipboard"
+msgstr "Kopioi jakolinkki leikepöydälle"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:154
+msgid "No shared link available for this folder"
+msgstr "Tälle kansiolle ei ole saatavilla jakolinkkiä"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:165
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:168
 msgid "Copy this shared link:"
 msgstr "Kopioi tämä jakolinkki:"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:170
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:176
 msgid "Into Version Set"
 msgstr "Muunna versiosarjaksi"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:173
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:179
 msgid "Turn this folder into a version set (revisions of one media file)"
 msgstr "Muuta tämä kansio versiosarjaksi (yhden mediatiedoston versiot)"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:179
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:196
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:185
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:202
 msgid "No folder selected"
 msgstr "Ei valittua kansiota"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:187
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:193
 msgid "Into Normal Folder"
 msgstr "Muunna tavalliseksi kansioksi"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:190
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:196
 msgid "Turn this version set back into a normal folder"
 msgstr "Muuta tämä versiosarja tavalliseksi kansioksi"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:204
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:210
 msgid "Make Versioned"
 msgstr "Ryhmittele versiosarjaksi"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:207
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:213
 msgid "Group the selected media files into a new version set"
 msgstr "Ryhmittele valitut mediatiedostot uudeksi versiosarjaksi"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:213
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:219
 msgid "No media files selected"
 msgstr "Ei valittuja mediatiedostoja"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:221
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:227
 msgid "Manage Versions"
 msgstr "Hallitse versioita"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:224
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:230
 msgid "Open the version set to manage its versions"
 msgstr "Avaa versiosarja hallitaksesi sen versioita"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:230
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:236
 msgid "No version set selected"
 msgstr "Ei valittua versiosarjaa"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:239
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:245
 msgid "Set Active Version"
 msgstr "Aseta aktiiviseksi versioksi"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:242
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:248
 msgid "Make this version the active one for the set"
 msgstr "Aseta tämä versio sarjan aktiiviseksi versioksi"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:250
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:256
 msgid "Cannot set active version (missing ids)"
 msgstr "Aktiivista versiota ei voi asettaa (tunnisteet puuttuvat)"
 
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:259
-msgid "Delete user"
-msgstr "Poista käyttäjä"
-
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:262
-msgid "Delete user if they have no content (only empty root folder)"
-msgstr "Poista käyttäjä, jos hänellä ei ole sisältöä (vain tyhjä juurikansio)"
-
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:269
-msgid "No user folder selected for cleanup"
-msgstr "Ei valittua käyttäjäkansiota siivottavaksi"
-
-#: organizer/basic_folders/organizer/helpers/actiondefs.py:272
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:266
 msgid ""
 "This will delete the user if they have no media files and only an empty root "
 "folder.\n"
@@ -737,6 +911,18 @@ msgstr ""
 "kommenteiksi.\n"
 "\n"
 "Oletko varma?"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:271
+msgid "Delete user"
+msgstr "Poista käyttäjä"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:274
+msgid "Delete user if they have no content (only empty root folder)"
+msgstr "Poista käyttäjä, jos hänellä ei ole sisältöä (vain tyhjä juurikansio)"
+
+#: organizer/basic_folders/organizer/helpers/actiondefs.py:281
+msgid "No user folder selected for cleanup"
+msgstr "Ei valittua käyttäjäkansiota siivottavaksi"
 
 #: organizer/basic_folders/organizer/helpers/folders.py:212
 msgid "Cannot fetch contents of another user's folder"

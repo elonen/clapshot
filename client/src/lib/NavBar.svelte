@@ -23,13 +23,17 @@ let { onbasicauthlogout, onaddcomments }: Props = $props();
 let loggedOut = $state(false);
 let localeOptions = $state(availableLocales);
 
-// Watch for (transcoding) progress reports from server, and update progress bar if one matches this item.
+// Watch for (transcoding/upload) progress reports from server, and show a quick status bar for the current video.
 let videoProgressMsg: string | undefined = $state(undefined);
+let videoProgressVal: number | undefined = $state(undefined);
 
-onMount(async () => {
-	latestProgressReports.subscribe((reports: MediaProgressReport[]) => {
-		videoProgressMsg = reports.find((r: MediaProgressReport) => r.mediaFileId === $mediaFileId)?.msg;
-	});
+onMount(() => {
+    const unsubscribe = latestProgressReports.subscribe((reports: MediaProgressReport[]) => {
+        const match = reports.find((r: MediaProgressReport) => r.mediaFileId === $mediaFileId);
+        videoProgressMsg = match?.msg;
+        videoProgressVal = match?.progress;
+    });
+    return () => unsubscribe();
 });
 
 $effect(() => {
@@ -131,7 +135,7 @@ function addEDLComments(comments: Proto3.Comment[]) {
 						<div class="relative inline-block text-left">
 							<button type="button"
 							  	class="inline-flex justify-center w-full rounded-md shadow-sm px-2 py-0.5 {$collabId ? 'bg-green-500' : 'bg-gray-800'} text-sm font-medium text-gray-500 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-								aria-haspopup="true" aria-expanded="true" aria-label="Open menu"
+								aria-haspopup="true" aria-expanded="true" aria-label={$t("Open menu")}
 							>
 								<i class="fas fa-bars"></i>
 							</button>
@@ -139,14 +143,14 @@ function addEDLComments(comments: Proto3.Comment[]) {
 						<Dropdown class="w-64 text-sm clapshot-dropdown" simple>
 							<DropdownItem onclick={copyToClipboard}><i class="fas fa-share-square"></i> {$t("Share to logged in users")}</DropdownItem>
 							{#if $curVideo?.origUrl}
-								<DropdownItem title="Download original file"><a href={$curVideo?.origUrl} download><i class="fas fa-download"></i> {$t("Download original")}</a></DropdownItem>
+								<DropdownItem title={$t("Download original")}><a href={$curVideo?.origUrl} download><i class="fas fa-download"></i> {$t("Download original")}</a></DropdownItem>
 							{/if}
 							{#if $collabId}
 								<DropdownItem href="?vid={$mediaFileId}" class="text-green-400"><i class="fas fa-users"></i> {$t("Leave collaborative Session", { context: "collab" })}</DropdownItem>
 							{:else if $playerHeaderHtml}
 								<DropdownItem class="text-gray-600 cursor-not-allowed" data-testid="start-collab-disabled" title={$t("Collaboration is disabled here", { context: "collab" })}><i class="fas fa-user-plus"></i> {$t("Start Collaborative Session", { context: "collab" })}</DropdownItem>
 							{:else}
-								<DropdownItem href="?vid={$mediaFileId}&collab={randomSessionId}" title="Start collaborative session"><i class="fas fa-user-plus"></i> {$t("Start Collaborative Session", { context: "collab" })}</DropdownItem>
+								<DropdownItem href="?vid={$mediaFileId}&collab={randomSessionId}" title={$t("Start Collaborative Session", { context: "collab" })}><i class="fas fa-user-plus"></i> {$t("Start Collaborative Session", { context: "collab" })}</DropdownItem>
 							{/if}
 
 							<DropdownItem>
@@ -166,6 +170,17 @@ function addEDLComments(comments: Proto3.Comment[]) {
 				{#if !$playerHeaderHtml}
 					<span class="mx-4 text-xs text-center">{$curVideo?.title}</span>
 				{/if}
+
+					{#if videoProgressVal !== undefined}
+						<div class="flex flex-col items-center gap-1 mt-1 mb-2">
+							<div class="text-xs italic text-gray-500 text-center px-2">
+								{videoProgressMsg || $t("Processing...")}
+							</div>
+							<div class="w-48 h-2 rounded-full bg-gray-200 overflow-hidden">
+								<div class="h-full bg-amber-500 transition-all duration-200" style={`width: ${(Math.max(0, Math.min(1, videoProgressVal)) * 100).toFixed(0)}%`}></div>
+							</div>
+						</div>
+					{/if}
 				{#if videoProgressMsg}
 					<span class="text-cyan-800 mx-4 text-xs text-center">{videoProgressMsg}</span>
 				{/if}

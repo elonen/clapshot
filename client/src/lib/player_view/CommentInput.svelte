@@ -66,9 +66,9 @@ function onTextChange(e: any) {
             <button type="button" class="fas fa-undo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 mx-2 rounded-lg" title={$t("Undo", { context: "comment" })} aria-label={$t("Undo", { context: "comment" })} onclick={()=>onUndoRedo(true)}></button>
             <button type="button" class="fas fa-redo text-gray-500 hover:text-gray-100 active:text-gray-400 inline-block w-10 h-10 mx-2 rounded-lg" title={$t("Redo", { context: "comment" })} aria-label={$t("Redo", { context: "comment" })} onclick={()=>onUndoRedo(false)}></button>
 
-            {#each ["red", "green", "blue", "cyan", "yellow", "black", "white"] as c}
-                <button type="button" class="{(curColor==c) ? 'border-2 border-gray-100' : 'border border-gray-600'}  inline-block w-6 h-6 m-2 rounded-lg" style="background: {c};" aria-label="Select {c} color" onclick={() => onColorSelected(c)}></button>
-            {/each}
+                {#each ["red", "green", "blue", "cyan", "yellow", "black", "white"] as c}
+                    <button type="button" class="{(curColor==c) ? 'border-2 border-gray-100' : 'border border-gray-600'}  inline-block w-6 h-6 m-2 rounded-lg" style="background: {c};" aria-label={$t("Select {color} color", { color: c })} onclick={() => onColorSelected(c)}></button>
+                {/each}
         </div>
     {/if}
 

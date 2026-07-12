@@ -8,6 +8,7 @@ import {rgbToCssColor, cssVariables} from './utils';
 import {latestProgressReports} from '@/stores';
 import {slide} from "svelte/transition";
 import type { MediaProgressReport } from '@/types';
+import { t } from "@/i18n";
 
 
     interface Props {
@@ -38,7 +39,7 @@ $effect(() => {
 });
 
 function fmt_date(d: Date | undefined) {
-    if (!d) return "(no date)";
+    if (!d) return $t("(no date)");
     return d.toISOString().split('T')[0];
 }
 
@@ -63,12 +64,16 @@ function fmt_date(d: Date | undefined) {
         <div class="flex-grow">
         <TileVisualizationOverride vis={visualization}/>
         </div>
+    {:else}
+        <div class="flex-grow flex items-center justify-center text-slate-300">
+            <i class="fas fa-video text-5xl" aria-label={$t("video icon")}></i>
+        </div>
     {/if}
 
     <!-- Progress bar (if any) -->
     {#if progress !== undefined}
         <div transition:slide class="mb-1">
-            <div class="w-full text-xs font-extralight italic text-center mt-1 mb-1">{progressMsg || 'Processing...'}</div>
+            <div class="w-full text-xs font-extralight italic text-center mt-1 mb-1">{progressMsg || $t("Processing...")}</div>
             <div class="w-full h-1 bg-black">
                 <div class="h-full bg-amber-500" style="width: {progress * 100}%"></div>
             </div>
@@ -116,4 +121,3 @@ function fmt_date(d: Date | undefined) {
 }
 
 </style>
-

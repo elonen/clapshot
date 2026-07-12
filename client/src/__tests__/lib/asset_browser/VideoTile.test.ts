@@ -102,6 +102,19 @@ describe('VideoTile', () => {
     expect(container.querySelector('.flex-grow')).toBeInTheDocument();
   });
 
+  it('shows a default icon when no preview or visualization exists', () => {
+    const mediaFile = createMediaFile({
+      id: 'no-preview',
+      title: 'No Preview Video',
+      previewData: undefined,
+    });
+
+    const { container } = render(VideoTile, { item: mediaFile });
+
+    const icon = container.querySelector('i.fa-video');
+    expect(icon).toBeInTheDocument();
+  });
+
   it('should render with visualization override when no preview data', () => {
     const mediaFile = createMediaFile({
       id: 'test-video-3',

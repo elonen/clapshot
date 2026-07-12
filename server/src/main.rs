@@ -4,9 +4,10 @@ use clapshot_server::{
     api_server::validate_org_http_headers_regex,
     grpc::{grpc_client::prepare_organizer, grpc_server::make_grpc_server_bind},
     run_clapshot, PKG_NAME, PKG_VERSION,
+    storage::StorageBackend,
     video_pipeline::IngestUsernameFrom,
 };
-use std::{path::PathBuf, sync::Arc, str::FromStr};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 use tracing::error;
 use indoc::indoc;
 
@@ -159,6 +160,39 @@ struct Args {
     /// e.g. '^X[-_]REMOTE[-_]USER[-_]CAN[-_]UPLOAD$' rather than '^X[-_]REMOTE[-_]'.
     #[arg(long, value_name="REGEX", default_value="^$")]
     org_http_headers: String,
+
+    /// Storage backend (local or s3-compatible object storage)
+    #[arg(long, value_name="BACKEND", default_value="local")]
+    storage_backend: String,
+
+    /// S3-compatible endpoint URL (only needed for non-AWS S3, e.g. MinIO).
+    /// For AWS S3, leave unset and configure AWS_REGION instead.
+    #[arg(long, value_name="URL")]
+    s3_endpoint: Option<String>,
+
+    /// S3 region (e.g. us-east-1). For AWS S3 this overrides AWS_REGION.
+    /// For MinIO this is usually ignored but may be required by some SDK calls.
+    #[arg(long, value_name="REGION")]
+    s3_region: Option<String>,
+
+    /// S3 bucket (required for S3 backend)
+    #[arg(long, value_name="BUCKET")]
+    s3_bucket: Option<String>,
+
+    /// Path/prefix inside the bucket where media files are stored
+    #[arg(long, value_name="PREFIX", default_value="videos")]
+    s3_prefix: String,
+
+    /// Public base URL for accessing the bucket/prefix (used for playback URLs).
+    /// If not set, defaults to endpoint/bucket or virtual-hosted style URL.
+    /// Deprecated: playback URLs are now server-mediated presigned redirects,
+    /// so the bucket no longer needs to be publicly readable.
+    #[arg(long, value_name="URL")]
+    s3_public_url: Option<String>,
+
+    /// Presigned S3 URL expiry time in seconds (default: 3600).
+    #[arg(long, value_name="SECONDS", default_value="3600")]
+    s3_presigned_url_expiry: u64,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -219,6 +253,30 @@ fn main() -> anyhow::Result<()> {
     // Validate and compile the org_http_headers regex
     let org_http_headers_regex = validate_org_http_headers_regex(&args.org_http_headers)?;
 
+    let storage = match args.storage_backend.as_str() {
+        "local" => StorageBackend::local(args.data_dir.join("videos"), &url_base),
+        "s3" => {
+            let bucket = args.s3_bucket.clone()
+                .ok_or_else(|| anyhow::anyhow!("--s3-bucket is required for S3 backend"))?;
+
+            if args.s3_public_url.is_some() {
+                tracing::info!("--s3-public-url is deprecated; playback now uses server-mediated presigned S3 URLs");
+            }
+
+            StorageBackend::s3(
+                args.data_dir.join("videos"),
+                bucket,
+                args.s3_endpoint.clone(),
+                args.s3_region.clone(),
+                args.s3_prefix.clone(),
+                args.s3_public_url.clone(),
+                url_base.clone(),
+                std::time::Duration::from_secs(args.s3_presigned_url_expiry),
+            )?
+        }
+        other => bail!("Unknown storage backend '{}'. Valid options: local, s3", other),
+    };
+
     // Run the server (blocking)
     if let Err(e) = run_clapshot(
         args.data_dir.to_path_buf(),
@@ -241,6 +299,7 @@ fn main() -> anyhow::Result<()> {
         args.notification_script,
         args.notification_events,
         org_http_headers_regex,
+        storage,
     ) {
         error!("run_clapshot() failed: {}", e);
     }

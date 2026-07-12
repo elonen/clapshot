@@ -193,6 +193,7 @@ macro_rules! api_test {
             let ws_url = url_base.replace("http", "ws") + "/api/ws";
             let media_files_dir = data_dir.join("videos");
             let upload_dir = data_dir.join("upload");
+            let storage = StorageBackend::local(media_files_dir.clone(), &url_base);
 
             let test_regex = validate_org_http_headers_regex("^X[-_]REMOTE[-_]").expect("Test regex failed");
             let (notification_sink, notification_rx) =
@@ -201,6 +202,7 @@ macro_rules! api_test {
                 &media_files_dir.clone(),
                 &upload_dir.clone(),
                 &url_base.clone(),
+                storage,
                 None,
                 grpc_srv_listening_flag.clone(),
                 "anonymous".to_string(),

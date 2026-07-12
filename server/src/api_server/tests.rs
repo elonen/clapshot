@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use crate::storage::StorageBackend;
 use std::sync::Arc;
 use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
@@ -13,10 +14,9 @@ use crate::database::DbBasicQuery;
 use crate::database::error::DBError;
 use crate::api_server::{parse_auth_headers, run_api_server_async, validate_org_http_headers_regex, UserMessage, UserMessageTopic};
 use crate::api_server::server_state::ServerState;
+use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_no_msg, write, open_media_file, connect_client_ws};
 use crate::database::models::{self};
 use crate::database::tests::make_test_db;
-
-use crate::api_server::test_utils::{ApiTestState, expect_msg, expect_no_msg, write, open_media_file, connect_client_ws};
 use crate::grpc::db_models::proto_msg_type_to_event_name;
 
 use warp::http::{HeaderMap, HeaderValue};
@@ -163,10 +163,30 @@ async fn test_api_open_bad_media_file()
 pub async fn expect_user_msg(ws: &mut crate::api_server::test_utils::WsClient, evt_type: proto::user_message::Type ) -> proto::UserMessage
 {
     println!(" --expect_user_msg of type {:?} ....", evt_type);
-    let cmd = expect_client_cmd!(ws, ShowMessages);
-    assert_eq!(cmd.msgs.len(), 1);
-    assert_eq!(cmd.msgs[0].r#type, evt_type as i32);
-    cmd.msgs[0].clone()
+    // Loop to skip PROGRESS messages when waiting for other message types
+    loop {
+        let cmd = expect_client_cmd!(ws, ShowMessages);
+        // Filter out PROGRESS messages if we're not looking for them
+        let non_progress_msgs: Vec<_> = cmd.msgs.iter()
+            .filter(|m| {
+                if evt_type != proto::user_message::Type::Progress {
+                    m.r#type != proto::user_message::Type::Progress as i32
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        if non_progress_msgs.is_empty() {
+            // Only got PROGRESS messages, keep waiting
+            println!("   (skipping PROGRESS message, waiting for {:?})", evt_type);
+            continue;
+        }
+
+        assert_eq!(non_progress_msgs.len(), 1, "Expected 1 message of type {:?}, got {} non-progress messages", evt_type, non_progress_msgs.len());
+        assert_eq!(non_progress_msgs[0].r#type, evt_type as i32, "Expected message type {:?}, got type {}", evt_type, non_progress_msgs[0].r#type);
+        return non_progress_msgs[0].clone();
+    }
 }
 
 /// Like `expect_user_msg`, but tolerant of slow background processing.

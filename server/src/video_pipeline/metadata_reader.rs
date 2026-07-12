@@ -49,7 +49,8 @@ pub struct Metadata {
     pub fps: Decimal,
     pub bitrate: u32,
     pub metadata_all: String,
-    pub upload_cookies: HashMap<String, String>    // Cookies from the upload, not read from the file
+    pub upload_cookies: HashMap<String, String>,    // Cookies from the upload, not read from the file
+    pub transcode_preference: super::TranscodePreference,
 }
 
 pub type MetadataResult = Result<Metadata, DetailedMsg>;
@@ -84,7 +85,7 @@ fn run_mediainfo( file: &PathBuf ) -> Result<serde_json::Value, String>
         },
         Err(e) => {
             tracing::debug!("Hard link failed ({}), falling back to symlink", e);
-            std::os::unix::fs::symlink(file, &link_path).map_err(|e| e.to_string())?;
+            std::os::unix::fs::symlink(std::fs::canonicalize(file).map_err(|e| e.to_string())?, &link_path).map_err(|e| e.to_string())?;
         }
     }
 
@@ -165,7 +166,8 @@ fn extract_variables<F>(json: serde_json::Value, args: &IncomingFile, get_file_s
             fps: Decimal::from_str(video_track["FrameRate"].as_str().ok_or("FPS not found")?).map_err(|_| "Invalid FPS".to_string())?,
             bitrate,
             metadata_all: json.to_string(),
-            upload_cookies: args.cookies.clone()
+            upload_cookies: args.cookies.clone(),
+            transcode_preference: args.transcode_preference,
         })
     }
 
@@ -181,7 +183,8 @@ fn extract_variables<F>(json: serde_json::Value, args: &IncomingFile, get_file_s
             fps: Decimal::from_u8(0).unwrap(),
             bitrate: audio_track["BitRate"].as_str().ok_or("Bitrate not found")?.parse().map_err(|_| "Invalid bitrate".to_string())?,
             metadata_all: json.to_string(),
-            upload_cookies: args.cookies.clone()
+            upload_cookies: args.cookies.clone(),
+            transcode_preference: args.transcode_preference,
         })
     }
 
@@ -197,7 +200,8 @@ fn extract_variables<F>(json: serde_json::Value, args: &IncomingFile, get_file_s
             fps: Decimal::from_u8(0).unwrap(),
             bitrate: 0,
             metadata_all: json.to_string(),
-            upload_cookies: args.cookies.clone()
+            upload_cookies: args.cookies.clone(),
+            transcode_preference: args.transcode_preference,
         })
     } else {
         return Err("No video, audio or image track found".to_string());
@@ -224,6 +228,7 @@ pub(super) fn read_fps_and_frame_count(file: &PathBuf) -> Result<(Decimal, u32),
         file_path: file.clone(),
         user_id: String::new(),
         cookies: Default::default(),
+        transcode_preference: super::TranscodePreference::Auto,
     };
     let md = extract_variables(json, &args, || file.metadata().map(|m| m.len()).map_err(|e| e.to_string()))?;
     Ok((md.fps, md.total_frames))
@@ -298,7 +303,8 @@ fn test_fixture(has_bitrate: bool, has_fps: bool) -> (IncomingFile, serde_json::
     let args = IncomingFile {
         file_path: PathBuf::from("test.mp4"),
         user_id: "test_user".to_string(),
-        cookies: Default::default()
+        cookies: Default::default(),
+        transcode_preference: super::TranscodePreference::Auto,
     };
 
     (args, json)

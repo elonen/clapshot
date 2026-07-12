@@ -18,7 +18,7 @@ Mainly for organizations that can't or won't put their media in commercial cloud
 - **File Organization**: Hierarchical folder system with drag-and-drop, admin user management interface
 - **Media Processing**: FFmpeg transcoding with configurable quality, thumbnail generation
 - **Authentication**: Reverse proxy integration supporting OAuth, JWT, Kerberos, SAML, etc.
-- **Storage**: SQLite database with automatic migrations, file-based media storage
+- **Storage**: SQLite database with automatic migrations, local filesystem or S3-compatible object storage
 - **Extensibility**: Plugin system for custom workflows and integrations
 
 *For a comprehensive feature list, see [FEATURES.md](FEATURES.md).*
@@ -153,6 +153,44 @@ See [Upgrading Guide](doc/upgrading.md) for instructions on installing a new rel
 **Want to customize media processing?** See the [Transcoding and Thumbnailing Guide](doc/transcoding.md) for configuring hardware acceleration, custom encoders, and specialized processing workflows.
 
 **Using Slack?** An optional [Slack unfurl bot](extras/clapshot-slack-unfurl/) is available in `extras/` — it runs alongside Clapshot and shows rich link previews (thumbnail, title, timecode) when Clapshot URLs are posted in Slack channels.
+
+
+### Object Storage (S3-compatible)
+
+Clapshot can upload processed media and thumbnails to an S3-compatible object store while still staging files locally under `<data_dir>/videos`.
+
+Playback URLs now point at the Clapshot server (`/api/media/...`), which validates the user and returns a short-lived presigned S3 redirect. This means the bucket itself can remain private.
+
+**Required settings** (CLI flags, `clapshot-server.conf`, or `CLAPSHOT_SERVER__*` env vars):
+- `storage-backend = s3`
+- `s3-bucket = clapshot-media`
+
+For MinIO or other S3-compatible services you also need:
+- `s3-endpoint = https://s3.example.com`
+
+For AWS S3 leave `s3-endpoint` unset and configure `AWS_REGION`.
+
+**Authentication** uses the standard AWS SDK credential chain (in order of precedence):
+1. Environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+2. AWS credentials file (`~/.aws/credentials`)
+3. IAM instance roles (for EC2/ECS deployments)
+
+**Optional settings:**
+- `s3-prefix` – path inside the bucket (default: `videos`)
+- `s3-presigned-url-expiry` – presigned redirect lifetime in seconds (default: `3600`)
+- `s3-public-url` – deprecated, kept only for backward compatibility
+
+**Docker env example:**
+```bash
+-e CLAPSHOT_SERVER__STORAGE_BACKEND=s3 \
+-e CLAPSHOT_SERVER__S3_BUCKET=clapshot-media \
+-e CLAPSHOT_SERVER__S3_REGION=us-east-1 \
+-e AWS_ACCESS_KEY_ID=YOUR_KEY \
+-e AWS_SECRET_ACCESS_KEY=YOUR_SECRET \
+-e CLAPSHOT_SERVER__S3_PRESIGNED_URL_EXPIRY=3600
+```
+
+Keep enough local disk for staging uploads under `data_dir/videos`.
 
 
 ## Architecture Overview

@@ -1,3 +1,4 @@
+.test-bin/
 target
 DEV_DATADIR*
 dist_deb

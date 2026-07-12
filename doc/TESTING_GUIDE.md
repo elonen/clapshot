@@ -367,7 +367,7 @@ npm run dev
 # Build and run complete stack
 make run-docker
 
-# Access: http://localhost:8080/
+# Access: http://localhost:8081/
 ```
 
 ### Testing Workflows

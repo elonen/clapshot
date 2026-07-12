@@ -8,6 +8,10 @@ CLIENT_VER := $(shell $(MAKE) -s -C client get-cur-ver)
 SERVER_VER := $(shell $(MAKE) -s -C server get-cur-ver)
 ORG_VER    := $(shell $(MAKE) -s -C organizer/basic_folders get-cur-ver)
 
+CLAPSHOT_DOCKER_HOST ?= 127.0.0.1
+CLAPSHOT_DOCKER_PORT ?= 8080
+CLAPSHOT_URL_BASE ?= http://$(CLAPSHOT_DOCKER_HOST):$(CLAPSHOT_DOCKER_PORT)/
+
 ifeq ($(TARGET_ARCH),)
   ARCH=$(shell uname -m)
   PLATFORM_STR =
@@ -106,7 +110,8 @@ run-docker: debian-docker
 	cp server/src/tests/assets/60fps-example.mp4 test/VOLUME/data/incoming/
 	@echo "Removing any existing Unix socket files for macOS Docker compatibility..."
 	rm -f test/VOLUME/data/grpc-srv-to-org.sock test/VOLUME/data/grpc-org-to-srv.sock
-	docker run --rm -it -p 0.0.0.0:8080:80 \
+	docker run --rm -it -p $(CLAPSHOT_DOCKER_HOST):$(CLAPSHOT_DOCKER_PORT):80 \
+		-e CLAPSHOT_SERVER__URL_BASE=$(CLAPSHOT_URL_BASE) \
 		--mount type=bind,source="$$(pwd)"/test/VOLUME,target=/mnt/clapshot-data \
 		--mount type=bind,source="$$(pwd)"/organizer/basic_folders/example_metaplugins,target=/opt/clapshot-org-bf-metaplugins,readonly \
 		clapshot-comb

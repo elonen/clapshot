@@ -431,6 +431,26 @@ describe('NavBar.svelte', () => {
       expect(matchingReport?.progress).toBe(0.7);
     });
 
+    it('renders a progress bar for the active video', () => {
+      const report: MediaProgressReport = {
+        mediaFileId: 'video123',
+        msg: 'Uploading to storage…',
+        progress: 0.4,
+        received_ts: Date.now()
+      };
+      mediaFileId.set('video123');
+      curVideo.set(createMinimalMediaFile({
+        id: 'video123',
+        title: 'Test Video'
+      }));
+      latestProgressReports.set([report]);
+
+      const { container } = render(NavBar);
+      expect(screen.getAllByText('Uploading to storage…').length).toBeGreaterThan(0);
+      const bars = container.querySelectorAll('.bg-amber-500');
+      expect(bars.length).toBeGreaterThan(0);
+    });
+
     it('should return undefined when no matching progress report', () => {
       const reports: MediaProgressReport[] = [
         {

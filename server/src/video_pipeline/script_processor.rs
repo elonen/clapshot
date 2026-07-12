@@ -360,7 +360,7 @@ fn run_transcode_script(src: &CmprInputSource, output_dir: PathBuf, output_prefi
                             },
                             None => {
                                 tracing::debug!("Progress pipe EOF. Sleeping...");
-                                std::thread::sleep(std::time::Duration::from_millis(250));
+                                std::thread::sleep(std::time::Duration::from_millis(50));
                             }
                             Some(Ok(l)) => {
                                 tracing::trace!(chunk=%l, "Got script progress line.");
