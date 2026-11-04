@@ -11,7 +11,7 @@ import clapshot_grpc.proto.clapshot.organizer as org
 from clapshot_grpc.utilities import try_send_user_message, parse_json_dict
 
 from organizer.config import PATH_COOKIE_NAME
-from organizer.helpers.folders import SHARED_FOLDER_TOKEN_COOKIE_NAME
+from organizer.helpers.folders import SHARED_FOLDER_TOKEN_COOKIE_NAME, SHARED_FOLDER_ICON
 from organizer.utils import uri_arg_to_folder_path
 
 from .helpers.l10n import _, ngettext
@@ -334,8 +334,15 @@ async def cmd_from_client_impl(oi: organizer.OrganizerInbound, cmd: org.CmdFromC
                 from .authz_methods import check_action_authorization
                 await check_action_authorization(oi, "rename_folder", folder=fld, ses=cmd.ses)
 
+                # Rename dialog prefills the displayed title, incl. shared marker (possibly repeated by earlier renames)
+                new_name = str(args["new_name"]).strip()
+                while new_name.startswith(SHARED_FOLDER_ICON):
+                    new_name = new_name.removeprefix(SHARED_FOLDER_ICON).lstrip()
+                if not new_name:
+                    raise GRPCError(GrpcStatus.INVALID_ARGUMENT, _("rename_folder command missing 'id' or 'new_name' argument"))
+
                 with dbs.begin_nested():
-                    fld.title = args["new_name"]
+                    fld.title = new_name
 
             oi.log.debug(f"Renamed folder '{fld.id}' to '{fld.title}'")
             page = await oi.pages_helper.construct_navi_page(cmd.ses, None)

@@ -23,6 +23,9 @@ from .l10n import _, pgettext
 # Cookie name for tracking the shared folder entry point
 SHARED_FOLDER_TOKEN_COOKIE_NAME = "shared_folder_token"
 
+# Display-only marker for shared folder tiles; never stored in DB
+SHARED_FOLDER_ICON = "🔗"
+
 # Version-set tile/badge colours
 VERSION_BADGE_COLOR = clap.Color(r=234, g=88, b=12)   # orange
 VERSION_ACTIVE_COLOR = clap.Color(r=8, g=145, b=178)  # cyan (Active version in version set's Manage view)
@@ -372,7 +375,7 @@ class FoldersHelper:
         # Add visual indicator for shared folders
         title = fld.title or pgettext("folder", "UNNAMED")
         if is_shared:
-            title = f"🔗 {title}"  # Add link icon before title to indicate shared folder
+            title = f"{SHARED_FOLDER_ICON} {title}"
 
         # Customize popup actions based on ownership and sharing status
         folder_actions = popup_actions.copy()

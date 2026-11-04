@@ -418,6 +418,13 @@ async def org_test__cmd_from_client__rename_folder(oi: organizer.OrganizerInboun
     assert len(flds) == 1
     assert flds[0].title == "Test Folder New Name"
 
+    # Shared-folder display marker (prefilled in rename dialog) must not be stored
+    await oi.cmd_from_client(org.CmdFromClientRequest(ses=ses,
+        cmd="rename_folder",
+        args=json.dumps({"id": new_fld.id, "new_name": "🔗 🔗 Shared Name"})))
+    cont = await oi.folders_helper.fetch_folder_contents(root_fld, ses)
+    assert [fi for fi in cont if isinstance(fi, DbFolder)][0].title == "Shared Name"
+
 
 async def org_test__cmd_from_client__trash_folder(oi: organizer.OrganizerInbound):
     """
