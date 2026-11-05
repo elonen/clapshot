@@ -41,7 +41,7 @@ $(TARGET_BIN): $(VENV) $(PY_SRC) $(VENV)/bin/mypy
 	$(PIP) install --no-build-isolation .
 
 $(VENV)/bin/mypy: $(VENV)
-	@$(PIP) install mypy==1.9.0
+	@$(PIP) install mypy==1.20.2
 	@touch $@
 
 install: $(TARGET_BIN)

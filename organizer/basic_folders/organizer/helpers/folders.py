@@ -497,9 +497,10 @@ class FoldersHelper:
                 if f.is_version_set:
                     member_ids = [r.media_file_id for r in dbs.query(DbFolderItems).filter(
                         DbFolderItems.folder_id == f.id, DbFolderItems.media_file_id.isnot(None)
-                    ).order_by(DbFolderItems.sort_order).all()]
+                    ).order_by(DbFolderItems.sort_order).all() if r.media_file_id is not None]
                     if member_ids:
-                        vset_active_id[f.id] = f.active_media_file_id if f.active_media_file_id in member_ids else member_ids[0]
+                        active = f.active_media_file_id
+                        vset_active_id[f.id] = active if active is not None and active in member_ids else member_ids[0]
 
         # One batched lookup for direct media + each version set's active version.
         wanted_ids = [v.id for v in media_files] + list(vset_active_id.values())

@@ -153,7 +153,7 @@ async def move_to_folder_impl(oi: organizer.OrganizerInbound, req: org.MoveToFol
     return clap.Empty()
 
 
-async def _recursive_set_folder_owner(dbs: orm.Session, folder_id: int, new_owner_id: str, seen: set[int], log: Logger) -> None:
+async def _recursive_set_folder_owner(dbs: orm.Session, folder_id: int | None, new_owner_id: str, seen: set[int], log: Logger) -> None:
     """
     Set the owner of a folder and all its subfolders + media files recursively.
     """
